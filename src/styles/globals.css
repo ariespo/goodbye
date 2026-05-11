@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@import '@fontsource/noto-serif-sc/400.css';
+@import '@fontsource/noto-serif-sc/700.css';
+@import '@chinese-fonts/lxgwwenkai/dist/LXGWWenKai-Regular/result.css';
+@import '@fontsource/jetbrains-mono/400.css';
+
+@theme {
+  --color-bg-primary: #0d0d0f;
+  --color-bg-secondary: #1a1a1f;
+  --color-border-subtle: #2a2a35;
+  --color-text-primary: #e8e4dc;
+  --color-text-muted: #8a8580;
+  --color-accent-blue: #6b8cff;
+  --color-accent-gold: #d4a853;
+  --color-danger: #c94f4f;
+  --color-insane: #a855c7;
+  --color-sad: #5b8db8;
+
+  --font-family-serif-cn: "Source Han Serif SC", "Noto Serif SC", serif;
+  --font-family-body-cn: "LXGW WenKai", "Maple Mono CN", monospace;
+  --font-family-mono: "JetBrains Mono", "Maple Mono", monospace;
+}
+
+@layer base {
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #0d0d0f;
+    color: #e8e4dc;
+    font-family: "LXGW WenKai", "Maple Mono CN", monospace;
+  }
+
+  * {
+    cursor: none;
+  }
+}
