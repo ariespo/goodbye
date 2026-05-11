@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import type {
-  AppSettings, ChatPreset, Lorebook, ChatSession, ChatMessage,
-  GameStatus, CurrentState, Mood, Scene, TurnSnapshot, Notification,
-  ParsedContent, SaveSlot,
+  AppSettings, ChatPreset, Lorebook, ChatSession,
+  GameStatus, CurrentState, Scene, TurnSnapshot, Notification,
+  ParsedContent,
 } from '../sillytavern/types';
 
 interface GameStore {

@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+[data-mood="calm"] {
+  --mood-bg-overlay: transparent;
+  --mood-text-color: #e8e4dc;
+  --mood-border-color: #2a2a35;
+  --mood-text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+[data-mood="horror"] {
+  --mood-bg-overlay: radial-gradient(circle at corners, transparent 40%, rgba(201, 79, 79, 0.15) 100%);
+  --mood-text-color: #ff3333;
+  --mood-border-color: #c94f4f;
+  --mood-text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+}
+
+[data-mood="insane"] {
+  --mood-bg-overlay: transparent;
+  --mood-text-color: #cc33ff;
+  --mood-border-color: #a855c7;
+  --mood-text-shadow: 2px 2px 0 rgba(128, 0, 128, 0.5), -2px -2px 0 rgba(0, 255, 255, 0.5);
+}
+
+[data-mood="sad"] {
+  --mood-bg-overlay: rgba(0, 0, 128, 0.1);
+  --mood-text-color: #99ccff;
+  --mood-border-color: #5b8db8;
+  --mood-text-shadow: 0 0 5px rgba(0, 0, 255, 0.5);
+}
+
+[data-mood="angry"] {
+  --mood-bg-overlay: rgba(255, 0, 0, 0.15);
+  --mood-border-color: #c94f4f;
+  --mood-text-color: #ff6666;
+  --mood-text-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
+}
+
+[data-mood="happy"] {
+  --mood-bg-overlay: rgba(255, 255, 0, 0.05);
+  --mood-text-color: #ffff99;
+  --mood-border-color: #d4a853;
+  --mood-text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
+}

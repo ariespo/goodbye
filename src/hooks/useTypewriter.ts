@@ -4,7 +4,7 @@ export function useTypewriter(text: string, speed: number = 35, enabled: boolean
   const [displayedText, setDisplayedText] = useState('');
   const [isComplete, setIsComplete] = useState(false);
   const indexRef = useRef(0);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const start = useCallback(() => {
     indexRef.current = 0;

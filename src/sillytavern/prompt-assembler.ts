@@ -1,4 +1,4 @@
-import type { ChatPreset, Lorebook, ChatMessage, AppSettings } from './types';
+import type { ChatPreset, Lorebook, ChatMessage } from './types';
 import { scanLorebooks, buildLorebookPrompt } from './lorebook-engine';
 
 export interface PromptContext {

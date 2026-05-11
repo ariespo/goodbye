@@ -1,4 +1,4 @@
-import type { ParsedContent, Scene, SceneLine, Mood } from '../sillytavern/types';
+import type { Scene, SceneLine, Mood } from '../sillytavern/types';
 
 export interface SceneInstructions {
   background?: string;
@@ -23,7 +23,12 @@ export function parseSceneInstructions(text: string): { cleanedText: string; ins
   for (const { key, regex } of patterns) {
     const matches = [...cleanedText.matchAll(regex)];
     if (matches.length > 0) {
-      instructions[key] = matches[matches.length - 1][1].trim();
+      const value = matches[matches.length - 1][1].trim();
+      if (key === 'mood') {
+        instructions[key] = value as Mood;
+      } else {
+        instructions[key] = value;
+      }
       cleanedText = cleanedText.replace(regex, '');
     }
   }
