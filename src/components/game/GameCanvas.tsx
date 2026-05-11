@@ -5,10 +5,18 @@ import { ChoiceMenu } from './ChoiceMenu';
 import { StatusPanel } from './StatusPanel';
 import { ActionBar } from './ActionBar';
 import { MoodOverlay } from './MoodOverlay';
+import { MapModal } from './MapModal';
+import { UserInput } from './UserInput';
+import { SaveModal } from '../system/SaveModal';
+import { AudioSystem } from '../system/AudioSystem';
+import { useGameStore } from '../../stores/gameStore';
 
 export function GameCanvas() {
+  const mood = useGameStore(state => state.game.currentState.mood);
+
   return (
-    <div className="relative w-full h-full overflow-hidden" data-mood="calm">
+    <div className="relative w-full h-full overflow-hidden" data-mood={mood}>
+      <AudioSystem />
       <BackgroundLayer />
       <MoodOverlay />
 
@@ -20,11 +28,14 @@ export function GameCanvas() {
         }}
       />
 
+      <SaveModal />
       <CharacterSprite />
       <DialogueBox />
       <ChoiceMenu />
+      <UserInput />
       <StatusPanel />
       <ActionBar />
+      <MapModal />
     </div>
   );
 }
