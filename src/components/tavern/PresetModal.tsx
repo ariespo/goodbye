@@ -34,13 +34,14 @@ export function PresetModal() {
   };
 
   const handleImport = async () => {
-    const data = await importJsonFile<Record<string, any>>();
-    if (!data) return;
-    const imported = importPreset(data);
+    const result = await importJsonFile<Record<string, any>>();
+    if (!result) return;
+    const imported = importPreset(result.data, result.fileName);
     await savePreset(imported);
     actions.setPresets([...presets, imported]);
     setSelectedId(imported.id);
     if (!activePresetId) await handleSelect(imported.id);
+    actions.addNotification({ type: 'success', message: `已导入预设: ${imported.name}`, duration: 2500 });
   };
 
   const handleNew = async () => {

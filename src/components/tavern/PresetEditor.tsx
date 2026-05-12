@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ChatPreset, PromptOrderItem } from '../../sillytavern/types';
 import { DEFAULT_PROMPT_ORDER } from '../../sillytavern/types';
-import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
+import { ArrowUp, ArrowDown, CaretDown, CaretRight } from '@phosphor-icons/react';
 
 interface Props {
   preset: ChatPreset;
@@ -25,7 +25,15 @@ const PROMPT_LABELS: Record<string, string> = {
   quietPrompt: 'Quiet Prompt',
   nsfw: 'NSFW',
   jailbreak: 'Jailbreak',
+  enhanceDefinitions: 'Enhance Definitions',
+  authorsNote: "Author's Note",
 };
+
+const MARKER_IDS = new Set([
+  'worldInfoBefore', 'worldInfoAfter', 'chatHistory',
+  'charDescription', 'charPersonality', 'scenario',
+  'personaDescription', 'dialogueExamples',
+]);
 
 export function PresetEditor({ preset, onChange }: Props) {
   const [tab, setTab] = useState<Tab>('basic');
@@ -149,24 +157,19 @@ export function PresetEditor({ preset, onChange }: Props) {
 
             <div className="space-y-1.5">
               {promptOrder.map((item, idx) => (
-                <div key={`${item.identifier}-${idx}`} className="flex items-center gap-2 px-3 py-2 border border-border-subtle bg-bg-secondary">
-                  <input
-                    type="checkbox"
-                    checked={item.enabled !== false}
-                    onChange={() => togglePromptOrder(idx)}
-                    className="accent-accent-blue"
-                  />
-                  <span className="flex-1 text-xs text-text-primary truncate" title={item.identifier}>
-                    {PROMPT_LABELS[item.identifier] || item.identifier}
-                    <span className="ml-2 text-text-muted font-mono">{item.identifier}</span>
-                  </span>
-                  <button onClick={() => movePromptOrder(idx, -1)} disabled={idx === 0} className="text-text-muted hover:text-accent-blue disabled:opacity-30">
-                    <ArrowUp size={12} />
-                  </button>
-                  <button onClick={() => movePromptOrder(idx, 1)} disabled={idx === promptOrder.length - 1} className="text-text-muted hover:text-accent-blue disabled:opacity-30">
-                    <ArrowDown size={12} />
-                  </button>
-                </div>
+                <PromptOrderRow
+                  key={`${item.identifier}-${idx}`}
+                  item={item}
+                  isFirst={idx === 0}
+                  isLast={idx === promptOrder.length - 1}
+                  onToggle={() => togglePromptOrder(idx)}
+                  onMoveUp={() => movePromptOrder(idx, -1)}
+                  onMoveDown={() => movePromptOrder(idx, 1)}
+                  onContentChange={(next) => {
+                    const arr = promptOrder.map((p, i) => i === idx ? { ...p, content: next } : p);
+                    patchSettings({ prompt_order: arr });
+                  }}
+                />
               ))}
             </div>
 
@@ -237,3 +240,92 @@ function TextareaField({ label, value, onChange, rows = 3, placeholder }: { labe
 }
 
 const inputCls = 'w-full px-2 py-1.5 bg-bg-primary border border-border-subtle text-text-primary text-xs focus:border-accent-blue focus:outline-none transition-colors';
+
+function PromptOrderRow({ item, isFirst, isLast, onToggle, onMoveUp, onMoveDown, onContentChange }: {
+  item: PromptOrderItem;
+  isFirst: boolean;
+  isLast: boolean;
+  onToggle: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onContentChange: (content: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isMarker = item.marker || MARKER_IDS.has(item.identifier);
+  const hasContent = !!(item.content && item.content.trim());
+  const role = item.role || 'system';
+
+  return (
+    <div className="border border-border-subtle bg-bg-secondary">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="text-text-muted hover:text-text-primary"
+          title={expanded ? '折叠' : '展开'}
+        >
+          {expanded ? <CaretDown size={12} /> : <CaretRight size={12} />}
+        </button>
+        <input
+          type="checkbox"
+          checked={item.enabled !== false}
+          onChange={onToggle}
+          className="accent-accent-blue"
+        />
+        <span className="flex-1 text-xs text-text-primary truncate" title={item.identifier}>
+          {PROMPT_LABELS[item.identifier] || item.name || item.identifier}
+          <span className="ml-2 text-text-muted font-mono">{item.identifier}</span>
+        </span>
+
+        {/* 标签 chips */}
+        {isMarker && (
+          <span className="text-[9px] px-1.5 py-0.5 border border-accent-gold/40 text-accent-gold/80 tracking-wider" title="占位符:运行时由世界书/历史/角色字段动态填充">
+            占位
+          </span>
+        )}
+        {!isMarker && hasContent && (
+          <span className="text-[9px] px-1.5 py-0.5 border border-accent-blue/40 text-accent-blue/80 tracking-wider">
+            有内容
+          </span>
+        )}
+        {role !== 'system' && (
+          <span className="text-[9px] px-1.5 py-0.5 border border-border-subtle text-text-muted font-mono">
+            {role}
+          </span>
+        )}
+
+        <button onClick={onMoveUp} disabled={isFirst} className="text-text-muted hover:text-accent-blue disabled:opacity-30">
+          <ArrowUp size={12} />
+        </button>
+        <button onClick={onMoveDown} disabled={isLast} className="text-text-muted hover:text-accent-blue disabled:opacity-30">
+          <ArrowDown size={12} />
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="px-3 pb-3 pt-1 border-t border-border-subtle/50">
+          {isMarker ? (
+            <p className="text-[11px] text-text-muted leading-relaxed">
+              {item.identifier === 'worldInfoBefore' && '占位符:运行时注入匹配到的世界书条目(position: before_char / before_example / example_msg_top)。'}
+              {item.identifier === 'worldInfoAfter' && '占位符:运行时注入匹配到的世界书条目(position: after_char / after_example / at_depth / example_msg_bottom / outlet)。'}
+              {item.identifier === 'chatHistory' && '占位符:运行时注入聊天历史(按 token 预算自动裁剪)。'}
+              {(item.identifier === 'charDescription' || item.identifier === 'charPersonality' || item.identifier === 'scenario' || item.identifier === 'personaDescription' || item.identifier === 'dialogueExamples') &&
+                '占位符:运行时读取 preset.settings 中对应字段(character_description / character_personality / scenario / persona_description / dialogue_examples)。可在「人设」tab 编辑。'}
+            </p>
+          ) : (
+            <>
+              <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">内容</div>
+              <textarea
+                value={item.content ?? ''}
+                onChange={e => onContentChange(e.target.value)}
+                rows={5}
+                placeholder="(空)"
+                className={inputCls + ' resize-y font-mono text-xs'}
+              />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

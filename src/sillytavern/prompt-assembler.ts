@@ -3,6 +3,9 @@
  *
  * 按 preset.settings.prompt_order 顺序组装提示词模块,支持 macros 替换、
  * token 预算、世界书 position 分组(before/after)、角色卡字段。
+ *
+ * importer.ts 在导入时会把 SillyTavern 原生 prompts 仓库 + prompt_order 索引规范化合并,
+ * 每个 prompt_order 项已经带上了 content/role/marker 等字段,运行时直接消费。
  */
 
 import type { ChatPreset, Lorebook, ChatMessage, MatchedEntry } from './types';
@@ -26,8 +29,26 @@ export interface AssembleResult {
   systemPrompt: string;
 }
 
+interface RuntimePromptItem {
+  identifier: string;
+  name?: string;
+  role?: 'system' | 'user' | 'assistant';
+  enabled?: boolean;
+  content?: string;
+  marker?: boolean;
+  injection_position?: number;
+  injection_depth?: number;
+}
+
 const BEFORE_POSITIONS = new Set<string>(['before_char', 'before_example', 'example_msg_top']);
 const AFTER_POSITIONS = new Set<string>(['after_char', 'after_example', 'at_depth', 'example_msg_bottom', 'outlet']);
+
+/** marker 槽位:这些 identifier 由运行时动态填充(世界书/历史/角色卡字段),不直接用 content */
+const MARKER_IDENTIFIERS = new Set([
+  'worldInfoBefore', 'worldInfoAfter', 'chatHistory',
+  'charDescription', 'charPersonality', 'scenario',
+  'personaDescription', 'dialogueExamples',
+]);
 
 export function assemblePrompt(options: AssembleOptions): AssembleResult {
   const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt } = options;
@@ -50,44 +71,69 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
 
   // 2) token 预算裁剪历史
   const maxContext = preset?.settings?.openai_max_context ?? 8192;
+  const maxOutput = preset?.settings?.openai_max_tokens ?? 2048;
+  const availableContext = Math.max(1024, maxContext - maxOutput);
   const recentHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
   let currentTokens = 0;
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
     if (msg.role === 'system') continue;
     const msgTokens = msg.content.length / 4;
-    if (currentTokens + msgTokens > maxContext * 0.8) break;
+    if (currentTokens + msgTokens > availableContext * 0.85) break;
     recentHistory.unshift({ role: msg.role, content: msg.content });
     currentTokens += msgTokens;
   }
 
   // 3) prompt_order 编排
-  const promptOrder: Array<{ identifier: string; role?: 'system' | 'user' | 'assistant'; enabled?: boolean }> = preset?.settings?.prompt_order || defaultPromptOrder();
-  const customPrompts: Array<{ identifier: string; role?: 'system' | 'user' | 'assistant'; content?: string }> = preset?.settings?.prompts || [];
+  const rawOrder = preset?.settings?.prompt_order;
+  const promptOrder: RuntimePromptItem[] = Array.isArray(rawOrder) && rawOrder.length > 0
+    ? rawOrder
+    : defaultPromptOrder();
+  // 备用 prompts 仓库(导入时一般已经合进 prompt_order,但旧数据可能仍是分离的)
+  const customPrompts: RuntimePromptItem[] = preset?.settings?.prompts || [];
 
   const macroCtx = { userName, characterName, userInput, variables };
 
-  function resolveContent(identifier: string): string | null {
-    if (identifier === 'worldInfoBefore') {
-      return beforeEntries.length ? beforeEntries.map(e => e.entry.content).join('\n\n') : null;
+  function resolveContent(item: RuntimePromptItem): string | null {
+    const id = item.identifier;
+
+    // marker 类槽位 — 走特殊路径
+    if (item.marker || MARKER_IDENTIFIERS.has(id)) {
+      if (id === 'worldInfoBefore') {
+        return beforeEntries.length ? beforeEntries.map(e => e.entry.content).join('\n\n') : null;
+      }
+      if (id === 'worldInfoAfter') {
+        return afterEntries.length ? afterEntries.map(e => e.entry.content).join('\n\n') : null;
+      }
+      // chatHistory 由外层单独处理
+      if (id === 'chatHistory') return null;
+      // 角色卡字段:优先用 item.content(如果导入时带了),否则查 settings 顶层字段
+      const map: Record<string, string> = {
+        charDescription: 'character_description',
+        charPersonality: 'character_personality',
+        scenario: 'scenario',
+        personaDescription: 'persona_description',
+        dialogueExamples: 'dialogue_examples',
+      };
+      const fieldKey = map[id];
+      if (fieldKey && typeof preset?.settings?.[fieldKey] === 'string' && preset.settings[fieldKey].trim()) {
+        return preset.settings[fieldKey];
+      }
+      // marker 占位符无对应内容 → 跳过
+      return item.content?.trim() ? item.content : null;
     }
-    if (identifier === 'worldInfoAfter') {
-      return afterEntries.length ? afterEntries.map(e => e.entry.content).join('\n\n') : null;
-    }
-    if (identifier === 'charDescription') return preset?.settings?.character_description || null;
-    if (identifier === 'charPersonality') return preset?.settings?.character_personality || null;
-    if (identifier === 'scenario') return preset?.settings?.scenario || null;
-    if (identifier === 'personaDescription') return preset?.settings?.persona_description || null;
-    if (identifier === 'dialogueExamples') return preset?.settings?.dialogue_examples || null;
-    if (identifier === 'groupNudge') return preset?.settings?.group_nudge_prompt || null;
-    if (identifier === 'impersonate') return preset?.settings?.impersonation_prompt || null;
-    if (identifier === 'quietPrompt') return preset?.settings?.quiet_prompt || null;
-    // 自定义模块
-    const custom = customPrompts.find(p => p.identifier === identifier);
-    if (custom?.content) return custom.content;
-    // preset 顶层字段(main / nsfw / jailbreak / enhanceDefinitions ...)
-    const direct = preset?.settings?.[identifier];
+
+    // 非 marker 块:优先用 item.content(由 importer 规范化后塞进去)
+    if (item.content && item.content.trim()) return item.content;
+
+    // 备用 1:从 prompts 仓库找(兼容未规范化的旧数据)
+    const custom = customPrompts.find(p => p.identifier === id);
+    if (custom?.content && custom.content.trim()) return custom.content;
+
+    // 备用 2:从 settings 顶层字段找(main / nsfw / jailbreak 等)
+    const direct = preset?.settings?.[id];
     if (typeof direct === 'string' && direct.trim()) return direct;
+
     return null;
   }
 
@@ -112,7 +158,7 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
       continue;
     }
 
-    const raw = resolveContent(item.identifier);
+    const raw = resolveContent(item);
     if (!raw) continue;
 
     const content = replaceMacros(raw, macroCtx);
@@ -172,7 +218,7 @@ export function replaceMacros(template: string, ctx: MacroContext): string {
     return opts[Math.floor(Math.random() * opts.length)];
   });
 
-  // {{pick:a,b,c}} — 同 random 但稳定(基于 hash)
+  // {{pick:a,b,c}} — 稳定取第一项
   r = r.replace(/\{\{pick:([^}]+)\}\}/g, (_m, list: string) => {
     const opts = list.split(',').map(s => s.trim()).filter(Boolean);
     if (opts.length === 0) return '';
@@ -207,16 +253,16 @@ function formatVariablesForPrompt(variables: Record<string, any>): string {
   return `[当前状态]\n${lines.join('\n')}`;
 }
 
-function defaultPromptOrder() {
+function defaultPromptOrder(): RuntimePromptItem[] {
   return [
-    { identifier: 'main', role: 'system' as const, enabled: true },
-    { identifier: 'worldInfoBefore', role: 'system' as const, enabled: true },
-    { identifier: 'charDescription', role: 'system' as const, enabled: true },
-    { identifier: 'charPersonality', role: 'system' as const, enabled: true },
-    { identifier: 'scenario', role: 'system' as const, enabled: true },
-    { identifier: 'personaDescription', role: 'system' as const, enabled: true },
-    { identifier: 'dialogueExamples', role: 'system' as const, enabled: true },
-    { identifier: 'chatHistory', role: 'system' as const, enabled: true },
-    { identifier: 'worldInfoAfter', role: 'system' as const, enabled: true },
+    { identifier: 'main', role: 'system', enabled: true },
+    { identifier: 'worldInfoBefore', role: 'system', enabled: true, marker: true },
+    { identifier: 'charDescription', role: 'system', enabled: true, marker: true },
+    { identifier: 'charPersonality', role: 'system', enabled: true, marker: true },
+    { identifier: 'scenario', role: 'system', enabled: true, marker: true },
+    { identifier: 'personaDescription', role: 'system', enabled: true, marker: true },
+    { identifier: 'dialogueExamples', role: 'system', enabled: true, marker: true },
+    { identifier: 'chatHistory', role: 'system', enabled: true, marker: true },
+    { identifier: 'worldInfoAfter', role: 'system', enabled: true, marker: true },
   ];
 }

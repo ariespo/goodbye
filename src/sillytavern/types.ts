@@ -134,6 +134,12 @@ export interface PromptOrderItem {
   name?: string;
   role?: 'system' | 'user' | 'assistant';
   enabled?: boolean;
+  /** 实际文本内容(由 importer 在导入时从 prompts 仓库 join 进来) */
+  content?: string;
+  /** 是否是占位符槽位(由运行时动态注入,如 worldInfoBefore/chatHistory) */
+  marker?: boolean;
+  injection_position?: number;
+  injection_depth?: number;
 }
 
 export interface PromptDefinition {

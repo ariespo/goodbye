@@ -61,9 +61,9 @@ export function LorebookModal() {
   };
 
   const handleImport = async () => {
-    const data = await importJsonFile<SillyTavernLorebookExport>();
-    if (!data) return;
-    const imported = importLorebook(data);
+    const result = await importJsonFile<SillyTavernLorebookExport>();
+    if (!result) return;
+    const imported = importLorebook(result.data, result.fileName);
     await saveLorebook(imported);
     actions.setLorebooks([...lorebooks, imported]);
     setSelectedBookId(imported.id);

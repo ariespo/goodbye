@@ -2,9 +2,10 @@
  * SillyTavern Import/Export Adapter
  *
  * 完整酒馆世界书/预设的 JSON 双向转换。
+ * 预设导入会把 prompts 仓库 + prompt_order 索引规范化合并,使运行时直接消费。
  */
 
-import type { Lorebook, LorebookEntry, ChatPreset, SillyTavernLorebookExport } from './types';
+import type { Lorebook, LorebookEntry, ChatPreset, SillyTavernLorebookExport, PromptOrderItem } from './types';
 
 const POSITION_MAP: Record<number, LorebookEntry['position']> = {
   0: 'before_char',
@@ -42,7 +43,9 @@ const REVERSE_LOGIC_MAP: Record<LorebookEntry['selectiveLogic'], number> = {
   and_all: 3,
 };
 
-export function importLorebook(data: SillyTavernLorebookExport): Lorebook {
+// ========== Lorebook ==========
+
+export function importLorebook(data: SillyTavernLorebookExport, fileName?: string): Lorebook {
   const rawEntries = Object.values(data.entries || {});
   const entries: LorebookEntry[] = rawEntries.map((e) => ({
     id: crypto.randomUUID(),
@@ -84,7 +87,7 @@ export function importLorebook(data: SillyTavernLorebookExport): Lorebook {
 
   return {
     id: crypto.randomUUID(),
-    name: data.name || '导入的世界书',
+    name: data.name || (fileName ? fileName.replace(/\.json$/i, '') : '导入的世界书'),
     description: data.description,
     entries,
     recursiveScanning: data.settings?.recursive_scanning ?? false,
@@ -150,13 +153,160 @@ export function exportLorebook(lorebook: Lorebook): SillyTavernLorebookExport {
   };
 }
 
-export function importPreset(data: Record<string, any>): ChatPreset {
-  const name = data.preset || data.name || '导入的预设';
-  // 移除一些与预设无关的元字段,但保留 prompt_order/prompts 等核心字段
-  const { id: _ignoredId, createdAt: _c, updatedAt: _u, ...settings } = data;
+// ========== Preset ==========
+
+/**
+ * 规范化酒馆 prompt_order:把 prompts 仓库 + prompt_order 索引按 identifier join,
+ * 得到每项都带 content/role/marker 的扁平数组。
+ *
+ * 支持的输入格式:
+ *   A. SillyTavern 原生:`data.prompts = [{identifier, name, content, role, marker}]`
+ *      + `data.prompt_order = [{identifier, enabled}]`
+ *   B. Tavernlike:`data.prompt_order = [{identifier, name, content, enabled}]`(自带 content)
+ *   C. 角色卡包装:`data.prompt_order = [{character_id, order:[{identifier, enabled}]}]`
+ *   D. 按 API 分组:`data.prompt_order = { openai: [{identifier, enabled}], claude: [...] }`
+ */
+function normalizePromptOrder(rawOrder: any, promptsRepo: any[]): PromptOrderItem[] {
+  let flat: any[] = [];
+
+  if (Array.isArray(rawOrder)) {
+    if (rawOrder.length === 0) {
+      flat = [];
+    } else if (rawOrder[0] && typeof rawOrder[0] === 'object' && Array.isArray(rawOrder[0].order)) {
+      flat = rawOrder[0].order;
+    } else if (rawOrder[0] && (rawOrder[0].identifier !== undefined || rawOrder[0].id !== undefined)) {
+      flat = rawOrder;
+    }
+  } else if (rawOrder && typeof rawOrder === 'object') {
+    for (const k of Object.keys(rawOrder)) {
+      const arr = rawOrder[k];
+      if (Array.isArray(arr) && arr.length > 0) {
+        flat = arr;
+        break;
+      }
+    }
+  }
+
+  const repoMap = new Map<string, any>();
+  for (const p of promptsRepo) {
+    const id = p?.identifier || p?.id;
+    if (id) repoMap.set(id, p);
+  }
+
+  const processed = new Set<string>();
+  const result: PromptOrderItem[] = [];
+
+  for (const entry of flat) {
+    const identifier = entry?.identifier || entry?.id;
+    if (!identifier) continue;
+    processed.add(identifier);
+    const def = repoMap.get(identifier);
+    result.push({
+      identifier,
+      name: def?.name ?? entry?.name ?? identifier,
+      role: resolveRole(def, entry),
+      enabled: entry?.enabled ?? def?.enabled ?? true,
+      // marker / content / injection 字段统一以扩展字段形式塞进去,Type 上是 PromptOrderItem
+      ...({
+        content: def?.content ?? entry?.content ?? entry?.system_prompt ?? '',
+        marker: !!(def?.marker ?? entry?.marker),
+        injection_position: def?.injection_position ?? entry?.injection_position,
+        injection_depth: def?.injection_depth ?? entry?.injection_depth,
+      } as any),
+    });
+  }
+
+  // 把未出现在 prompt_order 但出现在 prompts 仓库中的非空条目也加进来(默认 disabled)
+  for (const p of promptsRepo) {
+    const id = p?.identifier || p?.id;
+    if (!id || processed.has(id)) continue;
+    const hasContent = !!(p?.content || p?.name);
+    if (!hasContent && !p?.marker) continue;
+    result.push({
+      identifier: id,
+      name: p?.name ?? id,
+      role: resolveRole(p, null),
+      enabled: false,
+      ...({
+        content: p?.content ?? '',
+        marker: !!p?.marker,
+        injection_position: p?.injection_position,
+        injection_depth: p?.injection_depth,
+      } as any),
+    });
+  }
+
+  return result;
+}
+
+function resolveRole(def: any, entry: any): 'system' | 'user' | 'assistant' {
+  const r = def?.role ?? entry?.role;
+  if (typeof r === 'string') {
+    const lower = r.toLowerCase();
+    if (lower === 'user' || lower === 'assistant' || lower === 'system') return lower;
+  }
+  if (r === 1) return 'user';
+  if (r === 2) return 'assistant';
+  return 'system';
+}
+
+export function importPreset(data: Record<string, any>, fileName?: string): ChatPreset {
+  const derivedName: string =
+    data.preset || data.name ||
+    (fileName ? fileName.replace(/\.json$/i, '') : '导入的预设');
+
+  // 1) 合并 prompts 仓库 + prompt_order 索引
+  const promptsRepo = Array.isArray(data.prompts) ? data.prompts : [];
+  const normalizedOrder = normalizePromptOrder(data.prompt_order ?? data.promptOrder, promptsRepo);
+
+  // 2) 参数 fallback(支持嵌套 gen_params/parameters)
+  const params = data.gen_params || data.parameters || data;
+  const fallbackParam = (...keys: string[]) => {
+    for (const k of keys) {
+      if (params[k] !== undefined) return params[k];
+    }
+    return undefined;
+  };
+
+  // 3) 写回 settings:保留原始字段,规范化 prompt_order 覆盖,补全参数缺省值
+  const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = data;
+  const settings: Record<string, any> = {
+    ...rest,
+    prompt_order: normalizedOrder,
+  };
+
+  if (settings.temp_openai === undefined) {
+    const v = fallbackParam('temperature', 'temp');
+    if (v !== undefined) settings.temp_openai = v;
+  }
+  if (settings.openai_max_tokens === undefined) {
+    const v = fallbackParam('openai_max_tokens', 'max_tokens', 'maxTokens', 'max_length', 'genamt');
+    if (v !== undefined) settings.openai_max_tokens = v;
+  }
+  if (settings.top_p_openai === undefined) {
+    const v = fallbackParam('top_p_openai', 'top_p', 'topP');
+    if (v !== undefined) settings.top_p_openai = v;
+  }
+  if (settings.freq_pen_openai === undefined) {
+    const v = fallbackParam('freq_pen_openai', 'frequency_penalty', 'frequencyPenalty', 'rep_pen');
+    if (v !== undefined) settings.freq_pen_openai = v;
+  }
+  if (settings.pres_pen_openai === undefined) {
+    const v = fallbackParam('pres_pen_openai', 'presence_penalty', 'presencePenalty');
+    if (v !== undefined) settings.pres_pen_openai = v;
+  }
+  if (settings.openai_max_context === undefined) {
+    const v = data.openai_max_context ?? data.contextLength ?? data.context_length ?? data.truncation_length;
+    if (v !== undefined) settings.openai_max_context = v;
+  }
+  if (settings.openai_model === undefined) {
+    const v = data.openai_model || data.model || data.modelName;
+    if (v !== undefined) settings.openai_model = v;
+  }
+
   return {
     id: crypto.randomUUID(),
-    name,
+    name: derivedName,
     description: data.description,
     settings,
     createdAt: Date.now(),
@@ -172,7 +322,9 @@ export function exportPreset(preset: ChatPreset): Record<string, any> {
   };
 }
 
-export async function importJsonFile<T>(): Promise<T | null> {
+// ========== JSON Helpers ==========
+
+export async function importJsonFile<T = unknown>(): Promise<{ data: T; fileName: string } | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -182,7 +334,7 @@ export async function importJsonFile<T>(): Promise<T | null> {
       if (!file) { resolve(null); return; }
       try {
         const text = await file.text();
-        resolve(JSON.parse(text) as T);
+        resolve({ data: JSON.parse(text) as T, fileName: file.name });
       } catch {
         resolve(null);
       }
@@ -221,7 +373,7 @@ export function importMultipleLorebooks(inputs: MultiImportInput[]): MultiImport
       if (!input.json || typeof input.json !== 'object' || Array.isArray(input.json)) {
         throw new Error('Invalid lorebook JSON: expected an object');
       }
-      const lb = importLorebook(input.json);
+      const lb = importLorebook(input.json, input.fileName);
       successes.push({ fileName: input.fileName, lorebook: lb });
     } catch (e) {
       failures.push({ fileName: input.fileName, error: String((e as Error).message ?? e) });
