@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { saveSettings } from '../../sillytavern/database';
 import { X } from '@phosphor-icons/react';
@@ -11,7 +11,12 @@ export function SettingsModal() {
 
   const [localSettings, setLocalSettings] = useState(settings);
 
-  if (!showSettings || !localSettings) return null;
+  useEffect(() => {
+    if (settings) setLocalSettings(settings);
+  }, [settings, showSettings]);
+
+  if (!showSettings) return null;
+  if (!localSettings) return null;
 
   const handleSave = async () => {
     await saveSettings(localSettings);
