@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 
 const PHASES = [
@@ -15,33 +15,43 @@ export function IntroAnimation() {
   const [skipRequested, setSkipRequested] = useState(false);
   const introPlayed = useGameStore(state => state.ui.introPlayed);
   const setIntroPlayed = useGameStore(state => state.actions.setIntroPlayed);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (introPlayed) return;
-
-    const advancePhase = () => {
-      setPhase(prev => {
-        if (prev >= PHASES.length - 1) {
-          setIntroPlayed(true);
-          return prev;
-        }
-        return prev + 1;
-      });
-    };
-
-    if (skipRequested) {
-      setPhase(PHASES.length - 1);
-      setTimeout(() => setIntroPlayed(true), PHASES[PHASES.length - 1].duration);
+    if (introPlayed) {
+      if (timerRef.current) clearTimeout(timerRef.current);
       return;
     }
 
-    const timer = setTimeout(advancePhase, PHASES[phase].duration);
-    return () => clearTimeout(timer);
-  }, [phase, skipRequested, introPlayed, setIntroPlayed]);
+    if (skipRequested) {
+      setPhase(PHASES.length - 1);
+      timerRef.current = setTimeout(() => {
+        setIntroPlayed(true);
+      }, PHASES[PHASES.length - 1].duration);
+      return;
+    }
+
+    if (phase >= PHASES.length - 1) {
+      timerRef.current = setTimeout(() => {
+        setIntroPlayed(true);
+      }, PHASES[phase].duration);
+      return;
+    }
+
+    timerRef.current = setTimeout(() => {
+      setPhase(prev => prev + 1);
+    }, PHASES[phase].duration);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, skipRequested, introPlayed]);
 
   const handleSkip = useCallback(() => {
+    if (skipRequested || introPlayed) return;
     setSkipRequested(true);
-  }, []);
+  }, [skipRequested, introPlayed]);
 
   if (introPlayed) return null;
 
@@ -138,7 +148,7 @@ export function IntroAnimation() {
       <style>{`
         @keyframes glitchLine {
           0%, 100% { transform: translateX(0); opacity: 0.3; }
-          50% { transform: translateX(${Math.random() > 0.5 ? '' : '-'}${Math.random() * 20}px); opacity: 0.8; }
+          50% { transform: translateX(10px); opacity: 0.8; }
         }
         @keyframes loadingProgress {
           0% { width: 0%; }

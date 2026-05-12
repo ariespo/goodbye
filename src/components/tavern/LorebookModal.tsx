@@ -6,10 +6,11 @@ import { X, Trash, Download, Upload } from '@phosphor-icons/react';
 
 export function LorebookModal() {
   const lorebooks = useGameStore(state => state.tavern.lorebooks);
-  const activeLorebookIds = useGameStore(state => state.tavern.settings?.activeLorebookIds || []);
+  const settings = useGameStore(state => state.tavern.settings);
   const showLorebook = useGameStore(state => state.ui.showLorebook);
   const toggleModal = useGameStore(state => state.actions.toggleModal);
   const actions = useGameStore(state => state.actions);
+  const activeLorebookIds = settings?.activeLorebookIds ?? [];
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
 
   if (!showLorebook) return null;
