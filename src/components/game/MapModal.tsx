@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { assetUrl } from '../../utils/assetUrl';
 import { X, MapPin } from '@phosphor-icons/react';
 
 interface Location {
@@ -56,7 +57,7 @@ export function MapModal() {
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage: 'url(/assets/map/map.png)',
+            backgroundImage: `url(${assetUrl('assets/map/map.png')})`,
             filter: 'grayscale(60%) contrast(120%)',
           }}
         />

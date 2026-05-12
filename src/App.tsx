@@ -5,6 +5,7 @@ import { GameCanvas } from './components/game/GameCanvas';
 import { CustomCursor } from './components/system/CustomCursor';
 import { IntroAnimation } from './components/system/IntroAnimation';
 import { NotificationToast } from './components/system/NotificationToast';
+import { ApiKeySetup } from './components/system/ApiKeySetup';
 // import { ConfirmModal } from './components/system/ConfirmModal';
 import { SettingsModal } from './components/tavern/SettingsModal';
 import { LorebookModal } from './components/tavern/LorebookModal';
@@ -110,6 +111,7 @@ function App() {
       <IntroAnimation />
       <NotificationToast />
       <GameCanvas />
+      <ApiKeySetup />
       <SettingsModal />
       <LorebookModal />
       <PresetModal />

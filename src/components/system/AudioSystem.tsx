@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { assetUrl } from '../../utils/assetUrl';
 
 export function AudioSystem() {
   const bgm = useGameStore(state => state.game.currentState.bgm);
@@ -35,7 +36,7 @@ export function AudioSystem() {
     }
 
     const audio = new Audio();
-    audio.src = bgm.startsWith('http') ? bgm : `/assets/audio/bgm/${bgm}`;
+    audio.src = bgm.startsWith('http') ? bgm : assetUrl(`assets/audio/bgm/${bgm}`);
     audio.loop = true;
     audio.volume = 0.5;
 
