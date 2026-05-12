@@ -54,6 +54,7 @@ export function useGameLoop() {
         userName: settings.userName,
         characterName: settings.characterName,
         variables: tavern.variables,
+        formatPrompt: settings.formatPromptTemplate,
       });
 
       const abortController = new AbortController();

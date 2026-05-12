@@ -12,6 +12,7 @@ import { LorebookModal } from './components/tavern/LorebookModal';
 import { PresetModal } from './components/tavern/PresetModal';
 import { HistoryDrawer } from './components/tavern/HistoryDrawer';
 import type { ChatSession, ChatPreset } from './sillytavern/types';
+import { createDefaultPreset } from './sillytavern/types';
 import './styles/animations.css';
 import './styles/themes.css';
 
@@ -35,17 +36,8 @@ function App() {
           // 如果没有预设，创建默认预设
           if (presets.length === 0) {
             const defaultPreset: ChatPreset = {
+              ...createDefaultPreset(),
               id: crypto.randomUUID(),
-              name: '默认预设',
-              settings: {
-                temp_openai: 0.8,
-                openai_max_tokens: 2048,
-                top_p_openai: 1,
-                freq_pen_openai: 0,
-                pres_pen_openai: 0,
-                openai_model: 'gpt-4',
-                stream_openai: true,
-              },
               createdAt: Date.now(),
               updatedAt: Date.now(),
             };

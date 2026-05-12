@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { AppSettings, ChatPreset, Lorebook, ChatSession, SaveSlot } from './types';
+import { DEFAULT_FORMAT_PROMPT, DEFAULT_OPAQUE_TAGS } from './types';
 
 export class FarewellDatabase extends Dexie {
   settings!: Table<AppSettings>;
@@ -10,6 +11,7 @@ export class FarewellDatabase extends Dexie {
 
   constructor() {
     super('FarewellDB');
+
     this.version(1).stores({
       settings: '++id',
       presets: 'id, name, updatedAt',
@@ -17,6 +19,30 @@ export class FarewellDatabase extends Dexie {
       chats: 'id, name, updatedAt',
       saves: 'id, name, createdAt',
     });
+
+    // v2: 升级到 tavernlike v3 兼容内核 — lorebook 字段大改,清空 lorebooks 表;
+    //     设置补齐新增字段 (api.secondary / opaqueTags / formatPromptTemplate)
+    this.version(2)
+      .stores({
+        settings: '++id',
+        presets: 'id, name, updatedAt',
+        lorebooks: 'id, name, updatedAt',
+        chats: 'id, name, updatedAt',
+        saves: 'id, name, createdAt',
+      })
+      .upgrade(async tx => {
+        await tx.table('lorebooks').clear();
+        await tx.table('settings').toCollection().modify((s: any) => {
+          if (s.api && !s.api.secondary) {
+            s.api.secondary = s.secondaryApi
+              ? { ...s.secondaryApi }
+              : { enabled: false, baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini' };
+          }
+          delete s.secondaryApi;
+          if (!s.opaqueTags) s.opaqueTags = [...DEFAULT_OPAQUE_TAGS];
+          if (!s.formatPromptTemplate) s.formatPromptTemplate = DEFAULT_FORMAT_PROMPT;
+        });
+      });
   }
 }
 
@@ -35,13 +61,14 @@ function getDefaultSettings(): AppSettings {
     api: {
       baseUrl: 'https://api.openai.com/v1',
       apiKey: '',
-      model: 'gpt-4',
-    },
-    secondaryApi: {
-      enabled: false,
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: '',
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',
+      timeout: 60000,
+      secondary: {
+        enabled: false,
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'gpt-4o-mini',
+      },
     },
     characterName: '少女',
     userName: '玩家',
@@ -52,6 +79,8 @@ function getDefaultSettings(): AppSettings {
     typingSpeed: 35,
     fontSize: 'medium',
     moodIntensity: 1,
+    opaqueTags: [...DEFAULT_OPAQUE_TAGS],
+    formatPromptTemplate: DEFAULT_FORMAT_PROMPT,
   };
 }
 

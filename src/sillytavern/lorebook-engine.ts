@@ -1,76 +1,170 @@
-import type { Lorebook, LorebookEntry } from './types';
+/**
+ * Lorebook Matching Engine
+ *
+ * 完整版酒馆世界书匹配:constant / probability / recursive scan / position 分组 /
+ * secondaryKeys + selectiveLogic / caseSensitive / matchWholeWords。
+ */
 
-export interface MatchedEntry {
-  entry: LorebookEntry;
-  lorebookName: string;
-  matchedKeys: string[];
-}
+import type { Lorebook, LorebookEntry, MatchedEntry } from './types';
 
-export function scanLorebooks(
-  lorebooks: Lorebook[],
-  activeIds: string[],
-  text: string,
-  options: {
-    caseSensitive?: boolean;
-    matchWholeWords?: boolean;
-  } = {}
-): MatchedEntry[] {
-  const activeBooks = lorebooks.filter(b => activeIds.includes(b.id));
-  const matches: MatchedEntry[] = [];
+export class LorebookEngine {
+  private lorebook: Lorebook;
 
-  for (const book of activeBooks) {
-    for (const entry of book.entries) {
-      if (!entry.enabled) continue;
+  constructor(lorebook: Lorebook) {
+    this.lorebook = lorebook;
+  }
 
-      const matchedKeys = matchEntry(entry, text, options);
-      if (matchedKeys.length > 0) {
-        matches.push({
+  scan(text: string, additionalContext?: string): MatchedEntry[] {
+    const normalizedText = this.lorebook.caseSensitive ? text : text.toLowerCase();
+    const normalizedContext = additionalContext
+      ? this.lorebook.caseSensitive ? additionalContext : additionalContext.toLowerCase()
+      : normalizedText;
+
+    const matched: MatchedEntry[] = [];
+
+    for (const entry of this.lorebook.entries) {
+      if (entry.enabled === false) continue;
+
+      if (entry.constant) {
+        matched.push({ entry, score: -9999, matchedKeywords: ['constant'] });
+        continue;
+      }
+
+      const probability = entry.useProbability === false ? 100 : entry.probability;
+      if (Math.random() * 100 >= probability) continue;
+
+      const isMatch = this.checkEntryMatch(entry, normalizedText, normalizedContext);
+
+      if (isMatch) {
+        matched.push({
           entry,
-          lorebookName: book.name,
-          matchedKeys,
+          score: entry.order,
+          matchedKeywords: entry.keys.filter(k =>
+            this.containsKeyword(normalizedText, this.normalizeKeyword(k))
+          ),
         });
       }
     }
+
+    return matched.sort((a, b) => a.score - b.score);
   }
 
-  return matches.sort((a, b) => b.entry.order - a.entry.order);
-}
+  recursiveScan(initialText: string, maxDepth: number = 3, additionalContext?: string): MatchedEntry[] {
+    if (!this.lorebook.recursiveScanning || maxDepth <= 0) {
+      return this.scan(initialText, additionalContext);
+    }
 
-function matchEntry(
-  entry: LorebookEntry,
-  text: string,
-  options: { caseSensitive?: boolean; matchWholeWords?: boolean }
-): string[] {
-  const { caseSensitive = false, matchWholeWords = false } = options;
-  const searchText = caseSensitive ? text : text.toLowerCase();
-  const matched: string[] = [];
+    const allMatched = new Map<string, MatchedEntry>();
+    let currentText = initialText;
+    let depth = 0;
 
-  for (const key of entry.key) {
-    if (!key.trim()) continue;
-    const searchKey = caseSensitive ? key : key.toLowerCase();
+    while (depth < maxDepth) {
+      const newMatches = this.scan(currentText, additionalContext);
+      let hasNewMatches = false;
 
-    if (matchWholeWords) {
-      const regex = new RegExp(`\\b${escapeRegex(searchKey)}\\b`, caseSensitive ? 'g' : 'gi');
-      if (regex.test(searchText)) matched.push(key);
-    } else {
-      if (searchText.includes(searchKey)) matched.push(key);
+      for (const match of newMatches) {
+        if (allMatched.has(match.entry.id)) continue;
+        if (match.entry.excludeRecursion) continue;
+        allMatched.set(match.entry.id, match);
+        if (!match.entry.preventRecursion) {
+          currentText += ' ' + match.entry.content;
+        }
+        hasNewMatches = true;
+      }
+
+      if (!hasNewMatches) break;
+      depth++;
+    }
+
+    return Array.from(allMatched.values()).sort((a, b) => a.score - b.score);
+  }
+
+  groupByPosition(matched: MatchedEntry[]): Record<LorebookEntry['position'], MatchedEntry[]> {
+    const grouped: Record<LorebookEntry['position'], MatchedEntry[]> = {
+      before_char: [], after_char: [], before_example: [], after_example: [], at_depth: [],
+      example_msg_top: [], example_msg_bottom: [], outlet: [],
+    };
+
+    for (const m of matched) {
+      grouped[m.entry.position].push(m);
+    }
+
+    return grouped;
+  }
+
+  formatEntriesContent(entries: MatchedEntry[]): string {
+    if (entries.length === 0) return '';
+    return entries.map(e => e.entry.content).join('\n\n');
+  }
+
+  private checkEntryMatch(entry: LorebookEntry, text: string, context: string): boolean {
+    const { keys, secondaryKeys, selective, selectiveLogic } = entry;
+
+    if (keys.length === 0) return false;
+
+    const primaryMatches = keys.map(k => this.containsKeyword(text, this.normalizeKeyword(k)));
+    const allPrimary = primaryMatches.every(m => m);
+    const anyPrimary = primaryMatches.some(m => m);
+
+    let primaryOk = false;
+    switch (selectiveLogic) {
+      case 'and_all':
+      case 'and_any':
+        primaryOk = anyPrimary;
+        break;
+      case 'not_all':
+        primaryOk = !allPrimary;
+        break;
+      case 'not_any':
+        primaryOk = !anyPrimary;
+        break;
+      default:
+        primaryOk = anyPrimary;
+    }
+
+    if (!primaryOk) return false;
+
+    if (!selective || secondaryKeys.length === 0) {
+      return primaryOk;
+    }
+
+    const secondaryMatches = secondaryKeys.map(k =>
+      this.containsKeyword(context, this.normalizeKeyword(k))
+    );
+    const allSecondary = secondaryMatches.every(m => m);
+    const anySecondary = secondaryMatches.some(m => m);
+
+    switch (selectiveLogic) {
+      case 'and_all':
+        return allSecondary;
+      case 'not_all':
+        return !allSecondary;
+      case 'and_any':
+        return anySecondary;
+      case 'not_any':
+        return !anySecondary;
+      default:
+        return anySecondary;
     }
   }
 
-  return matched;
+  private normalizeKeyword(keyword: string): string {
+    return this.lorebook.caseSensitive ? keyword : keyword.toLowerCase();
+  }
+
+  private containsKeyword(text: string, keyword: string): boolean {
+    if (this.lorebook.matchWholeWords) {
+      const regex = new RegExp(`\\b${this.escapeRegex(keyword)}\\b`, 'i');
+      return regex.test(text);
+    }
+    return text.includes(keyword);
+  }
+
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 }
 
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export function buildLorebookPrompt(matches: MatchedEntry[]): string {
-  if (matches.length === 0) return '';
-
-  const sections = matches.map(m => {
-    const header = m.entry.comment ? `[${m.entry.comment}]` : '';
-    return `${header}\n${m.entry.content}`.trim();
-  });
-
-  return sections.join('\n\n');
+export function createLorebookEngine(lorebook: Lorebook): LorebookEngine {
+  return new LorebookEngine(lorebook);
 }
