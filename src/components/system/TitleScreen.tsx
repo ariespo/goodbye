@@ -177,7 +177,7 @@ export function TitleScreen() {
           <h1
             className="text-5xl md:text-6xl font-bold tracking-[0.35em]"
             style={{
-              fontFamily: '"LXGW WenKai", "Noto Serif SC", serif',
+              fontFamily: '"MuzaiPixel", "LXGW WenKai", "Noto Serif SC", serif',
               color: '#e8e4dc',
               textShadow: '0 0 80px rgba(232,228,220,0.1), 0 2px 10px rgba(0,0,0,0.8)',
             }}
