@@ -1,50 +1,116 @@
-import { useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface FilmStripProps {
   position: 'top' | 'bottom';
   filmColor: string;
 }
 
-const PATTERN_W = 26;
-const PATTERN_H = 56;
+const STRIP_H = 56;
+const PITCH = 26;      // 齿孔间距
+const HOLE_W = 10;
+const HOLE_H = 14;
+const HOLE_RX = 4;     // 圆角
+const SPEED = 0.6;     // 滚动速度 (px/frame)
 
-/** 逼真的 35mm 电影胶片条 — 圆角齿孔 + 厚度阴影 + 边缘高光 */
+/** 用 Canvas 绘制逼真胶片条 — 齿孔为真实透明区域 */
 export function FilmStrip({ position, filmColor }: FilmStripProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+  const offsetRef = useRef(0);
   const isTop = position === 'top';
 
-  // SVG mask: 白色=保留胶片底色, 黑色=齿孔挖空(透明)
-  const maskSvg = useMemo(() => {
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${PATTERN_W}" height="${PATTERN_H}" viewBox="0 0 ${PATTERN_W} ${PATTERN_H}">
-        <rect width="${PATTERN_W}" height="${PATTERN_H}" fill="white"/>
-        <rect x="5" y="7" width="10" height="14" rx="4" fill="black"/>
-        <rect x="5" y="35" width="10" height="14" rx="4" fill="black"/>
-      </svg>
-    `;
-    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-  }, []);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = STRIP_H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    // 绘制圆角矩形（兼容旧浏览器）
+    function drawRoundRect(x: number, y: number, w: number, h: number, r: number) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+      ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x, y + h, x, y + h - r, r);
+      ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r);
+      ctx.closePath();
+    }
+
+    const draw = () => {
+      const w = canvas.getBoundingClientRect().width;
+      const h = STRIP_H;
+
+      // 1. 清空画布
+      ctx.clearRect(0, 0, w, h);
+
+      // 2. 绘制胶片底色
+      ctx.fillStyle = filmColor;
+      ctx.fillRect(0, 0, w, h);
+
+      // 3. 切换到"擦除"模式，齿孔区域变透明
+      ctx.globalCompositeOperation = 'destination-out';
+
+      offsetRef.current = (offsetRef.current + SPEED) % PITCH;
+      const startX = -PITCH + offsetRef.current;
+
+      for (let x = startX; x < w + PITCH; x += PITCH) {
+        // 上排齿孔
+        drawRoundRect(x + 5, 7, HOLE_W, HOLE_H, HOLE_RX);
+        ctx.fill();
+        // 下排齿孔
+        drawRoundRect(x + 5, 35, HOLE_W, HOLE_H, HOLE_RX);
+        ctx.fill();
+      }
+
+      // 4. 恢复混合模式
+      ctx.globalCompositeOperation = 'source-over';
+
+      // 5. 绘制中间画面区域的细边框线（仅边缘）
+      ctx.strokeStyle = filmColor;
+      ctx.globalAlpha = 0.15;
+      ctx.lineWidth = 1;
+      const frameL = 52;
+      const frameR = w - 52;
+      const frameY = isTop ? h - 3 : 3;
+      ctx.beginPath();
+      ctx.moveTo(frameL, frameY);
+      ctx.lineTo(frameR, frameY);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [filmColor, isTop]);
 
   return (
     <div
       className={`absolute left-0 right-0 z-30 pointer-events-none ${isTop ? 'top-0' : 'bottom-0'}`}
-      style={{ height: `${PATTERN_H}px` }}
+      style={{ height: `${STRIP_H}px` }}
     >
-      {/* 胶片底色 + 齿孔挖空 */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundColor: filmColor,
-          maskImage: `url("${maskSvg}")`,
-          WebkitMaskImage: `url("${maskSvg}")`,
-          maskRepeat: 'repeat-x',
-          WebkitMaskRepeat: 'repeat-x',
-          maskSize: `${PATTERN_W}px ${PATTERN_H}px`,
-          WebkitMaskSize: `${PATTERN_W}px ${PATTERN_H}px`,
-          animation: 'filmMaskScroll 0.5s linear infinite',
-        }}
-      />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
-      {/* 胶片厚度阴影 */}
+      {/* 厚度阴影 */}
       <div
         className="absolute left-0 right-0"
         style={{
@@ -56,25 +122,13 @@ export function FilmStrip({ position, filmColor }: FilmStripProps) {
         }}
       />
 
-      {/* 胶片顶部边缘高光（增加立体感） */}
+      {/* 边缘高光 */}
       <div
         className="absolute left-0 right-0"
         style={{
           [isTop ? 'top' : 'bottom']: '0',
           height: '1px',
           background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)',
-        }}
-      />
-
-      {/* 中间画面区域边框线（像真实胶片那样有画面框） */}
-      <div
-        className="absolute"
-        style={{
-          [isTop ? 'bottom' : 'top']: '3px',
-          left: '52px',
-          right: '52px',
-          height: '1px',
-          background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent 100%)',
         }}
       />
     </div>

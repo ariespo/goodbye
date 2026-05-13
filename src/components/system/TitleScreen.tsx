@@ -270,12 +270,6 @@ export function TitleScreen() {
       <div className="absolute bottom-6 left-6 w-12 h-12 border-l border-b border-white/[0.04]" />
       <div className="absolute bottom-6 right-6 w-12 h-12 border-r border-b border-white/[0.04]" />
 
-      <style>{`
-        @keyframes filmMaskScroll {
-          0% { mask-position: 0 0; -webkit-mask-position: 0 0; }
-          100% { mask-position: 26px 0; -webkit-mask-position: 26px 0; }
-        }
-      `}</style>
     </div>
   );
 }

@@ -196,10 +196,6 @@ export function IntroAnimation() {
           0% { opacity: 1; }
           100% { opacity: 0; }
         }
-        @keyframes filmMaskScroll {
-          0% { mask-position: 0 0; -webkit-mask-position: 0 0; }
-          100% { mask-position: 26px 0; -webkit-mask-position: 26px 0; }
-        }
       `}</style>
     </div>
   );
