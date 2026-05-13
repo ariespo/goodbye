@@ -20,8 +20,13 @@ export function DialogueBox() {
   const currentLine = currentScene?.lines[currentLineIndex];
   const isLastLine = currentLineIndex >= (currentScene?.lines.length ?? 0) - 1;
 
+  const userName = settings?.userName || '玩家';
+  const characterName = settings?.characterName || '少女';
+  const displaySpeaker = applyMacros(currentLine?.speaker || '', userName, characterName);
+  const displayText = applyMacros(currentLine?.text || '', userName, characterName);
+
   const { displayedText, isComplete, skip } = useTypewriter(
-    currentLine?.text || '',
+    displayText,
     typingSpeed,
     true
   );
@@ -109,11 +114,11 @@ export function DialogueBox() {
       onClick={handleAdvance}
     >
       {/* Speaker 标签 (旁白不显示) */}
-      {!isNarrator && currentLine.speaker && (
+      {!isNarrator && displaySpeaker && (
         <div
           className="inline-block px-3 py-1 mb-3 bg-bg-secondary border border-border-subtle text-accent-blue text-sm font-serif-cn tracking-widest animate-[slideInLeft_0.3s_ease-out]"
         >
-          {currentLine.speaker}
+          {displaySpeaker}
         </div>
       )}
 
@@ -171,4 +176,9 @@ function emotionLabel(m: string): string {
     sad: '悲伤', angry: '愤怒', happy: '开心',
   };
   return map[m] || m;
+}
+
+function applyMacros(s: string, user: string, char: string): string {
+  if (!s) return s;
+  return s.replace(/\{\{user\}\}/g, user).replace(/\{\{char\}\}/g, char);
 }

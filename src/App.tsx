@@ -11,8 +11,10 @@ import { SettingsModal } from './components/tavern/SettingsModal';
 import { LorebookModal } from './components/tavern/LorebookModal';
 import { PresetModal } from './components/tavern/PresetModal';
 import { HistoryDrawer } from './components/tavern/HistoryDrawer';
-import type { ChatSession, ChatPreset } from './sillytavern/types';
+import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
+import { OPENING_STORYLINE } from './engine/opening-storyline';
+import { maintextToScene } from './engine/scene-parser';
 import './styles/animations.css';
 import './styles/themes.css';
 
@@ -55,12 +57,19 @@ function App() {
 
         actions.setLorebooks(lorebooks);
 
-        // 如果没有聊天记录，创建默认会话
+        // 如果没有聊天记录，创建默认会话 + 注入开局正文
         if (chats.length === 0 && settings) {
+          const openingMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穂的早晨</sum>\n<vars>{ "stamina": 100, "sanity": 80 }</vars>`,
+            timestamp: Date.now(),
+            variables: {},
+          };
           const newChat: ChatSession = {
             id: crypto.randomUUID(),
             name: `${settings.characterName} - 新对话 1`,
-            messages: [],
+            messages: [openingMsg],
             characterName: settings.characterName,
             userName: settings.userName,
             presetId: settings.activePresetId || presets[0]?.id || null,
@@ -72,6 +81,10 @@ function App() {
           await saveChat(newChat);
           chats.push(newChat);
           actions.setActiveChatId(newChat.id);
+
+          // 让 GameCanvas 立即显示开局场景
+          const scene = maintextToScene(OPENING_STORYLINE);
+          actions.setCurrentScene(scene);
         }
 
         actions.setChats(chats);
