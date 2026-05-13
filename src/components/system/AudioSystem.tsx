@@ -15,10 +15,14 @@ export function AudioSystem() {
       if (audioContextRef.current.state === 'suspended') {
         audioContextRef.current.resume();
       }
+      // 用户交互后，如果 BGM 被自动播放策略阻止，尝试恢复播放
+      if (bgmRef.current && bgmRef.current.paused) {
+        bgmRef.current.play().catch(() => {});
+      }
     };
 
-    document.addEventListener('click', initAudio, { once: true });
-    document.addEventListener('keydown', initAudio, { once: true });
+    document.addEventListener('click', initAudio);
+    document.addEventListener('keydown', initAudio);
 
     return () => {
       document.removeEventListener('click', initAudio);
@@ -49,15 +53,21 @@ export function AudioSystem() {
       }
     };
 
+    // 音频加载完成后尝试播放（解决首次加载时 play() 过早调用失败）
+    audio.addEventListener('canplay', playAudio, { once: true });
+
+    // 立即也尝试一次（文件已缓存时直接成功）
+    playAudio();
+
     if (bgmRef.current) {
       bgmRef.current.pause();
     }
 
     bgmRef.current = audio;
-    playAudio();
 
     return () => {
       audio.pause();
+      audio.removeEventListener('canplay', playAudio);
     };
   }, [bgm]);
 

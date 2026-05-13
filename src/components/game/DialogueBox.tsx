@@ -87,10 +87,12 @@ export function DialogueBox() {
   // 同步当前行的背景/音乐/立绘/情绪到全局状态
   useEffect(() => {
     if (!currentLine) return;
-    if (currentLine.background) setCurrentState({ background: currentLine.background });
-    if (currentLine.bgm) setCurrentState({ bgm: currentLine.bgm });
-    if (currentLine.character !== undefined) setCurrentState({ character: currentLine.character });
-    if (currentLine.emotion) setCurrentState({ mood: currentLine.emotion });
+    setCurrentState({
+      background: currentLine.background || null,
+      bgm: currentLine.bgm || null,
+      character: currentLine.character ?? null,
+      mood: currentLine.emotion || 'calm',
+    });
     setIsTyping(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLineIndex, currentScene]);
