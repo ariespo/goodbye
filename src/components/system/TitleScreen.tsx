@@ -21,7 +21,6 @@ export function TitleScreen() {
   const settings = useGameStore(state => state.tavern.settings);
 
   const [visible, setVisible] = useState(false);
-  const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
 
@@ -139,7 +138,10 @@ export function TitleScreen() {
 
   if (!showTitle) return null;
 
-  const btnCls = 'group relative w-[280px] py-3.5 text-[13px] tracking-[0.35em] transition-all duration-500 border select-none overflow-hidden cursor-none';
+  // 像素风格按钮基础样式：直角 + 像素阴影 + 按下位移
+  const pixelShadow = 'shadow-[1px_1px_0_0_rgba(0,0,0,0.55),2px_2px_0_0_rgba(0,0,0,0.55),3px_3px_0_0_rgba(0,0,0,0.55),4px_4px_0_0_rgba(0,0,0,0.55)]';
+  const pixelShadowHover = 'hover:shadow-[1px_1px_0_0_rgba(0,0,0,0.55),2px_2px_0_0_rgba(0,0,0,0.55)]';
+  const pixelPress = 'hover:translate-x-[2px] hover:translate-y-[2px] active:shadow-none active:translate-x-[4px] active:translate-y-[4px]';
 
   const filmColor = '#d4cfc7'; // 标题页用浅米色胶片，与暗色背景形成对比
 
@@ -215,31 +217,26 @@ export function TitleScreen() {
         <div className="flex flex-col items-center gap-3">
           {/* 开始游戏 */}
           <button
-            className={`${btnCls} border-accent-blue/30 text-accent-blue hover:border-accent-blue hover:bg-accent-blue/[0.07]`}
-            onMouseEnter={() => setHoveredBtn('start')}
-            onMouseLeave={() => setHoveredBtn(null)}
+            className={`w-[240px] py-3 text-[12px] tracking-[0.3em] uppercase font-bold border-2 border-accent-blue/40 text-accent-blue bg-transparent hover:bg-accent-blue/10 hover:text-accent-blue transition-all duration-150 select-none cursor-none rounded-none ${pixelShadow} ${pixelShadowHover} ${pixelPress}`}
+            style={{ fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}
             onClick={handleStartGame}
           >
-            <span className="relative z-10 flex items-center justify-center gap-3">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-300 ${hoveredBtn === 'start' ? 'translate-x-1' : ''}`}>
+            <span className="flex items-center justify-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
               开 始 游 戏
             </span>
-            {hoveredBtn === 'start' && (
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent-blue/5 to-transparent animate-[shimmer_2s_infinite]" />
-            )}
           </button>
 
           {/* 设置 */}
           <button
-            className={`${btnCls} border-white/10 text-text-muted/60 hover:border-white/25 hover:text-text-muted hover:bg-white/[0.03]`}
-            onMouseEnter={() => setHoveredBtn('settings')}
-            onMouseLeave={() => setHoveredBtn(null)}
+            className={`w-[240px] py-3 text-[12px] tracking-[0.3em] uppercase font-bold border-2 border-white/15 text-text-muted/60 bg-transparent hover:border-white/30 hover:text-text-muted hover:bg-white/[0.04] transition-all duration-150 select-none cursor-none rounded-none ${pixelShadow} ${pixelShadowHover} ${pixelPress}`}
+            style={{ fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}
             onClick={handleSettings}
           >
-            <span className="relative z-10 flex items-center justify-center gap-3">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <span className="flex items-center justify-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.67 15 1.65 1.65 0 0 0 3 13.57V13a2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2v.57a1.65 1.65 0 0 0-.67 1.43z" />
               </svg>
@@ -249,13 +246,12 @@ export function TitleScreen() {
 
           {/* 进入轮回 */}
           <button
-            className={`${btnCls} border-accent-gold/20 text-accent-gold/50 hover:border-accent-gold/50 hover:text-accent-gold hover:bg-accent-gold/[0.05]`}
-            onMouseEnter={() => setHoveredBtn('reincarnation')}
-            onMouseLeave={() => setHoveredBtn(null)}
+            className={`w-[240px] py-3 text-[12px] tracking-[0.3em] uppercase font-bold border-2 border-accent-gold/25 text-accent-gold/55 bg-transparent hover:border-accent-gold/45 hover:text-accent-gold hover:bg-accent-gold/[0.06] transition-all duration-150 select-none cursor-none rounded-none ${pixelShadow} ${pixelShadowHover} ${pixelPress}`}
+            style={{ fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}
             onClick={handleReincarnation}
           >
-            <span className="relative z-10 flex items-center justify-center gap-3">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-500 ${hoveredBtn === 'reincarnation' ? 'rotate-180' : ''}`}>
+            <span className="flex items-center justify-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="23 4 23 10 17 10" />
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
               </svg>
