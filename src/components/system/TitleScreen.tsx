@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { FilmStrip } from './FilmStrip';
 import { maintextToScene } from '../../engine/scene-parser';
 import { OPENING_STORYLINE } from '../../engine/opening-storyline';
 import { deleteChat, saveChat } from '../../sillytavern/database';
@@ -139,9 +140,15 @@ export function TitleScreen() {
 
   const btnCls = 'group relative w-[280px] py-3.5 text-[13px] tracking-[0.35em] transition-all duration-500 border select-none overflow-hidden cursor-none';
 
+  const filmColor = '#d4cfc7'; // 标题页用浅米色胶片，与暗色背景形成对比
+
   return (
     <div className="fixed inset-0 z-[50] flex flex-col items-center justify-end overflow-hidden"
       style={{ background: '#0a0a0c' }}>
+
+      {/* 上下胶片条 */}
+      <FilmStrip position="top" filmColor={filmColor} />
+      <FilmStrip position="bottom" filmColor={filmColor} />
 
       {/* 背景图：bedroom1 暗化 */}
       <div className="absolute inset-0 bg-cover bg-center opacity-30"
@@ -262,6 +269,13 @@ export function TitleScreen() {
       <div className="absolute top-6 right-6 w-12 h-12 border-r border-t border-white/[0.04]" />
       <div className="absolute bottom-6 left-6 w-12 h-12 border-l border-b border-white/[0.04]" />
       <div className="absolute bottom-6 right-6 w-12 h-12 border-r border-b border-white/[0.04]" />
+
+      <style>{`
+        @keyframes filmMaskScroll {
+          0% { mask-position: 0 0; -webkit-mask-position: 0 0; }
+          100% { mask-position: 26px 0; -webkit-mask-position: 26px 0; }
+        }
+      `}</style>
     </div>
   );
 }
