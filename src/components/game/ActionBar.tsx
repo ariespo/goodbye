@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
-import { Eye, MagnifyingGlass, ArrowRight, MapTrifold, Gear, Books, SlidersHorizontal, ClockClockwise } from '@phosphor-icons/react';
+import {
+  Eye, MagnifyingGlass, ArrowRight, MapTrifold,
+  Gear, Books, SlidersHorizontal, ClockClockwise,
+} from '@phosphor-icons/react';
+
+const BORDER = '#3a3a42';
+const BORDER_HOVER = '#6b8fc4';
+const BG = 'rgba(12, 12, 16, 0.88)';
+const TEXT_DIM = '#6a6560';
+const ACCENT = '#6b8fc4';
 
 const gameActions = [
   { id: 'observe', icon: Eye, label: '观察' },
@@ -20,50 +29,93 @@ const tools: Array<{ id: ToolId; icon: typeof Eye; label: string }> = [
 ];
 
 export function ActionBar() {
-  const [hovered, setHovered] = useState<string | null>(null);
   const toggleModal = useGameStore(state => state.actions.toggleModal);
   const { performAction } = useGameLoop();
 
-  const renderButton = (id: string, Icon: typeof Eye, label: string, onClick: () => void) => {
-    const isHovered = hovered === id;
-    return (
-      <div key={id} className="relative">
-        <button
-          className={`w-10 h-10 flex items-center justify-center border transition-all duration-200 ${
-            isHovered
-              ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
-              : 'border-border-subtle text-text-muted hover:border-accent-blue hover:bg-accent-blue/10 hover:text-accent-blue'
-          }`}
-          onMouseEnter={() => setHovered(id)}
-          onMouseLeave={() => setHovered(null)}
-          onClick={onClick}
-        >
-          <Icon size={20} />
-        </button>
-
-        {isHovered && (
-          <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-bg-secondary border border-border-subtle text-xs text-text-muted whitespace-nowrap animate-[fadeIn_0.08s_ease-out]">
-            {label}
-          </div>
-        )}
+  return (
+    <div className="absolute bottom-[5%] left-4 flex items-center gap-2 z-30"
+      style={{ paddingBottom: 2 }}
+    >
+      {/* 游戏动作组 */}
+      <div className="flex gap-2">
+        {gameActions.map(a => (
+          <PixelActionBtn
+            key={a.id}
+            icon={<a.icon size={18} />}
+            label={a.label}
+            onClick={() => a.id === 'map' ? toggleModal('map') : performAction(a.id)}
+          />
+        ))}
       </div>
-    );
-  };
+
+      {/* 分隔线 */}
+      <div style={{ width: 2, height: 32, background: BORDER, margin: '0 4px' }} />
+
+      {/* 工具组 */}
+      <div className="flex gap-2">
+        {tools.map(t => (
+          <PixelActionBtn
+            key={t.id}
+            icon={<t.icon size={18} />}
+            label={t.label}
+            onClick={() => toggleModal(t.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── 像素图标按钮 ── */
+
+function PixelActionBtn({
+  icon, label, onClick,
+}: {
+  icon: React.ReactNode; label: string; onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  const bg = hovered ? 'rgba(107,143,196,0.12)' : BG;
+  const border = hovered ? BORDER_HOVER : BORDER;
+  const color = hovered ? ACCENT : TEXT_DIM;
 
   return (
-    <div className="absolute bottom-[6%] left-[5%] flex gap-2 z-20">
-      {gameActions.map(action =>
-        renderButton(action.id, action.icon, action.label, () => {
-          if (action.id === 'map') toggleModal('map');
-          else performAction(action.id);
-        })
-      )}
+    <div className="relative">
+      <button
+        className="w-10 h-10 flex items-center justify-center select-none cursor-none transition-all duration-150"
+        style={{
+          background: bg,
+          border: `2px solid ${border}`,
+          color,
+          boxShadow: hovered
+            ? `inset 1px 1px 0 rgba(255,255,255,0.06), 2px 2px 0 rgba(0,0,0,0.3)`
+            : `inset 1px 1px 0 rgba(255,255,255,0.03), 2px 2px 0 rgba(0,0,0,0.3)`,
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={onClick}
+      >
+        {icon}
+      </button>
 
-      <div className="w-px h-10 bg-border-subtle mx-1" />
-
-      {tools.map(tool =>
-        renderButton(tool.id, tool.icon, tool.label, () => toggleModal(tool.id))
+      {hovered && (
+        <div
+          className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 whitespace-nowrap z-50"
+          style={{
+            background: BG,
+            border: `2px solid ${BORDER}`,
+            fontSize: '10px',
+            color: TEXT_DIM,
+            fontFamily: '"MuzaiPixel", monospace',
+            letterSpacing: '0.1em',
+            boxShadow: '2px 2px 0 rgba(0,0,0,0.4)',
+          }}
+        >
+          {label}
+        </div>
       )}
     </div>
   );
 }
+
+import React from 'react';

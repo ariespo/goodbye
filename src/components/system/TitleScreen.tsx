@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { FilmStrip } from './FilmStrip';
 import { FullScreenGrain } from './FullScreenGrain';
@@ -138,11 +139,6 @@ export function TitleScreen() {
 
   if (!showTitle) return null;
 
-  // 像素风格按钮基础样式：直角 + 像素阴影 + 按下位移
-  const pixelShadow = 'shadow-[1px_1px_0_0_rgba(0,0,0,0.55),2px_2px_0_0_rgba(0,0,0,0.55),3px_3px_0_0_rgba(0,0,0,0.55),4px_4px_0_0_rgba(0,0,0,0.55)]';
-  const pixelShadowHover = 'hover:shadow-[1px_1px_0_0_rgba(0,0,0,0.55),2px_2px_0_0_rgba(0,0,0,0.55)]';
-  const pixelPress = 'hover:translate-x-[2px] hover:translate-y-[2px] active:shadow-none active:translate-x-[4px] active:translate-y-[4px]';
-
   const filmColor = '#d4cfc7'; // 标题页用浅米色胶片，与暗色背景形成对比
 
   return (
@@ -215,49 +211,32 @@ export function TitleScreen() {
 
         {/* 按钮组 */}
         <div className="flex flex-col items-center gap-3">
-          {/* 开始游戏 */}
-          <button
-            className={`w-[240px] py-3 text-[12px] tracking-[0.3em] uppercase font-bold border-2 border-accent-blue/40 text-accent-blue bg-transparent hover:bg-accent-blue/10 hover:text-accent-blue transition-all duration-150 select-none cursor-none rounded-none ${pixelShadow} ${pixelShadowHover} ${pixelPress}`}
-            style={{ fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}
+          {/* 开始游戏 — 实色填充 + 像素 3D 边框 */}
+          <PixelButton
+            label="开 始 游 戏"
+            width={320}
+            theme="blue"
+            icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>}
             onClick={handleStartGame}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
-              开 始 游 戏
-            </span>
-          </button>
+          />
 
           {/* 设置 */}
-          <button
-            className={`w-[240px] py-3 text-[12px] tracking-[0.3em] uppercase font-bold border-2 border-white/15 text-text-muted/60 bg-transparent hover:border-white/30 hover:text-text-muted hover:bg-white/[0.04] transition-all duration-150 select-none cursor-none rounded-none ${pixelShadow} ${pixelShadowHover} ${pixelPress}`}
-            style={{ fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}
+          <PixelButton
+            label="设 置"
+            width={320}
+            theme="gray"
+            icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.67 15 1.65 1.65 0 0 0 3 13.57V13a2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2v.57a1.65 1.65 0 0 0-.67 1.43z" /></svg>}
             onClick={handleSettings}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.67 15 1.65 1.65 0 0 0 3 13.57V13a2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2v.57a1.65 1.65 0 0 0-.67 1.43z" />
-              </svg>
-              设 置
-            </span>
-          </button>
+          />
 
           {/* 进入轮回 */}
-          <button
-            className={`w-[240px] py-3 text-[12px] tracking-[0.3em] uppercase font-bold border-2 border-accent-gold/25 text-accent-gold/55 bg-transparent hover:border-accent-gold/45 hover:text-accent-gold hover:bg-accent-gold/[0.06] transition-all duration-150 select-none cursor-none rounded-none ${pixelShadow} ${pixelShadowHover} ${pixelPress}`}
-            style={{ fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}
+          <PixelButton
+            label="进 入 轮 回"
+            width={320}
+            theme="gold"
+            icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>}
             onClick={handleReincarnation}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-              进 入 轮 回
-            </span>
-          </button>
+          />
         </div>
       </div>
 
@@ -273,5 +252,94 @@ export function TitleScreen() {
       <div className="absolute bottom-6 right-6 w-12 h-12 border-r border-b border-white/[0.04]" />
 
     </div>
+  );
+}
+
+/* ===== 像素风格按钮组件 ===== */
+
+const BTN_THEMES: Record<string, { bg: string; border: string; text: string; shadow: string; bgHover: string; borderHover: string; textHover: string }> = {
+  blue: {
+    bg: '#162a42',
+    border: '#3d6a9a',
+    text: '#9ec8e8',
+    shadow: 'rgba(12,22,38,0.9)',
+    bgHover: '#1d3654',
+    borderHover: '#4a7fb5',
+    textHover: '#b8daf0',
+  },
+  gray: {
+    bg: '#1e1e24',
+    border: '#44444c',
+    text: '#98938e',
+    shadow: 'rgba(8,8,10,0.9)',
+    bgHover: '#2a2a32',
+    borderHover: '#52525c',
+    textHover: '#b0aba5',
+  },
+  gold: {
+    bg: '#2a2015',
+    border: '#7a6540',
+    text: '#c4a872',
+    shadow: 'rgba(15,12,6,0.9)',
+    bgHover: '#3a2d1f',
+    borderHover: '#8a7348',
+    textHover: '#d4bc88',
+  },
+};
+
+interface PixelButtonProps {
+  label: string;
+  width?: number;
+  theme: 'blue' | 'gray' | 'gold';
+  icon?: ReactNode;
+  onClick: () => void;
+}
+
+function PixelButton({ label, width = 320, theme, icon, onClick }: PixelButtonProps) {
+  const t = BTN_THEMES[theme];
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const active = hovered || pressed;
+  const shift = pressed ? 4 : hovered ? 2 : 0;
+  const layers = pressed ? 0 : hovered ? 2 : 4;
+
+  const s = t.shadow;
+  const shadows: string[] = [];
+  // inset 高光
+  shadows.push(`inset 2px 2px 0 rgba(255,255,255,${pressed ? 0.04 : 0.08})`);
+  shadows.push(`inset -2px -2px 0 rgba(0,0,0,${pressed ? 0.5 : 0.35})`);
+  // 外阴影层
+  for (let i = 1; i <= layers; i++) {
+    shadows.push(`${i + shift}px ${i + shift}px 0 ${s}`);
+  }
+
+  return (
+    <button
+      className="relative select-none cursor-none rounded-none overflow-hidden transition-all duration-150"
+      style={{
+        fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace',
+        width: `${width}px`,
+        padding: '14px 0',
+        fontSize: '14px',
+        letterSpacing: '0.3em',
+        fontWeight: 'bold',
+        background: active ? (pressed ? t.bg : t.bgHover) : t.bg,
+        color: active ? (pressed ? t.text : t.textHover) : t.text,
+        border: `3px solid ${active ? (pressed ? t.border : t.borderHover) : t.border}`,
+        boxShadow: shadows.join(', '),
+        transform: `translate(${shift}px, ${shift}px)`,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onClick={onClick}
+    >
+      <span className="flex items-center justify-center gap-2.5">
+        {icon}
+        {label}
+      </span>
+    </button>
   );
 }

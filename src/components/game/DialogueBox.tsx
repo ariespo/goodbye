@@ -5,6 +5,16 @@ import { OPENING_STORYLINE } from '../../engine/opening-storyline';
 import { maintextToScene } from '../../engine/scene-parser';
 import { Play, Pause, FastForward, CaretDown } from '@phosphor-icons/react';
 
+/* ── 像素风对话框 ── */
+
+const PANEL_BG = 'rgba(12, 12, 16, 0.92)';
+const BORDER = '#3a3a42';
+const BORDER_BRIGHT = '#52525c';
+const CORNER = '#5a5a64';
+const TEXT_MAIN = '#d8d4cc';
+const TEXT_DIM = '#7a756e';
+const ACCENT = '#6b8fc4';
+
 export function DialogueBox() {
   const currentScene = useGameStore(state => state.game.currentScene);
   const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
@@ -28,39 +38,25 @@ export function DialogueBox() {
   const displaySpeaker = applyMacros(currentLine?.speaker || '', userName, characterName);
   const displayText = applyMacros(currentLine?.text || '', userName, characterName);
 
-  const { displayedText, isComplete, skip } = useTypewriter(
-    displayText,
-    typingSpeed,
-    true
-  );
+  const { displayedText, isComplete, skip } = useTypewriter(displayText, typingSpeed, true);
 
-  // 自动推进
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (autoMode && isComplete && currentLine && !isLastLine) {
-      autoTimerRef.current = setTimeout(() => {
-        handleAdvance();
-      }, autoIntervalMs);
+      autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
     }
-    return () => {
-      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-    };
+    return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
   }, [autoMode, isComplete, currentLineIndex, currentScene, autoIntervalMs]);
 
-  // 推进到下一行(或等 AI)
   const handleAdvance = useCallback(() => {
     if (!currentScene) return;
-    if (!isComplete) {
-      skip();
-      return;
-    }
+    if (!isComplete) { skip(); return; }
     if (currentLineIndex < currentScene.lines.length - 1) {
       setCurrentLineIndex(currentLineIndex + 1);
     }
   }, [currentScene, currentLineIndex, isComplete, skip, setCurrentLineIndex]);
 
-  // 当 currentScene 为 null 时，点击"开始游戏"触发初始化
   const handleStartOrAdvance = useCallback(() => {
     if (!currentScene) {
       const state = useGameStore.getState();
@@ -71,10 +67,7 @@ export function DialogueBox() {
           const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
           if (maintext) {
             const scene = maintextToScene(maintext);
-            if (scene.lines.length > 0) {
-              setCurrentScene(scene);
-              return;
-            }
+            if (scene.lines.length > 0) { setCurrentScene(scene); return; }
           }
         }
       }
@@ -84,7 +77,6 @@ export function DialogueBox() {
     handleAdvance();
   }, [currentScene, handleAdvance, setCurrentScene]);
 
-  // 同步当前行的背景/音乐/立绘/情绪到全局状态
   useEffect(() => {
     if (!currentLine) return;
     setCurrentState({
@@ -94,15 +86,11 @@ export function DialogueBox() {
       mood: currentLine.emotion || 'calm',
     });
     setIsTyping(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLineIndex, currentScene]);
 
-  // 打字完成时标记 isTyping = false
-  useEffect(() => {
-    if (isComplete) setIsTyping(false);
-  }, [isComplete, setIsTyping]);
+  useEffect(() => { if (isComplete) setIsTyping(false); }, [isComplete, setIsTyping]);
 
-  // 空格/Enter 推进
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.code === 'Space' || e.code === 'Enter') {
@@ -114,94 +102,192 @@ export function DialogueBox() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleStartOrAdvance]);
 
-  // 自动模式的闪烁箭头
   const showNextArrow = isComplete && !isLastLine;
+  const isNarrator = currentLine?.speaker === '旁白';
 
+  /* 初始状态（无场景） */
   if (!currentScene || !currentLine) {
     return (
-      <div
-        className="absolute bottom-[6%] left-1/2 -translate-x-1/2 w-[85vw] max-w-[960px] min-h-[120px] max-h-[400px] bg-bg-primary/92 backdrop-blur-sm border-2 border-border-subtle p-6 overflow-y-auto flex items-center justify-center"
-        style={{
-          boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 0 12px 40px rgba(0,0,0,0.6)',
-        }}
-        onClick={handleStartOrAdvance}
-      >
-        <div className="text-text-muted text-lg font-body-cn text-center cursor-pointer">
-          {isWaitingForAI ? '等待AI回应...' : '点击开始游戏'}
+      <PixelPanel onClick={handleStartOrAdvance}>
+        <div className="text-center cursor-pointer" style={{ color: TEXT_DIM, fontSize: '18px', fontFamily: '"MuzaiPixel", "LXGW WenKai", serif' }}>
+          {isWaitingForAI ? '等待AI回应…' : '点击开始游戏'}
         </div>
-      </div>
+      </PixelPanel>
     );
   }
 
-  const isNarrator = currentLine.speaker === '旁白';
-
   return (
-    <div
-      className="absolute bottom-[6%] left-1/2 -translate-x-1/2 w-[85vw] max-w-[960px] min-h-[120px] max-h-[400px] bg-bg-primary/92 backdrop-blur-sm border-2 border-border-subtle p-6 overflow-y-auto select-none"
-      style={{
-        boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 0 12px 40px rgba(0,0,0,0.6)',
-      }}
-      onClick={handleStartOrAdvance}
-    >
-      {/* Speaker 标签 (旁白不显示) */}
-      {!isNarrator && displaySpeaker && (
-        <div
-          className="inline-block px-3 py-1 mb-3 bg-bg-secondary border border-border-subtle text-accent-blue text-sm font-serif-cn tracking-widest animate-[slideInLeft_0.3s_ease-out]"
-        >
-          {displaySpeaker}
-        </div>
-      )}
+    <PixelPanel onClick={handleStartOrAdvance}>
+      {/* Speaker + 情绪标签行 */}
+      <div className="flex items-start gap-2 mb-3">
+        {!isNarrator && displaySpeaker && (
+          <PixelTag text={displaySpeaker} />
+        )}
+        {!isNarrator && currentLine.emotion && currentLine.emotion !== 'calm' && (
+          <span style={{ fontSize: '11px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.15em' }}>
+            [{emotionLabel(currentLine.emotion)}]
+          </span>
+        )}
+      </div>
 
-      {/* 情绪微标(仅情绪非 calm) */}
-      {!isNarrator && currentLine.emotion && currentLine.emotion !== 'calm' && (
-        <div className="inline-block ml-2 text-[10px] text-text-muted uppercase tracking-widest mb-3 align-top"
-          style={{ color: `var(--mood-text-color, #e8e4dc)` }}
-        >
-          [{emotionLabel(currentLine.emotion)}]
-        </div>
-      )}
-
-      {/* 文本内容 — 根据情绪应用不同视觉效果 */}
+      {/* 主文本 */}
       <div
-        className={`text-[22px] leading-[1.8] font-body-cn whitespace-pre-wrap ${emotionTextClass(currentLine.emotion)}`}
-        style={emotionTextStyle(currentLine.emotion)}
+        className={`whitespace-pre-wrap select-none ${emotionTextClass(currentLine.emotion)}`}
+        style={{
+          fontSize: '22px',
+          lineHeight: 1.8,
+          color: TEXT_MAIN,
+          fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
+          ...emotionTextStyle(currentLine.emotion),
+        }}
       >
         {displayedText}
         {!isComplete && (
-          <span className="inline-block w-[2px] h-[1em] bg-accent-blue ml-1 animate-[cursorBlink_0.8s_infinite]" />
+          <span
+            className="inline-block align-middle"
+            style={{
+              width: '3px',
+              height: '1.1em',
+              background: ACCENT,
+              marginLeft: '4px',
+              animation: 'cursorBlink 0.75s infinite',
+            }}
+          />
         )}
         {showNextArrow && (
-          <span className="inline-block ml-2 text-accent-blue animate-[pulse_0.8s_infinite]">
+          <span className="inline-block ml-2" style={{ color: ACCENT, animation: 'pulse 0.8s infinite' }}>
             <CaretDown size={18} />
           </span>
         )}
       </div>
 
       {/* 底部工具栏 */}
-      <div className="absolute bottom-3 right-3 flex gap-2">
-        <button
-          className={`flex items-center gap-1 px-2 py-1 text-xs border transition-all duration-200 ${
-            autoMode
-              ? 'border-accent-blue text-accent-blue bg-accent-blue/10'
-              : 'border-border-subtle text-text-muted hover:border-accent-blue hover:text-accent-blue hover:bg-accent-blue/10'
-          }`}
+      <div className="absolute bottom-3 right-4 flex gap-2">
+        <PixelIconBtn
+          active={autoMode}
           onClick={(e) => { e.stopPropagation(); }}
-          title="自动模式(可在设置调整间隔)"
-        >
-          {autoMode ? <Play size={12} weight="fill" /> : <Pause size={12} />}
-          {autoMode ? '自动' : '手动'}
-        </button>
-        <button
-          className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted border border-border-subtle hover:border-accent-blue hover:text-accent-blue hover:bg-accent-blue/10 transition-all duration-200"
+          icon={autoMode ? <Play size={14} weight="fill" /> : <Pause size={14} />}
+          label={autoMode ? '自动' : '手动'}
+        />
+        <PixelIconBtn
           onClick={(e) => { e.stopPropagation(); skip(); }}
-        >
-          <FastForward size={12} />
-          快进
-        </button>
+          icon={<FastForward size={14} />}
+          label="快进"
+        />
       </div>
+    </PixelPanel>
+  );
+}
+
+/* ── 像素风面板外壳 ── */
+
+function PixelPanel({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <div
+      className="absolute bottom-[5%] left-1/2 -translate-x-1/2 select-none"
+      style={{ width: 'min(88vw, 980px)', minHeight: '120px', maxHeight: '420px', zIndex: 20 }}
+      onClick={onClick}
+    >
+      {/* 主体背景 */}
+      <div
+        className="relative w-full h-full overflow-y-auto"
+        style={{
+          background: PANEL_BG,
+          border: `3px solid ${BORDER}`,
+          padding: '24px 28px 32px 28px',
+          boxShadow:
+            `inset 2px 2px 0 ${BORDER_BRIGHT},` +
+            `inset -2px -2px 0 rgba(0,0,0,0.5),` +
+            `4px 4px 0 rgba(0,0,0,0.6),` +
+            `5px 5px 0 rgba(0,0,0,0.4),` +
+            `6px 6px 0 rgba(0,0,0,0.2)`,
+        }}
+      >
+        {children}
+      </div>
+
+      {/* 四角像素装饰 */}
+      <div style={{ position: 'absolute', top: -4, left: -4, width: 10, height: 3, background: CORNER }} />
+      <div style={{ position: 'absolute', top: -4, left: -4, width: 3, height: 10, background: CORNER }} />
+      <div style={{ position: 'absolute', top: -4, right: -4, width: 10, height: 3, background: CORNER }} />
+      <div style={{ position: 'absolute', top: -4, right: -2, width: 3, height: 10, background: CORNER }} />
+      <div style={{ position: 'absolute', bottom: -4, left: -4, width: 10, height: 3, background: CORNER }} />
+      <div style={{ position: 'absolute', bottom: -2, left: -4, width: 3, height: 10, background: CORNER }} />
+      <div style={{ position: 'absolute', bottom: -4, right: -4, width: 10, height: 3, background: CORNER }} />
+      <div style={{ position: 'absolute', bottom: -2, right: -2, width: 3, height: 10, background: CORNER }} />
+
+      {/* 扫描线覆盖 */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.02]"
+        style={{
+          background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)',
+        }}
+      />
     </div>
   );
 }
+
+/* ── 像素风 Speaker 标签 ── */
+
+function PixelTag({ text }: { text: string }) {
+  return (
+    <div
+      className="inline-flex items-center px-3 py-1"
+      style={{
+        background: 'rgba(107, 143, 196, 0.12)',
+        border: `2px solid rgba(107, 143, 196, 0.35)`,
+        color: ACCENT,
+        fontSize: '13px',
+        fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
+        letterSpacing: '0.15em',
+        boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.05), 2px 2px 0 rgba(0,0,0,0.3)',
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+/* ── 像素风图标按钮 ── */
+
+function PixelIconBtn({
+  icon, label, active, onClick,
+}: {
+  icon: React.ReactNode; label: string; active?: boolean; onClick: (e: React.MouseEvent) => void;
+}) {
+  const [hovered, setHovered] = React.useState(false);
+
+  const bg = active ? 'rgba(107,143,196,0.18)' : hovered ? 'rgba(107,143,196,0.1)' : 'transparent';
+  const border = active ? 'rgba(107,143,196,0.5)' : hovered ? 'rgba(107,143,196,0.4)' : BORDER;
+  const color = active ? ACCENT : hovered ? ACCENT : TEXT_DIM;
+
+  return (
+    <button
+      className="flex items-center gap-1.5 px-2.5 py-1.5 select-none cursor-none transition-all duration-150"
+      style={{
+        background: bg,
+        border: `2px solid ${border}`,
+        color,
+        fontSize: '11px',
+        fontFamily: '"MuzaiPixel", monospace',
+        letterSpacing: '0.1em',
+        boxShadow: hovered
+          ? 'inset 1px 1px 0 rgba(255,255,255,0.05), 2px 2px 0 rgba(0,0,0,0.3)'
+          : 'inset 1px 1px 0 rgba(255,255,255,0.03)',
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/* ── 辅助函数 ── */
+
+import React from 'react';
 
 function emotionLabel(m: string): string {
   const map: Record<string, string> = {
@@ -211,7 +297,6 @@ function emotionLabel(m: string): string {
   return map[m] || m;
 }
 
-/** 情绪 → 文本 CSS class */
 function emotionTextClass(emotion: string | undefined): string {
   switch (emotion) {
     case 'horror': return 'animate-[textHorror_2.5s_infinite]';
@@ -219,11 +304,10 @@ function emotionTextClass(emotion: string | undefined): string {
     case 'sad': return 'animate-[textSad_3s_infinite_ease-in-out]';
     case 'angry': return 'animate-[textAngry_1.2s_infinite]';
     case 'happy': return 'animate-[textHappy_2s_infinite_ease-in-out]';
-    default: return 'text-text-primary';
+    default: return '';
   }
 }
 
-/** 情绪 → 文本颜色 style */
 function emotionTextStyle(emotion: string | undefined): React.CSSProperties {
   switch (emotion) {
     case 'horror': return { color: '#ddd8d0' };
