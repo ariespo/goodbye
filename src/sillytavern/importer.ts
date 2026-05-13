@@ -193,45 +193,24 @@ function normalizePromptOrder(rawOrder: any, promptsRepo: any[]): PromptOrderIte
     if (id) repoMap.set(id, p);
   }
 
-  const processed = new Set<string>();
   const result: PromptOrderItem[] = [];
 
+  // 严格按 prompt_order 数组顺序输出。每项的 enabled 直接从 prompt_order 项读,
+  // 不与 prompts 仓库的 def.enabled 混合(酒馆设计上以 prompt_order 为权威)。
   for (const entry of flat) {
     const identifier = entry?.identifier || entry?.id;
     if (!identifier) continue;
-    processed.add(identifier);
     const def = repoMap.get(identifier);
     result.push({
       identifier,
       name: def?.name ?? entry?.name ?? identifier,
       role: resolveRole(def, entry),
-      enabled: entry?.enabled ?? def?.enabled ?? true,
-      // marker / content / injection 字段统一以扩展字段形式塞进去,Type 上是 PromptOrderItem
+      enabled: entry?.enabled !== false,
       ...({
         content: def?.content ?? entry?.content ?? entry?.system_prompt ?? '',
         marker: !!(def?.marker ?? entry?.marker),
         injection_position: def?.injection_position ?? entry?.injection_position,
         injection_depth: def?.injection_depth ?? entry?.injection_depth,
-      } as any),
-    });
-  }
-
-  // 把未出现在 prompt_order 但出现在 prompts 仓库中的非空条目也加进来(默认 disabled)
-  for (const p of promptsRepo) {
-    const id = p?.identifier || p?.id;
-    if (!id || processed.has(id)) continue;
-    const hasContent = !!(p?.content || p?.name);
-    if (!hasContent && !p?.marker) continue;
-    result.push({
-      identifier: id,
-      name: p?.name ?? id,
-      role: resolveRole(p, null),
-      enabled: false,
-      ...({
-        content: p?.content ?? '',
-        marker: !!p?.marker,
-        injection_position: p?.injection_position,
-        injection_depth: p?.injection_depth,
       } as any),
     });
   }
