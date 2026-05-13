@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
-import { FilmStrip } from './FilmStrip';
+import { FilmFrame } from './FilmFrame';
 import { maintextToScene } from '../../engine/scene-parser';
 import { OPENING_STORYLINE } from '../../engine/opening-storyline';
 import { deleteChat, saveChat } from '../../sillytavern/database';
@@ -146,9 +146,8 @@ export function TitleScreen() {
     <div className="fixed inset-0 z-[50] flex flex-col items-center justify-center overflow-hidden"
       style={{ background: '#0a0a0c' }}>
 
-      {/* 上下胶片条 */}
-      <FilmStrip position="top" filmColor={filmColor} />
-      <FilmStrip position="bottom" filmColor={filmColor} />
+      {/* 胶片框覆盖层 */}
+      <FilmFrame filmColor={filmColor} className="z-20" />
 
       {/* 背景图：bedroom1 暗化 */}
       <div className="absolute inset-0 bg-cover bg-center opacity-30"
@@ -177,7 +176,7 @@ export function TitleScreen() {
       />
 
       {/* 内容区 */}
-      <div className={`relative z-10 flex flex-col items-center pb-12 transition-all duration-[1.2s] ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+      <div className={`relative z-30 flex flex-col items-center pb-12 transition-all duration-[1.2s] ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
         style={{ marginTop: '-8vh' }}
       >
 

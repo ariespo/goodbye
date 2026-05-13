@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
-import { FilmStrip } from './FilmStrip';
+import { FilmFrame } from './FilmFrame';
 
 const PHASES = [
   { name: 'black', duration: 800 },
@@ -57,9 +57,8 @@ export function IntroAnimation() {
       style={{ background: '#0a0a0c' }}
       onClick={handleSkip}
     >
-      {/* 上下流动胶片条 */}
-      <FilmStrip position="top" filmColor={filmColor} />
-      <FilmStrip position="bottom" filmColor={filmColor} />
+      {/* 胶片框覆盖层 */}
+      <FilmFrame filmColor={filmColor} className="z-20" />
 
       {/* 阶段：纯黑 */}
       {p === 'black' && <div className="absolute inset-0 bg-black" />}
@@ -92,7 +91,7 @@ export function IntroAnimation() {
 
       {/* 阶段：resolve / hold / fade — 标题在白屏中浮现 */}
       {(p === 'resolve' || p === 'hold' || p === 'fade') && (
-        <div className="relative flex flex-col items-center gap-5 z-10"
+        <div className="relative flex flex-col items-center gap-5 z-30"
           style={{
             animation: p === 'fade' ? 'titleFadeOut 1s ease-in forwards' : 'none',
           }}
