@@ -8,7 +8,7 @@ export function BackgroundLayer() {
     <div
       className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-in-out"
       style={{
-        backgroundImage: background ? `url(${background.startsWith('http') ? background : assetUrl(`assets/backgrounds/${background}`)})` : 'none',
+        backgroundImage: background ? `url(${background.startsWith('http') ? background : assetUrl(`assets/backgrounds/${background}${background.includes('.') ? '' : '.png'}`)})` : 'none',
         filter: 'grayscale(100%) contrast(150%)',
       }}
     />

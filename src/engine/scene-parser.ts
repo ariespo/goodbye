@@ -92,7 +92,14 @@ export function maintextToScene(maintext: string): Scene {
   };
 }
 
+const SPEAKER_SPRITE_MAP: Record<string, string> = {
+  '文穂': 'fumi-normal.png',
+  'fumi': 'fumi-normal.png',
+  '緋室灯織': 'touko-normal.png',
+  'touko': 'touko-normal.png',
+};
+
 /** 角色名 → 立绘文件名的默认推导(可被显式 character 字段覆盖) */
-function speakerToCharacterAsset(speaker: string): string {
-  return `${speaker}.png`;
+function speakerToCharacterAsset(speaker: string): string | undefined {
+  return SPEAKER_SPRITE_MAP[speaker];
 }

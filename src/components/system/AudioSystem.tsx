@@ -36,7 +36,8 @@ export function AudioSystem() {
     }
 
     const audio = new Audio();
-    audio.src = bgm.startsWith('http') ? bgm : assetUrl(`assets/audio/bgm/${bgm}`);
+    const bgmPath = bgm.includes('.') ? bgm : `${bgm}.mp3`;
+    audio.src = bgm.startsWith('http') ? bgm : assetUrl(`assets/audio/bgm/${bgmPath}`);
     audio.loop = true;
     audio.volume = 0.5;
 
