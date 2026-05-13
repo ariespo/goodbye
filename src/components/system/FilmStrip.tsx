@@ -149,8 +149,6 @@ export function FilmStrip({ position, filmColor }: FilmStripProps) {
 
       // 7. 画面框圆角暗示（像参考图片中画面框的顶部/底部边缘）
       const frameInset = 36;
-      const frameY = isTop ? 30 : 30;
-      const frameH = isTop ? 2 : 2;
       ctx.strokeStyle = filmColor;
       ctx.globalAlpha = 0.08;
       ctx.lineWidth = 1.5;
