@@ -36,6 +36,7 @@ interface GameStore {
     showPreset: boolean;
     showHistory: boolean;
     showMap: boolean;
+    showTitle: boolean;
     notifications: Notification[];
     introPlayed: boolean;
   };
@@ -60,6 +61,7 @@ interface GameStore {
     setApiError: (error: string | null) => void;
     setAbortController: (controller: AbortController | null) => void;
     toggleModal: (modal: 'settings' | 'lorebook' | 'preset' | 'history' | 'map') => void;
+    setShowTitle: (show: boolean) => void;
     addNotification: (notification: Omit<Notification, 'id'>) => void;
     removeNotification: (id: string) => void;
     setIntroPlayed: (played: boolean) => void;
@@ -120,6 +122,7 @@ export const useGameStore = create<GameStore>((set) => ({
     showPreset: false,
     showHistory: false,
     showMap: false,
+    showTitle: true,
     notifications: [],
     introPlayed: false,
   },
@@ -147,6 +150,7 @@ export const useGameStore = create<GameStore>((set) => ({
       const key = `show${modal.charAt(0).toUpperCase() + modal.slice(1)}` as keyof typeof state.ui;
       return { ui: { ...state.ui, [key]: !state.ui[key] } };
     }),
+    setShowTitle: (show) => set(state => ({ ui: { ...state.ui, showTitle: show } })),
     addNotification: (notification) => set(state => ({
       ui: {
         ...state.ui,

@@ -4,6 +4,7 @@ import { initializeDatabase, getSettings, getLorebooks, getPresets, getChats, sa
 import { GameCanvas } from './components/game/GameCanvas';
 import { CustomCursor } from './components/system/CustomCursor';
 import { IntroAnimation } from './components/system/IntroAnimation';
+import { TitleScreen } from './components/system/TitleScreen';
 import { NotificationToast } from './components/system/NotificationToast';
 import { ApiKeySetup } from './components/system/ApiKeySetup';
 // import { ConfirmModal } from './components/system/ConfirmModal';
@@ -14,7 +15,6 @@ import { HistoryDrawer } from './components/tavern/HistoryDrawer';
 import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
 import { OPENING_STORYLINE } from './engine/opening-storyline';
-import { maintextToScene } from './engine/scene-parser';
 import './styles/animations.css';
 import './styles/themes.css';
 
@@ -58,6 +58,7 @@ function App() {
         actions.setLorebooks(lorebooks);
 
         // 如果没有聊天记录，创建默认会话 + 注入开局正文
+        // 但不设置 currentScene，等用户在 TitleScreen 点击"开始游戏"后再进入
         if (chats.length === 0 && settings) {
           const openingMsg: ChatMessage = {
             id: crypto.randomUUID(),
@@ -81,41 +82,12 @@ function App() {
           await saveChat(newChat);
           chats.push(newChat);
           actions.setActiveChatId(newChat.id);
-
-          // 让 GameCanvas 立即显示开局场景
-          const scene = maintextToScene(OPENING_STORYLINE);
-          actions.setCurrentScene(scene);
         }
 
         actions.setChats(chats);
 
         if (chats.length > 0 && !useGameStore.getState().tavern.activeChatId) {
           actions.setActiveChatId(chats[0].id);
-        }
-
-        // 兜底: 无论前面哪条路径都确保 currentScene 有值
-        const stateAfterInit = useGameStore.getState();
-        if (!stateAfterInit.game.currentScene) {
-          // 优先尝试从已有聊天记录的最后一条 assistant 消息恢复
-          const chat = stateAfterInit.tavern.chats.find(
-            c => c.id === stateAfterInit.tavern.activeChatId
-          );
-          if (chat) {
-            const lastAssistant = [...chat.messages].reverse().find(m => m.role === 'assistant');
-            if (lastAssistant) {
-              const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
-              if (maintext) {
-                const scene = maintextToScene(maintext);
-                if (scene.lines.length > 0) {
-                  actions.setCurrentScene(scene);
-                }
-              }
-            }
-          }
-          // 仍然为 null 则使用开场剧情
-          if (!useGameStore.getState().game.currentScene) {
-            actions.setCurrentScene(maintextToScene(OPENING_STORYLINE));
-          }
         }
 
         actions.addNotification({
@@ -135,12 +107,15 @@ function App() {
     loadData();
   }, [actions]);
 
+  const showTitle = useGameStore(state => state.ui.showTitle);
+
   return (
     <div className="relative w-full h-full overflow-hidden bg-bg-primary">
       <CustomCursor />
       <IntroAnimation />
       <NotificationToast />
-      <GameCanvas />
+      {showTitle && <TitleScreen />}
+      {!showTitle && <GameCanvas />}
       <ApiKeySetup />
       <SettingsModal />
       <LorebookModal />
