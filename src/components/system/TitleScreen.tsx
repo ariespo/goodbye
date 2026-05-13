@@ -143,7 +143,7 @@ export function TitleScreen() {
   const filmColor = '#d4cfc7'; // 标题页用浅米色胶片，与暗色背景形成对比
 
   return (
-    <div className="fixed inset-0 z-[50] flex flex-col items-center justify-end overflow-hidden"
+    <div className="fixed inset-0 z-[50] flex flex-col items-center justify-center overflow-hidden"
       style={{ background: '#0a0a0c' }}>
 
       {/* 上下胶片条 */}
@@ -177,7 +177,9 @@ export function TitleScreen() {
       />
 
       {/* 内容区 */}
-      <div className={`relative z-10 flex flex-col items-center pb-24 transition-all duration-[1.2s] ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+      <div className={`relative z-10 flex flex-col items-center pb-12 transition-all duration-[1.2s] ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+        style={{ marginTop: '-8vh' }}
+      >
 
         {/* 标题 */}
         <div className="flex flex-col items-center gap-3 mb-10">

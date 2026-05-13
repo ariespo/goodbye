@@ -105,7 +105,7 @@ export function FilmStrip({ position, filmColor }: FilmStripProps) {
 
   return (
     <div
-      className={`absolute left-0 right-0 z-30 pointer-events-none ${isTop ? 'top-0' : 'bottom-0'}`}
+      className={`absolute left-3 right-3 z-30 pointer-events-none ${isTop ? 'top-3' : 'bottom-3'}`}
       style={{ height: `${STRIP_H}px` }}
     >
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
