@@ -46,12 +46,20 @@ export function IntroAnimation() {
 
   const p = PHASES[phase].name;
 
+  // 胶片颜色：白色背景阶段用黑色胶片，黑色背景阶段用白色胶片
+  const isDarkPhase = ['black', 'fade', 'exit'].includes(p);
+  const filmColor = isDarkPhase ? '#e8e4dc' : '#1a1a1f';
+  const holeColor = isDarkPhase ? '#0a0a0c' : '#e8e4dc';
+
   return (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center overflow-hidden"
       style={{ background: '#0a0a0c' }}
       onClick={handleSkip}
     >
+      {/* 上下流动胶片条 */}
+      <FilmStrip position="top" filmColor={filmColor} holeColor={holeColor} />
+      <FilmStrip position="bottom" filmColor={filmColor} holeColor={holeColor} />
       {/* 阶段：纯黑 */}
       {p === 'black' && <div className="absolute inset-0 bg-black" />}
 
@@ -187,7 +195,77 @@ export function IntroAnimation() {
           0% { opacity: 1; }
           100% { opacity: 0; }
         }
+        @keyframes filmScroll {
+          0% { background-position: 0 0; }
+          100% { background-position: 22px 0; }
+        }
       `}</style>
+    </div>
+  );
+}
+
+/** 流动胶片条 — 上下边缘的 35mm 电影胶片效果 */
+function FilmStrip({ position, filmColor, holeColor }: {
+  position: 'top' | 'bottom';
+  filmColor: string;
+  holeColor: string;
+}) {
+  const isTop = position === 'top';
+
+  return (
+    <div
+      className={`absolute left-0 right-0 z-20 pointer-events-none ${isTop ? 'top-0' : 'bottom-0'}`}
+      style={{ height: '44px' }}
+    >
+      {/* 胶片底色 */}
+      <div className="absolute inset-0" style={{ backgroundColor: filmColor }} />
+
+      {/* 上排齿孔 */}
+      <div
+        className="absolute left-0 right-0"
+        style={{
+          [isTop ? 'top' : 'bottom']: '6px',
+          height: '10px',
+          backgroundImage: `repeating-linear-gradient(
+            90deg,
+            ${holeColor} 0px,
+            ${holeColor} 10px,
+            transparent 10px,
+            transparent 22px
+          )`,
+          backgroundSize: '22px 100%',
+          animation: 'filmScroll 0.6s linear infinite',
+        }}
+      />
+
+      {/* 下排齿孔 */}
+      <div
+        className="absolute left-0 right-0"
+        style={{
+          [isTop ? 'top' : 'bottom']: '28px',
+          height: '10px',
+          backgroundImage: `repeating-linear-gradient(
+            90deg,
+            ${holeColor} 0px,
+            ${holeColor} 10px,
+            transparent 10px,
+            transparent 22px
+          )`,
+          backgroundSize: '22px 100%',
+          animation: 'filmScroll 0.6s linear infinite',
+        }}
+      />
+
+      {/* 胶片边缘细线 */}
+      <div
+        className="absolute left-0 right-0"
+        style={{
+          [isTop ? 'bottom' : 'top']: '0',
+          height: '1px',
+          backgroundColor: filmColor,
+          opacity: 0.5,
+        }}
+      />
     </div>
   );
 }
