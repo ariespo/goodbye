@@ -12,6 +12,7 @@ import { UserInput } from './UserInput';
 import { SaveModal } from '../system/SaveModal';
 import { AudioSystem } from '../system/AudioSystem';
 import { maintextToScene } from '../../engine/scene-parser';
+import { OPENING_STORYLINE } from '../../engine/opening-storyline';
 
 /** 从 assistant message 的 content 里提取 <maintext>...*/
 function extractMaintext(content: string): string {
@@ -32,15 +33,21 @@ export function GameCanvas() {
   // 自动从最后一条 assistant message 重建 scene(解决刷新页面后 scene 丢失)
   useEffect(() => {
     if (currentScene) return;
-    if (!activeChat || activeChat.messages.length === 0) return;
-    const lastAssistant = [...activeChat.messages].reverse().find(m => m.role === 'assistant');
-    if (!lastAssistant) return;
-    const maintext = extractMaintext(lastAssistant.content);
-    if (!maintext) return;
-    const scene = maintextToScene(maintext);
-    if (scene.lines.length > 0) {
-      actions.setCurrentScene(scene);
+    if (activeChat && activeChat.messages.length > 0) {
+      const lastAssistant = [...activeChat.messages].reverse().find(m => m.role === 'assistant');
+      if (lastAssistant) {
+        const maintext = extractMaintext(lastAssistant.content);
+        if (maintext) {
+          const scene = maintextToScene(maintext);
+          if (scene.lines.length > 0) {
+            actions.setCurrentScene(scene);
+            return;
+          }
+        }
+      }
     }
+    // 最终后备: 直接使用开场剧情确保用户永远能开始游戏
+    actions.setCurrentScene(maintextToScene(OPENING_STORYLINE));
   }, [currentScene, activeChat, actions]);
 
   return (

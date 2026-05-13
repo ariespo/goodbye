@@ -93,6 +93,31 @@ function App() {
           actions.setActiveChatId(chats[0].id);
         }
 
+        // 兜底: 无论前面哪条路径都确保 currentScene 有值
+        const stateAfterInit = useGameStore.getState();
+        if (!stateAfterInit.game.currentScene) {
+          // 优先尝试从已有聊天记录的最后一条 assistant 消息恢复
+          const chat = stateAfterInit.tavern.chats.find(
+            c => c.id === stateAfterInit.tavern.activeChatId
+          );
+          if (chat) {
+            const lastAssistant = [...chat.messages].reverse().find(m => m.role === 'assistant');
+            if (lastAssistant) {
+              const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
+              if (maintext) {
+                const scene = maintextToScene(maintext);
+                if (scene.lines.length > 0) {
+                  actions.setCurrentScene(scene);
+                }
+              }
+            }
+          }
+          // 仍然为 null 则使用开场剧情
+          if (!useGameStore.getState().game.currentScene) {
+            actions.setCurrentScene(maintextToScene(OPENING_STORYLINE));
+          }
+        }
+
         actions.addNotification({
           type: 'success',
           message: '游戏数据加载完成',

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useTypewriter } from '../../hooks/useTypewriter';
+import { OPENING_STORYLINE } from '../../engine/opening-storyline';
+import { maintextToScene } from '../../engine/scene-parser';
 import { Play, Pause, FastForward, CaretDown } from '@phosphor-icons/react';
 
 export function DialogueBox() {
@@ -12,6 +14,7 @@ export function DialogueBox() {
   const setCurrentLineIndex = useGameStore(state => state.actions.setCurrentLineIndex);
   const setCurrentState = useGameStore(state => state.actions.setCurrentState);
   const setIsTyping = useGameStore(state => state.actions.setIsTyping);
+  const setCurrentScene = useGameStore(state => state.actions.setCurrentScene);
 
   const autoMode = settings?.autoMode ?? false;
   const autoIntervalMs = settings?.autoIntervalMs ?? 1500;
@@ -57,6 +60,30 @@ export function DialogueBox() {
     }
   }, [currentScene, currentLineIndex, isComplete, skip, setCurrentLineIndex]);
 
+  // 当 currentScene 为 null 时，点击"开始游戏"触发初始化
+  const handleStartOrAdvance = useCallback(() => {
+    if (!currentScene) {
+      const state = useGameStore.getState();
+      const chat = state.tavern.chats.find(c => c.id === state.tavern.activeChatId);
+      if (chat) {
+        const lastAssistant = [...chat.messages].reverse().find(m => m.role === 'assistant');
+        if (lastAssistant) {
+          const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
+          if (maintext) {
+            const scene = maintextToScene(maintext);
+            if (scene.lines.length > 0) {
+              setCurrentScene(scene);
+              return;
+            }
+          }
+        }
+      }
+      setCurrentScene(maintextToScene(OPENING_STORYLINE));
+      return;
+    }
+    handleAdvance();
+  }, [currentScene, handleAdvance, setCurrentScene]);
+
   // 同步当前行的背景/音乐/立绘/情绪到全局状态
   useEffect(() => {
     if (!currentLine) return;
@@ -78,12 +105,12 @@ export function DialogueBox() {
     function onKey(e: KeyboardEvent) {
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
-        handleAdvance();
+        handleStartOrAdvance();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleAdvance]);
+  }, [handleStartOrAdvance]);
 
   // 自动模式的闪烁箭头
   const showNextArrow = isComplete && !isLastLine;
@@ -95,8 +122,9 @@ export function DialogueBox() {
         style={{
           boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 0 12px 40px rgba(0,0,0,0.6)',
         }}
+        onClick={handleStartOrAdvance}
       >
-        <div className="text-text-muted text-lg font-body-cn text-center">
+        <div className="text-text-muted text-lg font-body-cn text-center cursor-pointer">
           {isWaitingForAI ? '等待AI回应...' : '点击开始游戏'}
         </div>
       </div>
@@ -111,7 +139,7 @@ export function DialogueBox() {
       style={{
         boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 0 12px 40px rgba(0,0,0,0.6)',
       }}
-      onClick={handleAdvance}
+      onClick={handleStartOrAdvance}
     >
       {/* Speaker 标签 (旁白不显示) */}
       {!isNarrator && displaySpeaker && (
