@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
-import { FilmFrame } from './FilmFrame';
+import { FilmStrip } from './FilmStrip';
+import { FullScreenGrain } from './FullScreenGrain';
 import { maintextToScene } from '../../engine/scene-parser';
 import { OPENING_STORYLINE } from '../../engine/opening-storyline';
 import { deleteChat, saveChat } from '../../sillytavern/database';
@@ -146,8 +147,12 @@ export function TitleScreen() {
     <div className="fixed inset-0 z-[50] flex flex-col items-center justify-center overflow-hidden"
       style={{ background: '#0a0a0c' }}>
 
-      {/* 胶片框覆盖层 */}
-      <FilmFrame filmColor={filmColor} className="z-20" />
+      {/* 全屏老胶片效果 */}
+      <FullScreenGrain />
+
+      {/* 上下完整胶片段 */}
+      <FilmStrip position="top" filmColor={filmColor} />
+      <FilmStrip position="bottom" filmColor={filmColor} />
 
       {/* 背景图：bedroom1 暗化 */}
       <div className="absolute inset-0 bg-cover bg-center opacity-30"

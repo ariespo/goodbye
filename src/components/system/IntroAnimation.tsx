@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
-import { FilmFrame } from './FilmFrame';
+import { FilmStrip } from './FilmStrip';
+import { FullScreenGrain } from './FullScreenGrain';
 
 const PHASES = [
   { name: 'black', duration: 800 },
@@ -57,8 +58,12 @@ export function IntroAnimation() {
       style={{ background: '#0a0a0c' }}
       onClick={handleSkip}
     >
-      {/* 胶片框覆盖层 */}
-      <FilmFrame filmColor={filmColor} className="z-20" />
+      {/* 全屏老胶片效果（灰尘/划痕/抖动/暗角） */}
+      <FullScreenGrain />
+
+      {/* 上下完整胶片段 */}
+      <FilmStrip position="top" filmColor={filmColor} />
+      <FilmStrip position="bottom" filmColor={filmColor} />
 
       {/* 阶段：纯黑 */}
       {p === 'black' && <div className="absolute inset-0 bg-black" />}
