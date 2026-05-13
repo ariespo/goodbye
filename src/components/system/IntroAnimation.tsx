@@ -92,7 +92,7 @@ export function IntroAnimation() {
           <h1
             className="text-6xl md:text-7xl font-bold tracking-[0.4em]"
             style={{
-              fontFamily: '"MuzaiPixel", "Noto Serif SC", serif',
+              fontFamily: '"LXGW WenKai", "Noto Serif SC", serif',
               color: '#1a1a1f',
               textShadow: '0 0 40px rgba(26,26,31,0.15), 0 1px 2px rgba(255,255,255,0.5)',
               animation: p === 'resolve' ? 'titleCarve 2s ease-out forwards' : 'none',

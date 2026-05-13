@@ -161,8 +161,11 @@ export function DialogueBox() {
         </div>
       )}
 
-      {/* 文本内容 */}
-      <div className="text-text-primary text-[22px] leading-[1.8] font-body-cn whitespace-pre-wrap">
+      {/* 文本内容 — 根据情绪应用不同视觉效果 */}
+      <div
+        className={`text-[22px] leading-[1.8] font-body-cn whitespace-pre-wrap ${emotionTextClass(currentLine.emotion)}`}
+        style={emotionTextStyle(currentLine.emotion)}
+      >
         {displayedText}
         {!isComplete && (
           <span className="inline-block w-[2px] h-[1em] bg-accent-blue ml-1 animate-[cursorBlink_0.8s_infinite]" />
@@ -206,6 +209,30 @@ function emotionLabel(m: string): string {
     sad: '悲伤', angry: '愤怒', happy: '开心',
   };
   return map[m] || m;
+}
+
+/** 情绪 → 文本 CSS class */
+function emotionTextClass(emotion: string | undefined): string {
+  switch (emotion) {
+    case 'horror': return 'animate-[textHorror_2.5s_infinite]';
+    case 'insane': return 'animate-[textInsane_1.5s_infinite]';
+    case 'sad': return 'animate-[textSad_3s_infinite_ease-in-out]';
+    case 'angry': return 'animate-[textAngry_1.2s_infinite]';
+    case 'happy': return 'animate-[textHappy_2s_infinite_ease-in-out]';
+    default: return 'text-text-primary';
+  }
+}
+
+/** 情绪 → 文本颜色 style */
+function emotionTextStyle(emotion: string | undefined): React.CSSProperties {
+  switch (emotion) {
+    case 'horror': return { color: '#ddd8d0' };
+    case 'insane': return { color: '#e0d8e8' };
+    case 'sad': return { color: '#c8d4e0' };
+    case 'angry': return { color: '#f0d8d8' };
+    case 'happy': return { color: '#f0e8d0' };
+    default: return {};
+  }
 }
 
 function applyMacros(s: string, user: string, char: string): string {

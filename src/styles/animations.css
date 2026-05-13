@@ -95,3 +95,58 @@
   0% { opacity: 0; transform: translateY(10px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+
+/* ========== 情绪文字特效 ========== */
+
+/* horror — 恐惧：轻微颤抖 + 血色阴影 */
+@keyframes textHorror {
+  0%, 100% { transform: translate(0, 0); text-shadow: 1px 0 8px rgba(201, 79, 79, 0.25); }
+  10% { transform: translate(0.5px, -0.5px); }
+  20% { transform: translate(-0.5px, 0.5px); }
+  30% { transform: translate(0.5px, 0.5px); text-shadow: -1px 0 10px rgba(201, 79, 79, 0.35); }
+  40% { transform: translate(-0.5px, -0.5px); }
+  50% { transform: translate(0, 0); }
+  60% { transform: translate(0.3px, 0); text-shadow: 2px 0 6px rgba(201, 79, 79, 0.2); }
+  70% { transform: translate(-0.3px, 0.3px); }
+  80% { transform: translate(0, -0.3px); }
+  90% { transform: translate(-0.3px, -0.3px); }
+}
+
+/* insane — 疯狂：剧烈错位 + 色差 */
+@keyframes textInsane {
+  0%, 100% { transform: translate(0); text-shadow: -2px 0 4px rgba(255, 0, 0, 0.3), 2px 0 4px rgba(0, 255, 255, 0.3); filter: blur(0); }
+  15% { transform: translate(-1px, 1px); text-shadow: 2px 0 6px rgba(255, 0, 0, 0.4), -2px 0 6px rgba(0, 255, 255, 0.4); }
+  30% { transform: translate(1px, -1px); filter: blur(0.3px); }
+  45% { transform: translate(-1.5px, 0); text-shadow: -3px 0 8px rgba(255, 0, 0, 0.5), 3px 0 8px rgba(0, 255, 255, 0.5); }
+  60% { transform: translate(1px, 1px); filter: blur(0); }
+  75% { transform: translate(0, -1px); text-shadow: 1px 0 4px rgba(168, 85, 199, 0.4); }
+  90% { transform: translate(-0.5px, 0.5px); }
+}
+
+/* sad — 悲伤：下沉 + 冷蓝模糊 */
+@keyframes textSad {
+  0%, 100% { transform: translateY(0); text-shadow: 0 2px 10px rgba(91, 141, 184, 0.15); filter: blur(0); opacity: 0.92; }
+  50% { transform: translateY(1px); text-shadow: 0 3px 14px rgba(91, 141, 184, 0.22); filter: blur(0.2px); opacity: 0.88; }
+}
+
+/* angry — 愤怒：脉冲震动 + 红色发光 */
+@keyframes textAngry {
+  0%, 100% { transform: scale(1) translate(0); text-shadow: 0 0 8px rgba(201, 79, 79, 0.3); }
+  10% { transform: scale(1.008) translate(0.5px, 0); }
+  20% { transform: scale(1) translate(-0.5px, 0); text-shadow: 0 0 16px rgba(201, 79, 79, 0.5); }
+  30% { transform: scale(1.005) translate(0, 0.5px); }
+  40% { transform: scale(1) translate(0, -0.5px); }
+  50% { transform: scale(1.01) translate(0); text-shadow: 0 0 20px rgba(201, 79, 79, 0.4); }
+  60% { transform: scale(1) translate(-0.5px, 0.5px); }
+  70% { transform: scale(1.005) translate(0.5px, -0.5px); }
+  80% { transform: scale(1) translate(0, 0); }
+  90% { transform: scale(1.003) translate(-0.3px, 0); }
+}
+
+/* happy — 开心：弹跳 + 暖金 */
+@keyframes textHappy {
+  0%, 100% { transform: translateY(0); text-shadow: 0 2px 8px rgba(212, 168, 83, 0.15); }
+  25% { transform: translateY(-1.5px); text-shadow: 0 3px 12px rgba(212, 168, 83, 0.25); }
+  50% { transform: translateY(0.5px); }
+  75% { transform: translateY(-1px); text-shadow: 0 2px 10px rgba(212, 168, 83, 0.2); }
+}
