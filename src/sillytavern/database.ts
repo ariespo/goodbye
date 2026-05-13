@@ -81,6 +81,8 @@ function getDefaultSettings(): AppSettings {
     moodIntensity: 1,
     opaqueTags: [...DEFAULT_OPAQUE_TAGS],
     formatPromptTemplate: DEFAULT_FORMAT_PROMPT,
+    autoMode: false,
+    autoIntervalMs: 1500,
   };
 }
 

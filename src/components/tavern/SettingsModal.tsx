@@ -191,6 +191,36 @@ export function SettingsModal() {
                 />
               </div>
 
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-text-muted">
+                  <input
+                    type="checkbox"
+                    checked={draft.autoMode ?? false}
+                    onChange={e => patch({ autoMode: e.target.checked })}
+                    className="accent-accent-blue"
+                  />
+                  <span>自动播放模式</span>
+                </label>
+                <span className="text-[11px] text-text-muted/60">{draft.autoMode ? '一行显示完毕后自动推进下一行' : '打字完等待点击或空格'}</span>
+              </div>
+
+              {draft.autoMode && (
+                <div>
+                  <label className="text-xs text-text-muted block mb-1">
+                    自动间隔: <span className="text-text-primary">{(draft.autoIntervalMs ?? 1500) / 1000} 秒</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={500}
+                    max={5000}
+                    step={100}
+                    value={draft.autoIntervalMs ?? 1500}
+                    onChange={e => patch({ autoIntervalMs: Number(e.target.value) })}
+                    className="w-full accent-accent-blue"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="text-xs text-text-muted block mb-1">字号</label>
                 <div className="flex gap-2">

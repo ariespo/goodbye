@@ -169,10 +169,6 @@ export function useGameLoop() {
             if (parseStateRef.current.parsed.maintext) {
               const scene = maintextToScene(parseStateRef.current.parsed.maintext);
               actions.setCurrentScene(scene);
-              if (scene.mood) actions.setCurrentState({ mood: scene.mood });
-              if (scene.background) actions.setCurrentState({ background: scene.background });
-              if (scene.character) actions.setCurrentState({ character: scene.character });
-              if (scene.bgm) actions.setCurrentState({ bgm: scene.bgm });
             }
           },
           onComplete: async () => {

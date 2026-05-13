@@ -181,16 +181,39 @@ export interface AppSettings {
   opaqueTags?: string[];
   /** v3: 格式提示词,系统提示末尾会附加 */
   formatPromptTemplate?: string;
+  /** GalGame 自动模式:一行打字完成后自动推进下一行 */
+  autoMode?: boolean;
+  /** 自动模式间隔(ms,从打字完到推进的等待时间) */
+  autoIntervalMs?: number;
 }
 
-export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格式输出回复，不要使用 Markdown 包裹：
-<thinking>……</thinking>     ← 可选；内部任何字符都视为思考过程，不被解析
-<maintext>……</maintext>     ← 必填；本回合的剧情正文，可多段，保留换行
+export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下格式输出回复,不要使用 Markdown 包裹:
+
+<maintext> 内部使用 GalGame 行指令格式,每行一个指令,用 | 分隔字段:
+  场景|<场景名>              切换背景(资源路径: /assets/backgrounds/<场景名>)
+  音乐|<音乐名>              切换 BGM(资源路径: /assets/audio/bgm/<音乐名>)
+  对话|<人物名>|<情绪>|<对话内容>   显示对话(人物 = "旁白" 时不显示角色名和立绘)
+
+情绪取值: calm / horror / insane / sad / angry / happy
+同一场景/音乐下可有多段对话,只在变化时声明。例:
+
+<maintext>场景|school_corridor.jpg
+音乐|silence.mp3
+对话|少女|horror|你来了。
+对话|旁白|calm|她背对着你,声音平淡得像背书。
+对话|少女|sad|"我等了你很久。"
+场景|classroom.jpg
+对话|少女|insane|她突然转身——
+</maintext>
+
+其余必填标签:
 <option>选项 A
 选项 B
-选项 C</option>              ← 必填；至少 2 项，每行一个
-<sum>……</sum>               ← 必填；本回合一句话总结
-<vars>{ "金钱": +10, "HP": 38 }</vars>   ← 选填；JSON 深合并`;
+选项 C</option>              ← 至少 2 项,每行一个
+<sum>本回合一句话总结</sum>
+<vars>{ "金钱": +10, "HP": 38 }</vars>   ← 选填,JSON 深合并
+
+<thinking>……</thinking>     ← 选填;内部不解析其他标签`;
 
 export const DEFAULT_TAGS = ['maintext', 'option', 'sum', 'vars', 'thinking', 'think'] as const;
 export const DEFAULT_OPAQUE_TAGS = ['thinking', 'think'] as const;
@@ -308,14 +331,26 @@ export type Mood = 'calm' | 'horror' | 'insane' | 'sad' | 'angry' | 'happy';
 export interface Scene {
   id: string;
   lines: SceneLine[];
+  /** 首帧背景(由 lines[0] 决定),为兼容旧字段保留 */
   background?: string;
   character?: string;
   bgm?: string;
   mood?: Mood;
 }
 
+/** GalGame 风格的单行场景指令:同一时刻的完整状态快照 */
 export interface SceneLine {
+  /** 当前背景文件名(继承上一行,直到显式切换) */
+  background?: string;
+  /** 当前 BGM 文件名 */
+  bgm?: string;
+  /** 当前说话者(角色名;`旁白` 特殊处理:不显示角色名和立绘) */
   speaker: string;
+  /** 角色立绘文件名;默认按 `${speaker}.png` 推导 */
+  character?: string;
+  /** 情绪(影响 mood 特效) */
+  emotion?: Mood;
+  /** 对话/旁白文本 */
   text: string;
 }
 
