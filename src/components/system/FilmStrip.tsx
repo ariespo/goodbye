@@ -5,25 +5,13 @@ interface FilmStripProps {
   filmColor: string;
 }
 
-const STRIP_H = 56;
-const PITCH = 26;
-const HOLE_W = 10;
-const HOLE_H = 14;
-const HOLE_RX = 4;
-const SPEED = 0.6;
+const STRIP_H = 64;
+const PITCH = 16;
+const HOLE_W = 5;
+const HOLE_H = 7;
+const SPEED = 0.5;
 
-/** 老胶片瑕疵 */
-interface Defect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  life: number;
-  maxLife: number;
-  type: 'scratch' | 'dust' | 'hair';
-}
-
-/** 用 Canvas 绘制老胶片 — 齿孔 + 颗粒噪点 + 灰尘划痕 + 边缘磨损 */
+/** 老胶片条 — 参考 35mm 电影胶片框设计 */
 export function FilmStrip({ position, filmColor }: FilmStripProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -46,67 +34,51 @@ export function FilmStrip({ position, filmColor }: FilmStripProps) {
     resize();
     window.addEventListener('resize', resize);
 
-    // 预渲染噪点纹理（复用）
+    // 噪点纹理
     const noiseCanvas = document.createElement('canvas');
     noiseCanvas.width = 128;
     noiseCanvas.height = 128;
     const nctx = noiseCanvas.getContext('2d')!;
     const nImg = nctx.createImageData(128, 128);
     for (let i = 0; i < nImg.data.length; i += 4) {
-      const v = Math.random() * 40 + 10;
-      nImg.data[i] = v;
-      nImg.data[i + 1] = v;
-      nImg.data[i + 2] = v;
-      nImg.data[i + 3] = 30; // 低透明度噪点
+      const v = Math.random() * 30 + 8;
+      nImg.data[i] = v; nImg.data[i + 1] = v; nImg.data[i + 2] = v; nImg.data[i + 3] = 25;
     }
     nctx.putImageData(nImg, 0, 0);
 
-    // 瑕疵列表
-    const defects: Defect[] = [];
+    const defects: { x: number; y: number; w: number; h: number; life: number; maxLife: number; type: string }[] = [];
     let frameCount = 0;
     let jitterY = 0;
     let nextJitterFrame = 0;
-
-    function drawRoundRect(x: number, y: number, w: number, h: number, r: number) {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.arcTo(x + w, y, x + w, y + r, r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-      ctx.lineTo(x + r, y + h);
-      ctx.arcTo(x, y + h, x, y + h - r, r);
-      ctx.lineTo(x, y + r);
-      ctx.arcTo(x, y, x + r, y, r);
-      ctx.closePath();
-    }
 
     const draw = () => {
       const w = canvas.getBoundingClientRect().width;
       const h = STRIP_H;
       frameCount++;
 
-      // 1. 清空
       ctx.clearRect(0, 0, w, h);
 
-      // 2. 放映机抖动（偶尔整体偏移 0-1px）
+      // 放映机抖动
       if (frameCount >= nextJitterFrame) {
-        jitterY = Math.random() < 0.3 ? (Math.random() > 0.5 ? 0.6 : -0.4) : 0;
-        nextJitterFrame = frameCount + Math.floor(Math.random() * 8 + 4);
+        jitterY = Math.random() < 0.25 ? (Math.random() > 0.5 ? 0.5 : -0.3) : 0;
+        nextJitterFrame = frameCount + Math.floor(Math.random() * 10 + 5);
       }
       ctx.save();
       ctx.translate(0, jitterY);
 
-      // 3. 胶片底色（带轻微不均匀——用径向渐变模拟褪色）
-      const bgGrad = ctx.createRadialGradient(w * 0.3, h * 0.5, 0, w * 0.5, h * 0.5, w * 0.8);
-      bgGrad.addColorStop(0, filmColor);
-      bgGrad.addColorStop(0.7, filmColor);
-      bgGrad.addColorStop(1, shadeColor(filmColor, -8)); // 边缘稍暗
-      ctx.fillStyle = bgGrad;
+      // 1. 胶片底色 + 右侧厚度阴影
+      ctx.fillStyle = filmColor;
       ctx.fillRect(0, 0, w, h);
 
-      // 4. 叠加颗粒噪点
-      ctx.globalAlpha = 0.25;
+      // 右侧厚度阴影（参考图片右侧的投影）
+      const shadowGrad = ctx.createLinearGradient(w - 12, 0, w, 0);
+      shadowGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      shadowGrad.addColorStop(1, 'rgba(0,0,0,0.25)');
+      ctx.fillStyle = shadowGrad;
+      ctx.fillRect(w - 12, 0, 12, h);
+
+      // 2. 噪点
+      ctx.globalAlpha = 0.2;
       ctx.imageSmoothingEnabled = false;
       for (let nx = 0; nx < w; nx += 128) {
         for (let ny = 0; ny < h; ny += 128) {
@@ -116,102 +88,88 @@ export function FilmStrip({ position, filmColor }: FilmStripProps) {
       ctx.imageSmoothingEnabled = true;
       ctx.globalAlpha = 1;
 
-      // 5. 生成新瑕疵
-      if (Math.random() < 0.015) {
-        const type: Defect['type'] = Math.random() < 0.4 ? 'scratch' : Math.random() < 0.6 ? 'hair' : 'dust';
+      // 3. 瑕疵
+      if (Math.random() < 0.012) {
+        const type = Math.random() < 0.35 ? 'scratch' : Math.random() < 0.55 ? 'hair' : 'dust';
         defects.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
-          w: type === 'scratch' ? Math.random() * 30 + 10 : type === 'hair' ? 0.8 : Math.random() * 2 + 1,
-          h: type === 'scratch' ? 0.6 : type === 'hair' ? Math.random() * 25 + 8 : Math.random() * 2 + 1,
-          life: 0,
-          maxLife: Math.floor(Math.random() * 40 + 20),
-          type,
+          x: Math.random() * w, y: Math.random() * h,
+          w: type === 'scratch' ? Math.random() * 25 + 8 : type === 'hair' ? 0.7 : Math.random() * 1.8 + 0.8,
+          h: type === 'scratch' ? 0.5 : type === 'hair' ? Math.random() * 20 + 6 : Math.random() * 1.8 + 0.8,
+          life: 0, maxLife: Math.floor(Math.random() * 35 + 18), type,
         });
       }
-
-      // 6. 绘制瑕疵（灰尘 / 划痕 / 毛发）
       for (let i = defects.length - 1; i >= 0; i--) {
         const d = defects[i];
         d.life++;
-        const fade = d.life < 5 ? d.life / 5 : d.life > d.maxLife - 8 ? (d.maxLife - d.life) / 8 : 1;
-        if (d.life >= d.maxLife) {
-          defects.splice(i, 1);
-          continue;
-        }
-
-        ctx.globalAlpha = fade * 0.55;
+        const fade = d.life < 4 ? d.life / 4 : d.life > d.maxLife - 6 ? (d.maxLife - d.life) / 6 : 1;
+        if (d.life >= d.maxLife) { defects.splice(i, 1); continue; }
+        ctx.globalAlpha = fade * 0.5;
         if (d.type === 'scratch') {
-          // 白色划痕
-          ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+          ctx.strokeStyle = 'rgba(255,255,255,0.6)';
           ctx.lineWidth = d.h;
-          ctx.beginPath();
-          ctx.moveTo(d.x, d.y);
-          ctx.lineTo(d.x + d.w, d.y + (Math.random() - 0.5) * 2);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.w, d.y + (Math.random() - 0.5) * 1.5); ctx.stroke();
         } else if (d.type === 'hair') {
-          // 黑色细毛发
-          ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+          ctx.strokeStyle = 'rgba(0,0,0,0.6)';
           ctx.lineWidth = d.w;
-          ctx.beginPath();
-          ctx.moveTo(d.x, d.y);
-          ctx.lineTo(d.x + (Math.random() - 0.5) * 3, d.y + d.h);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + (Math.random() - 0.5) * 2, d.y + d.h); ctx.stroke();
         } else {
-          // 灰尘点
-          ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.35)';
-          ctx.beginPath();
-          ctx.arc(d.x, d.y, d.w, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.3)';
+          ctx.beginPath(); ctx.arc(d.x, d.y, d.w, 0, Math.PI * 2); ctx.fill();
         }
       }
       ctx.globalAlpha = 1;
 
-      // 7. 边缘磨损（边缘透明度渐变）
+      // 4. 边缘磨损
       const edgeGrad = ctx.createLinearGradient(0, 0, 0, h);
-      edgeGrad.addColorStop(0, 'rgba(0,0,0,0.08)');
-      edgeGrad.addColorStop(0.15, 'rgba(0,0,0,0)');
-      edgeGrad.addColorStop(0.85, 'rgba(0,0,0,0)');
-      edgeGrad.addColorStop(1, 'rgba(0,0,0,0.08)');
+      edgeGrad.addColorStop(0, 'rgba(0,0,0,0.1)');
+      edgeGrad.addColorStop(0.12, 'rgba(0,0,0,0)');
+      edgeGrad.addColorStop(0.88, 'rgba(0,0,0,0)');
+      edgeGrad.addColorStop(1, 'rgba(0,0,0,0.1)');
       ctx.fillStyle = edgeGrad;
       ctx.fillRect(0, 0, w, h);
 
-      // 8. 擦除齿孔
+      // 5. 齿孔（直角矩形，像参考图片那样）
       ctx.globalCompositeOperation = 'destination-out';
-
       offsetRef.current = (offsetRef.current + SPEED) % PITCH;
       const startX = -PITCH + offsetRef.current;
 
+      const holeY = isTop ? 6 : 51; // 上排或下排齿孔
       for (let x = startX; x < w + PITCH; x += PITCH) {
-        drawRoundRect(x + 5, 7, HOLE_W, HOLE_H, HOLE_RX);
-        ctx.fill();
-        drawRoundRect(x + 5, 35, HOLE_W, HOLE_H, HOLE_RX);
-        ctx.fill();
+        ctx.clearRect(x + 4, holeY, HOLE_W, HOLE_H);
       }
 
-      // 9. 恢复混合模式
       ctx.globalCompositeOperation = 'source-over';
 
-      // 10. 画面框细线
+      // 6. 粗边框线（像参考图片中齿孔和画面之间的黑色条带）
+      const borderY = isTop ? 22 : 38;
+      ctx.fillStyle = filmColor;
+      ctx.globalAlpha = 0.9;
+      ctx.fillRect(0, borderY, w, 4);
+      ctx.globalAlpha = 1;
+
+      // 7. 画面框圆角暗示（像参考图片中画面框的顶部/底部边缘）
+      const frameInset = 36;
+      const frameY = isTop ? 30 : 30;
+      const frameH = isTop ? 2 : 2;
       ctx.strokeStyle = filmColor;
-      ctx.globalAlpha = 0.12;
-      ctx.lineWidth = 0.8;
-      const frameL = 52;
-      const frameR = w - 52;
-      const frameY = isTop ? h - 3 : 3;
+      ctx.globalAlpha = 0.08;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(frameL, frameY);
-      ctx.lineTo(frameR, frameY);
+      if (isTop) {
+        ctx.moveTo(frameInset, 30);
+        ctx.lineTo(w - frameInset, 30);
+      } else {
+        ctx.moveTo(frameInset, 34);
+        ctx.lineTo(w - frameInset, 34);
+      }
       ctx.stroke();
       ctx.globalAlpha = 1;
 
       ctx.restore();
-
       rafRef.current = requestAnimationFrame(draw);
     };
 
     draw();
-
     return () => {
       window.removeEventListener('resize', resize);
       cancelAnimationFrame(rafRef.current);
@@ -224,38 +182,6 @@ export function FilmStrip({ position, filmColor }: FilmStripProps) {
       style={{ height: `${STRIP_H}px` }}
     >
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-
-      {/* 厚度阴影 */}
-      <div
-        className="absolute left-0 right-0"
-        style={{
-          [isTop ? 'bottom' : 'top']: '-4px',
-          height: '4px',
-          background: isTop
-            ? 'linear-gradient(to bottom, rgba(0,0,0,0.35), transparent)'
-            : 'linear-gradient(to top, rgba(0,0,0,0.35), transparent)',
-        }}
-      />
-
-      {/* 边缘高光 */}
-      <div
-        className="absolute left-0 right-0"
-        style={{
-          [isTop ? 'top' : 'bottom']: '0',
-          height: '1px',
-          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)',
-        }}
-      />
     </div>
   );
-}
-
-/** 颜色变暗/变亮 helper */
-function shadeColor(color: string, percent: number): string {
-  const num = parseInt(color.replace('#', ''), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
-  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) + amt));
-  const B = Math.max(0, Math.min(255, (num & 0x0000ff) + amt));
-  return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
 }
