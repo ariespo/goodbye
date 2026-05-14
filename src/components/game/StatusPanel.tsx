@@ -45,7 +45,7 @@ export function StatusPanel() {
           style={{
             borderBottom: `2px solid ${BORDER}`,
             fontFamily: '"MuzaiPixel", monospace',
-            fontSize: '10px',
+            fontSize: '15px',
             letterSpacing: '0.3em',
             color: TEXT_DIM,
             textTransform: 'uppercase',
@@ -56,10 +56,10 @@ export function StatusPanel() {
 
         {/* 时间 */}
         <div className="mb-4">
-          <div style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em', marginBottom: 4 }}>
+          <div style={{ fontSize: '14px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em', marginBottom: 4 }}>
             当前时间
           </div>
-          <div style={{ fontSize: '13px', color: TEXT_MAIN, fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}>
+          <div style={{ fontSize: '20px', color: TEXT_MAIN, fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}>
             {formatTime(gameStatus.time)}
           </div>
         </div>
@@ -84,10 +84,10 @@ export function StatusPanel() {
 
         {/* 轮回次数 */}
         <div className="mt-4 pt-3" style={{ borderTop: `2px solid ${BORDER}` }}>
-          <div style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em', marginBottom: 4 }}>
+          <div style={{ fontSize: '14px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em', marginBottom: 4 }}>
             时间重置次数
           </div>
-          <div style={{ fontSize: '20px', color: ACCENT_GOLD, fontFamily: '"MuzaiPixel", monospace', textShadow: '0 0 8px rgba(184,152,88,0.25)' }}>
+          <div style={{ fontSize: '30px', color: ACCENT_GOLD, fontFamily: '"MuzaiPixel", monospace', textShadow: '0 0 8px rgba(184,152,88,0.25)' }}>
             {timeResetCount + 1}
           </div>
         </div>
@@ -110,11 +110,11 @@ function PixelBar({ label, value, percent, color, danger }: {
   return (
     <div className="mb-4">
       <div className="flex justify-between items-center mb-1.5">
-        <span style={{ fontSize: '9px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em' }}>
+        <span style={{ fontSize: '14px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em' }}>
           {label}
         </span>
         <span style={{
-          fontSize: '13px', color: danger ? DANGER : TEXT_MAIN, fontFamily: '"MuzaiPixel", monospace',
+          fontSize: '20px', color: danger ? DANGER : TEXT_MAIN, fontFamily: '"MuzaiPixel", monospace',
           animation: danger ? 'pulse 1.2s infinite' : 'none',
         }}>
           {value}<span style={{ color: TEXT_DIM }}>/100</span>

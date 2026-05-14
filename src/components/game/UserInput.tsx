@@ -69,7 +69,7 @@ export function UserInput() {
             padding: '12px 16px 12px 20px',
             color: TEXT_MAIN,
             fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
-            fontSize: '15px',
+            fontSize: '23px',
             letterSpacing: '0.05em',
           }}
         />
@@ -112,7 +112,7 @@ function PixelSendBtn({ onClick, disabled }: { onClick: () => void; disabled: bo
       onClick={onClick}
       disabled={disabled}
     >
-      <PaperPlaneRight size={20} />
+      <PaperPlaneRight size={30} />
     </button>
   );
 }

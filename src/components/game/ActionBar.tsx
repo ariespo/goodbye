@@ -41,7 +41,7 @@ export function ActionBar() {
         {gameActions.map(a => (
           <PixelActionBtn
             key={a.id}
-            icon={<a.icon size={18} />}
+            icon={<a.icon size={27} />}
             label={a.label}
             onClick={() => a.id === 'map' ? toggleModal('map') : performAction(a.id)}
           />
@@ -56,7 +56,7 @@ export function ActionBar() {
         {tools.map(t => (
           <PixelActionBtn
             key={t.id}
-            icon={<t.icon size={18} />}
+            icon={<t.icon size={27} />}
             label={t.label}
             onClick={() => toggleModal(t.id)}
           />
@@ -104,7 +104,7 @@ function PixelActionBtn({
           style={{
             background: BG,
             border: `2px solid ${BORDER}`,
-            fontSize: '10px',
+            fontSize: '15px',
             color: TEXT_DIM,
             fontFamily: '"MuzaiPixel", monospace',
             letterSpacing: '0.1em',

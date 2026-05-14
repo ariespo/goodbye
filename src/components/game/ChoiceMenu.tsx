@@ -58,7 +58,7 @@ function PixelChoiceBtn({ index, text, onClick }: {
         padding: '14px 20px',
         color: textColor,
         fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
-        fontSize: '16px',
+        fontSize: '24px',
         lineHeight: 1.6,
         boxShadow: hovered
           ? `inset 1px 1px 0 rgba(255,255,255,0.05), 3px 3px 0 rgba(0,0,0,0.35)`
@@ -73,7 +73,7 @@ function PixelChoiceBtn({ index, text, onClick }: {
         style={{
           color: numColor,
           fontFamily: '"MuzaiPixel", monospace',
-          fontSize: '13px',
+          fontSize: '20px',
           minWidth: 24,
         }}
       >

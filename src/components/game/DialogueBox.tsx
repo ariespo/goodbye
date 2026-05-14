@@ -104,12 +104,13 @@ export function DialogueBox() {
 
   const showNextArrow = isComplete && !isLastLine;
   const isNarrator = currentLine?.speaker === '旁白';
+  const showSpeaker = !isNarrator && displaySpeaker;
 
   /* 初始状态（无场景） */
   if (!currentScene || !currentLine) {
     return (
       <PixelPanel onClick={handleStartOrAdvance}>
-        <div className="text-center cursor-pointer" style={{ color: TEXT_DIM, fontSize: '18px', fontFamily: '"MuzaiPixel", "LXGW WenKai", serif' }}>
+        <div className="text-center cursor-pointer" style={{ color: TEXT_DIM, fontSize: '27px', fontFamily: '"MuzaiPixel", "LXGW WenKai", serif' }}>
           {isWaitingForAI ? '等待AI回应…' : '点击开始游戏'}
         </div>
       </PixelPanel>
@@ -118,23 +119,27 @@ export function DialogueBox() {
 
   return (
     <PixelPanel onClick={handleStartOrAdvance}>
-      {/* Speaker + 情绪标签行 */}
-      <div className="flex items-start gap-2 mb-3">
-        {!isNarrator && displaySpeaker && (
+      {/* 左上角角色名称 */}
+      {showSpeaker && (
+        <div style={{ position: 'absolute', top: 16, left: 20, zIndex: 2 }}>
           <PixelTag text={displaySpeaker} />
-        )}
-        {!isNarrator && currentLine.emotion && currentLine.emotion !== 'calm' && (
-          <span style={{ fontSize: '11px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.15em' }}>
-            [{emotionLabel(currentLine.emotion)}]
-          </span>
-        )}
-      </div>
+          {currentLine.emotion && currentLine.emotion !== 'calm' && (
+            <span
+              className="ml-2"
+              style={{ fontSize: '17px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.15em' }}
+            >
+              [{emotionLabel(currentLine.emotion)}]
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* 主文本 */}
+      {/* 主文本 — 顶部留出角色名空间 */}
       <div
         className={`whitespace-pre-wrap select-none ${emotionTextClass(currentLine.emotion)}`}
         style={{
-          fontSize: '22px',
+          marginTop: showSpeaker ? 44 : 0,
+          fontSize: '33px',
           lineHeight: 1.8,
           color: TEXT_MAIN,
           fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
@@ -146,17 +151,17 @@ export function DialogueBox() {
           <span
             className="inline-block align-middle"
             style={{
-              width: '3px',
+              width: '4px',
               height: '1.1em',
               background: ACCENT,
-              marginLeft: '4px',
+              marginLeft: '6px',
               animation: 'cursorBlink 0.75s infinite',
             }}
           />
         )}
         {showNextArrow && (
           <span className="inline-block ml-2" style={{ color: ACCENT, animation: 'pulse 0.8s infinite' }}>
-            <CaretDown size={18} />
+            <CaretDown size={27} />
           </span>
         )}
       </div>
@@ -166,12 +171,12 @@ export function DialogueBox() {
         <PixelIconBtn
           active={autoMode}
           onClick={(e) => { e.stopPropagation(); }}
-          icon={autoMode ? <Play size={14} weight="fill" /> : <Pause size={14} />}
+          icon={autoMode ? <Play size={21} weight="fill" /> : <Pause size={21} />}
           label={autoMode ? '自动' : '手动'}
         />
         <PixelIconBtn
           onClick={(e) => { e.stopPropagation(); skip(); }}
-          icon={<FastForward size={14} />}
+          icon={<FastForward size={21} />}
           label="快进"
         />
       </div>
@@ -237,7 +242,7 @@ function PixelTag({ text }: { text: string }) {
         background: 'rgba(107, 143, 196, 0.12)',
         border: `2px solid rgba(107, 143, 196, 0.35)`,
         color: ACCENT,
-        fontSize: '13px',
+        fontSize: '20px',
         fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
         letterSpacing: '0.15em',
         boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.05), 2px 2px 0 rgba(0,0,0,0.3)',
@@ -268,7 +273,7 @@ function PixelIconBtn({
         background: bg,
         border: `2px solid ${border}`,
         color,
-        fontSize: '11px',
+        fontSize: '17px',
         fontFamily: '"MuzaiPixel", monospace',
         letterSpacing: '0.1em',
         boxShadow: hovered
