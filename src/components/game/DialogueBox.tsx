@@ -117,28 +117,26 @@ export function DialogueBox() {
     );
   }
 
-  return (
-    <PixelPanel onClick={handleStartOrAdvance}>
-      {/* 左上角角色名称 */}
-      {showSpeaker && (
-        <div style={{ position: 'absolute', top: 16, left: 20, zIndex: 2 }}>
-          <PixelTag text={displaySpeaker} />
-          {currentLine.emotion && currentLine.emotion !== 'calm' && (
-            <span
-              className="ml-2"
-              style={{ fontSize: '17px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.15em' }}
-            >
-              [{emotionLabel(currentLine.emotion)}]
-            </span>
-          )}
-        </div>
+  const speakerTag = showSpeaker ? (
+    <>
+      <PixelTag text={displaySpeaker} />
+      {currentLine.emotion && currentLine.emotion !== 'calm' && (
+        <span
+          className="ml-2"
+          style={{ fontSize: '17px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.15em' }}
+        >
+          [{emotionLabel(currentLine.emotion)}]
+        </span>
       )}
+    </>
+  ) : undefined;
 
-      {/* 主文本 — 顶部留出角色名空间 */}
+  return (
+    <PixelPanel topLeft={speakerTag} onClick={handleStartOrAdvance}>
+      {/* 主文本 */}
       <div
         className={`whitespace-pre-wrap select-none ${emotionTextClass(currentLine.emotion)}`}
         style={{
-          marginTop: showSpeaker ? 44 : 0,
           fontSize: '33px',
           lineHeight: 1.8,
           color: TEXT_MAIN,
@@ -186,13 +184,20 @@ export function DialogueBox() {
 
 /* ── 像素风面板外壳 ── */
 
-function PixelPanel({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+function PixelPanel({ children, topLeft, onClick }: { children: React.ReactNode; topLeft?: React.ReactNode; onClick?: () => void }) {
   return (
     <div
       className="absolute bottom-[5%] left-1/2 -translate-x-1/2 select-none"
       style={{ width: 'min(88vw, 980px)', minHeight: '120px', maxHeight: '420px', zIndex: 20 }}
       onClick={onClick}
     >
+      {/* 左上角外部标签 */}
+      {topLeft && (
+        <div style={{ position: 'absolute', top: -44, left: 0, zIndex: 3 }}>
+          {topLeft}
+        </div>
+      )}
+
       {/* 主体背景 */}
       <div
         className="relative w-full h-full overflow-y-auto"
