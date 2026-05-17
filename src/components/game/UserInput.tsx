@@ -17,10 +17,11 @@ export function UserInput() {
   const parsedContent = useGameStore(state => state.api.parsedContent);
   const isStreaming = useGameStore(state => state.api.isStreaming);
   const currentScene = useGameStore(state => state.game.currentScene);
+  const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const { sendMessage } = useGameLoop();
 
   const hasOptions = parsedContent.options.length > 0;
-  const showInput = !hasOptions && !isStreaming && currentScene;
+  const showInput = !hasOptions && !isStreaming && currentScene && sceneComplete;
 
   const handleSubmit = () => {
     if (!input.trim() || isWaitingForAI) return;

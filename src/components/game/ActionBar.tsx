@@ -30,28 +30,35 @@ const tools: Array<{ id: ToolId; icon: typeof Eye; label: string }> = [
 
 export function ActionBar() {
   const toggleModal = useGameStore(state => state.actions.toggleModal);
+  const sceneComplete = useGameStore(state => state.game.sceneComplete);
+  const currentScene = useGameStore(state => state.game.currentScene);
   const { performAction } = useGameLoop();
+
+  const showGameActions = currentScene && sceneComplete;
 
   return (
     <div className="absolute bottom-[5%] left-4 flex items-center gap-2 z-30"
       style={{ paddingBottom: 2 }}
     >
-      {/* 游戏动作组 */}
-      <div className="flex gap-2">
-        {gameActions.map(a => (
-          <PixelActionBtn
-            key={a.id}
-            icon={<a.icon size={27} />}
-            label={a.label}
-            onClick={() => a.id === 'map' ? toggleModal('map') : performAction(a.id)}
-          />
-        ))}
-      </div>
+      {/* 游戏动作组 — 只在场景播放完毕后显示 */}
+      {showGameActions && (
+        <>
+          <div className="flex gap-2">
+            {gameActions.map(a => (
+              <PixelActionBtn
+                key={a.id}
+                icon={<a.icon size={27} />}
+                label={a.label}
+                onClick={() => a.id === 'map' ? toggleModal('map') : performAction(a.id)}
+              />
+            ))}
+          </div>
+          {/* 分隔线 */}
+          <div style={{ width: 2, height: 32, background: BORDER, margin: '0 4px' }} />
+        </>
+      )}
 
-      {/* 分隔线 */}
-      <div style={{ width: 2, height: 32, background: BORDER, margin: '0 4px' }} />
-
-      {/* 工具组 */}
+      {/* 工具组 — 始终显示 */}
       <div className="flex gap-2">
         {tools.map(t => (
           <PixelActionBtn
@@ -117,5 +124,3 @@ function PixelActionBtn({
     </div>
   );
 }
-
-import React from 'react';

@@ -14,6 +14,10 @@ interface GameStore {
     isTyping: boolean;
     isWaitingForAI: boolean;
     history: TurnSnapshot[];
+    /** 自动播放模式 */
+    autoMode: boolean;
+    /** 当前场景是否已播放完毕 */
+    sceneComplete: boolean;
   };
   tavern: {
     settings: AppSettings | null;
@@ -54,6 +58,8 @@ interface GameStore {
     setCurrentState: (state: Partial<CurrentState>) => void;
     setIsTyping: (typing: boolean) => void;
     setIsWaitingForAI: (waiting: boolean) => void;
+    setAutoMode: (auto: boolean) => void;
+    setSceneComplete: (complete: boolean) => void;
     addHistorySnapshot: (snapshot: TurnSnapshot) => void;
     setStreaming: (streaming: boolean) => void;
     setStreamBuffer: (buffer: string) => void;
@@ -100,6 +106,8 @@ export const useGameStore = create<GameStore>((set) => ({
     isTyping: false,
     isWaitingForAI: false,
     history: [],
+    autoMode: false,
+    sceneComplete: false,
   },
   tavern: {
     settings: null,
@@ -134,12 +142,14 @@ export const useGameStore = create<GameStore>((set) => ({
     setChats: (chats) => set(state => ({ tavern: { ...state.tavern, chats } })),
     setActiveChatId: (id) => set(state => ({ tavern: { ...state.tavern, activeChatId: id } })),
     setVariables: (vars) => set(state => ({ tavern: { ...state.tavern, variables: vars } })),
-    setCurrentScene: (scene) => set(state => ({ game: { ...state.game, currentScene: scene, currentLineIndex: 0 } })),
+    setCurrentScene: (scene) => set(state => ({ game: { ...state.game, currentScene: scene, currentLineIndex: 0, sceneComplete: false } })),
     setCurrentLineIndex: (index) => set(state => ({ game: { ...state.game, currentLineIndex: index } })),
     setGameStatus: (status) => set(state => ({ game: { ...state.game, gameStatus: { ...state.game.gameStatus, ...status } } })),
     setCurrentState: (newState) => set(state => ({ game: { ...state.game, currentState: { ...state.game.currentState, ...newState } } })),
     setIsTyping: (typing) => set(state => ({ game: { ...state.game, isTyping: typing } })),
     setIsWaitingForAI: (waiting) => set(state => ({ game: { ...state.game, isWaitingForAI: waiting } })),
+    setAutoMode: (auto) => set(state => ({ game: { ...state.game, autoMode: auto } })),
+    setSceneComplete: (complete) => set(state => ({ game: { ...state.game, sceneComplete: complete } })),
     addHistorySnapshot: (snapshot) => set(state => ({ game: { ...state.game, history: [...state.game.history, snapshot] } })),
     setStreaming: (streaming) => set(state => ({ api: { ...state.api, isStreaming: streaming } })),
     setStreamBuffer: (buffer) => set(state => ({ api: { ...state.api, streamBuffer: buffer } })),

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useTypewriter } from '../../hooks/useTypewriter';
 import { OPENING_STORYLINE } from '../../engine/opening-storyline';
 import { maintextToScene } from '../../engine/scene-parser';
-import { Play, Pause, FastForward, CaretDown } from '@phosphor-icons/react';
+import { Play, Pause, FastForward, CaretDown, ArrowCounterClockwise } from '@phosphor-icons/react';
 
 /* ── 像素风对话框 ── */
 
@@ -18,6 +18,8 @@ const ACCENT = '#6b8fc4';
 export function DialogueBox() {
   const currentScene = useGameStore(state => state.game.currentScene);
   const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
+  const autoMode = useGameStore(state => state.game.autoMode);
+  const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const settings = useGameStore(state => state.tavern.settings);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
 
@@ -25,8 +27,9 @@ export function DialogueBox() {
   const setCurrentState = useGameStore(state => state.actions.setCurrentState);
   const setIsTyping = useGameStore(state => state.actions.setIsTyping);
   const setCurrentScene = useGameStore(state => state.actions.setCurrentScene);
+  const setAutoMode = useGameStore(state => state.actions.setAutoMode);
+  const setSceneComplete = useGameStore(state => state.actions.setSceneComplete);
 
-  const autoMode = settings?.autoMode ?? false;
   const autoIntervalMs = settings?.autoIntervalMs ?? 1500;
   const typingSpeed = settings?.typingSpeed || 35;
 
@@ -42,12 +45,20 @@ export function DialogueBox() {
 
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /* ── 自动模式推进 ── */
   useEffect(() => {
     if (autoMode && isComplete && currentLine && !isLastLine) {
       autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
     }
     return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
   }, [autoMode, isComplete, currentLineIndex, currentScene, autoIntervalMs]);
+
+  /* ── 场景完成检测 ── */
+  useEffect(() => {
+    if (isComplete && isLastLine && currentScene) {
+      setSceneComplete(true);
+    }
+  }, [isComplete, isLastLine, currentScene, setSceneComplete]);
 
   const handleAdvance = useCallback(() => {
     if (!currentScene) return;
@@ -77,6 +88,38 @@ export function DialogueBox() {
     handleAdvance();
   }, [currentScene, handleAdvance, setCurrentScene]);
 
+  /* ── 快进：跳到最后一行 ── */
+  const handleFastForward = useCallback(() => {
+    if (!currentScene) return;
+    // 如果还没到最后一句，直接跳到最后一句
+    if (currentLineIndex < currentScene.lines.length - 1) {
+      setCurrentLineIndex(currentScene.lines.length - 1);
+    } else if (!isComplete) {
+      // 已经在最后一句但打字未完成，跳过打字
+      skip();
+    }
+  }, [currentScene, currentLineIndex, isComplete, skip, setCurrentLineIndex]);
+
+  /* ── 重头回看：回到第一句，恢复首帧状态 ── */
+  const handleRestart = useCallback(() => {
+    if (!currentScene || currentScene.lines.length === 0) return;
+    setCurrentLineIndex(0);
+    setSceneComplete(false);
+    const firstLine = currentScene.lines[0];
+    setCurrentState({
+      background: firstLine.background || null,
+      bgm: firstLine.bgm || null,
+      character: firstLine.character ?? null,
+      mood: firstLine.emotion || 'calm',
+    });
+  }, [currentScene, setCurrentLineIndex, setSceneComplete, setCurrentState]);
+
+  /* ── 切换自动/手动模式 ── */
+  const handleToggleAuto = useCallback(() => {
+    setAutoMode(!autoMode);
+  }, [autoMode, setAutoMode]);
+
+  /* ── 同步当前行状态 ── */
   useEffect(() => {
     if (!currentLine) return;
     setCurrentState({
@@ -91,6 +134,7 @@ export function DialogueBox() {
 
   useEffect(() => { if (isComplete) setIsTyping(false); }, [isComplete, setIsTyping]);
 
+  /* ── 键盘推进 ── */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.code === 'Space' || e.code === 'Enter') {
@@ -166,17 +210,27 @@ export function DialogueBox() {
 
       {/* 底部工具栏 */}
       <div className="absolute bottom-3 right-4 flex gap-2">
+        {/* 自动/手动 */}
         <PixelIconBtn
           active={autoMode}
-          onClick={(e) => { e.stopPropagation(); }}
+          onClick={(e) => { e.stopPropagation(); handleToggleAuto(); }}
           icon={autoMode ? <Play size={21} weight="fill" /> : <Pause size={21} />}
           label={autoMode ? '自动' : '手动'}
         />
+        {/* 快进 */}
         <PixelIconBtn
-          onClick={(e) => { e.stopPropagation(); skip(); }}
+          onClick={(e) => { e.stopPropagation(); handleFastForward(); }}
           icon={<FastForward size={21} />}
           label="快进"
         />
+        {/* 重头回看 — 只在场景播放完毕后显示 */}
+        {sceneComplete && (
+          <PixelIconBtn
+            onClick={(e) => { e.stopPropagation(); handleRestart(); }}
+            icon={<ArrowCounterClockwise size={21} />}
+            label="重头回看"
+          />
+        )}
       </div>
     </PixelPanel>
   );
@@ -237,20 +291,20 @@ function PixelPanel({ children, topLeft, onClick }: { children: React.ReactNode;
   );
 }
 
-/* ── 像素风 Speaker 标签 ── */
+/* ── 像素风 Speaker 标签（实色背景） ── */
 
 function PixelTag({ text }: { text: string }) {
   return (
     <div
       className="inline-flex items-center px-3 py-1"
       style={{
-        background: 'rgba(107, 143, 196, 0.12)',
-        border: `2px solid rgba(107, 143, 196, 0.35)`,
+        background: '#1a2d42',
+        border: `2px solid rgba(107, 143, 196, 0.5)`,
         color: ACCENT,
         fontSize: '20px',
         fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
         letterSpacing: '0.15em',
-        boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.05), 2px 2px 0 rgba(0,0,0,0.3)',
+        boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.08), 2px 2px 0 rgba(0,0,0,0.3)',
       }}
     >
       {text}
@@ -265,7 +319,7 @@ function PixelIconBtn({
 }: {
   icon: React.ReactNode; label: string; active?: boolean; onClick: (e: React.MouseEvent) => void;
 }) {
-  const [hovered, setHovered] = React.useState(false);
+  const [hovered, setHovered] = useState(false);
 
   const bg = active ? 'rgba(107,143,196,0.18)' : hovered ? 'rgba(107,143,196,0.1)' : 'transparent';
   const border = active ? 'rgba(107,143,196,0.5)' : hovered ? 'rgba(107,143,196,0.4)' : BORDER;
@@ -296,8 +350,6 @@ function PixelIconBtn({
 }
 
 /* ── 辅助函数 ── */
-
-import React from 'react';
 
 function emotionLabel(m: string): string {
   const map: Record<string, string> = {
