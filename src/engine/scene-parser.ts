@@ -10,6 +10,11 @@ import type { Scene, SceneLine, Mood } from '../sillytavern/types';
  *
  * 同一组场景/音乐下可有多段对话(只在变化时声明)。
  * 人物名 = "旁白" 时,渲染时不显示角色名和立绘。
+ *
+ * 支持 XML 标签提取:
+ *   <observe> 五感观察内容 </observe>
+ *   <investigate> 调查列表 (desc|suspect|style|time|stamina|sanity) </investigate>
+ *   <action> 行动列表 (desc|style|time|stamina|sanity) </action>
  */
 
 const EMOTION_MAP: Record<string, Mood> = {
@@ -32,14 +37,81 @@ function splitFields(line: string): string[] {
   return line.split(/[|｜]/).map(s => s.trim());
 }
 
+/** 从文本中提取 XML 标签内容，返回清理后的文本和提取的标签数据 */
+function extractXmlTags(text: string): {
+  cleanText: string;
+  observe?: string;
+  investigateItems?: Scene['investigateItems'];
+  actionItems?: Scene['actionItems'];
+} {
+  const result: ReturnType<typeof extractXmlTags> = { cleanText: text };
+
+  // <observe>...内容...</observe>
+  const observeMatch = text.match(/<observe>([\s\S]*?)<\/observe>/);
+  if (observeMatch) {
+    result.observe = observeMatch[1].trim();
+  }
+
+  // <investigate>...内容...</investigate>
+  const investigateMatch = text.match(/<investigate>([\s\S]*?)<\/investigate>/);
+  if (investigateMatch) {
+    result.investigateItems = investigateMatch[1]
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const [desc, suspect, style, time, stamina, sanity] = splitFields(line);
+        return {
+          desc: desc || '',
+          suspect: suspect || '无',
+          style: style || '现实',
+          time: time || '0分钟',
+          stamina: parseInt(stamina, 10) || 0,
+          sanity: parseInt(sanity, 10) || 0,
+        };
+      });
+  }
+
+  // <action>...内容...</action>
+  const actionMatch = text.match(/<action>([\s\S]*?)<\/action>/);
+  if (actionMatch) {
+    result.actionItems = actionMatch[1]
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const [desc, style, time, stamina, sanity] = splitFields(line);
+        return {
+          desc: desc || '',
+          style: style || '现实',
+          time: time || '0分钟',
+          stamina: parseInt(stamina, 10) || 0,
+          sanity: parseInt(sanity, 10) || 0,
+        };
+      });
+  }
+
+  // 移除 XML 标签得到干净文本
+  result.cleanText = text
+    .replace(/<observe>[\s\S]*?<\/observe>/g, '')
+    .replace(/<investigate>[\s\S]*?<\/investigate>/g, '')
+    .replace(/<action>[\s\S]*?<\/action>/g, '')
+    .trim();
+
+  return result;
+}
+
 export function maintextToScene(maintext: string): Scene {
+  // 先提取 XML 标签
+  const { cleanText, observe, investigateItems, actionItems } = extractXmlTags(maintext);
+
   const lines: SceneLine[] = [];
 
   // 当前上下文(被后续 对话| 行继承)
   let currentBackground: string | undefined;
   let currentBgm: string | undefined;
 
-  for (const rawLine of maintext.split(/\r?\n/)) {
+  for (const rawLine of cleanText.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
 
@@ -67,7 +139,7 @@ export function maintextToScene(maintext: string): Scene {
         speaker,
         emotion,
         text,
-        character: speaker === '旁白' ? undefined : speakerToCharacterAsset(speaker),
+        character: speaker === '旁白' ? undefined : speakerToCharacterAsset(speaker, emotion),
       });
       continue;
     }
@@ -89,17 +161,28 @@ export function maintextToScene(maintext: string): Scene {
     bgm: lines[0]?.bgm,
     character: lines[0]?.character,
     mood: lines[0]?.emotion,
+    observe,
+    investigateItems,
+    actionItems,
   };
 }
 
 const SPEAKER_SPRITE_MAP: Record<string, string> = {
-  '文穂': 'fumi-normal.png',
-  'fumi': 'fumi-normal.png',
-  '緋室灯織': 'touko-normal.png',
-  'touko': 'touko-normal.png',
+  '文穂': 'fumi',
+  'fumi': 'fumi',
+  '緋室灯織': 'touko',
+  'touko': 'touko',
 };
 
-/** 角色名 → 立绘文件名的默认推导(可被显式 character 字段覆盖) */
-function speakerToCharacterAsset(speaker: string): string | undefined {
-  return SPEAKER_SPRITE_MAP[speaker];
+/** 有独立立绘的情绪列表 */
+const EMOTION_SPRITES: Mood[] = ['angry', 'happy', 'horror', 'insane', 'sad'];
+
+/** 角色名 + 情绪 → 立绘文件名(无情绪立绘则回退到默认) */
+function speakerToCharacterAsset(speaker: string, emotion?: Mood): string | undefined {
+  const base = SPEAKER_SPRITE_MAP[speaker];
+  if (!base) return undefined;
+  if (emotion && EMOTION_SPRITES.includes(emotion)) {
+    return `${base}-${emotion}.png`;
+  }
+  return `${base}-normal.png`;
 }

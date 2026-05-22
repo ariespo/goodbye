@@ -336,6 +336,25 @@ export interface Scene {
   character?: string;
   bgm?: string;
   mood?: Mood;
+  /** 观察内容（五感描述+想法+疑点） */
+  observe?: string;
+  /** 可调查对象列表 */
+  investigateItems?: Array<{
+    desc: string;
+    suspect: string;
+    style: string;
+    time: string;
+    stamina: number;
+    sanity: number;
+  }>;
+  /** 可执行行动列表 */
+  actionItems?: Array<{
+    desc: string;
+    style: string;
+    time: string;
+    stamina: number;
+    sanity: number;
+  }>;
 }
 
 /** GalGame 风格的单行场景指令:同一时刻的完整状态快照 */

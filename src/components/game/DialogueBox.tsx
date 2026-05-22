@@ -78,7 +78,11 @@ export function DialogueBox() {
           const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
           if (maintext) {
             const scene = maintextToScene(maintext);
-            if (scene.lines.length > 0) { setCurrentScene(scene); return; }
+            // 只有提取的 scene 有交互数据时才使用它
+            if (scene.lines.length > 0 && (scene.observe || scene.investigateItems?.length || scene.actionItems?.length)) {
+              setCurrentScene(scene);
+              return;
+            }
           }
         }
       }

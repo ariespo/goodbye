@@ -9,6 +9,7 @@ import { ActionBar } from './ActionBar';
 import { MoodOverlay } from './MoodOverlay';
 import { MapModal } from './MapModal';
 import { UserInput } from './UserInput';
+import { ActionPanel } from './ActionPanel';
 import { SaveModal } from '../system/SaveModal';
 import { AudioSystem } from '../system/AudioSystem';
 import { maintextToScene } from '../../engine/scene-parser';
@@ -39,7 +40,8 @@ export function GameCanvas() {
         const maintext = extractMaintext(lastAssistant.content);
         if (maintext) {
           const scene = maintextToScene(maintext);
-          if (scene.lines.length > 0) {
+          // 只有提取的 scene 有交互数据时才使用它
+          if (scene.lines.length > 0 && (scene.observe || scene.investigateItems?.length || scene.actionItems?.length)) {
             actions.setCurrentScene(scene);
             return;
           }
@@ -69,6 +71,7 @@ export function GameCanvas() {
       <DialogueBox />
       <ChoiceMenu />
       <UserInput />
+      <ActionPanel />
       <StatusPanel />
       <ActionBar />
       <MapModal />

@@ -8,15 +8,18 @@ import {
 
 const BORDER = '#3a3a42';
 const BORDER_HOVER = '#6b8fc4';
+const BORDER_DISABLED = '#2a2a2e';
 const BG = 'rgba(12, 12, 16, 0.88)';
+const BG_DISABLED = 'rgba(12, 12, 16, 0.5)';
 const TEXT_DIM = '#6a6560';
+const TEXT_DISABLED = '#3a3632';
 const ACCENT = '#6b8fc4';
 
 const gameActions = [
-  { id: 'observe', icon: Eye, label: '观察' },
-  { id: 'investigate', icon: MagnifyingGlass, label: '调查' },
-  { id: 'actions', icon: ArrowRight, label: '行动' },
-  { id: 'map', icon: MapTrifold, label: '地图' },
+  { id: 'observe' as const, icon: Eye, label: '观察' },
+  { id: 'investigate' as const, icon: MagnifyingGlass, label: '调查' },
+  { id: 'actions' as const, icon: ArrowRight, label: '行动' },
+  { id: 'map' as const, icon: MapTrifold, label: '地图' },
 ] as const;
 
 type ToolId = 'history' | 'lorebook' | 'preset' | 'settings';
@@ -36,6 +39,18 @@ export function ActionBar() {
 
   const showGameActions = currentScene && sceneComplete;
 
+  // 判断当前场景是否有对应的本地数据
+  const hasObserve = !!currentScene?.observe;
+  const hasInvestigate = !!currentScene?.investigateItems && currentScene.investigateItems.length > 0;
+  const hasActions = !!currentScene?.actionItems && currentScene.actionItems.length > 0;
+
+  const availability: Record<string, boolean> = {
+    observe: hasObserve,
+    investigate: hasInvestigate,
+    actions: hasActions,
+    map: true,
+  };
+
   return (
     <div className="absolute bottom-[5%] left-4 flex items-center gap-2 z-30"
       style={{ paddingBottom: 2 }}
@@ -49,6 +64,7 @@ export function ActionBar() {
                 key={a.id}
                 icon={<a.icon size={27} />}
                 label={a.label}
+                enabled={availability[a.id]}
                 onClick={() => a.id === 'map' ? toggleModal('map') : performAction(a.id)}
               />
             ))}
@@ -76,31 +92,47 @@ export function ActionBar() {
 /* ── 像素图标按钮 ── */
 
 function PixelActionBtn({
-  icon, label, onClick,
+  icon, label, enabled = true, onClick,
 }: {
-  icon: React.ReactNode; label: string; onClick: () => void;
+  icon: React.ReactNode; label: string; enabled?: boolean; onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
-  const bg = hovered ? 'rgba(107,143,196,0.12)' : BG;
-  const border = hovered ? BORDER_HOVER : BORDER;
-  const color = hovered ? ACCENT : TEXT_DIM;
+  const isDisabled = !enabled;
+  const bg = isDisabled
+    ? BG_DISABLED
+    : hovered
+      ? 'rgba(107,143,196,0.12)'
+      : BG;
+  const border = isDisabled
+    ? BORDER_DISABLED
+    : hovered
+      ? BORDER_HOVER
+      : BORDER;
+  const color = isDisabled
+    ? TEXT_DISABLED
+    : hovered
+      ? ACCENT
+      : TEXT_DIM;
 
   return (
     <div className="relative">
       <button
-        className="w-10 h-10 flex items-center justify-center select-none cursor-none transition-all duration-150"
+        className="w-10 h-10 flex items-center justify-center select-none transition-all duration-150"
         style={{
           background: bg,
           border: `2px solid ${border}`,
           color,
-          boxShadow: hovered
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          opacity: isDisabled ? 0.5 : 1,
+          boxShadow: hovered && !isDisabled
             ? `inset 1px 1px 0 rgba(255,255,255,0.06), 2px 2px 0 rgba(0,0,0,0.3)`
             : `inset 1px 1px 0 rgba(255,255,255,0.03), 2px 2px 0 rgba(0,0,0,0.3)`,
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={onClick}
+        onClick={() => { if (!isDisabled) onClick(); }}
+        disabled={isDisabled}
       >
         {icon}
       </button>

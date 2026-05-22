@@ -18,6 +18,13 @@ interface GameStore {
     autoMode: boolean;
     /** 当前场景是否已播放完毕 */
     sceneComplete: boolean;
+    /** 当前显示的动作结果面板 */
+    actionPanel: {
+      visible: boolean;
+      type: 'observe' | 'investigate' | 'act' | null;
+      content: string;
+      selectedIndex: number | null;
+    };
   };
   tavern: {
     settings: AppSettings | null;
@@ -60,6 +67,7 @@ interface GameStore {
     setIsWaitingForAI: (waiting: boolean) => void;
     setAutoMode: (auto: boolean) => void;
     setSceneComplete: (complete: boolean) => void;
+    setActionPanel: (panel: Partial<GameStore['game']['actionPanel']>) => void;
     addHistorySnapshot: (snapshot: TurnSnapshot) => void;
     setStreaming: (streaming: boolean) => void;
     setStreamBuffer: (buffer: string) => void;
@@ -108,6 +116,7 @@ export const useGameStore = create<GameStore>((set) => ({
     history: [],
     autoMode: false,
     sceneComplete: false,
+    actionPanel: { visible: false, type: null, content: '', selectedIndex: null },
   },
   tavern: {
     settings: null,
@@ -150,6 +159,7 @@ export const useGameStore = create<GameStore>((set) => ({
     setIsWaitingForAI: (waiting) => set(state => ({ game: { ...state.game, isWaitingForAI: waiting } })),
     setAutoMode: (auto) => set(state => ({ game: { ...state.game, autoMode: auto } })),
     setSceneComplete: (complete) => set(state => ({ game: { ...state.game, sceneComplete: complete } })),
+    setActionPanel: (panel) => set(state => ({ game: { ...state.game, actionPanel: { ...state.game.actionPanel, ...panel } } })),
     addHistorySnapshot: (snapshot) => set(state => ({ game: { ...state.game, history: [...state.game.history, snapshot] } })),
     setStreaming: (streaming) => set(state => ({ api: { ...state.api, isStreaming: streaming } })),
     setStreamBuffer: (buffer) => set(state => ({ api: { ...state.api, streamBuffer: buffer } })),

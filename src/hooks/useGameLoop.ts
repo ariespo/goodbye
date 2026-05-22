@@ -200,8 +200,64 @@ export function useGameLoop() {
     sendMessage(optionText);
   }, [sendMessage]);
 
-  const performAction = useCallback((actionType: string, itemDescription?: string) => {
-    const message = itemDescription || `${store.tavern.settings?.userName || '玩家'}执行了${actionType}`;
+  const performAction = useCallback((actionType: 'observe' | 'investigate' | 'actions', itemIndex?: number) => {
+    const { game, actions } = store;
+    const scene = game.currentScene;
+
+    // 如果当前场景有本地数据，直接展示，不调用 API
+    if (actionType === 'observe' && scene?.observe) {
+      actions.setActionPanel({ visible: true, type: 'observe', content: scene.observe, selectedIndex: null });
+      return;
+    }
+
+    if (actionType === 'investigate' && scene?.investigateItems && scene.investigateItems.length > 0) {
+      if (itemIndex !== undefined) {
+        // 选择了具体调查项：构造 prompt 发送给 LLM 获取详细结果
+        const item = scene.investigateItems[itemIndex];
+        const prompt = `[系统] 玩家选择了调查："${item.desc}"
+当前场景：${game.currentState.background || '未知'}
+嫌疑人指向：${item.suspect}
+结果风格：${item.style}
+
+请返回详细的调查结果，包含发现、疑点、可能的线索。
+输出格式：<action type="investigate">...</action>`;
+        sendMessage(prompt);
+        actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
+      } else {
+        // 显示调查列表（序列化为文本供面板展示）
+        const listText = scene.investigateItems.map((item, i) =>
+          `[${i + 1}] ${item.desc}\n    嫌疑人：${item.suspect}  风格：${item.style}  耗时：${item.time}  体力-${item.stamina}  理智-${item.sanity}`
+        ).join('\n\n');
+        actions.setActionPanel({ visible: true, type: 'investigate', content: listText, selectedIndex: null });
+      }
+      return;
+    }
+
+    if (actionType === 'actions' && scene?.actionItems && scene.actionItems.length > 0) {
+      if (itemIndex !== undefined) {
+        // 选择了具体行动项：构造 prompt 发送给 LLM 获取详细结果
+        const item = scene.actionItems[itemIndex];
+        const prompt = `[系统] 玩家执行了行动："${item.desc}"
+当前场景：${game.currentState.background || '未知'}
+结果风格：${item.style}
+
+请描述行动过程、结果、场景变化（如果有）。
+如果行动导致场景切换，在文本末尾加上：[变化] 场景切换 → 新场景名
+输出格式：<action type="act">...</action>`;
+        sendMessage(prompt);
+        actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
+      } else {
+        // 显示行动列表
+        const listText = scene.actionItems.map((item, i) =>
+          `[${i + 1}] ${item.desc}\n    风格：${item.style}  耗时：${item.time}  体力-${item.stamina}  理智-${item.sanity}`
+        ).join('\n\n');
+        actions.setActionPanel({ visible: true, type: 'act', content: listText, selectedIndex: null });
+      }
+      return;
+    }
+
+    // 没有本地数据时，发送通用消息给 LLM
+    const message = `${store.tavern.settings?.userName || '玩家'}执行了${actionType}`;
     sendMessage(message);
   }, [sendMessage, store]);
 
