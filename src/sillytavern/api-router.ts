@@ -24,6 +24,10 @@ export interface FetchedModel {
 
 /** 获取模型列表；支持 Bearer 和 api-key 两种 header 方式 */
 export async function fetchModels(config: ApiConfig): Promise<FetchedModel[]> {
+  if (!config.baseUrl || !config.apiKey) {
+    throw new Error('请先填写 Base URL 和 API Key');
+  }
+
   const headersList = [
     { 'Authorization': `Bearer ${config.apiKey}` },
     { 'api-key': config.apiKey },
@@ -54,6 +58,10 @@ export async function fetchModels(config: ApiConfig): Promise<FetchedModel[]> {
 
 /** 测试 API 连通性：发送一条极简消息 */
 export async function testConnectivity(config: ApiConfig): Promise<{ ok: boolean; latency: number; model?: string }> {
+  if (!config.baseUrl || !config.apiKey || !config.model) {
+    throw new Error('请先填写 Base URL、API Key 和模型');
+  }
+
   const start = performance.now();
   const body = {
     model: config.model,
@@ -105,7 +113,12 @@ async function fetchWithAuthFallback(
   apiKey: string,
   init: RequestInit
 ): Promise<Response> {
+  if (!apiKey) {
+    throw new Error('API Key 未设置，请先在设置中填写');
+  }
+
   const headersList = buildHeaders(apiKey);
+  let lastStatus = 0;
   let lastError = '';
 
   for (const headers of headersList) {
@@ -118,13 +131,14 @@ async function fetchWithAuthFallback(
         },
       });
       if (response.ok) return response;
+      lastStatus = response.status;
       lastError = await response.text();
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
     }
   }
 
-  throw new Error(`API error: ${lastError}`);
+  throw new Error(`API error ${lastStatus}: ${lastError}`);
 }
 
 export async function streamChatCompletion(
@@ -135,7 +149,7 @@ export async function streamChatCompletion(
   abortSignal?: AbortSignal
 ): Promise<void> {
   const body: Record<string, any> = {
-    model: preset?.settings.openai_model || config.model,
+    model: config.model || preset?.settings.openai_model,
     messages,
     stream: true,
   };
@@ -207,7 +221,7 @@ export async function callSecondaryApi(
   options?: SecondaryApiOptions
 ): Promise<string> {
   const body: Record<string, any> = {
-    model: preset?.settings.openai_model || config.model,
+    model: config.model || preset?.settings.openai_model,
     messages,
   };
 
