@@ -56,9 +56,7 @@ export function SettingsModal() {
     }
   }, [showSettings, draft?.api.baseUrl, draft?.api.secondary?.baseUrl]);
 
-  if (!showSettings || !draft) return null;
-
-  const apiMode: 'single' | 'dual' = draft.api.secondary?.enabled ? 'dual' : 'single';
+  const apiMode: 'single' | 'dual' = draft?.api.secondary?.enabled ? 'dual' : 'single';
 
   const patch = (p: Partial<AppSettings>) => setDraft({ ...draft, ...p });
   const patchApi = (p: Partial<AppSettings['api']>) => setDraft({ ...draft, api: { ...draft.api, ...p } });
@@ -101,6 +99,7 @@ export function SettingsModal() {
   };
 
   const handleFetchModels = useCallback(async (isSecondary: boolean) => {
+    if (!draft) return;
     const config = isSecondary
       ? { baseUrl: draft.api.secondary?.baseUrl ?? '', apiKey: draft.api.secondary?.apiKey ?? '', model: '' }
       : { baseUrl: draft.api.baseUrl, apiKey: draft.api.apiKey, model: '' };
@@ -126,9 +125,10 @@ export function SettingsModal() {
     } finally {
       setFetching(false);
     }
-  }, [draft.api, actions]);
+  }, [draft, actions]);
 
   const handleTestConnectivity = useCallback(async (isSecondary: boolean) => {
+    if (!draft) return;
     const config = isSecondary
       ? { baseUrl: draft.api.secondary?.baseUrl ?? '', apiKey: draft.api.secondary?.apiKey ?? '', model: draft.api.secondary?.model ?? '' }
       : { baseUrl: draft.api.baseUrl, apiKey: draft.api.apiKey, model: draft.api.model };
@@ -153,14 +153,17 @@ export function SettingsModal() {
     } finally {
       setTesting(false);
     }
-  }, [draft.api, actions]);
+  }, [draft, actions]);
 
   const handleSave = async () => {
+    if (!draft) return;
     await saveSettings(draft);
     actions.setSettings(draft);
     toggleModal('settings');
     actions.addNotification({ type: 'success', message: '设置已保存', duration: 2500 });
   };
+
+  if (!showSettings || !draft) return null;
 
   return (
     <div
