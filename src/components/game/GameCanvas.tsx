@@ -10,6 +10,7 @@ import { MoodOverlay } from './MoodOverlay';
 import { MapModal } from './MapModal';
 import { UserInput } from './UserInput';
 import { ActionPanel } from './ActionPanel';
+import { EndingEditor } from './EndingEditor';
 import { SaveModal } from '../system/SaveModal';
 import { AudioSystem } from '../system/AudioSystem';
 import { maintextToScene } from '../../engine/scene-parser';
@@ -72,6 +73,7 @@ export function GameCanvas() {
       <ChoiceMenu />
       <UserInput />
       <ActionPanel />
+      <EndingEditor />
       <StatusPanel />
       <ActionBar />
       <MapModal />

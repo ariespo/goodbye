@@ -4,6 +4,7 @@ import { useGameLoop } from '../../hooks/useGameLoop';
 import {
   Eye, MagnifyingGlass, ArrowRight, MapTrifold,
   Gear, Books, SlidersHorizontal, ClockClockwise,
+  Star,
 } from '@phosphor-icons/react';
 
 const BORDER = '#3a3a42';
@@ -31,8 +32,11 @@ const tools: Array<{ id: ToolId; icon: typeof Eye; label: string }> = [
   { id: 'settings', icon: Gear, label: '设置' },
 ];
 
+const endingTool = { id: 'ending', icon: Star, label: '结局' };
+
 export function ActionBar() {
   const toggleModal = useGameStore(state => state.actions.toggleModal);
+  const setShowEndingEditor = useGameStore(state => state.actions.setShowEndingEditor);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const currentScene = useGameStore(state => state.game.currentScene);
   const { performAction } = useGameLoop();
@@ -84,6 +88,11 @@ export function ActionBar() {
             onClick={() => toggleModal(t.id)}
           />
         ))}
+        <PixelActionBtn
+          icon={<endingTool.icon size={27} />}
+          label={endingTool.label}
+          onClick={() => setShowEndingEditor(true)}
+        />
       </div>
     </div>
   );

@@ -92,7 +92,7 @@ export function useGameLoop() {
         const assistantMessage: ChatMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: parsed.maintext || fullText,
+          content: fullText,
           timestamp: Date.now(),
           variables: { ...tavern.variables, ...parsed.vars },
           apiUsed: apiUsed === 'dual' ? 'secondary' : 'primary',
@@ -127,7 +127,8 @@ export function useGameLoop() {
               { role: 'system', content: SECONDARY_SYSTEM_PROMPT },
               { role: 'user', content: parsed.maintext || fullText },
             ],
-            activePreset
+            activePreset,
+            { temperature: sec.temperature, maxTokens: sec.maxTokens }
           );
 
           const sumMatch = result.match(/<sum>([\s\S]*?)<\/sum>/);
@@ -168,6 +169,10 @@ export function useGameLoop() {
 
             if (parseStateRef.current.parsed.maintext) {
               const scene = maintextToScene(parseStateRef.current.parsed.maintext);
+              const parsed = parseStateRef.current.parsed;
+              if (parsed.observe) scene.observe = parsed.observe;
+              if (parsed.investigateItems?.length) scene.investigateItems = parsed.investigateItems;
+              if (parsed.actionItems?.length) scene.actionItems = parsed.actionItems;
               actions.setCurrentScene(scene);
             }
           },

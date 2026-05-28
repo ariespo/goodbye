@@ -162,6 +162,8 @@ export interface ApiSettings {
     baseUrl: string;
     apiKey: string;
     model: string;
+    temperature?: number;
+    maxTokens?: number;
   };
 }
 
@@ -296,6 +298,28 @@ export interface ParsedContent {
   options: string[];
   summary: string;
   vars: Record<string, any>;
+
+  // 观察/调查/行动（主剧情回复中附带）
+  observe?: string;
+  investigateItems?: Array<{
+    desc: string;
+    suspect: string;
+    style: string;
+    time: string;
+    stamina: number;
+    sanity: number;
+  }>;
+  actionItems?: Array<{
+    desc: string;
+    style: string;
+    time: string;
+    stamina: number;
+    sanity: number;
+  }>;
+
+  // 二次请求返回的具体结果（<action type="investigate"> / <action type="act">）
+  actionType?: 'investigate' | 'act';
+  actionResult?: string;
 }
 
 export type Task = 'story' | 'summary' | 'vars';
@@ -411,4 +435,80 @@ export interface SaveSlot {
     messages: ChatMessage[];
   };
   historyIndex: number;
+}
+
+// ========== Ending System (多真相/多结局) ==========
+
+/** 真相类型: A-自刃者 B-梦觉 C-深渊 D-等价交换 E-观测者 */
+export type TruthType = 'A' | 'B' | 'C' | 'D' | 'E';
+
+/** 结局分类标签 */
+export type EndingTag = 'normal' | 'good' | 'bad' | 'true' | 'hidden';
+
+/** 单个触发条件项 */
+export interface EndingConditionItem {
+  /** 变量路径,如 "cycleCount" / "affinity.fumi" / "suspicion.self" / "investigation.psych" */
+  variablePath: string;
+  /** 比较运算符 */
+  operator: '>=' | '<=' | '>' | '<' | '=' | '!=';
+  /** 目标值 */
+  targetValue: number | string | boolean;
+}
+
+/** 条件组: 组内条件满足任一即算通过,各组之间为 AND */
+export interface EndingConditionGroup {
+  id: string;
+  name: string;
+  /** 组内条件满足模式: 'all'(全部满足) | 'any'(任一满足) */
+  mode: 'all' | 'any';
+  conditions: EndingConditionItem[];
+}
+
+/** 结局定义 */
+export interface Ending {
+  id: string;
+  /** 结局名称 */
+  name: string;
+  /** 所属真相线 */
+  truthType: TruthType;
+  /** 结局分类标签 */
+  tag: EndingTag;
+  /** 结局描述(展示在结局画面) */
+  description: string;
+  /** 触发提示(接近此结局时的暗示) */
+  hint?: string;
+  /** 结局画面背景图 */
+  backgroundImage?: string;
+  /** 结局画面BGM */
+  bgm?: string;
+  /** 触发条件(条件组,组间AND) */
+  conditionGroups: EndingConditionGroup[];
+  /** 是否已解锁(玩家已通关过) */
+  isUnlocked: boolean;
+  /** 解锁时间 */
+  unlockedAt?: number;
+  /** 排序权重 */
+  order: number;
+  /** 额外元数据 */
+  metadata?: Record<string, any>;
+}
+
+/** 结局面板状态 */
+export interface EndingPanelState {
+  visible: boolean;
+  /** 当前展示的结局ID */
+  activeEndingId: string | null;
+  /** 是否处于结局动画中 */
+  isAnimating: boolean;
+}
+
+/** 结局检测上下文(每次场景切换/回合结束时检查) */
+export interface EndingCheckContext {
+  cycleCount: number;
+  affinity: Record<string, number>;
+  suspicion: Record<string, number>;
+  investigation: Record<string, number>;
+  unlockedClues: string[];
+  endingsSeen: string[];
+  [key: string]: any;
 }
