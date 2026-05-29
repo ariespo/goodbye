@@ -13,6 +13,7 @@ import { ActionPanel } from './ActionPanel';
 import { EndingEditor } from './EndingEditor';
 import { SaveModal } from '../system/SaveModal';
 import { AudioSystem } from '../system/AudioSystem';
+import { LoadingOverlay } from '../system/LoadingOverlay';
 import { maintextToScene } from '../../engine/scene-parser';
 import { OPENING_STORYLINE } from '../../engine/opening-storyline';
 
@@ -77,6 +78,7 @@ export function GameCanvas() {
       <StatusPanel />
       <ActionBar />
       <MapModal />
+      <LoadingOverlay />
     </div>
   );
 }

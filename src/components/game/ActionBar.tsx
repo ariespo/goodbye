@@ -41,6 +41,7 @@ export function ActionBar() {
   const setShowPromptInspector = useGameStore(state => state.actions.setShowPromptInspector);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const currentScene = useGameStore(state => state.game.currentScene);
+  const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const { performAction } = useGameLoop();
 
   const showGameActions = currentScene && sceneComplete;
@@ -51,10 +52,10 @@ export function ActionBar() {
   const hasActions = !!currentScene?.actionItems && currentScene.actionItems.length > 0;
 
   const availability: Record<string, boolean> = {
-    observe: hasObserve,
-    investigate: hasInvestigate,
-    actions: hasActions,
-    map: true,
+    observe: hasObserve && !isWaitingForAI,
+    investigate: hasInvestigate && !isWaitingForAI,
+    actions: hasActions && !isWaitingForAI,
+    map: !isWaitingForAI,
   };
 
   return (
@@ -87,12 +88,14 @@ export function ActionBar() {
             key={t.id}
             icon={<t.icon size={27} />}
             label={t.label}
+            enabled={!isWaitingForAI}
             onClick={() => t.id === 'prompt' ? setShowPromptInspector(true) : toggleModal(t.id)}
           />
         ))}
         <PixelActionBtn
           icon={<endingTool.icon size={27} />}
           label={endingTool.label}
+          enabled={!isWaitingForAI}
           onClick={() => setShowEndingEditor(true)}
         />
       </div>

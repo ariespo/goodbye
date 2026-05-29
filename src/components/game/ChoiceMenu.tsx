@@ -11,6 +11,7 @@ const ACCENT = '#6b8fc4';
 export function ChoiceMenu() {
   const parsedContent = useGameStore(state => state.api.parsedContent);
   const isStreaming = useGameStore(state => state.api.isStreaming);
+  const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const { selectOption } = useGameLoop();
 
   const options = parsedContent.options;
@@ -26,6 +27,7 @@ export function ChoiceMenu() {
           key={index}
           index={index}
           text={option}
+          disabled={isWaitingForAI}
           onClick={() => selectOption(option)}
         />
       ))}
@@ -35,16 +37,21 @@ export function ChoiceMenu() {
 
 /* ── 像素选项按钮 ── */
 
-function PixelChoiceBtn({ index, text, onClick }: {
-  index: number; text: string; onClick: () => void;
+function PixelChoiceBtn({ index, text, disabled, onClick }: {
+  index: number; text: string; disabled?: boolean; onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
-  const bg = hovered ? 'rgba(107,143,196,0.1)' : PANEL_BG;
-  const border = hovered ? BORDER_HOVER : BORDER;
-  const borderLeft = hovered ? `4px solid ${ACCENT}` : `2px solid ${BORDER}`;
-  const textColor = hovered ? TEXT_MAIN : TEXT_DIM;
-  const numColor = hovered ? ACCENT : TEXT_DIM;
+  const isDisabled = disabled;
+  const bg = isDisabled
+    ? 'rgba(12, 12, 16, 0.4)'
+    : hovered ? 'rgba(107,143,196,0.1)' : PANEL_BG;
+  const border = isDisabled ? '#2a2a2e' : hovered ? BORDER_HOVER : BORDER;
+  const borderLeft = isDisabled
+    ? `2px solid #2a2a2e`
+    : hovered ? `4px solid ${ACCENT}` : `2px solid ${BORDER}`;
+  const textColor = isDisabled ? '#3a3632' : hovered ? TEXT_MAIN : TEXT_DIM;
+  const numColor = isDisabled ? '#3a3632' : hovered ? ACCENT : TEXT_DIM;
 
   return (
     <button
@@ -60,13 +67,16 @@ function PixelChoiceBtn({ index, text, onClick }: {
         fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
         fontSize: '24px',
         lineHeight: 1.6,
-        boxShadow: hovered
+        opacity: isDisabled ? 0.4 : 1,
+        pointerEvents: isDisabled ? 'none' : 'auto',
+        boxShadow: hovered && !isDisabled
           ? `inset 1px 1px 0 rgba(255,255,255,0.05), 3px 3px 0 rgba(0,0,0,0.35)`
           : `inset 1px 1px 0 rgba(255,255,255,0.02), 2px 2px 0 rgba(0,0,0,0.3)`,
       }}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => { if (!isDisabled) setHovered(true); }}
       onMouseLeave={() => setHovered(false)}
-      onClick={onClick}
+      onClick={() => { if (!isDisabled) onClick(); }}
+      disabled={isDisabled}
     >
       <span
         className="inline-block mr-3"
