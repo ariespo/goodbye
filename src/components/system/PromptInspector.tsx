@@ -16,7 +16,7 @@ export function PromptInspector() {
 
   const data = useMemo(() => {
     if (!show) return null;
-    const { tavern, game } = store;
+    const { tavern } = store;
     const settings = tavern.settings;
     if (!settings) return null;
 
@@ -265,7 +265,7 @@ function LorebookEntryRow({ entry }: { entry: { entry: { keys: string[]; content
       {expanded && (
         <pre className="mt-1 p-2 bg-bg-secondary text-[11px] text-text-muted font-mono whitespace-pre-wrap break-all max-h-[150px] overflow-y-auto">
           {entry.entry.content}
-        </div>
+        </pre>
       )}
     </div>
   );
@@ -345,7 +345,7 @@ function FinalTab({ data }: { data: PromptInspectionResult }) {
           {expandedMsg.has(msg.index) && (
             <pre className="p-3 text-[11px] text-text-primary font-mono whitespace-pre-wrap break-all max-h-[300px] overflow-y-auto bg-bg-primary">
               {msg.content}
-            </div>
+            </pre>
           )}
         </div>
       ))}
