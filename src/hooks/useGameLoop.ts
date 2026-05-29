@@ -20,40 +20,47 @@ const SECONDARY_SYSTEM_PROMPT = `你是游戏状态分析助手。基于下面�
 export function useGameLoop() {
   const store = useGameStore();
   const parseStateRef = useRef(createParseState());
+  const sendingLockRef = useRef(false);
 
   const sendMessage = useCallback(async (userInput: string) => {
-    const { tavern, game, actions } = store;
-    const settings = tavern.settings;
-    const activePreset = tavern.presets.find(p => p.id === settings?.activePresetId) || null;
-
-    if (!settings) {
-      actions.addNotification({ type: 'error', message: '设置未加载', duration: 4000 });
+    if (sendingLockRef.current) {
       return;
     }
+    sendingLockRef.current = true;
 
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: userInput,
-      timestamp: Date.now(),
-      variables: { ...tavern.variables },
-    };
-
-    const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
-    const messages = activeChat ? [...activeChat.messages, userMessage] : [userMessage];
-
-    if (activeChat) {
-      const updatedChat = { ...activeChat, messages, updatedAt: Date.now() };
-      await saveChat(updatedChat);
-      actions.setChats(tavern.chats.map(c => c.id === updatedChat.id ? updatedChat : c));
-    }
-
-    actions.setIsWaitingForAI(true);
-    actions.setApiError(null);
-    actions.setStreaming(true);
-    parseStateRef.current = createParseState();
+    const { tavern, game, actions } = store;
 
     try {
+      const settings = tavern.settings;
+      const activePreset = tavern.presets.find(p => p.id === settings?.activePresetId) || null;
+
+      if (!settings) {
+        actions.addNotification({ type: 'error', message: '设置未加载', duration: 4000 });
+        return;
+      }
+
+      const userMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: userInput,
+        timestamp: Date.now(),
+        variables: { ...tavern.variables },
+      };
+
+      const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
+      const messages = activeChat ? [...activeChat.messages, userMessage] : [userMessage];
+
+      if (activeChat) {
+        const updatedChat = { ...activeChat, messages, updatedAt: Date.now() };
+        await saveChat(updatedChat);
+        actions.setChats(tavern.chats.map(c => c.id === updatedChat.id ? updatedChat : c));
+      }
+
+      actions.setIsWaitingForAI(true);
+      actions.setApiError(null);
+      actions.setStreaming(true);
+      parseStateRef.current = createParseState();
+
       const { messages: promptMessages } = assemblePrompt({
         userInput,
         history: messages,
@@ -198,6 +205,8 @@ export function useGameLoop() {
       const message = error instanceof Error ? error.message : '未知错误';
       actions.setApiError(message);
       actions.addNotification({ type: 'error', message, duration: 6000 });
+    } finally {
+      sendingLockRef.current = false;
     }
   }, [store]);
 
