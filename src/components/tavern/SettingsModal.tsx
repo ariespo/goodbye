@@ -25,6 +25,7 @@ export function SettingsModal() {
   const settings = useGameStore(state => state.tavern.settings);
   const showSettings = useGameStore(state => state.ui.showSettings);
   const toggleModal = useGameStore(state => state.actions.toggleModal);
+  const setShowPromptInspector = useGameStore(state => state.actions.setShowPromptInspector);
   const actions = useGameStore(state => state.actions);
 
   const [draft, setDraft] = useState<AppSettings | null>(settings);
@@ -385,19 +386,27 @@ export function SettingsModal() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-border-subtle">
+        <div className="flex justify-between items-center px-6 py-4 border-t border-border-subtle">
           <button
-            onClick={() => toggleModal('settings')}
-            className="px-4 py-2 border border-border-subtle text-text-muted hover:text-text-primary hover:border-text-muted transition-all"
+            onClick={() => { toggleModal('settings'); setShowPromptInspector(true); }}
+            className="px-4 py-2 text-xs border border-border-subtle text-text-muted hover:text-accent-blue hover:border-accent-blue transition-all"
           >
-            取消
+            查看提示词
           </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-accent-blue text-bg-primary hover:bg-accent-blue/80 transition-colors"
-          >
-            保存
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => toggleModal('settings')}
+              className="px-4 py-2 border border-border-subtle text-text-muted hover:text-text-primary hover:border-text-muted transition-all"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-accent-blue text-bg-primary hover:bg-accent-blue/80 transition-colors"
+            >
+              保存
+            </button>
+          </div>
         </div>
       </div>
     </div>
