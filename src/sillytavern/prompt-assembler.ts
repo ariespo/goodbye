@@ -29,6 +29,45 @@ export interface AssembleResult {
   systemPrompt: string;
 }
 
+export interface PromptOrderInspectItem {
+  identifier: string;
+  name: string;
+  enabled: boolean;
+  marker: boolean;
+  role: string;
+  rawContent: string | null;
+  resolvedContent: string | null;
+  finalContent: string | null;
+  skipped: boolean;
+  skipReason: string;
+}
+
+export interface PromptInspectionResult {
+  lorebook: {
+    scanText: string;
+    matchedEntries: MatchedEntry[];
+    beforeEntries: MatchedEntry[];
+    afterEntries: MatchedEntry[];
+  };
+  history: {
+    totalMessages: number;
+    includedMessages: number;
+    maxContext: number;
+    availableContext: number;
+    messages: { role: string; content: string; tokens: number; included: boolean }[];
+  };
+  orderItems: PromptOrderInspectItem[];
+  varBlock: string | null;
+  formatPrompt: string | null;
+  finalMessages: { role: string; content: string; index: number }[];
+  stats: {
+    totalTokens: number;
+    systemTokens: number;
+    historyTokens: number;
+    userInputTokens: number;
+  };
+}
+
 interface RuntimePromptItem {
   identifier: string;
   name?: string;
@@ -251,6 +290,203 @@ function formatVariablesForPrompt(variables: Record<string, any>): string {
   if (entries.length === 0) return '';
   const lines = entries.map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
   return `[当前状态]\n${lines.join('\n')}`;
+}
+
+/** 提示词组装可视化检查 — 返回完整的中间状态 */
+export function inspectPrompt(options: AssembleOptions): PromptInspectionResult {
+  const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt } = options;
+
+  // 1) 世界书扫描
+  const activeBooks = lorebooks.filter(b => activeLorebookIds.includes(b.id));
+  const matchedAll: MatchedEntry[] = [];
+  const scanText = userInput + ' ' + history.slice(-5).map(m => m.content).join(' ');
+  for (const book of activeBooks) {
+    const engine = createLorebookEngine(book);
+    const matches = engine.recursiveScan(scanText, 3);
+    matchedAll.push(...matches);
+  }
+  const uniqueEntries = Array.from(
+    new Map(matchedAll.map(e => [e.entry.id, e])).values()
+  ).sort((a, b) => a.score - b.score);
+
+  const beforeEntries = uniqueEntries.filter(e => BEFORE_POSITIONS.has(e.entry.position));
+  const afterEntries = uniqueEntries.filter(e => AFTER_POSITIONS.has(e.entry.position));
+
+  // 2) token 预算裁剪历史
+  const maxContext = preset?.settings?.openai_max_context ?? 8192;
+  const maxOutput = preset?.settings?.openai_max_tokens ?? 2048;
+  const availableContext = Math.max(1024, maxContext - maxOutput);
+
+  const historyInspect: { role: string; content: string; tokens: number; included: boolean }[] = [];
+  let currentTokens = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    const msgTokens = Math.ceil(msg.content.length / 4);
+    const included = msg.role !== 'system' && currentTokens + msgTokens <= availableContext * 0.85;
+    if (included) {
+      currentTokens += msgTokens;
+    }
+    historyInspect.unshift({ role: msg.role, content: msg.content, tokens: msgTokens, included });
+  }
+  const includedHistory = historyInspect.filter(m => m.included);
+
+  // 3) prompt_order 编排 + 详细记录
+  const rawOrder = preset?.settings?.prompt_order;
+  const promptOrder: RuntimePromptItem[] = Array.isArray(rawOrder) && rawOrder.length > 0
+    ? rawOrder
+    : defaultPromptOrder();
+  const customPrompts: RuntimePromptItem[] = preset?.settings?.prompts || [];
+
+  const macroCtx = { userName, characterName, userInput, variables };
+
+  function resolveContentInspect(item: RuntimePromptItem): { raw: string | null; resolved: string | null } {
+    const id = item.identifier;
+
+    if (item.marker || MARKER_IDENTIFIERS.has(id)) {
+      if (id === 'worldInfoBefore') {
+        const content = beforeEntries.length ? beforeEntries.map(e => e.entry.content).join('\n\n') : null;
+        return { raw: `[世界书前置: ${beforeEntries.length} 条匹配]`, resolved: content };
+      }
+      if (id === 'worldInfoAfter') {
+        const content = afterEntries.length ? afterEntries.map(e => e.entry.content).join('\n\n') : null;
+        return { raw: `[世界书后置: ${afterEntries.length} 条匹配]`, resolved: content };
+      }
+      if (id === 'chatHistory') {
+        return { raw: `[聊天历史: ${includedHistory.length} 条]`, resolved: null };
+      }
+      const map: Record<string, string> = {
+        charDescription: 'character_description',
+        charPersonality: 'character_personality',
+        scenario: 'scenario',
+        personaDescription: 'persona_description',
+        dialogueExamples: 'dialogue_examples',
+      };
+      const fieldKey = map[id];
+      if (fieldKey && typeof preset?.settings?.[fieldKey] === 'string' && preset.settings[fieldKey].trim()) {
+        return { raw: preset.settings[fieldKey], resolved: preset.settings[fieldKey] };
+      }
+      if (item.content?.trim()) return { raw: item.content, resolved: item.content };
+      return { raw: null, resolved: null };
+    }
+
+    if (item.content?.trim()) return { raw: item.content, resolved: item.content };
+    const custom = customPrompts.find(p => p.identifier === id);
+    if (custom?.content?.trim()) return { raw: custom.content, resolved: custom.content };
+    const direct = preset?.settings?.[id];
+    if (typeof direct === 'string' && direct.trim()) return { raw: direct, resolved: direct };
+
+    return { raw: null, resolved: null };
+  }
+
+  const orderItems: PromptOrderInspectItem[] = [];
+  let systemAcc = '';
+
+  for (const item of promptOrder) {
+    const inspectItem: PromptOrderInspectItem = {
+      identifier: item.identifier,
+      name: item.name || item.identifier,
+      enabled: item.enabled !== false,
+      marker: !!(item.marker || MARKER_IDENTIFIERS.has(item.identifier)),
+      role: item.role || 'system',
+      rawContent: null,
+      resolvedContent: null,
+      finalContent: null,
+      skipped: false,
+      skipReason: '',
+    };
+
+    if (item.enabled === false) {
+      inspectItem.skipped = true;
+      inspectItem.skipReason = '已禁用';
+      orderItems.push(inspectItem);
+      continue;
+    }
+
+    if (item.identifier === 'chatHistory') {
+      inspectItem.rawContent = `[聊天历史: ${includedHistory.length}/${history.length} 条]`;
+      inspectItem.resolvedContent = includedHistory.map(m => `[${m.role}] ${m.content.slice(0, 100)}${m.content.length > 100 ? '...' : ''}`).join('\n');
+      inspectItem.finalContent = inspectItem.resolvedContent;
+      orderItems.push(inspectItem);
+      continue;
+    }
+
+    const { raw, resolved } = resolveContentInspect(item);
+    inspectItem.rawContent = raw;
+    inspectItem.resolvedContent = resolved;
+
+    if (!resolved) {
+      inspectItem.skipped = true;
+      inspectItem.skipReason = '内容为空';
+      orderItems.push(inspectItem);
+      continue;
+    }
+
+    const final = replaceMacros(resolved, macroCtx);
+    inspectItem.finalContent = final;
+
+    if (!final.trim()) {
+      inspectItem.skipped = true;
+      inspectItem.skipReason = '宏替换后为空';
+      orderItems.push(inspectItem);
+      continue;
+    }
+
+    if (item.role !== 'system' && item.role !== 'user' && item.role !== 'assistant') {
+      // role 不对也继续，但标记一下
+    }
+
+    if ((item.role || 'system') === 'system') {
+      systemAcc += (systemAcc ? '\n\n' : '') + final;
+    }
+
+    orderItems.push(inspectItem);
+  }
+
+  // 4) 附加块
+  const varBlock = formatVariablesForPrompt(variables || {});
+
+  // 5) 组装最终消息（模拟）
+  const finalMessages: { role: string; content: string; index: number }[] = [];
+  let idx = 0;
+
+  if (systemAcc || varBlock || formatPrompt) {
+    let sys = systemAcc;
+    if (varBlock) sys += (sys ? '\n\n' : '') + varBlock;
+    if (formatPrompt) sys += (sys ? '\n\n' : '') + formatPrompt;
+    finalMessages.push({ role: 'system', content: sys, index: idx++ });
+  }
+
+  for (const msg of includedHistory) {
+    finalMessages.push({ role: msg.role, content: msg.content, index: idx++ });
+  }
+
+  finalMessages.push({ role: 'user', content: replaceMacros(userInput, macroCtx), index: idx++ });
+
+  // 6) 统计
+  const systemTokens = Math.ceil((systemAcc.length + (varBlock?.length || 0) + (formatPrompt?.length || 0)) / 4);
+  const historyTokens = includedHistory.reduce((sum, m) => sum + m.tokens, 0);
+  const userInputTokens = Math.ceil(userInput.length / 4);
+
+  return {
+    lorebook: { scanText, matchedEntries: uniqueEntries, beforeEntries, afterEntries },
+    history: {
+      totalMessages: history.length,
+      includedMessages: includedHistory.length,
+      maxContext,
+      availableContext,
+      messages: historyInspect,
+    },
+    orderItems,
+    varBlock: varBlock || null,
+    formatPrompt: formatPrompt || null,
+    finalMessages,
+    stats: {
+      totalTokens: systemTokens + historyTokens + userInputTokens,
+      systemTokens,
+      historyTokens,
+      userInputTokens,
+    },
+  };
 }
 
 function defaultPromptOrder(): RuntimePromptItem[] {

@@ -12,6 +12,7 @@ import { SettingsModal } from './components/tavern/SettingsModal';
 import { LorebookModal } from './components/tavern/LorebookModal';
 import { PresetModal } from './components/tavern/PresetModal';
 import { HistoryDrawer } from './components/tavern/HistoryDrawer';
+import { PromptInspector } from './components/system/PromptInspector';
 import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
 import { OPENING_STORYLINE } from './engine/opening-storyline';
@@ -121,6 +122,7 @@ function App() {
       <LorebookModal />
       <PresetModal />
       <HistoryDrawer />
+      <PromptInspector />
     </div>
   );
 }

@@ -57,6 +57,7 @@ interface GameStore {
     showMap: boolean;
     showTitle: boolean;
     showEndingEditor: boolean;
+    showPromptInspector: boolean;
     notifications: Notification[];
     introPlayed: boolean;
   };
@@ -93,6 +94,7 @@ interface GameStore {
     toggleModal: (modal: 'settings' | 'lorebook' | 'preset' | 'history' | 'map') => void;
     setShowTitle: (show: boolean) => void;
     setShowEndingEditor: (show: boolean) => void;
+    setShowPromptInspector: (show: boolean) => void;
     addNotification: (notification: Omit<Notification, 'id'>) => void;
     removeNotification: (id: string) => void;
     setIntroPlayed: (played: boolean) => void;
@@ -338,6 +340,7 @@ export const useGameStore = create<GameStore>((set) => ({
     showMap: false,
     showTitle: true,
     showEndingEditor: false,
+    showPromptInspector: false,
     notifications: [],
     introPlayed: false,
   },
@@ -387,6 +390,7 @@ export const useGameStore = create<GameStore>((set) => ({
     }),
     setShowTitle: (show) => set(state => ({ ui: { ...state.ui, showTitle: show } })),
     setShowEndingEditor: (show) => set(state => ({ ui: { ...state.ui, showEndingEditor: show } })),
+    setShowPromptInspector: (show) => set(state => ({ ui: { ...state.ui, showPromptInspector: show } })),
     addNotification: (notification) => set(state => ({
       ui: {
         ...state.ui,

@@ -4,7 +4,7 @@ import { useGameLoop } from '../../hooks/useGameLoop';
 import {
   Eye, MagnifyingGlass, ArrowRight, MapTrifold,
   Gear, Books, SlidersHorizontal, ClockClockwise,
-  Star,
+  Star, Terminal,
 } from '@phosphor-icons/react';
 
 const BORDER = '#3a3a42';
@@ -23,13 +23,14 @@ const gameActions = [
   { id: 'map' as const, icon: MapTrifold, label: '地图' },
 ] as const;
 
-type ToolId = 'history' | 'lorebook' | 'preset' | 'settings';
+type ToolId = 'history' | 'lorebook' | 'preset' | 'settings' | 'prompt';
 
 const tools: Array<{ id: ToolId; icon: typeof Eye; label: string }> = [
   { id: 'history', icon: ClockClockwise, label: '历史' },
   { id: 'lorebook', icon: Books, label: '世界书' },
   { id: 'preset', icon: SlidersHorizontal, label: '预设' },
   { id: 'settings', icon: Gear, label: '设置' },
+  { id: 'prompt', icon: Terminal, label: '提示词' },
 ];
 
 const endingTool = { id: 'ending', icon: Star, label: '结局' };
@@ -37,6 +38,7 @@ const endingTool = { id: 'ending', icon: Star, label: '结局' };
 export function ActionBar() {
   const toggleModal = useGameStore(state => state.actions.toggleModal);
   const setShowEndingEditor = useGameStore(state => state.actions.setShowEndingEditor);
+  const setShowPromptInspector = useGameStore(state => state.actions.setShowPromptInspector);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const currentScene = useGameStore(state => state.game.currentScene);
   const { performAction } = useGameLoop();
@@ -85,7 +87,7 @@ export function ActionBar() {
             key={t.id}
             icon={<t.icon size={27} />}
             label={t.label}
-            onClick={() => toggleModal(t.id)}
+            onClick={() => t.id === 'prompt' ? setShowPromptInspector(true) : toggleModal(t.id)}
           />
         ))}
         <PixelActionBtn
