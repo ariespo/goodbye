@@ -12,7 +12,7 @@ export function ChoiceMenu() {
   const parsedContent = useGameStore(state => state.api.parsedContent);
   const isStreaming = useGameStore(state => state.api.isStreaming);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
-  const { selectOption } = useGameLoop();
+  const { selectOption, reroll } = useGameLoop();
 
   const options = parsedContent.options;
   if (isStreaming || options.length === 0) return null;
@@ -31,6 +31,8 @@ export function ChoiceMenu() {
           onClick={() => selectOption(option)}
         />
       ))}
+      {/* 重roll 选项 */}
+      <RerollBtn disabled={isWaitingForAI} onClick={() => reroll()} />
     </div>
   );
 }
@@ -95,3 +97,39 @@ function PixelChoiceBtn({ index, text, disabled, onClick }: {
 }
 
 import { useState } from 'react';
+import { ArrowCounterClockwise } from '@phosphor-icons/react';
+
+/* ── 重roll 按钮 ── */
+
+function RerollBtn({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+
+  const isDisabled = disabled;
+  const borderColor = isDisabled ? '#2a2a2e' : hovered ? '#8b6a7a' : '#3a3a42';
+  const textColor = isDisabled ? '#3a3632' : hovered ? '#b89a8a' : '#6a6560';
+
+  return (
+    <button
+      className="relative text-left select-none cursor-none transition-all duration-150 flex items-center gap-3"
+      style={{
+        background: 'transparent',
+        border: `2px dashed ${borderColor}`,
+        padding: '12px 20px',
+        color: textColor,
+        fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
+        fontSize: '18px',
+        lineHeight: 1.6,
+        opacity: isDisabled ? 0.4 : 1,
+        pointerEvents: isDisabled ? 'none' : 'auto',
+        marginTop: 8,
+      }}
+      onMouseEnter={() => { if (!isDisabled) setHovered(true); }}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => { if (!isDisabled) onClick(); }}
+      disabled={isDisabled}
+    >
+      <ArrowCounterClockwise size={20} />
+      <span>尝试进入其他时间线</span>
+    </button>
+  );
+}
