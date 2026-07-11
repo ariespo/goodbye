@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/gameStore';
-import { X, Plus, Trash, Copy } from '@phosphor-icons/react';
+import { GameIcon } from '../ui/GameIcon';
 import type { Ending, EndingConditionGroup, TruthType, EndingTag } from '../../sillytavern/types';
 
 const PANEL_BG = 'rgba(12, 12, 16, 0.96)';
@@ -77,7 +77,15 @@ export function EndingEditor() {
   const endings = useGameStore(state => state.game.endings);
   const endingsSeen = useGameStore(state => state.game.endingsSeen);
   const showPanel = useGameStore(state => state.ui.showEndingEditor);
-  const { addEnding, removeEnding, updateEnding, setShowEndingEditor } = useGameStore(state => state.actions);
+  const {
+    addEnding,
+    removeEnding,
+    updateEnding,
+    setShowEndingEditor,
+    setEndingPanel,
+    setPendingEnding,
+    setSceneComplete,
+  } = useGameStore(state => state.actions);
   const [selectedId, setSelectedId] = useState<string | null>(endings[0]?.id ?? null);
 
   const selected = endings.find(e => e.id === selectedId) ?? null;
@@ -123,16 +131,29 @@ export function EndingEditor() {
     updateEnding(selected.id, patch);
   }, [selected, updateEnding]);
 
+  const handleTestEnding = useCallback((ending: Ending) => {
+    setShowEndingEditor(false);
+    setEndingPanel({
+      visible: false,
+      activeEndingId: null,
+      pendingEndingId: null,
+      isPreview: true,
+      isAnimating: false,
+    });
+    setPendingEnding(ending.id);
+    setSceneComplete(true);
+  }, [setEndingPanel, setPendingEnding, setSceneComplete, setShowEndingEditor]);
+
   if (!showPanel) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="ending-editor-shell fixed inset-0 z-[60] flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.7)' }}
       onClick={() => setShowEndingEditor(false)}
     >
       <div
-        className="relative flex select-none"
+        className="ending-editor relative flex select-none"
         style={{
           width: 'min(95vw, 1200px)',
           height: 'min(90vh, 700px)',
@@ -167,7 +188,7 @@ export function EndingEditor() {
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = ACCENT; e.currentTarget.style.color = ACCENT; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = TEXT_DIM; }}
             >
-              <X size={14} />
+              <GameIcon name="close" size={14} />
             </button>
           </div>
 
@@ -176,12 +197,12 @@ export function EndingEditor() {
             <PixelButtonSmall
               onClick={handleAddEnding}
               label="添加结局"
-              icon={<Plus size={14} />}
+              icon={<GameIcon name="plus" size={14} />}
             />
           </div>
 
           {/* 列表 */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="flex-1 pixel-scroll-blue overflow-y-auto p-2 space-y-1">
             {(['A', 'B', 'C', 'D', 'E'] as TruthType[]).map(truth => {
               const group = endings.filter(e => e.truthType === truth).sort((a, b) => a.order - b.order);
               if (group.length === 0) return null;
@@ -253,13 +274,14 @@ export function EndingEditor() {
                   {selected.name}
                 </span>
                 <div className="flex items-center gap-2">
-                  <PixelIconBtn onClick={() => handleCloneEnding(selected)} icon={<Copy size={14} />} title="复制" />
-                  <PixelIconBtn onClick={() => { removeEnding(selected.id); setSelectedId(null); }} icon={<Trash size={14} />} title="删除" />
+                  <PixelIconBtn onClick={() => handleTestEnding(selected)} icon={<GameIcon name="play" size={14} />} title="测试" />
+                  <PixelIconBtn onClick={() => handleCloneEnding(selected)} icon={<GameIcon name="copy" size={14} />} title="复制" />
+                  <PixelIconBtn onClick={() => { removeEnding(selected.id); setSelectedId(null); }} icon={<GameIcon name="trash" size={14} />} title="删除" />
                 </div>
               </div>
 
               {/* 滚动内容 */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              <div className="flex-1 pixel-scroll-blue overflow-y-auto p-5 space-y-5">
                 {/* 基本信息 */}
                 <Section title="基本信息">
                   <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -329,7 +351,7 @@ export function EndingEditor() {
                         });
                       }}
                       label="添加条件组"
-                      icon={<Plus size={14} />}
+                      icon={<GameIcon name="plus" size={14} />}
                     />
                   </div>
                 </Section>
@@ -382,7 +404,7 @@ function ConditionGroupEditor({
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#c46b6b'; e.currentTarget.style.color = '#c46b6b'; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = TEXT_DIM; }}
         >
-          <Trash size={12} />
+          <GameIcon name="trash" size={12} />
         </button>
       </div>
 
@@ -432,7 +454,7 @@ function ConditionGroupEditor({
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#c46b6b'; e.currentTarget.style.color = '#c46b6b'; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = TEXT_DIM; }}
             >
-              <X size={10} />
+              <GameIcon name="close" size={10} />
             </button>
           </div>
         ))}
@@ -444,7 +466,7 @@ function ConditionGroupEditor({
             });
           }}
           label="添加条件"
-          icon={<Plus size={12} />}
+          icon={<GameIcon name="plus" size={12} />}
         />
       </div>
     </div>

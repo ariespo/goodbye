@@ -187,35 +187,73 @@ export interface AppSettings {
   autoMode?: boolean;
   /** 自动模式间隔(ms,从打字完到推进的等待时间) */
   autoIntervalMs?: number;
+  /** 游戏字体 */
+  fontFamily?: string;
+  /** 音乐音量 0-1 */
+  musicVolume?: number;
+  /** 音效音量 0-1 */
+  soundVolume?: number;
 }
 
-export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下格式输出回复,不要使用 Markdown 包裹:
+export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格式输出回复。除标签内容外,不要输出任何 Markdown、解释或额外文字。
 
-<maintext> 内部使用 GalGame 行指令格式,每行一个指令,用 | 分隔字段:
-  场景|<场景名>              切换背景(资源路径: /assets/backgrounds/<场景名>)
-  音乐|<音乐名>              切换 BGM(资源路径: /assets/audio/bgm/<音乐名>)
-  对话|<人物名>|<情绪>|<对话内容>   显示对话(人物 = "旁白" 时不显示角色名和立绘)
+## 1. 剧情正文(必填)
+<maintext>
+  内部使用 GalGame 行指令格式,每行一个指令,用 | 分隔字段:
+    场景|<场景文件名>              切换背景(资源路径: /assets/backgrounds/)
+    音乐|<音乐文件名>              切换 BGM(资源路径: /assets/audio/bgm/)
+    对话|<人物名>|<情绪>|<对话内容>   显示对话(人物 = "旁白" 时不显示角色名和立绘)
 
-情绪取值: calm / horror / insane / sad / angry / happy
-同一场景/音乐下可有多段对话,只在变化时声明。例:
+  情绪只允许: calm / horror / insane / sad / angry / happy
+  同一场景/音乐下可有多段对话,只在变化时声明场景或音乐。
 
-<maintext>场景|school_corridor.jpg
-音乐|silence.mp3
-对话|少女|horror|你来了。
-对话|旁白|calm|她背对着你,声音平淡得像背书。
-对话|少女|sad|"我等了你很久。"
-场景|classroom.jpg
-对话|少女|insane|她突然转身——
+  示例:
+  场景|school_corridor.jpg
+  音乐|silence.mp3
+  对话|少女|horror|你来了。
+  对话|旁白|calm|她背对着你,声音平淡得像背书。
 </maintext>
 
-其余必填标签:
-<option>选项 A
+## 2. 玩家选项(必填)
+<option>
+选项 A
 选项 B
-选项 C</option>              ← 至少 2 项,每行一个
-<sum>本回合一句话总结</sum>
-<vars>{ "金钱": +10, "HP": 38 }</vars>   ← 选填,JSON 深合并
+选项 C
+</option>
+要求:至少 2 项,每行一个,不要带序号或额外标记。
 
-<thinking>……</thinking>     ← 选填;内部不解析其他标签`;
+## 3. 回合总结(必填)
+<sum>本回合一句话总结</sum>
+
+## 4. 状态变量(选填,但如有变化必须合法)
+<vars>{ "stamina": 80, "sanity": 75 }</vars>
+要求:必须是合法 JSON 对象,只包含发生变化的字段,不要注释。
+
+## 5. 观察/调查/行动(选填,仅在需要时提供)
+<observe>
+[发现] 五感或环境信息。
+[异常] 令你不安的细节。
+[线索] 值得记录的线索。
+</observe>
+
+<investigate>
+描述|嫌疑人|风格|耗时|消耗体力|消耗理智
+旧日记|文穂|现实|15分钟|2|1
+</investigate>
+
+<action>
+描述|风格|耗时|消耗体力|消耗理智
+悄悄离开|现实|5分钟|1|0
+</action>
+
+## 6. 暗示(选填)
+<hint>如果当前剧情接近某个结局,可以给出一句不剧透的暗示。</hint>
+
+## 禁止事项
+- 不要输出 <maintext> 外的 Markdown 代码块。
+- 不要省略必填标签 <maintext>、<option>、<sum>。
+- 不要在 <vars> 中写入非 JSON 内容。
+- 不要在一个回复中嵌套同名标签。`;
 
 export const DEFAULT_TAGS = ['maintext', 'option', 'sum', 'vars', 'thinking', 'think'] as const;
 export const DEFAULT_OPAQUE_TAGS = ['thinking', 'think'] as const;
@@ -320,6 +358,14 @@ export interface ParsedContent {
   // 二次请求返回的具体结果（<action type="investigate"> / <action type="act">）
   actionType?: 'investigate' | 'act';
   actionResult?: string;
+}
+
+export interface OrganizedClue {
+  id: string;
+  title: string;
+  description: string;
+  source: string;
+  createdAt: number;
 }
 
 export type Task = 'story' | 'summary' | 'vars';
@@ -429,11 +475,20 @@ export interface SaveSlot {
     currentLineIndex: number;
     gameStatus: GameStatus;
     currentState: CurrentState;
+    /** 回合历史快照（完整恢复用） */
+    history?: TurnSnapshot[];
+    /** 已解锁结局 */
+    endingsSeen?: string[];
+    /** 自动播放 */
+    autoMode?: boolean;
+    /** 当前场景是否播完 */
+    sceneComplete?: boolean;
   };
   tavernState: {
     variables: Record<string, any>;
     messages: ChatMessage[];
   };
+  /** @deprecated 仅旧档兼容，优先使用 gameState.history */
   historyIndex: number;
 }
 
@@ -498,6 +553,8 @@ export interface EndingPanelState {
   visible: boolean;
   /** 当前展示的结局ID */
   activeEndingId: string | null;
+  pendingEndingId?: string | null;
+  isPreview?: boolean;
   /** 是否处于结局动画中 */
   isAnimating: boolean;
 }

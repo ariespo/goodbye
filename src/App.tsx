@@ -1,13 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from './stores/gameStore';
-import { initializeDatabase, getSettings, getLorebooks, getPresets, getChats, saveChat, savePreset } from './sillytavern/database';
+import { initializeDatabase, getSettings, getLorebooks, getPresets, getChats, saveChat, savePreset, saveSettings } from './sillytavern/database';
 import { GameCanvas } from './components/game/GameCanvas';
 import { CustomCursor } from './components/system/CustomCursor';
 import { IntroAnimation } from './components/system/IntroAnimation';
+import { OpeningVideo } from './components/system/OpeningVideo';
 import { TitleScreen } from './components/system/TitleScreen';
+import { TitleMusic } from './components/system/TitleMusic';
+import { AudioSystem } from './components/system/AudioSystem';
 import { NotificationToast } from './components/system/NotificationToast';
 import { ApiKeySetup } from './components/system/ApiKeySetup';
-// import { ConfirmModal } from './components/system/ConfirmModal';
+import { SaveModal } from './components/system/SaveModal';
 import { SettingsModal } from './components/tavern/SettingsModal';
 import { LorebookModal } from './components/tavern/LorebookModal';
 import { PresetModal } from './components/tavern/PresetModal';
@@ -16,11 +19,18 @@ import { PromptInspector } from './components/system/PromptInspector';
 import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
 import { OPENING_STORYLINE } from './engine/opening-storyline';
+import { createDefaultVariables } from './sillytavern/vars-merger';
 import './styles/animations.css';
 import './styles/themes.css';
+import { applyFontFamily } from './utils/fonts';
 
 function App() {
   const actions = useGameStore(state => state.actions);
+  const fontFamily = useGameStore(state => state.tavern.settings?.fontFamily);
+
+  useEffect(() => {
+    applyFontFamily(fontFamily);
+  }, [fontFamily]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -49,7 +59,7 @@ function App() {
             actions.setPresets(presets);
 
             const updatedSettings = { ...settings, activePresetId: defaultPreset.id };
-            await import('./sillytavern/database').then(m => m.saveSettings(updatedSettings));
+            await saveSettings(updatedSettings);
             actions.setSettings(updatedSettings);
           } else {
             actions.setPresets(presets);
@@ -61,12 +71,13 @@ function App() {
         // 如果没有聊天记录，创建默认会话 + 注入开局正文
         // 但不设置 currentScene，等用户在 TitleScreen 点击"开始游戏"后再进入
         if (chats.length === 0 && settings) {
+          const openingVariables = createDefaultVariables();
           const openingMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             content: `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穂的早晨</sum>\n<vars>{ "stamina": 100, "sanity": 80 }</vars>`,
             timestamp: Date.now(),
-            variables: {},
+            variables: openingVariables,
           };
           const newChat: ChatSession = {
             id: crypto.randomUUID(),
@@ -76,7 +87,7 @@ function App() {
             userName: settings.userName,
             presetId: settings.activePresetId || presets[0]?.id || null,
             lorebookIds: [...settings.activeLorebookIds],
-            variables: {},
+            variables: openingVariables,
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
@@ -87,8 +98,9 @@ function App() {
 
         actions.setChats(chats);
 
-        if (chats.length > 0 && !useGameStore.getState().tavern.activeChatId) {
-          actions.setActiveChatId(chats[0].id);
+        if (chats.length > 0) {
+          const activeId = useGameStore.getState().tavern.activeChatId || chats[0].id;
+          actions.setActiveChatId(activeId);
         }
 
         actions.addNotification({
@@ -109,15 +121,37 @@ function App() {
   }, [actions]);
 
   const showTitle = useGameStore(state => state.ui.showTitle);
+  const [openingVideoEnded, setOpeningVideoEnded] = useState(false);
+
+  if (!openingVideoEnded) {
+    return (
+      <div className="relative w-full h-full overflow-hidden bg-bg-primary">
+        <CustomCursor />
+        <AudioSystem />
+        <OpeningVideo onEnded={() => setOpeningVideoEnded(true)} />
+        <NotificationToast />
+        <ApiKeySetup />
+        <SaveModal />
+        <SettingsModal />
+        <LorebookModal />
+        <PresetModal />
+        <HistoryDrawer />
+        <PromptInspector />
+      </div>
+    );
+  }
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-bg-primary">
+    <div className={`relative w-full h-full overflow-hidden bg-bg-primary ${showTitle ? '' : 'world-horror-theme'}`}>
       <CustomCursor />
+      <AudioSystem />
       <IntroAnimation />
       <NotificationToast />
+      {showTitle && <TitleMusic />}
       {showTitle && <TitleScreen />}
       {!showTitle && <GameCanvas />}
       <ApiKeySetup />
+      <SaveModal />
       <SettingsModal />
       <LorebookModal />
       <PresetModal />

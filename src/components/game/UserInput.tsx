@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
-import { PaperPlaneRight } from '@phosphor-icons/react';
+import { GameIcon } from '../ui/GameIcon';
 
 const PANEL_BG = 'rgba(12, 12, 16, 0.88)';
 const BORDER = '#3a3a42';
@@ -18,10 +18,11 @@ export function UserInput() {
   const isStreaming = useGameStore(state => state.api.isStreaming);
   const currentScene = useGameStore(state => state.game.currentScene);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
+  const endingVisible = useGameStore(state => state.game.endingPanel.visible);
   const { sendMessage } = useGameLoop();
 
   const hasOptions = parsedContent.options.length > 0;
-  const showInput = !hasOptions && !isStreaming && currentScene && sceneComplete;
+  const showInput = !endingVisible && !hasOptions && !isStreaming && currentScene && sceneComplete;
 
   const handleSubmit = () => {
     if (!input.trim() || isWaitingForAI) return;
@@ -41,11 +42,11 @@ export function UserInput() {
 
   return (
     <div
-      className="absolute bottom-[1.5%] left-1/2 -translate-x-1/2 flex gap-2 z-30"
+      className="user-input absolute bottom-[1.5%] left-1/2 -translate-x-1/2 flex gap-2 z-30"
       style={{ width: 'min(85vw, 940px)' }}
     >
       {/* 输入框 */}
-      <div className="flex-1 relative"
+      <div className="user-input-field flex-1 relative"
         style={{
           background: PANEL_BG,
           border: `2px solid ${BORDER}`,
@@ -97,7 +98,7 @@ function PixelSendBtn({ onClick, disabled }: { onClick: () => void; disabled: bo
 
   return (
     <button
-      className="flex items-center justify-center select-none cursor-none transition-all duration-150"
+      className="user-input-send flex items-center justify-center select-none cursor-none transition-all duration-150"
       style={{
         width: 48,
         height: 48,
@@ -113,7 +114,7 @@ function PixelSendBtn({ onClick, disabled }: { onClick: () => void; disabled: bo
       onClick={onClick}
       disabled={disabled}
     >
-      <PaperPlaneRight size={30} />
+      <GameIcon name="action" size={28} />
     </button>
   );
 }

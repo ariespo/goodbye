@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { GameIcon } from '../ui/GameIcon';
 import { saveSettings } from '../../sillytavern/database';
 import { fetchModels, testConnectivity } from '../../sillytavern/api-router';
-import { X, Lightning, Stack, CheckCircle, Warning, ArrowCounterClockwise } from '@phosphor-icons/react';
 import type { AppSettings } from '../../sillytavern/types';
+import type { CSSProperties } from 'react';
+import { applyFontFamily, FONT_OPTIONS, getFontStack } from '../../utils/fonts';
+import { setSfxVolume } from '../../utils/sfx';
 
 const PRESET_PROVIDERS = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -41,6 +44,18 @@ export function SettingsModal() {
   useEffect(() => {
     if (settings) setDraft(settings);
   }, [settings, showSettings]);
+
+  useEffect(() => {
+    if (!showSettings || !draft) return;
+    applyFontFamily(draft.fontFamily);
+    return () => applyFontFamily(settings?.fontFamily);
+  }, [showSettings, draft?.fontFamily, settings?.fontFamily]);
+
+  useEffect(() => {
+    if (!showSettings || !draft) return;
+    setSfxVolume(draft.soundVolume ?? 0.65);
+    return () => setSfxVolume(settings?.soundVolume ?? 0.65);
+  }, [showSettings, draft?.soundVolume, settings?.soundVolume]);
 
   useEffect(() => {
     if (!showSettings || !draft) return;
@@ -168,54 +183,60 @@ export function SettingsModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+      className="settings-modal-shell fixed inset-0 z-[200] flex items-center justify-center px-4"
       onClick={() => toggleModal('settings')}
     >
       <div
-        className="w-[720px] max-h-[85vh] bg-bg-primary border border-border-subtle overflow-y-auto animate-[scaleIn_0.35s_ease-out]"
-        style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 0 12px 40px rgba(0,0,0,0.6)' }}
+        className="settings-modal relative w-[740px] max-h-[88vh] overflow-hidden animate-[scaleIn_0.35s_ease-out]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-          <h2 className="text-lg font-serif-cn text-text-primary">设置</h2>
+        <span className="settings-modal-corner settings-modal-corner-tl" aria-hidden="true" />
+        <span className="settings-modal-corner settings-modal-corner-br" aria-hidden="true" />
+
+        <div className="settings-modal-header flex items-center justify-between px-6 py-4">
+          <div>
+            <h2 className="settings-modal-title">设置</h2>
+            <div className="settings-modal-subtitle">SYSTEM CONFIG</div>
+          </div>
           <button
+            type="button"
+            data-cursor="pointer"
             onClick={() => toggleModal('settings')}
-            className="text-text-muted hover:text-text-primary hover:rotate-90 transition-all duration-200"
+            className="pixel-close-button flex h-9 w-9 items-center justify-center"
           >
-            <X size={20} />
+            <GameIcon name="close" size={15} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="settings-modal-body pixel-scroll-blue space-y-6 overflow-y-auto p-6">
           {/* API 模式 */}
-          <div>
-            <h3 className="text-sm text-text-muted uppercase tracking-widest mb-3">API 模式</h3>
+          <section className="settings-section">
+            <h3 className="settings-section-title">API 模式</h3>
             <div className="grid grid-cols-2 gap-3">
               <ModeCard
                 active={apiMode === 'single'}
-                icon={<Lightning size={18} />}
+                icon={<GameIcon name="lightning" size={18} />}
                 title="单 API"
                 desc="所有任务都走主 API"
                 onClick={() => switchMode('single')}
               />
               <ModeCard
                 active={apiMode === 'dual'}
-                icon={<Stack size={18} />}
+                icon={<GameIcon name="stack" size={18} />}
                 title="双 API 路由"
                 desc="次 API 跑变量/总结(可用更便宜模型)"
                 onClick={() => switchMode('dual')}
               />
             </div>
-          </div>
+          </section>
 
           {/* 主 API */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm text-text-muted uppercase tracking-widest">主 API <span className="text-text-muted/60 normal-case tracking-normal">(剧情生成)</span></h3>
+          <section className="settings-section">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="settings-section-title mb-0">主 API <span className="settings-section-hint">(剧情生成)</span></h3>
               {mainConn && (
-                <span className={`flex items-center gap-1 text-xs ${mainConn.ok ? 'text-green-400' : 'text-red-400'}`}>
-                  {mainConn.ok ? <CheckCircle size={12} /> : <Warning size={12} />}
+                <span className={`settings-conn ${mainConn.ok ? 'is-ok' : 'is-bad'}`}>
+                  {mainConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}
                   {mainConn.ok ? `${mainConn.latency}ms` : '未连通'}
                 </span>
               )}
@@ -232,16 +253,16 @@ export function SettingsModal() {
               fetching={fetchingMain}
               testing={testingMain}
             />
-          </div>
+          </section>
 
           {/* 次 API */}
           {apiMode === 'dual' && (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm text-text-muted uppercase tracking-widest">次 API <span className="text-text-muted/60 normal-case tracking-normal">(变量/总结)</span></h3>
+            <section className="settings-section">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="settings-section-title mb-0">次 API <span className="settings-section-hint">(变量/总结)</span></h3>
                 {secConn && (
-                  <span className={`flex items-center gap-1 text-xs ${secConn.ok ? 'text-green-400' : 'text-red-400'}`}>
-                    {secConn.ok ? <CheckCircle size={12} /> : <Warning size={12} />}
+                  <span className={`settings-conn ${secConn.ok ? 'is-ok' : 'is-bad'}`}>
+                    {secConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}
                     {secConn.ok ? `${secConn.latency}ms` : '未连通'}
                   </span>
                 )}
@@ -262,9 +283,9 @@ export function SettingsModal() {
                 fetching={fetchingSec}
                 testing={testingSec}
                 extraFields={(
-                  <div className="grid grid-cols-2 gap-3 mt-2">
+                  <div className="mt-2 grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] text-text-muted uppercase tracking-widest mb-1 block">温度</label>
+                      <label className="settings-label">温度</label>
                       <input
                         type="range"
                         min={0}
@@ -272,9 +293,9 @@ export function SettingsModal() {
                         step={0.1}
                         value={draft.api.secondary?.temperature ?? 0.3}
                         onChange={e => patchSecondary({ temperature: Number(e.target.value) })}
-                        className="w-full accent-accent-blue"
+                        className="settings-range w-full"
                       />
-                      <div className="text-[11px] text-text-muted text-right">{draft.api.secondary?.temperature ?? 0.3}</div>
+                      <div className="settings-range-value">{draft.api.secondary?.temperature ?? 0.3}</div>
                     </div>
                     <LabeledInput
                       label="最大 Token"
@@ -285,28 +306,28 @@ export function SettingsModal() {
                   </div>
                 )}
               />
-              <p className="mt-2 text-[11px] text-text-muted/70 leading-relaxed">
+              <p className="settings-help mt-2">
                 次 API 仅用于无需高质量推理的辅助任务(变量更新、回合总结)。如调用失败会自动回退到主 API。
               </p>
-            </div>
+            </section>
           )}
 
           {/* 角色 */}
-          <div>
-            <h3 className="text-sm text-text-muted uppercase tracking-widest mb-3">角色</h3>
+          <section className="settings-section">
+            <h3 className="settings-section-title">角色</h3>
             <div className="grid grid-cols-2 gap-3">
               <LabeledInput label="角色名" value={draft.characterName} onChange={v => patch({ characterName: v })} />
               <LabeledInput label="玩家名" value={draft.userName} onChange={v => patch({ userName: v })} />
             </div>
-          </div>
+          </section>
 
           {/* 游戏 */}
-          <div>
-            <h3 className="text-sm text-text-muted uppercase tracking-widest mb-3">游戏</h3>
+          <section className="settings-section">
+            <h3 className="settings-section-title">游戏</h3>
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-text-muted block mb-1">
-                  打字速度: <span className="text-text-primary">{draft.typingSpeed} ms / 字</span>
+                <label className="settings-label">
+                  打字速度: <span className="settings-value">{draft.typingSpeed} ms / 字</span>
                 </label>
                 <input
                   type="range"
@@ -314,13 +335,13 @@ export function SettingsModal() {
                   max={120}
                   value={draft.typingSpeed}
                   onChange={e => patch({ typingSpeed: Number(e.target.value) })}
-                  className="w-full accent-accent-blue"
+                  className="settings-range w-full"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-text-muted block mb-1">
-                  情绪强度: <span className="text-text-primary">{Math.round(draft.moodIntensity * 100)}%</span>
+                <label className="settings-label">
+                  情绪强度: <span className="settings-value">{Math.round(draft.moodIntensity * 100)}%</span>
                 </label>
                 <input
                   type="range"
@@ -329,27 +350,26 @@ export function SettingsModal() {
                   step={0.1}
                   value={draft.moodIntensity}
                   onChange={e => patch({ moodIntensity: Number(e.target.value) })}
-                  className="w-full accent-accent-blue"
+                  className="settings-range w-full"
                 />
               </div>
 
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer text-sm text-text-muted">
+              <div className="flex items-center justify-between gap-3">
+                <label className="settings-check">
                   <input
                     type="checkbox"
                     checked={draft.autoMode ?? false}
                     onChange={e => patch({ autoMode: e.target.checked })}
-                    className="accent-accent-blue"
                   />
                   <span>自动播放模式</span>
                 </label>
-                <span className="text-[11px] text-text-muted/60">{draft.autoMode ? '一行显示完毕后自动推进下一行' : '打字完等待点击或空格'}</span>
+                <span className="settings-help shrink-0">{draft.autoMode ? '一行显示完毕后自动推进下一行' : '打字完等待点击或空格'}</span>
               </div>
 
               {draft.autoMode && (
                 <div>
-                  <label className="text-xs text-text-muted block mb-1">
-                    自动间隔: <span className="text-text-primary">{(draft.autoIntervalMs ?? 1500) / 1000} 秒</span>
+                  <label className="settings-label">
+                    自动间隔: <span className="settings-value">{(draft.autoIntervalMs ?? 1500) / 1000} 秒</span>
                   </label>
                   <input
                     type="range"
@@ -358,24 +378,70 @@ export function SettingsModal() {
                     step={100}
                     value={draft.autoIntervalMs ?? 1500}
                     onChange={e => patch({ autoIntervalMs: Number(e.target.value) })}
-                    className="w-full accent-accent-blue"
+                    className="settings-range w-full"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-xs text-text-muted block mb-1">字号</label>
+                <label className="settings-label">音乐音量: <span className="settings-value">{Math.round((draft.musicVolume ?? 0.5) * 100)}%</span></label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={draft.musicVolume ?? 0.5}
+                  onChange={e => patch({ musicVolume: Number(e.target.value) })}
+                  className="settings-range w-full"
+                />
+              </div>
+
+              <div>
+                <label className="settings-label">音效音量: <span className="settings-value">{Math.round((draft.soundVolume ?? 0.65) * 100)}%</span></label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={draft.soundVolume ?? 0.65}
+                  onChange={e => patch({ soundVolume: Number(e.target.value) })}
+                  className="settings-range w-full"
+                />
+              </div>
+
+              <div>
+                <label className="settings-label">字体</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {FONT_OPTIONS.map(font => {
+                    const selected = (draft.fontFamily || 'renou-fangsong') === font.id;
+                    return (
+                      <button
+                        key={font.id}
+                        type="button"
+                        data-cursor="pointer"
+                        aria-pressed={selected}
+                        onClick={() => patch({ fontFamily: font.id })}
+                        className={`settings-chip font-preview-option min-h-[58px] px-4 py-2 text-left ${selected ? 'is-active' : ''}`}
+                        style={{ '--preview-font-family': getFontStack(font.id), cursor: 'pointer' } as CSSProperties}
+                      >
+                        <span className="block text-[17px] leading-6">{font.name}</span>
+                        <span className="block text-[12px] opacity-70">永别之前 · Goodbye 09:00</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="settings-label">字号</label>
                 <div className="flex gap-2">
                   {(['small', 'medium', 'large'] as const).map(size => (
                     <button
                       key={size}
                       type="button"
+                      data-cursor="pointer"
                       onClick={() => patch({ fontSize: size })}
-                      className={`px-3 py-1 text-xs border transition-colors ${
-                        draft.fontSize === size
-                          ? 'border-accent-blue text-accent-blue bg-accent-blue/10'
-                          : 'border-border-subtle text-text-muted hover:border-text-muted hover:text-text-primary'
-                      }`}
+                      className={`settings-chip px-3 py-1 text-xs ${draft.fontSize === size ? 'is-active' : ''}`}
                     >
                       {size === 'small' ? '小' : size === 'medium' ? '中' : '大'}
                     </button>
@@ -383,26 +449,32 @@ export function SettingsModal() {
                 </div>
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        <div className="flex justify-between items-center px-6 py-4 border-t border-border-subtle">
+        <div className="settings-modal-footer flex items-center justify-between gap-3 px-6 py-4">
           <button
+            type="button"
+            data-cursor="pointer"
             onClick={() => { toggleModal('settings'); setShowPromptInspector(true); }}
-            className="px-4 py-2 text-xs border border-border-subtle text-text-muted hover:text-accent-blue hover:border-accent-blue transition-all"
+            className="settings-btn settings-btn-ghost"
           >
             查看提示词
           </button>
           <div className="flex gap-3">
             <button
+              type="button"
+              data-cursor="pointer"
               onClick={() => toggleModal('settings')}
-              className="px-4 py-2 border border-border-subtle text-text-muted hover:text-text-primary hover:border-text-muted transition-all"
+              className="settings-btn settings-btn-ghost"
             >
               取消
             </button>
             <button
+              type="button"
+              data-cursor="pointer"
               onClick={handleSave}
-              className="px-4 py-2 bg-accent-blue text-bg-primary hover:bg-accent-blue/80 transition-colors"
+              className="settings-btn settings-btn-primary"
             >
               保存
             </button>
@@ -421,18 +493,15 @@ function ModeCard({ active, icon, title, desc, onClick }: {
   return (
     <button
       type="button"
+      data-cursor="pointer"
       onClick={onClick}
-      className={`text-left p-3 border transition-all ${
-        active
-          ? 'border-accent-blue bg-accent-blue/10'
-          : 'border-border-subtle hover:border-text-muted'
-      }`}
+      className={`settings-mode-card ${active ? 'is-active' : ''}`}
     >
-      <div className={`flex items-center gap-2 mb-1 ${active ? 'text-accent-blue' : 'text-text-primary'}`}>
+      <div className="settings-mode-card-title">
         {icon}
-        <span className="text-sm font-serif-cn">{title}</span>
+        <span>{title}</span>
       </div>
-      <div className="text-xs text-text-muted leading-relaxed">{desc}</div>
+      <div className="settings-mode-card-desc">{desc}</div>
     </button>
   );
 }
@@ -442,17 +511,14 @@ function ProviderPresets({ selected, onPick }: {
   onPick: (preset: typeof PRESET_PROVIDERS[0]) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-2 mb-3">
+    <div className="mb-3 grid grid-cols-4 gap-2">
       {PRESET_PROVIDERS.map(p => (
         <button
           key={p.name}
           type="button"
+          data-cursor="pointer"
           onClick={() => onPick(p)}
-          className={`px-2 py-1.5 text-[11px] border transition-colors ${
-            selected === p.baseUrl
-              ? 'border-accent-blue text-accent-blue bg-accent-blue/10'
-              : 'border-border-subtle text-text-muted hover:border-text-muted hover:text-text-primary'
-          }`}
+          className={`settings-chip ${selected === p.baseUrl ? 'is-active' : ''}`}
         >
           {p.name}
         </button>
@@ -487,19 +553,21 @@ function ApiConfigSection({
         <div className="flex gap-2 pt-5">
           <button
             type="button"
+            data-cursor="pointer"
             onClick={onFetchModels}
             disabled={fetching}
-            className="px-3 py-2 text-[11px] border border-border-subtle text-text-muted hover:text-text-primary hover:border-text-muted transition-all disabled:opacity-40 whitespace-nowrap flex items-center gap-1"
+            className="settings-btn settings-btn-ghost settings-btn-sm"
             title="获取模型列表"
           >
-            <ArrowCounterClockwise size={12} className={fetching ? 'animate-spin' : ''} />
+            <GameIcon name="restart" size={12} className={fetching ? 'animate-spin' : ''} />
             {fetching ? '获取中' : '获取模型'}
           </button>
           <button
             type="button"
+            data-cursor="pointer"
             onClick={onTest}
             disabled={testing}
-            className="px-3 py-2 text-[11px] border border-border-subtle text-text-muted hover:text-text-primary hover:border-text-muted transition-all disabled:opacity-40 whitespace-nowrap"
+            className="settings-btn settings-btn-ghost settings-btn-sm"
           >
             {testing ? '测试中' : '测试连通'}
           </button>
@@ -510,13 +578,13 @@ function ApiConfigSection({
 
       <div>
         <label className="block">
-          <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">模型</div>
+          <div className="settings-label">模型</div>
           {showDropdown ? (
             <div className="flex gap-2">
               <select
                 value={modelInList ? model : ''}
                 onChange={e => onChange({ model: e.target.value })}
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border-subtle text-text-primary text-sm focus:border-accent-blue focus:outline-none transition-colors font-mono"
+                className="settings-input flex-1 font-mono"
               >
                 <option value="">-- 选择模型 --</option>
                 {models.map(m => (
@@ -528,7 +596,7 @@ function ApiConfigSection({
                 value={model}
                 onChange={e => onChange({ model: e.target.value })}
                 placeholder="或手动输入"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border-subtle text-text-primary text-sm focus:border-accent-blue focus:outline-none transition-colors font-mono"
+                className="settings-input flex-1 font-mono"
               />
             </div>
           ) : (
@@ -536,7 +604,7 @@ function ApiConfigSection({
               type="text"
               value={model}
               onChange={e => onChange({ model: e.target.value })}
-              className="w-full px-3 py-2 bg-bg-secondary border border-border-subtle text-text-primary text-sm focus:border-accent-blue focus:outline-none transition-colors font-mono"
+              className="settings-input w-full font-mono"
             />
           )}
         </label>
@@ -556,14 +624,12 @@ function LabeledInput({ label, value, onChange, mono, password }: {
 }) {
   return (
     <label className="block">
-      <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">{label}</div>
+      <div className="settings-label">{label}</div>
       <input
         type={password ? 'password' : 'text'}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className={`w-full px-3 py-2 bg-bg-secondary border border-border-subtle text-text-primary text-sm focus:border-accent-blue focus:outline-none transition-colors ${
-          mono ? 'font-mono' : ''
-        }`}
+        className={`settings-input w-full ${mono ? 'font-mono' : ''}`}
       />
     </label>
   );

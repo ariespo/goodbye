@@ -1,5 +1,5 @@
 import { useGameStore } from '../../stores/gameStore';
-import { X } from '@phosphor-icons/react';
+import { GameIcon } from '../ui/GameIcon';
 
 export function HistoryDrawer() {
   const history = useGameStore(state => state.game.history);
@@ -12,10 +12,10 @@ export function HistoryDrawer() {
     <div className="fixed inset-y-0 left-0 z-[200] w-[320px] bg-bg-primary/95 backdrop-blur-sm border-r border-border-subtle animate-[slideInLeft_0.35s_ease-out]">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
         <h2 className="text-sm font-serif-cn text-text-primary">历史记录</h2>
-        <button onClick={() => toggleModal('history')} className="text-text-muted hover:text-text-primary"><X size={16} /></button>
+        <button onClick={() => toggleModal('history')} data-cursor="pointer" className="pixel-close-button flex h-8 w-8 items-center justify-center" style={{ cursor: 'pointer' }}><GameIcon name="close" size={13} /></button>
       </div>
 
-      <div className="overflow-y-auto h-[calc(100%-48px)]">
+      <div className="pixel-scroll-blue overflow-y-auto h-[calc(100%-48px)] pr-2">
         {history.length === 0 ? (
           <div className="text-center text-text-muted py-8">暂无历史记录</div>
         ) : (

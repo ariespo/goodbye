@@ -4,7 +4,9 @@ import { assemblePrompt } from '../sillytavern/prompt-assembler';
 import { streamChatCompletion, callSecondaryApi } from '../sillytavern/api-router';
 import { maintextToScene } from '../engine/scene-parser';
 import { mergeVariables } from '../sillytavern/vars-merger';
+import { checkEndingConditions } from '../sillytavern/ending-checker';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
+import { createOutputProtocol, formatValidationErrors } from '../sillytavern/output-protocol';
 import { saveChat } from '../sillytavern/database';
 import type { ChatMessage } from '../sillytavern/types';
 
@@ -14,8 +16,15 @@ const SECONDARY_SYSTEM_PROMPT = `你是游戏状态分析助手。基于下面�
 
 要求:
 - vars 中只包含变量发生变化的字段(例如体力 stamina、理智 sanity、时间 time、物品 items 等)
-- vars 必须是合法 JSON
+- vars 必须是合法 JSON 对象
 - 如果回合内没有数值变化,可以输出空对象 <vars>{}</vars>`;
+
+const outputProtocol = createOutputProtocol({
+  requiredTags: ['maintext', 'option', 'sum'],
+  requireMinOptions: 2,
+  validateVarsJson: true,
+  checkUnclosedTags: true,
+});
 
 export function useGameLoop() {
   const store = useGameStore();
@@ -87,10 +96,10 @@ export function useGameLoop() {
 
       const finalize = (apiUsed: 'primary' | 'dual') => {
         const parsed = parseStateRef.current.parsed;
+        const mergedVariables = mergeVariables(tavern.variables, parsed.vars);
 
         if (Object.keys(parsed.vars).length > 0) {
-          const merged = mergeVariables(tavern.variables, parsed.vars);
-          actions.setVariables(merged);
+          actions.setVariables(mergedVariables);
 
           if (parsed.vars.stamina !== undefined) {
             actions.setGameStatus({ stamina: parsed.vars.stamina });
@@ -103,18 +112,28 @@ export function useGameLoop() {
           }
         }
 
+        const matchedEnding = checkEndingConditions(
+          mergedVariables,
+          game.endings,
+          game.endingsSeen
+        );
+        if (matchedEnding && !game.endingPanel.visible && !game.endingPanel.pendingEndingId) {
+          actions.setEndingPanel({ isPreview: false });
+          actions.setPendingEnding(matchedEnding.id);
+        }
+
         const assistantMessage: ChatMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
           content: fullText,
           timestamp: Date.now(),
-          variables: { ...tavern.variables, ...parsed.vars },
+          variables: mergedVariables,
           apiUsed: apiUsed === 'dual' ? 'secondary' : 'primary',
         };
 
         const finalMessages = [...messages, assistantMessage];
         if (activeChat) {
-          const updated = { ...activeChat, messages: finalMessages, variables: { ...tavern.variables, ...parsed.vars }, updatedAt: Date.now() };
+          const updated = { ...activeChat, messages: finalMessages, variables: mergedVariables, updatedAt: Date.now() };
           saveChat(updated);
           actions.setChats(tavern.chats.map(c => c.id === updated.id ? updated : c));
         }
@@ -124,7 +143,7 @@ export function useGameLoop() {
           timestamp: Date.now(),
           summary: parsed.summary || '回合结束',
           gameStatus: { ...game.gameStatus },
-          variables: { ...tavern.variables, ...parsed.vars },
+          variables: mergedVariables,
         });
       };
 
@@ -178,7 +197,7 @@ export function useGameLoop() {
           onToken: (token) => {
             fullText += token;
             actions.setStreamBuffer(fullText);
-            parseStateRef.current = parseChunk(parseStateRef.current, token);
+            parseStateRef.current = parseChunk(parseStateRef.current, token, { strict: true });
             actions.setParsedContent(parseStateRef.current.parsed);
 
             if (parseStateRef.current.parsed.maintext) {
@@ -193,6 +212,23 @@ export function useGameLoop() {
           onComplete: async () => {
             actions.setStreaming(false);
             actions.setIsWaitingForAI(false);
+
+            // 严格校验 LLM 输出协议
+            const validationErrors = outputProtocol.validate(fullText, parseStateRef.current.parsed);
+            const streamErrors = parseStateRef.current.errors;
+            if (streamErrors.length > 0) {
+              validationErrors.push(...streamErrors.map(msg => ({ code: 'STREAM_PARSE_ERROR', message: msg })));
+            }
+            if (validationErrors.length > 0) {
+              const detail = formatValidationErrors(validationErrors);
+              actions.addNotification({
+                type: 'error',
+                message: `AI 输出格式不合法,请点击"尝试进入其他时间线"重roll,或检查提示词设置。\n${detail}`,
+                duration: 12000,
+              });
+              actions.setApiError('AI 输出格式不合法:\n' + detail);
+              return;
+            }
 
             const augmented = await maybeAugmentWithSecondary();
             finalize(augmented ? 'dual' : 'primary');

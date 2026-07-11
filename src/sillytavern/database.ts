@@ -44,8 +44,8 @@ export class FarewellDatabase extends Dexie {
         });
       });
 
-    // v3: 次 API 支持独立 temperature / maxTokens
-    this.version(3)
+    // v4: 新增字体与音乐音量设置
+    this.version(4)
       .stores({
         settings: '++id',
         presets: 'id, name, updatedAt',
@@ -55,10 +55,22 @@ export class FarewellDatabase extends Dexie {
       })
       .upgrade(async tx => {
         await tx.table('settings').toCollection().modify((s: any) => {
-          if (s.api?.secondary) {
-            if (s.api.secondary.temperature === undefined) s.api.secondary.temperature = 0.3;
-            if (s.api.secondary.maxTokens === undefined) s.api.secondary.maxTokens = 512;
-          }
+          if (!s.fontFamily) s.fontFamily = 'renou-fangsong';
+          if (s.musicVolume === undefined) s.musicVolume = 0.5;
+        });
+      });
+
+    this.version(5)
+      .stores({
+        settings: '++id',
+        presets: 'id, name, updatedAt',
+        lorebooks: 'id, name, updatedAt',
+        chats: 'id, name, updatedAt',
+        saves: 'id, name, createdAt',
+      })
+      .upgrade(async tx => {
+        await tx.table('settings').toCollection().modify((s: any) => {
+          if (s.soundVolume === undefined) s.soundVolume = 0.65;
         });
       });
   }
@@ -101,6 +113,9 @@ function getDefaultSettings(): AppSettings {
     formatPromptTemplate: DEFAULT_FORMAT_PROMPT,
     autoMode: false,
     autoIntervalMs: 1500,
+    fontFamily: 'renou-fangsong',
+    musicVolume: 0.5,
+    soundVolume: 0.65,
   };
 }
 

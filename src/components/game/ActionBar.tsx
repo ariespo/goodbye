@@ -1,39 +1,34 @@
 import { useState } from 'react';
+
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
-import {
-  Eye, MagnifyingGlass, ArrowRight, MapTrifold,
-  Gear, Books, SlidersHorizontal, ClockClockwise,
-  Star, Terminal,
-} from '@phosphor-icons/react';
+import { assetUrl } from '../../utils/assetUrl';
+import { GameIcon, type GameIconName } from '../ui/GameIcon';
 
-const BORDER = '#3a3a42';
-const BORDER_HOVER = '#6b8fc4';
-const BORDER_DISABLED = '#2a2a2e';
-const BG = 'rgba(12, 12, 16, 0.88)';
-const BG_DISABLED = 'rgba(12, 12, 16, 0.5)';
-const TEXT_DIM = '#6a6560';
-const TEXT_DISABLED = '#3a3632';
-const ACCENT = '#6b8fc4';
+const TEXT_DIM = '#8a8580';
+const TEXT_DISABLED = '#4a4542';
+const ACCENT_BLUE = '#86a8f2';
+const ACCENT_GOLD = '#d4a853';
 
 const gameActions = [
-  { id: 'observe' as const, icon: Eye, label: '观察' },
-  { id: 'investigate' as const, icon: MagnifyingGlass, label: '调查' },
-  { id: 'actions' as const, icon: ArrowRight, label: '行动' },
-  { id: 'map' as const, icon: MapTrifold, label: '地图' },
+  { id: 'observe' as const, icon: 'observe' as const, label: '观察' },
+  { id: 'investigate' as const, icon: 'investigate' as const, label: '调查' },
+  { id: 'actions' as const, icon: 'action' as const, label: '行动' },
+  { id: 'map' as const, icon: 'map' as const, label: '地图' },
 ] as const;
 
-type ToolId = 'history' | 'lorebook' | 'preset' | 'settings' | 'prompt';
+type ToolId = 'clues' | 'history' | 'lorebook' | 'preset' | 'settings' | 'prompt';
 
-const tools: Array<{ id: ToolId; icon: typeof Eye; label: string }> = [
-  { id: 'history', icon: ClockClockwise, label: '历史' },
-  { id: 'lorebook', icon: Books, label: '世界书' },
-  { id: 'preset', icon: SlidersHorizontal, label: '预设' },
-  { id: 'settings', icon: Gear, label: '设置' },
-  { id: 'prompt', icon: Terminal, label: '提示词' },
+const tools: Array<{ id: ToolId; icon: GameIconName; label: string }> = [
+  { id: 'clues', icon: 'stack', label: '线索' },
+  { id: 'history', icon: 'history', label: '历史' },
+  { id: 'lorebook', icon: 'lorebook', label: '世界书' },
+  { id: 'preset', icon: 'preset', label: '预设' },
+  { id: 'settings', icon: 'settings', label: '设置' },
+  { id: 'prompt', icon: 'prompt', label: '提示词' },
 ];
 
-const endingTool = { id: 'ending', icon: Star, label: '结局' };
+const endingTool = { id: 'ending', icon: 'ending' as const, label: '结局' };
 
 export function ActionBar() {
   const toggleModal = useGameStore(state => state.actions.toggleModal);
@@ -42,11 +37,12 @@ export function ActionBar() {
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const currentScene = useGameStore(state => state.game.currentScene);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
+  const endingVisible = useGameStore(state => state.game.endingPanel.visible);
   const { performAction } = useGameLoop();
 
-  const showGameActions = currentScene && sceneComplete;
+  if (endingVisible) return null;
 
-  // 判断当前场景是否有对应的本地数据
+  const showGameActions = currentScene && sceneComplete;
   const hasObserve = !!currentScene?.observe;
   const hasInvestigate = !!currentScene?.investigateItems && currentScene.investigateItems.length > 0;
   const hasActions = !!currentScene?.actionItems && currentScene.actionItems.length > 0;
@@ -59,43 +55,39 @@ export function ActionBar() {
   };
 
   return (
-    <div className="absolute bottom-[5%] left-4 flex items-center gap-2 z-30"
-      style={{ paddingBottom: 2 }}
-    >
-      {/* 游戏动作组 — 只在场景播放完毕后显示 */}
+    <div className="action-bar absolute bottom-[5%] left-4 z-30 flex items-center gap-2" style={{ paddingBottom: 2 }}>
       {showGameActions && (
         <>
-          <div className="flex gap-2">
-            {gameActions.map(a => (
+          <div className="action-bar-group flex gap-2">
+            {gameActions.map(action => (
               <PixelActionBtn
-                key={a.id}
-                icon={<a.icon size={27} />}
-                label={a.label}
-                enabled={availability[a.id]}
-                onClick={() => a.id === 'map' ? toggleModal('map') : performAction(a.id)}
+                key={action.id}
+                iconName={action.icon}
+                label={action.label}
+                enabled={availability[action.id]}
+                onClick={() => action.id === 'map' ? toggleModal('map') : performAction(action.id)}
               />
             ))}
           </div>
-          {/* 分隔线 */}
-          <div style={{ width: 2, height: 32, background: BORDER, margin: '0 4px' }} />
+          <div className="mx-1 h-9 w-[2px] bg-[#202027] shadow-[1px_0_0_rgba(255,255,255,0.08)]" />
         </>
       )}
 
-      {/* 工具组 — 始终显示 */}
-      <div className="flex gap-2">
-        {tools.map(t => (
+      <div className="action-bar-group flex gap-2">
+        {tools.map(tool => (
           <PixelActionBtn
-            key={t.id}
-            icon={<t.icon size={27} />}
-            label={t.label}
+            key={tool.id}
+            iconName={tool.icon}
+            label={tool.label}
             enabled={!isWaitingForAI}
-            onClick={() => t.id === 'prompt' ? setShowPromptInspector(true) : toggleModal(t.id)}
+            onClick={() => tool.id === 'prompt' ? setShowPromptInspector(true) : toggleModal(tool.id)}
           />
         ))}
         <PixelActionBtn
-          icon={<endingTool.icon size={27} />}
+          iconName={endingTool.icon}
           label={endingTool.label}
           enabled={!isWaitingForAI}
+          tone="gold"
           onClick={() => setShowEndingEditor(true)}
         />
       </div>
@@ -103,65 +95,88 @@ export function ActionBar() {
   );
 }
 
-/* ── 像素图标按钮 ── */
-
 function PixelActionBtn({
-  icon, label, enabled = true, onClick,
+  iconName,
+  label,
+  enabled = true,
+  tone = 'blue',
+  onClick,
 }: {
-  icon: React.ReactNode; label: string; enabled?: boolean; onClick: () => void;
+  iconName: GameIconName;
+  label: string;
+  enabled?: boolean;
+  tone?: 'blue' | 'gold';
+  onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-
+  const [pressed, setPressed] = useState(false);
   const isDisabled = !enabled;
-  const bg = isDisabled
-    ? BG_DISABLED
-    : hovered
-      ? 'rgba(107,143,196,0.12)'
-      : BG;
-  const border = isDisabled
-    ? BORDER_DISABLED
-    : hovered
-      ? BORDER_HOVER
-      : BORDER;
-  const color = isDisabled
-    ? TEXT_DISABLED
-    : hovered
-      ? ACCENT
-      : TEXT_DIM;
+  const state = isDisabled ? 'disabled' : pressed ? 'pressed' : hovered ? 'hover' : 'normal';
+  const accent = tone === 'gold' ? ACCENT_GOLD : ACCENT_BLUE;
 
   return (
-    <div className="relative">
+    <div className="group relative">
       <button
-        className="w-10 h-10 flex items-center justify-center select-none transition-all duration-150"
+        aria-label={label}
+        title={label}
+        data-cursor={isDisabled ? undefined : 'pointer'}
+        className="action-bar-button relative flex h-12 w-12 select-none items-center justify-center overflow-hidden rounded-none transition-[filter,transform] duration-100"
         style={{
-          background: bg,
-          border: `2px solid ${border}`,
-          color,
+          backgroundImage: `url(${assetUrl(`assets/ui/action-slot-${tone}-${state}.png`)})`,
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: '100% 100%',
+          color: isDisabled ? TEXT_DISABLED : hovered ? accent : TEXT_DIM,
           cursor: isDisabled ? 'not-allowed' : 'pointer',
-          opacity: isDisabled ? 0.5 : 1,
-          boxShadow: hovered && !isDisabled
-            ? `inset 1px 1px 0 rgba(255,255,255,0.06), 2px 2px 0 rgba(0,0,0,0.3)`
-            : `inset 1px 1px 0 rgba(255,255,255,0.03), 2px 2px 0 rgba(0,0,0,0.3)`,
+          opacity: isDisabled ? 0.55 : 1,
+          filter: hovered && !isDisabled ? `drop-shadow(0 0 8px ${accent}44)` : 'drop-shadow(2px 2px 0 rgba(0,0,0,0.45))',
+          imageRendering: 'pixelated',
+          transform: pressed ? 'translate(2px, 2px)' : hovered ? 'translate(1px, 1px)' : 'translate(0, 0)',
         }}
         onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onClick={() => { if (!isDisabled) onClick(); }}
+        onMouseLeave={() => {
+          setHovered(false);
+          setPressed(false);
+        }}
+        onMouseDown={() => {
+          if (!isDisabled) setPressed(true);
+        }}
+        onMouseUp={() => setPressed(false)}
+        onClick={() => {
+          if (!isDisabled) onClick();
+        }}
         disabled={isDisabled}
       >
-        {icon}
+        <span
+          className="absolute inset-x-2 top-1 h-px opacity-0 transition-opacity duration-150 group-hover:opacity-70"
+          style={{ background: accent }}
+        />
+        <GameIcon name={iconName} size={28} />
+        {hovered && !isDisabled && (
+          <span
+            className="pointer-events-none absolute -right-1 top-1 h-2 w-2"
+            style={{
+              background: accent,
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%)',
+              imageRendering: 'pixelated',
+            }}
+          />
+        )}
       </button>
 
       {hovered && (
         <div
-          className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 whitespace-nowrap z-50"
+          className="pointer-events-none absolute -bottom-9 left-1/2 z-50 flex h-12 -translate-x-1/2 items-center justify-center whitespace-nowrap px-5"
           style={{
-            background: BG,
-            border: `2px solid ${BORDER}`,
+            minWidth: 108,
+            backgroundImage: `url(${assetUrl('assets/ui/tooltip-frame.png')})`,
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: '100% 100%',
+            color: isDisabled ? TEXT_DISABLED : accent,
             fontSize: '15px',
-            color: TEXT_DIM,
-            fontFamily: '"MuzaiPixel", monospace',
-            letterSpacing: '0.1em',
-            boxShadow: '2px 2px 0 rgba(0,0,0,0.4)',
+            fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace',
+            letterSpacing: '0.08em',
+            textShadow: '0 2px 0 rgba(0,0,0,0.8)',
+            imageRendering: 'pixelated',
           }}
         >
           {label}

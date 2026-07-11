@@ -106,26 +106,24 @@ export class LorebookEngine {
     const allPrimary = primaryMatches.every(m => m);
     const anyPrimary = primaryMatches.some(m => m);
 
-    let primaryOk = false;
-    switch (selectiveLogic) {
-      case 'and_all':
-      case 'and_any':
-        primaryOk = anyPrimary;
-        break;
-      case 'not_all':
-        primaryOk = !allPrimary;
-        break;
-      case 'not_any':
-        primaryOk = !anyPrimary;
-        break;
-      default:
-        primaryOk = anyPrimary;
-    }
+    const primaryOk = ((): boolean => {
+      switch (selectiveLogic) {
+        case 'and_all':
+        case 'and_any':
+          return anyPrimary;
+        case 'not_all':
+          return !allPrimary;
+        case 'not_any':
+          return !anyPrimary;
+        default:
+          return anyPrimary;
+      }
+    })();
 
     if (!primaryOk) return false;
 
     if (!selective || secondaryKeys.length === 0) {
-      return primaryOk;
+      return true;
     }
 
     const secondaryMatches = secondaryKeys.map(k =>

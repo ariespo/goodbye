@@ -18,6 +18,7 @@ export function IntroAnimation() {
   const [skipRequested, setSkipRequested] = useState(false);
   const introPlayed = useGameStore(state => state.ui.introPlayed);
   const setIntroPlayed = useGameStore(state => state.actions.setIntroPlayed);
+  const setTitleRevealed = useGameStore(state => state.actions.setTitleRevealed);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -26,11 +27,13 @@ export function IntroAnimation() {
       return;
     }
     if (skipRequested) {
+      setTitleRevealed(true);
       setPhase(PHASES.length - 1);
       timerRef.current = setTimeout(() => setIntroPlayed(true), PHASES[PHASES.length - 1].duration);
       return;
     }
     if (phase >= PHASES.length - 1) {
+      setTitleRevealed(true);
       timerRef.current = setTimeout(() => setIntroPlayed(true), PHASES[phase].duration);
       return;
     }
@@ -38,6 +41,13 @@ export function IntroAnimation() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, skipRequested, introPlayed]);
+
+  useEffect(() => {
+    const p = PHASES[phase].name;
+    if (p === 'resolve' || p === 'hold' || p === 'fade') {
+      setTitleRevealed(true);
+    }
+  }, [phase, setTitleRevealed]);
 
   const handleSkip = useCallback(() => {
     if (skipRequested || introPlayed) return;

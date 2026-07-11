@@ -248,6 +248,7 @@ export function importPreset(data: Record<string, any>, fileName?: string): Chat
   };
 
   // 3) 写回 settings:保留原始字段,规范化 prompt_order 覆盖,补全参数缺省值
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = data;
   const settings: Record<string, any> = {
     ...rest,

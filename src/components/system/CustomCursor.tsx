@@ -1,44 +1,132 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { assetUrl } from '../../utils/assetUrl';
+
+type CursorMode = 'idle' | 'point' | 'disabled';
+
+type ClickBurst = {
+  id: number;
+  x: number;
+  y: number;
+  color: string;
+};
+
+const CURSOR_SIZE = 32;
+const CURSOR_HOTSPOT = { x: 9, y: 5 };
+const INTERACTIVE_SELECTOR = [
+  'button',
+  'a',
+  'label',
+  'summary',
+  'input',
+  'textarea',
+  'select',
+  '[role="button"]',
+  '[data-cursor="pointer"]',
+].join(',');
+
+function getMoodColor(mood?: string) {
+  switch (mood) {
+    case 'horror':
+    case 'angry':
+      return '#c94f4f';
+    case 'insane':
+      return '#a855c7';
+    case 'sad':
+      return '#5b8db8';
+    case 'happy':
+      return '#d4a853';
+    default:
+      return '#6b8cff';
+  }
+}
+
+function isDisabledElement(el: Element | null) {
+  if (!el || !(el instanceof HTMLElement)) return false;
+  return (
+    el.hasAttribute('disabled') ||
+    el.getAttribute('aria-disabled') === 'true' ||
+    el.closest('[disabled], [aria-disabled="true"]') !== null
+  );
+}
+
+function getCursorMode(target: EventTarget | null): CursorMode {
+  if (!(target instanceof HTMLElement)) return 'idle';
+
+  const interactive = target.closest(INTERACTIVE_SELECTOR);
+  if (interactive) return isDisabledElement(interactive) ? 'disabled' : 'point';
+
+  const style = window.getComputedStyle(target);
+  if (style.pointerEvents === 'none') return 'idle';
+  if (style.cursor === 'pointer') return 'point';
+  if (style.cursor === 'not-allowed') return 'disabled';
+
+  return 'idle';
+}
 
 export function CustomCursor() {
   const cursorRef = useRef<HTMLDivElement>(null);
-  const dotRef = useRef<HTMLDivElement>(null);
-  const pos = useRef({ x: -100, y: -100 });
   const target = useRef({ x: -100, y: -100 });
-  const [isClickable, setIsClickable] = useState(false);
+  const pos = useRef({ x: -100, y: -100 });
+  const burstId = useRef(0);
+  const modeRef = useRef<CursorMode>('idle');
+  const pressedRef = useRef(false);
+
+  const [mode, setMode] = useState<CursorMode>('idle');
   const [isPressed, setIsPressed] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const [bursts, setBursts] = useState<ClickBurst[]>([]);
   const mood = useGameStore(state => state.game.currentState.mood);
+  const moodColor = getMoodColor(mood);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    target.current = { x: e.clientX, y: e.clientY };
+  const setCursorMode = useCallback((nextMode: CursorMode) => {
+    modeRef.current = nextMode;
+    setMode(nextMode);
   }, []);
 
-  const handleMouseOver = useCallback((e: MouseEvent) => {
-    const el = e.target as HTMLElement;
-    const clickable = !!(
-      el.tagName === 'BUTTON' ||
-      el.tagName === 'A' ||
-      el.tagName === 'INPUT' ||
-      el.tagName === 'TEXTAREA' ||
-      el.closest('button') ||
-      el.closest('a') ||
-      el.closest('label') ||
-      window.getComputedStyle(el).cursor === 'pointer'
-    );
-    setIsClickable(clickable);
-  }, []);
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    target.current = { x: event.clientX, y: event.clientY };
+    setIsVisible(true);
+    setCursorMode(getCursorMode(event.target));
+  }, [setCursorMode]);
 
-  const handleMouseOut = useCallback(() => {
-    setIsClickable(false);
-  }, []);
+  const handleMouseOver = useCallback((event: MouseEvent) => {
+    setCursorMode(getCursorMode(event.target));
+  }, [setCursorMode]);
 
-  const handleMouseDown = useCallback(() => {
+  const handleMouseOut = useCallback((event: MouseEvent) => {
+    const related = event.relatedTarget;
+    if (!related || !(related instanceof Node)) {
+      setCursorMode('idle');
+    }
+  }, [setCursorMode]);
+
+  const handleMouseDown = useCallback((event: MouseEvent) => {
+    pressedRef.current = true;
     setIsPressed(true);
-  }, []);
+    const color = modeRef.current === 'disabled' ? '#c94f4f' : getMoodColor(mood);
+    const id = burstId.current + 1;
+    burstId.current = id;
+    setBursts(current => [...current.slice(-5), { id, x: event.clientX, y: event.clientY, color }]);
+    window.setTimeout(() => {
+      setBursts(current => current.filter(item => item.id !== id));
+    }, 360);
+  }, [mood]);
 
   const handleMouseUp = useCallback(() => {
+    pressedRef.current = false;
     setIsPressed(false);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsVisible(false);
+    pressedRef.current = false;
+    setIsPressed(false);
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    setIsVisible(true);
   }, []);
 
   useEffect(() => {
@@ -47,20 +135,20 @@ export function CustomCursor() {
     document.addEventListener('mouseout', handleMouseOut);
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseleave', handleMouseLeave);
+    document.addEventListener('mouseenter', handleMouseEnter);
 
-    let raf: number;
+    let raf = 0;
     const animate = () => {
-      // lag 0.65 = 响应快但有微妙的重量感
-      pos.current.x += (target.current.x - pos.current.x) * 0.65;
-      pos.current.y += (target.current.y - pos.current.y) * 0.65;
+      const lag = modeRef.current === 'idle' ? 0.5 : 0.72;
+      pos.current.x += (target.current.x - pos.current.x) * lag;
+      pos.current.y += (target.current.y - pos.current.y) * lag;
 
       if (cursorRef.current) {
-        cursorRef.current.style.transform = `translate(${pos.current.x}px, ${pos.current.y}px)`;
+        const downOffset = pressedRef.current ? 1 : 0;
+        cursorRef.current.style.transform = `translate3d(${pos.current.x - CURSOR_HOTSPOT.x + downOffset}px, ${pos.current.y - CURSOR_HOTSPOT.y + downOffset}px, 0)`;
       }
-      if (dotRef.current) {
-        // dot 更跟手，lag 更高
-        dotRef.current.style.transform = `translate(${target.current.x - 2}px, ${target.current.y - 2}px)`;
-      }
+
       raf = requestAnimationFrame(animate);
     };
     raf = requestAnimationFrame(animate);
@@ -71,136 +159,97 @@ export function CustomCursor() {
       document.removeEventListener('mouseout', handleMouseOut);
       document.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+      document.removeEventListener('mouseenter', handleMouseEnter);
       cancelAnimationFrame(raf);
     };
-  }, [handleMouseMove, handleMouseOver, handleMouseOut, handleMouseDown, handleMouseUp]);
+  }, [
+    handleMouseMove,
+    handleMouseOver,
+    handleMouseOut,
+    handleMouseDown,
+    handleMouseUp,
+    handleMouseLeave,
+    handleMouseEnter,
+  ]);
 
-  // 情绪影响颜色
-  const getMoodColor = () => {
-    switch (mood) {
-      case 'horror': return '#c94f4f';
-      case 'insane': return '#a855c7';
-      case 'sad': return '#5b8db8';
-      case 'angry': return '#c94f4f';
-      case 'happy': return '#d4a853';
-      default: return '#6b8cff';
-    }
-  };
-
-  const moodColor = getMoodColor();
+  const cursorAsset = isPressed && mode !== 'disabled'
+    ? 'hand-press'
+    : mode === 'point'
+      ? 'hand-point'
+      : mode === 'disabled'
+        ? 'hand-disabled'
+        : 'hand-idle';
 
   return (
     <>
-      {/* 中心点 — 始终紧贴鼠标 */}
-      <div
-        ref={dotRef}
-        className="fixed top-0 left-0 pointer-events-none z-[9999]"
-      >
-        <div
-          className={`w-1 h-1 rounded-full transition-all duration-100 ${
-            isClickable ? 'scale-150 opacity-100' : 'scale-100 opacity-50'
-          }`}
-          style={{ backgroundColor: isClickable ? moodColor : '#e8e4dc' }}
-        />
-      </div>
-
-      {/* 主光标 — 带 lag 的重量感 */}
       <div
         ref={cursorRef}
-        className="fixed top-0 left-0 pointer-events-none z-[9998]"
-        style={{ willChange: 'transform' }}
+        className="fixed left-0 top-0 pointer-events-none z-[9998] transition-opacity duration-150"
+        style={{
+          opacity: isVisible ? 1 : 0,
+          willChange: 'transform',
+        }}
+        aria-hidden="true"
       >
-        {/* 默认箭头 */}
         <div
-          className={`relative transition-all duration-100 ${
-            isClickable ? 'opacity-0 scale-75' : 'opacity-100 scale-100'
-          } ${isPressed ? 'scale-90' : ''}`}
+          className="relative"
           style={{
-            width: 0,
-            height: 0,
-            marginLeft: -1,
-            marginTop: -1,
+            width: CURSOR_SIZE,
+            height: CURSOR_SIZE,
+            filter: mode === 'idle'
+              ? 'drop-shadow(2px 2px 0 rgba(0,0,0,0.72))'
+              : `drop-shadow(2px 2px 0 rgba(0,0,0,0.8)) drop-shadow(0 0 5px ${mode === 'disabled' ? '#c94f4f' : moodColor}66)`,
           }}
         >
-          {/* 外发光层 */}
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 28 28"
-            className="absolute -top-1 -left-1"
+          <img
+            src={assetUrl(`assets/cursor/${cursorAsset}.png`)}
+            alt=""
+            draggable={false}
+            className="absolute left-0 top-0 h-8 w-8 select-none"
             style={{
-              filter: `drop-shadow(0 0 3px ${moodColor}) drop-shadow(0 0 6px ${moodColor}40)`,
-              opacity: mood !== 'calm' ? 0.6 : 0,
-              transition: 'opacity 0.3s',
+              imageRendering: 'pixelated',
+              transform: isPressed ? 'scale(0.94)' : mode === 'point' ? 'scale(1.04)' : 'scale(1)',
+              transformOrigin: `${CURSOR_HOTSPOT.x}px ${CURSOR_HOTSPOT.y}px`,
+              transition: 'transform 80ms steps(2, end), filter 120ms steps(2, end)',
             }}
-          >
-            <polygon
-              points="2,2 2,20 8,14 12,22 16,20 12,12 20,12"
-              fill={moodColor}
-            />
-          </svg>
-
-          {/* 主箭头 — 白色填充 + 黑色描边防吞没 */}
-          <svg width="24" height="24" viewBox="0 0 24 24">
-            <polygon
-              points="2,2 2,18 7,13 10,20 13,18 10,11 17,11"
-              fill="#e8e4dc"
-              stroke="#0d0d0f"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-          </svg>
-
-          {/* 高光点 */}
-          <div
-            className="absolute top-[3px] left-[3px] w-[2px] h-[2px] bg-white/80 rounded-full"
           />
-        </div>
-
-        {/* Hover 手形 */}
-        <div
-          className={`relative transition-all duration-150 ${
-            isClickable ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
-          } ${isPressed ? 'scale-90' : ''}`}
-          style={{
-            width: 0,
-            height: 0,
-            marginLeft: -10,
-            marginTop: -2,
-          }}
-        >
-          {/* 发光 */}
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 28 28"
-            className="absolute -top-1 -left-1"
-            style={{
-              filter: `drop-shadow(0 0 4px ${moodColor})`,
-            }}
-          >
-            <path
-              d="M8,4 L8,16 L11,16 L11,20 L15,20 L15,16 L18,16 L18,12 L20,12 L20,8 L18,8 L18,4 L14,4 L14,8 L12,8 L12,4 Z"
-              fill={moodColor}
-              opacity="0.5"
+          {mode === 'point' && !isPressed && (
+            <span
+              className="absolute block"
+              style={{
+                left: 2,
+                top: 1,
+                width: 4,
+                height: 4,
+                background: moodColor,
+                clipPath: 'polygon(0 40%, 40% 40%, 40% 0, 60% 0, 60% 40%, 100% 40%, 100% 60%, 60% 60%, 60% 100%, 40% 100%, 40% 60%, 0 60%)',
+                imageRendering: 'pixelated',
+                animation: 'pixelCursorSpark 620ms steps(2, end) infinite',
+              }}
             />
-          </svg>
-
-          {/* 手形主体 */}
-          <svg width="24" height="24" viewBox="0 0 24 24">
-            <path
-              d="M7,3 L7,15 L10,15 L10,19 L14,19 L14,15 L17,15 L17,11 L19,11 L19,7 L17,7 L17,3 L13,3 L13,7 L11,7 L11,3 Z"
-              fill="#e8e4dc"
-              stroke="#0d0d0f"
-              strokeWidth="1.2"
-              strokeLinejoin="round"
-            />
-          </svg>
-
-          {/* 手指高光 */}
-          <div className="absolute top-[5px] left-[8px] w-[2px] h-[3px] bg-white/60 rounded-full" />
+          )}
         </div>
       </div>
+
+      {bursts.map(burst => (
+        <span
+          key={burst.id}
+          className="fixed left-0 top-0 pointer-events-none z-[9997]"
+          style={{
+            '--cursor-burst-x': `${burst.x - 9}px`,
+            '--cursor-burst-y': `${burst.y - 9}px`,
+            transform: `translate3d(${burst.x - 9}px, ${burst.y - 9}px, 0)`,
+            width: 18,
+            height: 18,
+            border: `2px solid ${burst.color}`,
+            boxShadow: `0 0 0 2px #0d0d0f, 0 0 10px ${burst.color}66`,
+            imageRendering: 'pixelated',
+            animation: 'pixelCursorBurst 360ms steps(5, end) forwards',
+          } as CSSProperties & Record<'--cursor-burst-x' | '--cursor-burst-y', string>}
+          aria-hidden="true"
+        />
+      ))}
     </>
   );
 }

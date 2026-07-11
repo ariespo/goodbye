@@ -10,6 +10,7 @@
 
 import type { ChatPreset, Lorebook, ChatMessage, MatchedEntry } from './types';
 import { createLorebookEngine } from './lorebook-engine';
+import { getVariablePath } from './vars-merger';
 
 export interface AssembleOptions {
   userInput: string;
@@ -267,7 +268,7 @@ export function replaceMacros(template: string, ctx: MacroContext): string {
   // {{自定义变量}}
   if (ctx.variables) {
     r = r.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) => {
-      const value = ctx.variables?.[key.trim()];
+      const value = getVariablePath(ctx.variables, key.trim());
       return value !== undefined ? String(value) : match;
     });
   }
@@ -447,20 +448,19 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
 
   // 5) 组装最终消息（模拟）
   const finalMessages: { role: string; content: string; index: number }[] = [];
-  let idx = 0;
 
   if (systemAcc || varBlock || formatPrompt) {
     let sys = systemAcc;
     if (varBlock) sys += (sys ? '\n\n' : '') + varBlock;
     if (formatPrompt) sys += (sys ? '\n\n' : '') + formatPrompt;
-    finalMessages.push({ role: 'system', content: sys, index: idx++ });
+    finalMessages.push({ role: 'system', content: sys, index: finalMessages.length });
   }
 
   for (const msg of includedHistory) {
-    finalMessages.push({ role: msg.role, content: msg.content, index: idx++ });
+    finalMessages.push({ role: msg.role, content: msg.content, index: finalMessages.length });
   }
 
-  finalMessages.push({ role: 'user', content: replaceMacros(userInput, macroCtx), index: idx++ });
+  finalMessages.push({ role: 'user', content: replaceMacros(userInput, macroCtx), index: finalMessages.length });
 
   // 6) 统计
   const systemTokens = Math.ceil((systemAcc.length + (varBlock?.length || 0) + (formatPrompt?.length || 0)) / 4);

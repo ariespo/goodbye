@@ -5,7 +5,8 @@ import { importPreset, exportPreset, exportToJson, importJsonFile } from '../../
 import { createDefaultPreset } from '../../sillytavern/types';
 import type { ChatPreset } from '../../sillytavern/types';
 import { PresetEditor } from './PresetEditor';
-import { X, Trash, Download, Upload, Plus, CheckCircle } from '@phosphor-icons/react';
+import { Trash, Download, Upload, Plus, CheckCircle } from '@phosphor-icons/react';
+import { GameIcon } from '../ui/GameIcon';
 
 export function PresetModal() {
   const presets = useGameStore(state => state.tavern.presets);
@@ -67,17 +68,17 @@ export function PresetModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} onClick={() => toggleModal('preset')}>
-      <div className="w-[1000px] h-[700px] bg-bg-primary border border-border-subtle flex animate-[scaleIn_0.35s_ease-out]" onClick={e => e.stopPropagation()}>
+    <div className="preset-modal-shell fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} onClick={() => toggleModal('preset')}>
+      <div className="tavern-modal preset-modal w-[1000px] h-[700px] bg-bg-primary border border-border-subtle flex animate-[scaleIn_0.35s_ease-out]" onClick={e => e.stopPropagation()}>
 
         {/* 左栏:预设列表 */}
-        <div className="w-[260px] border-r border-border-subtle flex flex-col">
+        <div className="tavern-modal-sidebar w-[260px] border-r border-border-subtle flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
             <h2 className="text-sm font-serif-cn text-text-primary">预设</h2>
-            <button onClick={() => toggleModal('preset')} className="text-text-muted hover:text-text-primary"><X size={16} /></button>
+            <button onClick={() => toggleModal('preset')} data-cursor="pointer" className="pixel-close-button flex h-8 w-8 items-center justify-center" style={{ cursor: 'pointer' }}><GameIcon name="close" size={13} /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 pixel-scroll-blue overflow-y-auto pr-2">
             {presets.length === 0 && (
               <div className="text-center text-text-muted text-xs py-8">暂无预设</div>
             )}
@@ -108,7 +109,7 @@ export function PresetModal() {
         </div>
 
         {/* 右栏:编辑器 */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="tavern-modal-main flex-1 flex flex-col min-w-0">
           {selected ? (
             <>
               <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">

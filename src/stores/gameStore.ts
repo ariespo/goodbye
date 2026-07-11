@@ -4,6 +4,7 @@ import type {
   GameStatus, CurrentState, Scene, TurnSnapshot, Notification,
   ParsedContent, Ending, EndingPanelState, EndingCheckContext,
 } from '../sillytavern/types';
+import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 
 interface GameStore {
   game: {
@@ -55,11 +56,14 @@ interface GameStore {
     showPreset: boolean;
     showHistory: boolean;
     showMap: boolean;
+    showClues: boolean;
     showTitle: boolean;
     showEndingEditor: boolean;
     showPromptInspector: boolean;
     notifications: Notification[];
     introPlayed: boolean;
+    /** 开场动画中的标题是否已显示（用于触发标题音乐） */
+    titleRevealed: boolean;
   };
 
   actions: {
@@ -84,6 +88,7 @@ interface GameStore {
     updateEnding: (id: string, patch: Partial<Ending>) => void;
     markEndingSeen: (id: string) => void;
     setEndingPanel: (panel: Partial<EndingPanelState>) => void;
+    setPendingEnding: (id: string | null) => void;
     setEndingCheckContext: (ctx: Partial<EndingCheckContext>) => void;
     addHistorySnapshot: (snapshot: TurnSnapshot) => void;
     setStreaming: (streaming: boolean) => void;
@@ -91,20 +96,21 @@ interface GameStore {
     setParsedContent: (content: Partial<ParsedContent>) => void;
     setApiError: (error: string | null) => void;
     setAbortController: (controller: AbortController | null) => void;
-    toggleModal: (modal: 'settings' | 'lorebook' | 'preset' | 'history' | 'map') => void;
+    toggleModal: (modal: 'settings' | 'lorebook' | 'preset' | 'history' | 'map' | 'clues') => void;
     setShowTitle: (show: boolean) => void;
     setShowEndingEditor: (show: boolean) => void;
     setShowPromptInspector: (show: boolean) => void;
     addNotification: (notification: Omit<Notification, 'id'>) => void;
     removeNotification: (id: string) => void;
     setIntroPlayed: (played: boolean) => void;
+    setTitleRevealed: (revealed: boolean) => void;
   };
 }
 
 const defaultGameStatus: GameStatus = {
   time: new Date(2024, 8, 9, 9, 0),
   stamina: 100,
-  sanity: 100,
+  sanity: 80,
   items: [],
 };
 
@@ -135,11 +141,11 @@ function createDefaultEndings(): Ending[] {
       name: '接受',
       truthType: 'A',
       tag: 'normal',
-      description: '主角在 therapy 中接受真相，承认自己的罪行。灰暗但"清醒"的结局。',
+      description: '主角在治疗与调查中接受真相，承认自己的记忆和罪责。灰暗但清醒的结局。',
       conditionGroups: [
         {
           id: 'A-1-cg',
-          name: '自疑+心理',
+          name: '自疑或心理调查',
           mode: 'any',
           conditions: [
             { variablePath: 'suspicion.self', operator: '>=', targetValue: 60 },
@@ -155,11 +161,11 @@ function createDefaultEndings(): Ending[] {
       name: '否认',
       truthType: 'A',
       tag: 'bad',
-      description: '主角拒绝接受，继续轮回。永恒的自我囚禁。',
+      description: '主角拒绝接受自我罪责，继续轮回，陷入永恒的自我囚禁。',
       conditionGroups: [
         {
           id: 'A-2-cg',
-          name: '轮回+自疑',
+          name: '低轮回自疑',
           mode: 'all',
           conditions: [
             { variablePath: 'cycleCount', operator: '<=', targetValue: 3 },
@@ -175,11 +181,11 @@ function createDefaultEndings(): Ending[] {
       name: '告别',
       truthType: 'B',
       tag: 'good',
-      description: '主角选择"放手"，文穂在梦中微笑消失。醒来后回到现实世界。',
+      description: '主角选择放手，文穗在梦中微笑消失。醒来后回到现实世界。',
       conditionGroups: [
         {
           id: 'B-1-cg',
-          name: '好感+梦觉',
+          name: '文穗好感与心理调查',
           mode: 'all',
           conditions: [
             { variablePath: 'affinity.fumi', operator: '>=', targetValue: 85 },
@@ -195,11 +201,11 @@ function createDefaultEndings(): Ending[] {
       name: '沉溺',
       truthType: 'B',
       tag: 'bad',
-      description: '主角选择"永远在一起"。永远困在梦境中（温柔的囚笼）。',
+      description: '主角选择永远和文穗停留在一起，温柔地困在梦境中。',
       conditionGroups: [
         {
           id: 'B-2-cg',
-          name: '好感',
+          name: '文穗依恋',
           mode: 'all',
           conditions: [
             { variablePath: 'affinity.fumi', operator: '>=', targetValue: 85 },
@@ -215,11 +221,11 @@ function createDefaultEndings(): Ending[] {
       name: '封印',
       truthType: 'C',
       tag: 'normal',
-      description: '主角在时坂朔的帮助下，用文穂的"牺牲"重新封印邪神。文穂死，城市得救。',
+      description: '主角在时坂朔的帮助下重新封印异常。城市得救，文穗成为代价。',
       conditionGroups: [
         {
           id: 'C-1-cg',
-          name: '超自然',
+          name: '超自然调查',
           mode: 'all',
           conditions: [
             { variablePath: 'investigation.occult', operator: '>=', targetValue: 70 },
@@ -235,11 +241,11 @@ function createDefaultEndings(): Ending[] {
       name: '放手',
       truthType: 'D',
       tag: 'normal',
-      description: '主角停止轮回，接受文穂的死亡。文穂的灵魂融入锚点，成为永恒的守护者。',
+      description: '主角停止轮回，接受文穗的死亡。文穗以另一种方式成为锚点的守护者。',
       conditionGroups: [
         {
           id: 'D-1-cg',
-          name: '科学+调查',
+          name: '科学调查与轮回',
           mode: 'all',
           conditions: [
             { variablePath: 'investigation.science', operator: '>=', targetValue: 70 },
@@ -255,11 +261,11 @@ function createDefaultEndings(): Ending[] {
       name: '共生',
       truthType: 'D',
       tag: 'true',
-      description: '主角发现"情感"本身可以维持锚点——不需要牺牲生命，只需要"真诚的告别"。两人在不同的存在形式中继续相伴。',
+      description: '主角发现情感本身可以维持锚点。真正的告别让两人以不同形式继续相伴。',
       conditionGroups: [
         {
           id: 'D-3-cg',
-          name: '均衡+科学',
+          name: '均衡与科学调查',
           mode: 'all',
           conditions: [
             { variablePath: 'investigation.science', operator: '>=', targetValue: 70 },
@@ -273,10 +279,10 @@ function createDefaultEndings(): Ending[] {
     },
     {
       id: 'E',
-      name: '观测者',
+      name: '观察者',
       truthType: 'E',
       tag: 'hidden',
-      description: '四种真相都是"部分正确"。真正的答案是：四种真相并不互斥，它们是同一个现象的四个观测面。主角选择不选择——接受不确定性。',
+      description: '四种真相都是部分正确。主角接受不确定性，不再强迫世界给出唯一答案。',
       conditionGroups: [
         {
           id: 'E-cg',
@@ -292,7 +298,6 @@ function createDefaultEndings(): Ending[] {
     },
   ];
 }
-
 export const useGameStore = create<GameStore>((set) => ({
   game: {
     currentScene: null,
@@ -315,7 +320,7 @@ export const useGameStore = create<GameStore>((set) => ({
       unlockedClues: [],
       endingsSeen: [],
     },
-    endingPanel: { visible: false, activeEndingId: null, isAnimating: false },
+    endingPanel: { visible: false, activeEndingId: null, pendingEndingId: null, isPreview: false, isAnimating: false },
   },
   tavern: {
     settings: null,
@@ -323,7 +328,7 @@ export const useGameStore = create<GameStore>((set) => ({
     presets: [],
     chats: [],
     activeChatId: null,
-    variables: {},
+    variables: createDefaultVariables(),
   },
   api: {
     isStreaming: false,
@@ -338,11 +343,13 @@ export const useGameStore = create<GameStore>((set) => ({
     showPreset: false,
     showHistory: false,
     showMap: false,
+    showClues: false,
     showTitle: true,
     showEndingEditor: false,
     showPromptInspector: false,
     notifications: [],
     introPlayed: false,
+    titleRevealed: false,
   },
 
   actions: {
@@ -350,8 +357,26 @@ export const useGameStore = create<GameStore>((set) => ({
     setLorebooks: (lorebooks) => set(state => ({ tavern: { ...state.tavern, lorebooks } })),
     setPresets: (presets) => set(state => ({ tavern: { ...state.tavern, presets } })),
     setChats: (chats) => set(state => ({ tavern: { ...state.tavern, chats } })),
-    setActiveChatId: (id) => set(state => ({ tavern: { ...state.tavern, activeChatId: id } })),
-    setVariables: (vars) => set(state => ({ tavern: { ...state.tavern, variables: vars } })),
+    setActiveChatId: (id) => set(state => {
+      const activeChat = state.tavern.chats.find(c => c.id === id);
+      const variables = activeChat?.variables && Object.keys(activeChat.variables).length > 0
+        ? activeChat.variables
+        : state.tavern.variables;
+      return {
+        tavern: { ...state.tavern, activeChatId: id, variables },
+        game: {
+          ...state.game,
+          endingCheckContext: variablesToEndingContext(variables, state.game.endingsSeen) as EndingCheckContext,
+        },
+      };
+    }),
+    setVariables: (vars) => set(state => ({
+      tavern: { ...state.tavern, variables: vars },
+      game: {
+        ...state.game,
+        endingCheckContext: variablesToEndingContext(vars, state.game.endingsSeen) as EndingCheckContext,
+      },
+    })),
     setCurrentScene: (scene) => set(state => ({ game: { ...state.game, currentScene: scene, currentLineIndex: 0, sceneComplete: false } })),
     setCurrentLineIndex: (index) => set(state => ({ game: { ...state.game, currentLineIndex: index } })),
     setGameStatus: (status) => set(state => ({ game: { ...state.game, gameStatus: { ...state.game.gameStatus, ...status } } })),
@@ -374,9 +399,13 @@ export const useGameStore = create<GameStore>((set) => ({
       game: {
         ...state.game,
         endingsSeen: state.game.endingsSeen.includes(id) ? state.game.endingsSeen : [...state.game.endingsSeen, id],
+        endings: state.game.endings.map(ending => ending.id === id
+          ? { ...ending, isUnlocked: true, unlockedAt: ending.unlockedAt ?? Date.now() }
+          : ending),
       },
     })),
     setEndingPanel: (panel) => set(state => ({ game: { ...state.game, endingPanel: { ...state.game.endingPanel, ...panel } } })),
+    setPendingEnding: (id) => set(state => ({ game: { ...state.game, endingPanel: { ...state.game.endingPanel, pendingEndingId: id } } })),
     setEndingCheckContext: (ctx) => set(state => ({ game: { ...state.game, endingCheckContext: { ...state.game.endingCheckContext, ...ctx } } })),
     addHistorySnapshot: (snapshot) => set(state => ({ game: { ...state.game, history: [...state.game.history, snapshot] } })),
     setStreaming: (streaming) => set(state => ({ api: { ...state.api, isStreaming: streaming } })),
@@ -401,5 +430,6 @@ export const useGameStore = create<GameStore>((set) => ({
       ui: { ...state.ui, notifications: state.ui.notifications.filter(n => n.id !== id) },
     })),
     setIntroPlayed: (played) => set(state => ({ ui: { ...state.ui, introPlayed: played } })),
+    setTitleRevealed: (revealed) => set(state => ({ ui: { ...state.ui, titleRevealed: revealed } })),
   },
 }));

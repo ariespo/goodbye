@@ -4,7 +4,8 @@ import { saveLorebook, deleteLorebook, saveSettings } from '../../sillytavern/da
 import { importLorebook, exportLorebook, exportToJson, importJsonFile } from '../../sillytavern/importer';
 import type { SillyTavernLorebookExport, Lorebook, LorebookEntry } from '../../sillytavern/types';
 import { LorebookEntryEditor } from './LorebookEntryEditor';
-import { X, Trash, Download, Upload, Plus, Pencil } from '@phosphor-icons/react';
+import { Trash, Download, Upload, Plus, Pencil } from '@phosphor-icons/react';
+import { GameIcon } from '../ui/GameIcon';
 
 function createEmptyEntry(): LorebookEntry {
   return {
@@ -133,17 +134,17 @@ export function LorebookModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} onClick={() => toggleModal('lorebook')}>
-      <div className="w-[1000px] h-[700px] bg-bg-primary border border-border-subtle flex animate-[scaleIn_0.35s_ease-out]" onClick={e => e.stopPropagation()}>
+    <div className="lorebook-modal-shell fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} onClick={() => toggleModal('lorebook')}>
+      <div className="tavern-modal lorebook-modal w-[1000px] h-[700px] bg-bg-primary border border-border-subtle flex animate-[scaleIn_0.35s_ease-out]" onClick={e => e.stopPropagation()}>
 
         {/* 左栏:世界书列表 */}
-        <div className="w-[260px] border-r border-border-subtle flex flex-col">
+        <div className="tavern-modal-sidebar w-[260px] border-r border-border-subtle flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
             <h2 className="text-sm font-serif-cn text-text-primary">世界书</h2>
-            <button onClick={() => toggleModal('lorebook')} className="text-text-muted hover:text-text-primary"><X size={16} /></button>
+            <button onClick={() => toggleModal('lorebook')} data-cursor="pointer" className="pixel-close-button flex h-8 w-8 items-center justify-center" style={{ cursor: 'pointer' }}><GameIcon name="close" size={13} /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 pixel-scroll-blue overflow-y-auto pr-2">
             {lorebooks.length === 0 && (
               <div className="text-center text-text-muted text-xs py-8">暂无世界书</div>
             )}
@@ -205,7 +206,7 @@ export function LorebookModal() {
         </div>
 
         {/* 右栏:条目编辑区 */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="tavern-modal-main flex-1 flex flex-col min-w-0">
           {selectedBook ? (
             <>
               <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">
@@ -252,7 +253,7 @@ export function LorebookModal() {
                 </label>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 pixel-scroll-blue overflow-y-auto p-4 pr-5 space-y-3">
                 {selectedBook.entries.map(entry => (
                   <LorebookEntryEditor
                     key={entry.id}

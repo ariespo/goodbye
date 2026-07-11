@@ -1,345 +1,363 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import type { ReactNode } from 'react';
+
+import { GameIcon } from '../ui/GameIcon';
+
+import { assetUrl } from '../../utils/assetUrl';
+
 import { useGameStore } from '../../stores/gameStore';
+
 import { FilmStrip } from './FilmStrip';
+
 import { FullScreenGrain } from './FullScreenGrain';
-import { maintextToScene } from '../../engine/scene-parser';
-import { OPENING_STORYLINE } from '../../engine/opening-storyline';
-import { deleteChat, saveChat } from '../../sillytavern/database';
-import type { ChatSession, ChatMessage } from '../../sillytavern/types';
+
+import { openSaveModal } from './SaveModal';
+import { startNewGame } from '../../utils/gameSession';
+
+
 
 export function TitleScreen() {
+
   const showTitle = useGameStore(state => state.ui.showTitle);
-  const setShowTitle = useGameStore(state => state.actions.setShowTitle);
-  const setCurrentScene = useGameStore(state => state.actions.setCurrentScene);
-  const setActiveChatId = useGameStore(state => state.actions.setActiveChatId);
+
   const toggleModal = useGameStore(state => state.actions.toggleModal);
-  const setChats = useGameStore(state => state.actions.setChats);
+
   const addNotification = useGameStore(state => state.actions.addNotification);
 
-  const chats = useGameStore(state => state.tavern.chats);
-  const activeChatId = useGameStore(state => state.tavern.activeChatId);
-  const settings = useGameStore(state => state.tavern.settings);
+
 
   const [visible, setVisible] = useState(false);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
   const rafRef = useRef<number>(0);
 
-  // 入场动画
+
+
   useEffect(() => {
+
     if (showTitle) {
+
       const t = setTimeout(() => setVisible(true), 100);
+
       return () => clearTimeout(t);
-    } else {
-      setVisible(false);
+
     }
+
+    setVisible(false);
+
   }, [showTitle]);
 
-  // 背景飘尘粒子（上升的光点，像尘埃在光束中飘浮）
+
+
   useEffect(() => {
+
     const canvas = canvasRef.current;
+
     if (!canvas) return;
+
     const ctx = canvas.getContext('2d');
+
     if (!ctx) return;
 
+
+
     const resize = () => {
+
       canvas.width = window.innerWidth;
+
       canvas.height = window.innerHeight;
+
     };
+
     resize();
+
     window.addEventListener('resize', resize);
 
-    interface Dust {
-      x: number; y: number; vx: number; vy: number; r: number; alpha: number;
-    }
-    const dusts: Dust[] = [];
-    for (let i = 0; i < 40; i++) {
-      dusts.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.15,
-        vy: -Math.random() * 0.3 - 0.05,
-        r: Math.random() * 1.2 + 0.3,
-        alpha: Math.random() * 0.3 + 0.1,
-      });
-    }
+
+
+    interface Dust { x: number; y: number; vx: number; vy: number; r: number; alpha: number; }
+
+    const dusts: Dust[] = Array.from({ length: 46 }, () => ({
+
+      x: Math.random() * canvas.width,
+
+      y: Math.random() * canvas.height,
+
+      vx: (Math.random() - 0.5) * 0.18,
+
+      vy: -Math.random() * 0.32 - 0.04,
+
+      r: Math.random() * 1.3 + 0.25,
+
+      alpha: Math.random() * 0.28 + 0.08,
+
+    }));
+
+
 
     const draw = () => {
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
       for (const d of dusts) {
+
         d.x += d.vx;
+
         d.y += d.vy;
+
         if (d.y < -10) { d.y = canvas.height + 10; d.x = Math.random() * canvas.width; }
+
         if (d.x < -10) d.x = canvas.width + 10;
+
         if (d.x > canvas.width + 10) d.x = -10;
+
         ctx.beginPath();
+
         ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+
         ctx.fillStyle = `rgba(220, 215, 205, ${d.alpha})`;
+
         ctx.fill();
+
       }
+
       rafRef.current = requestAnimationFrame(draw);
+
     };
+
     draw();
+
     return () => {
+
       window.removeEventListener('resize', resize);
+
       cancelAnimationFrame(rafRef.current);
+
     };
+
   }, []);
 
+
+
+  /** 开始游戏：完整重置所有局内状态，从开局剧情重新开始 */
   const handleStartGame = useCallback(async () => {
-    const chat = chats.find(c => c.id === activeChatId);
-    if (chat) {
-      const lastAssistant = [...chat.messages].reverse().find(m => m.role === 'assistant');
-      if (lastAssistant) {
-        const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
-        if (maintext) {
-          const scene = maintextToScene(maintext);
-          // 只有提取的 scene 有交互数据时才使用它，否则回退到开局剧本
-          if (scene.lines.length > 0 && (scene.observe || scene.investigateItems?.length || scene.actionItems?.length)) {
-            setCurrentScene(scene);
-            setShowTitle(false);
-            return;
-          }
-        }
-      }
+    try {
+      await startNewGame();
+    } catch (e) {
+      addNotification({
+        type: 'error',
+        message: e instanceof Error ? e.message : '开始游戏失败',
+        duration: 3500,
+      });
     }
-    setCurrentScene(maintextToScene(OPENING_STORYLINE));
-    setShowTitle(false);
-  }, [chats, activeChatId, setCurrentScene, setShowTitle]);
+  }, [addNotification]);
 
   const handleSettings = useCallback(() => toggleModal('settings'), [toggleModal]);
 
-  const handleReincarnation = useCallback(async () => {
-    if (!settings) { addNotification({ type: 'error', message: '设置未加载', duration: 3000 }); return; }
-    try {
-      for (const chat of chats) await deleteChat(chat.id);
-      const openingMsg: ChatMessage = {
-        id: crypto.randomUUID(), role: 'assistant',
-        content: `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穂的早晨</sum>\n<vars>{ "stamina": 100, "sanity": 80 }</vars>`,
-        timestamp: Date.now(), variables: {},
-      };
-      const newChat: ChatSession = {
-        id: crypto.randomUUID(),
-        name: `${settings.characterName} - 新对话 1`,
-        messages: [openingMsg],
-        characterName: settings.characterName,
-        userName: settings.userName,
-        presetId: settings.activePresetId || null,
-        lorebookIds: [...settings.activeLorebookIds],
-        variables: {},
-        createdAt: Date.now(), updatedAt: Date.now(),
-      };
-      await saveChat(newChat);
-      setChats([newChat]);
-      setActiveChatId(newChat.id);
-      setCurrentScene(maintextToScene(OPENING_STORYLINE));
-      setShowTitle(false);
-      addNotification({ type: 'info', message: '轮回重启...', duration: 2000 });
-    } catch { addNotification({ type: 'error', message: '重启失败', duration: 3000 }); }
-  }, [chats, settings, setChats, setActiveChatId, setCurrentScene, setShowTitle, addNotification]);
+  /** 进入轮回：打开读档页，选择档案后继续 */
+  const handleReincarnation = useCallback(() => {
+    openSaveModal('load');
+  }, []);
+
+
 
   if (!showTitle) return null;
 
-  const filmColor = '#d4cfc7'; // 标题页用浅米色胶片，与暗色背景形成对比
+
+
+  const filmColor = '#d4cfc7';
+
+
 
   return (
-    <div className="fixed inset-0 z-[50] flex flex-col items-center justify-center overflow-hidden"
-      style={{ background: '#0a0a0c' }}>
 
-      {/* 全屏老胶片效果 */}
+    <div className="title-screen fixed inset-0 z-[50] flex flex-col items-center justify-center overflow-hidden" style={{ background: '#050506' }}>
+
+      <div
+
+        className="absolute inset-0 bg-cover bg-center"
+
+        style={{ backgroundImage: `url(${assetUrl('assets/title/title-bg-v2.png')})` }}
+
+      />
+
       <FullScreenGrain />
 
-      {/* 上下完整胶片段 */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.16] game-film-overlay" />
+
       <FilmStrip position="top" filmColor={filmColor} />
+
       <FilmStrip position="bottom" filmColor={filmColor} />
 
-      {/* 背景图：bedroom1 暗化 */}
-      <div className="absolute inset-0 bg-cover bg-center opacity-30"
-        style={{
-          backgroundImage: `url(/assets/backgrounds/bedroom1.png)`,
-          filter: 'grayscale(60%) brightness(0.4) contrast(1.2)',
-        }}
-      />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none opacity-80" />
 
-      {/* 暗角 */}
-      <div className="absolute inset-0 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse at 50% 40%, transparent 30%, rgba(0,0,0,0.7) 80%, rgba(0,0,0,0.95) 100%)' }}
-      />
 
-      {/* 底部渐变遮罩（让按钮区域更清晰） */}
-      <div className="absolute bottom-0 left-0 right-0 h-[55%] pointer-events-none"
-        style={{ background: 'linear-gradient(to top, rgba(10,10,12,0.95) 0%, rgba(10,10,12,0.6) 40%, transparent 100%)' }}
-      />
 
-      {/* 粒子层 */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+      <div
 
-      {/* 扫描线 */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.02]"
-        style={{ background: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.03) 3px, rgba(255,255,255,0.03) 6px)' }}
-      />
+        className={`title-screen-content relative z-30 flex min-h-[86vh] w-full max-w-[1040px] flex-col items-center justify-center px-6 pb-10 transition-all duration-[1.2s] ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
 
-      {/* 内容区 */}
-      <div className={`relative z-30 flex flex-col items-center pb-12 transition-all duration-[1.2s] ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
-        style={{ marginTop: '-8vh' }}
       >
 
-        {/* 标题 */}
-        <div className="flex flex-col items-center gap-3 mb-10">
-          <h1
-            className="text-5xl md:text-6xl font-bold tracking-[0.35em]"
+        <div className="flex flex-col items-center gap-5 mb-9">
+
+          <h1 className="sr-only">漫长的告别</h1>
+
+          <img
+
+            src={assetUrl('assets/title/title-logo-v2.png')}
+
+            alt="漫长的告别"
+
+            className="title-logo select-none"
+
             style={{
-              fontFamily: '"MuzaiPixel", "LXGW WenKai", "Noto Serif SC", serif',
-              color: '#e8e4dc',
-              textShadow: '0 0 80px rgba(232,228,220,0.1), 0 2px 10px rgba(0,0,0,0.8)',
+
+              width: 'min(78vw, 760px)',
+
+              imageRendering: 'pixelated',
+
+              filter: 'drop-shadow(0 16px 34px rgba(0,0,0,0.75)) drop-shadow(0 0 20px rgba(107,143,196,0.12))',
+
+              animation: 'titleLogoBreathe 5s ease-in-out infinite',
+
             }}
+
+          />
+
+          <p
+
+            className="text-xs text-center"
+
+            style={{
+
+              color: 'rgba(216,212,204,0.44)',
+
+              fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
+
+              letterSpacing: '0.18em',
+
+              textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+
+            }}
+
           >
-            漫长的告别
-          </h1>
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-px bg-text-muted/20" />
-            <p className="text-[11px] tracking-[0.5em] uppercase" style={{ fontFamily: '"JetBrains Mono", monospace', color: 'rgba(138,133,128,0.5)' }}>
-              A Long Farewell
-            </p>
-            <div className="w-10 h-px bg-text-muted/20" />
-          </div>
+
+            如果时间可以倒流，你是否能改写结局？
+
+          </p>
+
         </div>
 
-        {/* 引言 */}
-        <p className="text-xs tracking-[0.15em] mb-10" style={{ color: 'rgba(138,133,128,0.35)' }}>
-          如果时间可以倒流，你是否能改写结局？
-        </p>
 
-        {/* 按钮组 */}
-        <div className="flex flex-col items-center gap-3">
-          {/* 开始游戏 — 实色填充 + 像素 3D 边框 */}
-          <PixelButton
-            label="开 始 游 戏"
-            width={320}
-            theme="blue"
-            icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>}
-            onClick={handleStartGame}
-          />
 
-          {/* 设置 */}
-          <PixelButton
-            label="设 置"
-            width={320}
-            theme="gray"
-            icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.67 15 1.65 1.65 0 0 0 3 13.57V13a2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2v.57a1.65 1.65 0 0 0-.67 1.43z" /></svg>}
-            onClick={handleSettings}
-          />
+        <div className="title-button-stack relative flex flex-col items-center gap-3">
 
-          {/* 进入轮回 */}
-          <PixelButton
-            label="进 入 轮 回"
-            width={320}
-            theme="gold"
-            icon={<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>}
-            onClick={handleReincarnation}
-          />
+          <PixelButton label="开 始 游 戏" theme="blue" icon={<GameIcon name="play" size={21} />} onClick={handleStartGame} />
+
+          <PixelButton label="设 置" theme="gray" icon={<GameIcon name="settings" size={21} />} onClick={handleSettings} />
+
+          <PixelButton label="进 入 轮 回" theme="gold" icon={<GameIcon name="restart" size={21} />} onClick={handleReincarnation} />
+
         </div>
+
       </div>
 
-      {/* 版本号 */}
-      <div className="absolute bottom-5 text-[9px] tracking-[0.4em]" style={{ color: 'rgba(138,133,128,0.15)', fontFamily: '"JetBrains Mono", monospace' }}>
+
+
+      <div className="absolute bottom-5 z-30 text-[9px] tracking-[0.4em]" style={{ color: 'rgba(138,133,128,0.18)', fontFamily: '"JetBrains Mono", monospace' }}>
+
         VER 1.0.0
+
       </div>
 
-      {/* 四角细线装饰 */}
-      <div className="absolute top-6 left-6 w-12 h-12 border-l border-t border-white/[0.04]" />
-      <div className="absolute top-6 right-6 w-12 h-12 border-r border-t border-white/[0.04]" />
-      <div className="absolute bottom-6 left-6 w-12 h-12 border-l border-b border-white/[0.04]" />
-      <div className="absolute bottom-6 right-6 w-12 h-12 border-r border-b border-white/[0.04]" />
+      <div className="absolute top-6 left-6 w-12 h-12 border-l border-t border-white/[0.05]" />
+
+      <div className="absolute top-6 right-6 w-12 h-12 border-r border-t border-white/[0.05]" />
+
+      <div className="absolute bottom-6 left-6 w-12 h-12 border-l border-b border-white/[0.05]" />
+
+      <div className="absolute bottom-6 right-6 w-12 h-12 border-r border-b border-white/[0.05]" />
+
+
+
+      <style>{`
+
+        @keyframes titleLogoBreathe {
+
+          0%, 100% { transform: translateY(0); opacity: 0.92; }
+
+          50% { transform: translateY(-2px); opacity: 1; }
+
+        }
+
+        @keyframes titleButtonSweep {
+
+          0% { transform: translateX(-120%); opacity: 0; }
+
+          40% { opacity: 0.8; }
+
+          100% { transform: translateX(140%); opacity: 0; }
+
+        }
+
+      `}</style>
 
     </div>
+
   );
+
 }
 
-/* ===== 像素风格按钮组件 ===== */
 
-const BTN_THEMES: Record<string, { bg: string; border: string; text: string; shadow: string; bgHover: string; borderHover: string; textHover: string }> = {
-  blue: {
-    bg: '#162a42',
-    border: '#3d6a9a',
-    text: '#9ec8e8',
-    shadow: 'rgba(12,22,38,0.9)',
-    bgHover: '#1d3654',
-    borderHover: '#4a7fb5',
-    textHover: '#b8daf0',
-  },
-  gray: {
-    bg: '#1e1e24',
-    border: '#44444c',
-    text: '#98938e',
-    shadow: 'rgba(8,8,10,0.9)',
-    bgHover: '#2a2a32',
-    borderHover: '#52525c',
-    textHover: '#b0aba5',
-  },
-  gold: {
-    bg: '#2a2015',
-    border: '#7a6540',
-    text: '#c4a872',
-    shadow: 'rgba(15,12,6,0.9)',
-    bgHover: '#3a2d1f',
-    borderHover: '#8a7348',
-    textHover: '#d4bc88',
-  },
-};
+
+type ButtonTheme = 'blue' | 'gray' | 'gold';
 
 interface PixelButtonProps {
   label: string;
-  width?: number;
-  theme: 'blue' | 'gray' | 'gold';
+  theme: ButtonTheme;
   icon?: ReactNode;
   onClick: () => void;
 }
 
-function PixelButton({ label, width = 320, theme, icon, onClick }: PixelButtonProps) {
-  const t = BTN_THEMES[theme];
+/** 与局内 PixelFrame / choice / dialogue-control 一致的硬边框单色像素按钮 */
+function PixelButton({ label, theme, icon, onClick }: PixelButtonProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
 
-  const active = hovered || pressed;
-  const shift = pressed ? 4 : hovered ? 2 : 0;
-  const layers = pressed ? 0 : hovered ? 2 : 4;
-
-  const s = t.shadow;
-  const shadows: string[] = [];
-  // inset 高光
-  shadows.push(`inset 2px 2px 0 rgba(255,255,255,${pressed ? 0.04 : 0.08})`);
-  shadows.push(`inset -2px -2px 0 rgba(0,0,0,${pressed ? 0.5 : 0.35})`);
-  // 外阴影层
-  for (let i = 1; i <= layers; i++) {
-    shadows.push(`${i + shift}px ${i + shift}px 0 ${s}`);
-  }
-
   return (
     <button
-      className="relative select-none cursor-none rounded-none overflow-hidden transition-all duration-150"
-      style={{
-        fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace',
-        width: `${width}px`,
-        padding: '14px 0',
-        fontSize: '21px',
-        letterSpacing: '0.3em',
-        fontWeight: 'bold',
-        background: active ? (pressed ? t.bg : t.bgHover) : t.bg,
-        color: active ? (pressed ? t.text : t.textHover) : t.text,
-        border: `3px solid ${active ? (pressed ? t.border : t.borderHover) : t.border}`,
-        boxShadow: shadows.join(', '),
-        transform: `translate(${shift}px, ${shift}px)`,
-      }}
+      type="button"
+      data-cursor="pointer"
+      data-theme={theme}
+      data-hovered={hovered ? 'true' : 'false'}
+      data-pressed={pressed ? 'true' : 'false'}
+      className={`title-button title-button-${theme} group relative select-none cursor-none rounded-none`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setPressed(false); }}
       onMouseDown={() => setPressed(true)}
       onMouseUp={() => setPressed(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => { setHovered(false); setPressed(false); }}
       onClick={onClick}
     >
-      <span className="flex items-center justify-center gap-2.5">
-        {icon}
-        {label}
+      {/* 与局内 world-pixel-frame 一致的 L 角 */}
+      <span className="title-button-corner title-button-corner-tl" aria-hidden="true" />
+      <span className="title-button-corner title-button-corner-br" aria-hidden="true" />
+
+      <span className="title-button-face">
+        {hovered && !pressed && (
+          <span
+            className="title-button-sweep"
+            style={{ animation: 'titleButtonSweep 0.9s ease-out forwards' }}
+          />
+        )}
+        <span className="title-button-label relative z-10 flex items-center justify-center gap-2.5">
+          {icon}
+          <span>{label}</span>
+        </span>
       </span>
     </button>
   );

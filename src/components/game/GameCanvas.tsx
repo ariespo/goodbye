@@ -10,9 +10,9 @@ import { MoodOverlay } from './MoodOverlay';
 import { MapModal } from './MapModal';
 import { UserInput } from './UserInput';
 import { ActionPanel } from './ActionPanel';
+import { ClueModal } from './ClueModal';
 import { EndingEditor } from './EndingEditor';
-import { SaveModal } from '../system/SaveModal';
-import { AudioSystem } from '../system/AudioSystem';
+import { EndingPlayer } from './EndingPlayer';
 import { LoadingOverlay } from '../system/LoadingOverlay';
 import { maintextToScene } from '../../engine/scene-parser';
 import { OPENING_STORYLINE } from '../../engine/opening-storyline';
@@ -55,8 +55,7 @@ export function GameCanvas() {
   }, [currentScene, activeChat, actions]);
 
   return (
-    <div className="relative w-full h-full overflow-hidden" data-mood={mood}>
-      <AudioSystem />
+    <div className="game-canvas relative w-full h-full overflow-hidden" data-mood={mood}>
       <BackgroundLayer />
       <MoodOverlay />
 
@@ -68,12 +67,13 @@ export function GameCanvas() {
         }}
       />
 
-      <SaveModal />
       <CharacterSprite />
       <DialogueBox />
       <ChoiceMenu />
       <UserInput />
       <ActionPanel />
+      <ClueModal />
+      <EndingPlayer />
       <EndingEditor />
       <StatusPanel />
       <ActionBar />

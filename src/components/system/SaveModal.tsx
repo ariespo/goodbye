@@ -1,55 +1,63 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { getSaves, saveSlot, deleteSave } from '../../sillytavern/database';
-import { X, FloppyDisk, Trash, Clock } from '@phosphor-icons/react';
+import { GameIcon } from '../ui/GameIcon';
+import type { SaveSlot } from '../../sillytavern/types';
+import { buildSaveSlotPayload, loadGameFromSave } from '../../utils/gameSession';
+
+export type SaveModalMode = 'manage' | 'load';
+
+/** 从标题页/结局等外部打开读档或存档面板 */
+export function openSaveModal(mode: SaveModalMode = 'load') {
+  window.dispatchEvent(new CustomEvent('farewell:open-save-modal', { detail: { mode } }));
+}
 
 export function SaveModal() {
   const [isOpen, setIsOpen] = useState(false);
-  const [saves, setSaves] = useState<Array<{ id: string; name: string; createdAt: number; thumbnail?: string }>>([]);
+  const [saves, setSaves] = useState<SaveSlot[]>([]);
+  const [mode, setMode] = useState<SaveModalMode>('manage');
   const [saveName, setSaveName] = useState('');
-  const gameState = useGameStore(state => state.game);
-  const tavernState = useGameStore(state => state.tavern);
+  const [busy, setBusy] = useState(false);
+  const showTitle = useGameStore(state => state.ui.showTitle);
   const actions = useGameStore(state => state.actions);
 
-  const loadSaves = async () => {
-    const data = await getSaves();
-    setSaves(data);
-  };
+  const loadSaves = async () => setSaves(await getSaves());
 
-  const handleOpen = async () => {
+  const handleOpen = async (nextMode: SaveModalMode = 'manage') => {
+    setMode(nextMode);
     setIsOpen(true);
     await loadSaves();
   };
 
+  useEffect(() => {
+    const openFromExternal = (event: Event) => {
+      const detail = (event as CustomEvent<{ mode?: SaveModalMode }>).detail;
+      void handleOpen(detail?.mode === 'manage' ? 'manage' : 'load');
+    };
+    window.addEventListener('farewell:open-save-modal', openFromExternal);
+    return () => window.removeEventListener('farewell:open-save-modal', openFromExternal);
+  }, []);
+
   const handleSave = async () => {
-    const name = saveName.trim() || `存档 ${new Date().toLocaleString('zh-CN')}`;
-    const canvas = document.querySelector('canvas');
-    let thumbnail = '';
-    if (canvas) {
-      thumbnail = canvas.toDataURL('image/jpeg', 0.5);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const name = saveName.trim() || `存档 ${new Date().toLocaleString('zh-CN')}`;
+      const canvas = document.querySelector('canvas');
+      const thumbnail = canvas ? (canvas as HTMLCanvasElement).toDataURL('image/jpeg', 0.5) : '';
+      await saveSlot(buildSaveSlotPayload(name, thumbnail));
+      await loadSaves();
+      setSaveName('');
+      actions.addNotification({ type: 'success', message: '存档已保存（含完整状态）', duration: 3000 });
+    } catch (e) {
+      actions.addNotification({
+        type: 'error',
+        message: e instanceof Error ? e.message : '存档失败',
+        duration: 3500,
+      });
+    } finally {
+      setBusy(false);
     }
-
-    await saveSlot({
-      id: crypto.randomUUID(),
-      name,
-      createdAt: Date.now(),
-      thumbnail,
-      gameState: {
-        currentSceneIndex: 0,
-        currentLineIndex: gameState.currentLineIndex,
-        gameStatus: gameState.gameStatus,
-        currentState: gameState.currentState,
-      },
-      tavernState: {
-        variables: tavernState.variables,
-        messages: tavernState.chats.find(c => c.id === tavernState.activeChatId)?.messages || [],
-      },
-      historyIndex: gameState.history.length,
-    });
-
-    await loadSaves();
-    setSaveName('');
-    actions.addNotification({ type: 'success', message: '存档已保存', duration: 3000 });
   };
 
   const handleDelete = async (id: string) => {
@@ -57,86 +65,158 @@ export function SaveModal() {
     await loadSaves();
   };
 
+  const handleLoad = async (save: SaveSlot) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await loadGameFromSave(save);
+      setIsOpen(false);
+    } catch (e) {
+      actions.addNotification({
+        type: 'error',
+        message: e instanceof Error ? e.message : '读档失败',
+        duration: 3500,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 标题页不显示局内悬浮存档按钮；仅局内显示
   if (!isOpen) {
+    if (showTitle) return null;
     return (
       <button
-        onClick={handleOpen}
-        className="absolute top-5 left-5 z-20 w-10 h-10 flex items-center justify-center border border-border-subtle text-text-muted hover:border-accent-blue hover:text-accent-blue hover:bg-accent-blue/10 transition-all duration-200"
+        type="button"
+        onClick={() => handleOpen('manage')}
+        data-cursor="pointer"
+        aria-label="存档"
+        className="save-trigger absolute left-5 top-5 z-20 flex h-10 w-10 items-center justify-center"
       >
-        <FloppyDisk size={20} />
+        <GameIcon name="save" size={19} />
       </button>
     );
   }
 
   return (
     <div
-      className="fixed inset-0 z-[250] flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
-      onClick={() => setIsOpen(false)}
+      className="save-modal-shell fixed inset-0 z-[250] flex items-center justify-center px-4"
+      onClick={() => !busy && setIsOpen(false)}
     >
       <div
-        className="w-[500px] max-h-[70vh] bg-bg-primary border border-border-subtle overflow-hidden animate-[scaleIn_0.35s_ease-out]"
+        className="save-modal relative animate-[scaleIn_0.35s_ease-out]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-          <h2 className="text-lg font-serif-cn text-text-primary">存档管理</h2>
-          <button onClick={() => setIsOpen(false)} className="text-text-muted hover:text-text-primary">
-            <X size={20} />
+        <span className="save-modal-corner save-modal-corner-tl" aria-hidden="true" />
+        <span className="save-modal-corner save-modal-corner-br" aria-hidden="true" />
+
+        <div className="save-modal-header mb-5 flex items-center justify-between pb-3">
+          <div>
+            <h2 className="save-modal-title">{mode === 'load' ? '读取存档' : '存档管理'}</h2>
+            <div className="save-modal-subtitle">{mode === 'load' ? 'SELECT MEMORY SLOT' : 'MEMORY SLOT ARCHIVE'}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            data-cursor="pointer"
+            className="pixel-close-button flex h-9 w-9 items-center justify-center"
+            disabled={busy}
+          >
+            <GameIcon name="close" size={15} />
           </button>
         </div>
 
-        <div className="p-6">
-          {/* 新建存档 */}
-          <div className="flex gap-2 mb-6">
+        {mode === 'manage' && (
+          <div className="save-modal-form mb-5 flex gap-3">
             <input
               type="text"
               value={saveName}
               onChange={e => setSaveName(e.target.value)}
               placeholder="存档名称（可选）"
-              className="flex-1 px-3 py-2 bg-bg-secondary border border-border-subtle text-text-primary text-sm focus:border-accent-blue focus:outline-none transition-colors"
+              className="settings-input h-[46px] flex-1"
             />
             <button
+              type="button"
               onClick={handleSave}
-              className="px-4 py-2 bg-accent-blue text-bg-primary hover:bg-accent-blue/80 transition-colors flex items-center gap-2"
+              data-cursor="pointer"
+              disabled={busy}
+              className="settings-btn settings-btn-primary h-[46px]"
             >
-              <FloppyDisk size={16} />
-              保存
+              <GameIcon name="save" size={15} /> 保存
             </button>
           </div>
+        )}
 
-          {/* 存档列表 */}
-          <div className="space-y-2 max-h-[300px] overflow-y-auto">
-            {saves.length === 0 ? (
-              <div className="text-center text-text-muted py-8">暂无存档</div>
-            ) : (
-              saves.map(save => (
-                <div
-                  key={save.id}
-                  className="flex items-center gap-3 px-4 py-3 border border-border-subtle hover:bg-bg-secondary transition-colors"
-                >
-                  {save.thumbnail ? (
-                    <img src={save.thumbnail} alt="" className="w-16 h-10 object-cover bg-bg-secondary" />
-                  ) : (
-                    <div className="w-16 h-10 bg-bg-secondary flex items-center justify-center">
-                      <Clock size={16} className="text-text-muted" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-text-primary truncate">{save.name}</div>
-                    <div className="text-xs text-text-muted">
-                      {new Date(save.createdAt).toLocaleString('zh-CN')}
-                    </div>
+        {mode === 'load' && (
+          <p className="settings-help mb-4">选择一份记忆残片以继续轮回。将恢复变量、体力/理智、对话、回合历史与结局进度。</p>
+        )}
+
+        <div className="save-modal-body pixel-scroll-blue space-y-2 overflow-y-auto pr-2">
+          {saves.length === 0 ? (
+            <div className="save-empty">暂无存档</div>
+          ) : (
+            saves.map(save => (
+              <div
+                key={save.id}
+                className="save-slot group"
+                role={mode === 'load' ? 'button' : undefined}
+                tabIndex={mode === 'load' ? 0 : undefined}
+                data-cursor={mode === 'load' ? 'pointer' : undefined}
+                onClick={mode === 'load' ? () => void handleLoad(save) : undefined}
+                onKeyDown={mode === 'load' ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void handleLoad(save);
+                  }
+                } : undefined}
+              >
+                {save.thumbnail ? (
+                  <img src={save.thumbnail} alt="" className="save-slot-thumb" />
+                ) : (
+                  <div className="save-slot-thumb save-slot-thumb-empty">
+                    <GameIcon name="clock" size={17} />
                   </div>
-                  <button
-                    onClick={() => handleDelete(save.id)}
-                    className="text-text-muted hover:text-danger transition-colors"
-                  >
-                    <Trash size={16} />
-                  </button>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="save-slot-name truncate">{save.name}</div>
+                  <div className="save-slot-time">{new Date(save.createdAt).toLocaleString('zh-CN')}</div>
                 </div>
-              ))
-            )}
-          </div>
+                {mode === 'manage' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleLoad(save)}
+                      data-cursor="pointer"
+                      className="save-action-btn"
+                      disabled={busy}
+                    >
+                      <GameIcon name="back" size={14} /> 读取
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(save.id)}
+                      data-cursor="pointer"
+                      className="save-action-btn is-danger"
+                      aria-label="删除存档"
+                      disabled={busy}
+                    >
+                      <GameIcon name="trash" size={15} />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); void handleLoad(save); }}
+                    data-cursor="pointer"
+                    className="save-action-btn"
+                    disabled={busy}
+                  >
+                    <GameIcon name="back" size={14} /> 读取
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

@@ -1,11 +1,48 @@
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
+import { playSfx, setSfxVolume, type SfxName } from '../../utils/sfx';
+
+const SFX_NAMES = new Set<SfxName>([
+  'ui-hover', 'ui-click', 'ui-confirm', 'ui-cancel', 'dialogue-advance', 'choice-open',
+  'clue-add', 'deduction-start', 'warning', 'success', 'sanity-drop', 'ending-signal',
+]);
 
 export function AudioSystem() {
   const bgm = useGameStore(state => state.game.currentState.bgm);
+  const musicVolume = useGameStore(state => state.tavern.settings?.musicVolume ?? 0.5);
+  const soundVolume = useGameStore(state => state.tavern.settings?.soundVolume ?? 0.65);
+  const notifications = useGameStore(state => state.ui.notifications);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const volumeRef = useRef(musicVolume);
+  const knownNotificationsRef = useRef<Set<string> | null>(null);
+  const lastHoverRef = useRef<{ element: Element; time: number } | null>(null);
+
+  useEffect(() => {
+    volumeRef.current = musicVolume;
+    if (bgmRef.current) {
+      bgmRef.current.volume = musicVolume;
+    }
+  }, [musicVolume]);
+
+  useEffect(() => {
+    setSfxVolume(soundVolume);
+  }, [soundVolume]);
+
+  useEffect(() => {
+    const known = knownNotificationsRef.current;
+    if (!known) {
+      knownNotificationsRef.current = new Set(notifications.map(notification => notification.id));
+      return;
+    }
+    for (const notification of notifications) {
+      if (known.has(notification.id)) continue;
+      playSfx(notification.type === 'success' ? 'success' : notification.type === 'error' || notification.type === 'warning' ? 'warning' : 'ui-click');
+      known.add(notification.id);
+    }
+    knownNotificationsRef.current = new Set(notifications.map(notification => notification.id));
+  }, [notifications]);
 
   useEffect(() => {
     const initAudio = () => {
@@ -31,6 +68,40 @@ export function AudioSystem() {
   }, []);
 
   useEffect(() => {
+    const interactiveSelector = 'button, a, [role="button"], [data-cursor="pointer"], [data-sfx]';
+
+    const handlePointerOver = (event: PointerEvent) => {
+      const element = (event.target as Element | null)?.closest(interactiveSelector);
+      if (!element || element.getAttribute('aria-disabled') === 'true' || element.hasAttribute('disabled')) return;
+      const now = performance.now();
+      if (lastHoverRef.current?.element === element && now - lastHoverRef.current.time < 250) return;
+      lastHoverRef.current = { element, time: now };
+      playSfx('ui-hover', 0.7);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const element = (event.target as Element | null)?.closest(interactiveSelector);
+      if (!element || element.getAttribute('aria-disabled') === 'true' || element.hasAttribute('disabled')) return;
+      const requested = element.getAttribute('data-sfx') as SfxName | null;
+      if (requested && SFX_NAMES.has(requested)) {
+        playSfx(requested);
+        return;
+      }
+      const label = `${element.getAttribute('aria-label') || ''} ${element.textContent || ''}`.toLowerCase();
+      if (/关闭|取消|删除|close|cancel|delete/.test(label)) playSfx('ui-cancel');
+      else if (/保存|确认|开始|读取|进入|save|confirm|start|load/.test(label)) playSfx('ui-confirm');
+      else playSfx('ui-click');
+    };
+
+    document.addEventListener('pointerover', handlePointerOver);
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerover', handlePointerOver);
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!bgm) {
       if (bgmRef.current) {
         bgmRef.current.pause();
@@ -43,7 +114,7 @@ export function AudioSystem() {
     const bgmPath = bgm.includes('.') ? bgm : `${bgm}.mp3`;
     audio.src = bgm.startsWith('http') ? bgm : assetUrl(`assets/audio/bgm/${bgmPath}`);
     audio.loop = true;
-    audio.volume = 0.5;
+    audio.volume = volumeRef.current;
 
     const playAudio = async () => {
       try {

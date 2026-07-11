@@ -1,5 +1,10 @@
 import type { ParsedContent } from './types';
 
+export interface ParseOptions {
+  /** 严格模式:非法 JSON / 未闭合标签会抛出错误 */
+  strict?: boolean;
+}
+
 export interface ParseState {
   buffer: string;
   parsed: ParsedContent;
@@ -7,6 +12,8 @@ export interface ParseState {
   tagBuffer: string;
   /** 当前打开标签的属性(如 { type: 'investigate' }) */
   tagAttributes: Record<string, string>;
+  /** 严格模式下记录的解析错误 */
+  errors: string[];
 }
 
 export function createParseState(): ParseState {
@@ -25,10 +32,11 @@ export function createParseState(): ParseState {
     currentTag: null,
     tagBuffer: '',
     tagAttributes: {},
+    errors: [],
   };
 }
 
-export function parseChunk(state: ParseState, chunk: string): ParseState {
+export function parseChunk(state: ParseState, chunk: string, options: ParseOptions = {}): ParseState {
   state.buffer += chunk;
 
   const tagPattern = /<(\/?)([a-zA-Z]+)[^>]*>/g;
@@ -52,7 +60,13 @@ export function parseChunk(state: ParseState, chunk: string): ParseState {
     } else {
       if (state.currentTag === tagName) {
         state.tagBuffer += state.buffer.slice(0, tagIndex);
-        flushTagBuffer(state, tagName);
+        try {
+          flushTagBuffer(state, tagName, options);
+        } catch (err) {
+          if (options.strict) {
+            state.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
         state.currentTag = null;
         state.tagBuffer = '';
         state.tagAttributes = {};
@@ -83,7 +97,7 @@ function extractAttributes(tagString: string): Record<string, string> {
   return attrs;
 }
 
-function flushTagBuffer(state: ParseState, tagName: string): void {
+function flushTagBuffer(state: ParseState, tagName: string, options: ParseOptions = {}): void {
   const rawContent = state.tagBuffer;
   const content = rawContent.trim();
 
@@ -144,13 +158,28 @@ function flushTagBuffer(state: ParseState, tagName: string): void {
     case 'sum':
       state.parsed.summary = content;
       break;
-    case 'vars':
+    case 'vars': {
+      if (!content) {
+        state.parsed.vars = {};
+        break;
+      }
       try {
-        state.parsed.vars = JSON.parse(content);
-      } catch {
-        // Ignore invalid JSON
+        const parsed = JSON.parse(content);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          state.parsed.vars = parsed;
+        } else if (options.strict) {
+          throw new Error(`<vars> 必须是 JSON 对象,收到: ${typeof parsed}`);
+        } else {
+          state.parsed.vars = {};
+        }
+      } catch (err) {
+        if (options.strict) {
+          throw new Error(`<vars> 解析失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        state.parsed.vars = {};
       }
       break;
+    }
   }
 }
 
@@ -167,4 +196,22 @@ export function isComplete(state: ParseState, requiredTags: string[] = ['maintex
       default: return true;
     }
   });
+}
+
+/** 检查是否存在未闭合标签(简化版) */
+export function hasUnclosedTags(text: string): boolean {
+  const tagPattern = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*>/g;
+  const stack: string[] = [];
+  let match;
+  while ((match = tagPattern.exec(text)) !== null) {
+    const isClosing = match[1] === '/';
+    const tagName = match[2];
+    if (isClosing) {
+      const last = stack.pop();
+      if (last !== tagName) return true;
+    } else {
+      stack.push(tagName);
+    }
+  }
+  return stack.length > 0;
 }

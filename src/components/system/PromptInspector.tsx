@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { inspectPrompt } from '../../sillytavern/prompt-assembler';
 import type { PromptInspectionResult, PromptOrderInspectItem } from '../../sillytavern/prompt-assembler';
-import { X, Eye, EyeSlash, BookOpen, ChatText, ListDashes, CheckCircle, XCircle, Minus } from '@phosphor-icons/react';
+import { GameIcon } from '../ui/GameIcon';
 
 type TabKey = 'order' | 'lorebook' | 'history' | 'final';
 
@@ -47,10 +47,10 @@ export function PromptInspector() {
   };
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-    { key: 'order', label: 'Prompt 结构', icon: <ListDashes size={14} /> },
-    { key: 'lorebook', label: '世界书', icon: <BookOpen size={14} /> },
-    { key: 'history', label: '历史消息', icon: <ChatText size={14} /> },
-    { key: 'final', label: '最终消息', icon: <Eye size={14} /> },
+    { key: 'order', label: 'Prompt 结构', icon: <GameIcon name="preset" size={14} /> },
+    { key: 'lorebook', label: '世界书', icon: <GameIcon name="lorebook" size={14} /> },
+    { key: 'history', label: '历史消息', icon: <GameIcon name="history" size={14} /> },
+    { key: 'final', label: '最终消息', icon: <GameIcon name="observe" size={14} /> },
   ];
 
   return (
@@ -77,9 +77,9 @@ export function PromptInspector() {
           </div>
           <button
             onClick={() => setShow(false)}
-            className="text-text-muted hover:text-text-primary transition-colors"
+            className="pixel-close-button flex h-9 w-9 items-center justify-center"
           >
-            <X size={18} />
+            <GameIcon name="close" size={18} />
           </button>
         </div>
 
@@ -102,7 +102,7 @@ export function PromptInspector() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 pixel-scroll-blue overflow-y-auto p-4">
           {activeTab === 'order' && <OrderTab data={data} expanded={expandedItems} toggle={toggleItem} />}
           {activeTab === 'lorebook' && <LorebookTab data={data} />}
           {activeTab === 'history' && <HistoryTab data={data} />}
@@ -126,8 +126,8 @@ function OrderTab({ data, expanded, toggle }: {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 text-[11px] text-text-muted">
-        <span className="flex items-center gap-1"><CheckCircle size={11} className="text-green-400" /> 生效: {enabledCount}</span>
-        <span className="flex items-center gap-1"><XCircle size={11} className="text-red-400" /> 跳过: {skippedCount}</span>
+        <span className="flex items-center gap-1"><GameIcon name="success" size={11} className="text-green-400" /> 生效: {enabledCount}</span>
+        <span className="flex items-center gap-1"><GameIcon name="error" size={11} className="text-red-400" /> 跳过: {skippedCount}</span>
       </div>
 
       <div className="space-y-1">
@@ -164,7 +164,7 @@ function OrderItemRow({ item, idx, expanded, toggle }: {
         {!item.enabled && <span className="text-[9px] px-1 py-0.5 bg-red-400/10 text-red-400 border border-red-400/20">已禁用</span>}
         {isSkipped && item.enabled && <span className="text-[9px] px-1 py-0.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/20">{item.skipReason}</span>}
         {!isSkipped && <span className="text-[9px] px-1 py-0.5 bg-green-400/10 text-green-400 border border-green-400/20">生效</span>}
-        <span className="ml-auto text-text-muted">{expanded ? <EyeSlash size={12} /> : <Eye size={12} />}</span>
+        <span className="ml-auto text-text-muted">{expanded ? <GameIcon name="close" size={12} /> : <GameIcon name="observe" size={12} />}</span>
       </button>
 
       {expanded && (
@@ -177,7 +177,7 @@ function OrderItemRow({ item, idx, expanded, toggle }: {
           {item.rawContent !== null && item.rawContent !== item.resolvedContent && (
             <div>
               <label className="text-[10px] text-text-muted uppercase tracking-widest">原始内容</label>
-              <pre className="mt-1 p-2 bg-bg-secondary border border-border-subtle text-[11px] text-text-muted font-mono whitespace-pre-wrap break-all max-h-[120px] overflow-y-auto">
+              <pre className="mt-1 p-2 bg-bg-secondary border border-border-subtle text-[11px] text-text-muted font-mono whitespace-pre-wrap break-all max-h-[120px] pixel-scroll-blue overflow-y-auto">
                 {item.rawContent}
               </pre>
             </div>
@@ -186,7 +186,7 @@ function OrderItemRow({ item, idx, expanded, toggle }: {
           {item.resolvedContent !== null && item.resolvedContent !== item.finalContent && (
             <div>
               <label className="text-[10px] text-text-muted uppercase tracking-widest">解析后（宏替换前）</label>
-              <pre className="mt-1 p-2 bg-bg-secondary border border-border-subtle text-[11px] text-text-muted font-mono whitespace-pre-wrap break-all max-h-[120px] overflow-y-auto">
+              <pre className="mt-1 p-2 bg-bg-secondary border border-border-subtle text-[11px] text-text-muted font-mono whitespace-pre-wrap break-all max-h-[120px] pixel-scroll-blue overflow-y-auto">
                 {item.resolvedContent}
               </pre>
             </div>
@@ -195,7 +195,7 @@ function OrderItemRow({ item, idx, expanded, toggle }: {
           {hasContent && (
             <div>
               <label className="text-[10px] text-text-muted uppercase tracking-widest">最终内容</label>
-              <pre className="mt-1 p-2 bg-bg-secondary border border-border-subtle text-[11px] text-text-primary font-mono whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
+              <pre className="mt-1 p-2 bg-bg-secondary border border-border-subtle text-[11px] text-text-primary font-mono whitespace-pre-wrap break-all max-h-[200px] pixel-scroll-blue overflow-y-auto">
                 {item.finalContent}
               </pre>
             </div>
@@ -263,7 +263,7 @@ function LorebookEntryRow({ entry }: { entry: { entry: { keys: string[]; content
         </div>
       </button>
       {expanded && (
-        <pre className="mt-1 p-2 bg-bg-secondary text-[11px] text-text-muted font-mono whitespace-pre-wrap break-all max-h-[150px] overflow-y-auto">
+        <pre className="mt-1 p-2 bg-bg-secondary text-[11px] text-text-muted font-mono whitespace-pre-wrap break-all max-h-[150px] pixel-scroll-blue overflow-y-auto">
           {entry.entry.content}
         </pre>
       )}
@@ -304,7 +304,7 @@ function HistoryTab({ data }: { data: PromptInspectionResult }) {
               <div className="text-[11px] text-text-primary truncate">{msg.content}</div>
               <div className="text-[10px] text-text-muted">~{msg.tokens} tokens {msg.included ? '' : '(超出预算)'}</div>
             </div>
-            {msg.included ? <CheckCircle size={12} className="text-green-400 shrink-0" /> : <Minus size={12} className="text-text-muted shrink-0" />}
+            {msg.included ? <GameIcon name="success" size={12} className="text-green-400 shrink-0" /> : <GameIcon name="pause" size={12} className="text-text-muted shrink-0" />}
           </div>
         ))}
       </div>
@@ -340,10 +340,10 @@ function FinalTab({ data }: { data: PromptInspectionResult }) {
               {msg.role.toUpperCase()}
             </span>
             <span className="text-[11px] text-text-muted truncate flex-1">{msg.content.slice(0, 80)}{msg.content.length > 80 ? '...' : ''}</span>
-            <span className="text-text-muted">{expandedMsg.has(msg.index) ? <EyeSlash size={12} /> : <Eye size={12} />}</span>
+            <span className="text-text-muted">{expandedMsg.has(msg.index) ? <GameIcon name="close" size={12} /> : <GameIcon name="observe" size={12} />}</span>
           </button>
           {expandedMsg.has(msg.index) && (
-            <pre className="p-3 text-[11px] text-text-primary font-mono whitespace-pre-wrap break-all max-h-[300px] overflow-y-auto bg-bg-primary">
+            <pre className="p-3 text-[11px] text-text-primary font-mono whitespace-pre-wrap break-all max-h-[300px] pixel-scroll-blue overflow-y-auto bg-bg-primary">
               {msg.content}
             </pre>
           )}

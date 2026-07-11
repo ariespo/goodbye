@@ -1,160 +1,190 @@
+import { useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { assetUrl } from '../../utils/assetUrl';
+import { PixelFrame } from '../ui/PixelFrame';
+import { GameIcon } from '../ui/GameIcon';
 
-const PANEL_BG = 'rgba(12, 12, 16, 0.88)';
-const BORDER = '#3a3a42';
-const BORDER_BRIGHT = '#52525c';
-const CORNER = '#5a5a64';
-const TEXT_MAIN = '#d8d4cc';
-const TEXT_DIM = '#6a6560';
-const ACCENT_BLUE = '#6b8fc4';
-const ACCENT_GOLD = '#b89858';
-const DANGER = '#a85050';
+const TEXT_MAIN = '#e2ded6';
+const TEXT_DIM = '#8a8580';
+const BLUE = '#86a8f2';
+const GOLD = '#d4a853';
+const DANGER = '#c94f4f';
 
 export function StatusPanel() {
   const gameStatus = useGameStore(state => state.game.gameStatus);
   const timeResetCount = useGameStore(state => state.game.history.length);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
 
   const formatTime = (date: Date) =>
-    date.toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
 
   const staminaPercent = Math.max(0, Math.min(100, gameStatus.stamina));
   const sanityPercent = Math.max(0, Math.min(100, gameStatus.sanity));
 
-  const staminaColor = staminaPercent < 30 ? DANGER : ACCENT_BLUE;
-  const sanityColor = sanityPercent < 30 ? DANGER : ACCENT_GOLD;
-
   return (
-    <div className="absolute top-4 right-4" style={{ width: 220, zIndex: 25 }}>
-      <div
-        className="relative"
+    <aside className={`status-panel ${mobileExpanded ? 'is-expanded' : 'is-collapsed'} absolute right-4 top-4 z-25 w-[252px] select-none`}>
+      <button
+        type="button"
+        aria-label={mobileExpanded ? "Collapse status" : "Expand status"}
+        data-cursor="pointer"
+        className="status-panel-toggle"
+        onClick={() => setMobileExpanded(value => !value)}
+      >
+        <GameIcon name={mobileExpanded ? "close" : "info"} size={20} />
+      </button>
+      <PixelFrame
+        variant="panel"
+        className="status-panel-frame"
+        contentStyle={{ padding: '18px 18px 16px 18px' }}
         style={{
-          background: PANEL_BG,
-          border: `3px solid ${BORDER}`,
-          padding: '18px 20px 16px 20px',
-          boxShadow:
-            `inset 2px 2px 0 ${BORDER_BRIGHT},` +
-            `inset -2px -2px 0 rgba(0,0,0,0.5),` +
-            `3px 3px 0 rgba(0,0,0,0.5),` +
-            `4px 4px 0 rgba(0,0,0,0.3),` +
-            `5px 5px 0 rgba(0,0,0,0.15)`,
+          boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 6px 6px 0 rgba(0,0,0,0.45), 0 0 28px rgba(0,0,0,0.45)',
         }}
       >
-        {/* 标题 */}
-        <div
-          className="mb-4 pb-2"
-          style={{
-            borderBottom: `2px solid ${BORDER}`,
-            fontFamily: '"MuzaiPixel", monospace',
-            fontSize: '15px',
-            letterSpacing: '0.3em',
-            color: TEXT_DIM,
-            textTransform: 'uppercase',
-          }}
-        >
-          状态
+        <div className="mb-4 flex items-center justify-between">
+          <StatusChip tone="blue">STATUS</StatusChip>
+          <span
+            className="font-mono"
+            style={{
+              color: TEXT_DIM,
+              fontSize: 12,
+              letterSpacing: '0.12em',
+            }}
+          >
+            LOOP {String(timeResetCount + 1).padStart(2, '0')}
+          </span>
         </div>
 
-        {/* 时间 */}
         <div className="mb-4">
-          <div style={{ fontSize: '14px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em', marginBottom: 4 }}>
-            当前时间
+          <div className="mb-1 flex items-center justify-between">
+            <span style={microLabelStyle}>当前时间</span>
+            <span style={{ ...microLabelStyle, color: GOLD }}>FILM</span>
           </div>
-          <div style={{ fontSize: '20px', color: TEXT_MAIN, fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace' }}>
+          <div
+            style={{
+              color: TEXT_MAIN,
+              fontFamily: '"MuzaiPixel", "LXGW WenKai", monospace',
+              fontSize: 18,
+              lineHeight: 1.45,
+              textShadow: '0 2px 0 rgba(0,0,0,0.75)',
+            }}
+          >
             {formatTime(gameStatus.time)}
           </div>
         </div>
 
-        {/* 体力 */}
-        <PixelBar
-          label="体力"
-          value={gameStatus.stamina}
-          percent={staminaPercent}
-          color={staminaColor}
-          danger={staminaPercent < 30}
-        />
+        <PixelMeter label="体力" value={gameStatus.stamina} percent={staminaPercent} tone="blue" />
+        <PixelMeter label="理智" value={gameStatus.sanity} percent={sanityPercent} tone="gold" />
 
-        {/* 理智 */}
-        <PixelBar
-          label="理智"
-          value={gameStatus.sanity}
-          percent={sanityPercent}
-          color={sanityColor}
-          danger={sanityPercent < 30}
-        />
-
-        {/* 轮回次数 */}
-        <div className="mt-4 pt-3" style={{ borderTop: `2px solid ${BORDER}` }}>
-          <div style={{ fontSize: '14px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em', marginBottom: 4 }}>
-            时间重置次数
+        <div className="mt-4 grid grid-cols-[1fr_auto] items-end gap-3 border-t-2 border-[#25252d] pt-3">
+          <div>
+            <div style={microLabelStyle}>时间重置次数</div>
+            <div style={{ color: TEXT_DIM, fontSize: 13, fontFamily: '"LXGW WenKai", serif' }}>
+              记忆残片同步中
+            </div>
           </div>
-          <div style={{ fontSize: '30px', color: ACCENT_GOLD, fontFamily: '"MuzaiPixel", monospace', textShadow: '0 0 8px rgba(184,152,88,0.25)' }}>
+          <div
+            style={{
+              minWidth: 58,
+              color: GOLD,
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 30,
+              lineHeight: 1,
+              textAlign: 'right',
+              textShadow: '0 0 12px rgba(212,168,83,0.32)',
+            }}
+          >
             {timeResetCount + 1}
           </div>
         </div>
-      </div>
-
-      {/* 四角装饰 */}
-      <PixelCorners />
-    </div>
+      </PixelFrame>
+    </aside>
   );
 }
 
-/* ── 分段式像素条 ── */
+const microLabelStyle = {
+  color: TEXT_DIM,
+  fontFamily: '"MuzaiPixel", "JetBrains Mono", monospace',
+  fontSize: 13,
+  letterSpacing: '0.18em',
+  textTransform: 'uppercase' as const,
+};
 
-function PixelBar({ label, value, percent, color, danger }: {
-  label: string; value: number; percent: number; color: string; danger: boolean;
+function StatusChip({ children, tone }: { children: string; tone: 'blue' | 'gold' | 'red' }) {
+  return (
+    <span
+      className="inline-flex h-7 items-center px-3"
+      style={{
+        backgroundImage: `url(${assetUrl(`assets/ui/status-chip-${tone}.png`)})`,
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: '100% 100%',
+        color: tone === 'gold' ? GOLD : tone === 'red' ? DANGER : BLUE,
+        fontFamily: '"JetBrains Mono", monospace',
+        fontSize: 12,
+        letterSpacing: '0.16em',
+        imageRendering: 'pixelated',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function PixelMeter({ label, value, percent, tone }: {
+  label: string;
+  value: number;
+  percent: number;
+  tone: 'blue' | 'gold';
 }) {
-  const segments = 20;
+  const danger = percent < 30;
+  const accent = danger ? DANGER : tone === 'blue' ? BLUE : GOLD;
+  const shell = tone === 'blue' ? 'meter-shell-blue.png' : 'meter-shell-gold.png';
+  const segments = 18;
   const filled = Math.round((percent / 100) * segments);
 
   return (
     <div className="mb-4">
-      <div className="flex justify-between items-center mb-1.5">
-        <span style={{ fontSize: '14px', color: TEXT_DIM, fontFamily: '"MuzaiPixel", monospace', letterSpacing: '0.2em' }}>
-          {label}
-        </span>
-        <span style={{
-          fontSize: '20px', color: danger ? DANGER : TEXT_MAIN, fontFamily: '"MuzaiPixel", monospace',
-          animation: danger ? 'pulse 1.2s infinite' : 'none',
-        }}>
-          {value}<span style={{ color: TEXT_DIM }}>/100</span>
+      <div className="mb-1.5 flex items-center justify-between">
+        <span style={microLabelStyle}>{label}</span>
+        <span
+          style={{
+            color: danger ? DANGER : TEXT_MAIN,
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 18,
+            animation: danger ? 'pulse 1.1s infinite' : 'none',
+          }}
+        >
+          {Math.round(value)}<span style={{ color: TEXT_DIM, fontSize: 12 }}>/100</span>
         </span>
       </div>
-
-      {/* 分段条 */}
-      <div className="flex gap-[2px]" style={{ height: 8 }}>
-        {Array.from({ length: segments }).map((_, i) => (
-          <div
-            key={i}
-            className="flex-1"
+      <div
+        className="relative flex items-center gap-[3px] px-[10px]"
+        style={{
+          height: 22,
+          backgroundImage: `url(${assetUrl(`assets/ui/${shell}`)})`,
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: '100% 100%',
+          imageRendering: 'pixelated',
+        }}
+      >
+        {Array.from({ length: segments }).map((_, index) => (
+          <span
+            key={index}
+            className="h-[8px] flex-1"
             style={{
-              background: i < filled ? color : 'rgba(255,255,255,0.04)',
-              opacity: i < filled ? 1 : 0.5,
-              boxShadow: i < filled ? `inset 1px 1px 0 rgba(255,255,255,0.15)` : 'none',
+              background: index < filled ? accent : 'rgba(255,255,255,0.06)',
+              opacity: index < filled ? 1 : 0.42,
+              boxShadow: index < filled ? `0 0 8px ${accent}44, inset 1px 1px 0 rgba(255,255,255,0.22)` : 'none',
             }}
           />
         ))}
       </div>
     </div>
-  );
-}
-
-/* ── 四角装饰 ── */
-
-function PixelCorners() {
-  const c = CORNER;
-  const s = 8;
-  const w = 3;
-  return (
-    <>
-      <div style={{ position: 'absolute', top: -3, left: -3, width: s, height: w, background: c }} />
-      <div style={{ position: 'absolute', top: -3, left: -3, width: w, height: s, background: c }} />
-      <div style={{ position: 'absolute', top: -3, right: -3, width: s, height: w, background: c }} />
-      <div style={{ position: 'absolute', top: -3, right: -1, width: w, height: s, background: c }} />
-      <div style={{ position: 'absolute', bottom: -3, left: -3, width: s, height: w, background: c }} />
-      <div style={{ position: 'absolute', bottom: -1, left: -3, width: w, height: s, background: c }} />
-      <div style={{ position: 'absolute', bottom: -3, right: -3, width: s, height: w, background: c }} />
-      <div style={{ position: 'absolute', bottom: -1, right: -1, width: w, height: s, background: c }} />
-    </>
   );
 }

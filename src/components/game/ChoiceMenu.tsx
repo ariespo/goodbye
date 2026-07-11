@@ -1,134 +1,157 @@
+import { useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
+import { assetUrl } from '../../utils/assetUrl';
+import { GameIcon } from '../ui/GameIcon';
 
-const PANEL_BG = 'rgba(12, 12, 16, 0.88)';
-const BORDER = '#3a3a42';
-const BORDER_HOVER = '#6b8fc4';
-const TEXT_MAIN = '#d8d4cc';
-const TEXT_DIM = '#6a6560';
-const ACCENT = '#6b8fc4';
+const TEXT_MAIN = '#e2ded6';
+const TEXT_DIM = '#8a8580';
+const TEXT_DISABLED = '#4a4542';
+const ACCENT = '#86a8f2';
 
 export function ChoiceMenu() {
   const parsedContent = useGameStore(state => state.api.parsedContent);
   const isStreaming = useGameStore(state => state.api.isStreaming);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
+  const endingVisible = useGameStore(state => state.game.endingPanel.visible);
   const { selectOption, reroll } = useGameLoop();
 
   const options = parsedContent.options;
-  if (isStreaming || options.length === 0) return null;
+  if (endingVisible || isStreaming || options.length === 0) return null;
 
   return (
     <div
-      className="absolute bottom-[36%] left-1/2 -translate-x-1/2 flex flex-col gap-2 z-20"
-      style={{ width: 'min(70vw, 720px)' }}
+      className="choice-menu absolute bottom-[36%] left-1/2 z-20 flex -translate-x-1/2 flex-col gap-2"
+      style={{ width: 'min(72vw, 760px)' }}
     >
       {options.map((option, index) => (
         <PixelChoiceBtn
-          key={index}
+          key={`${index}-${option}`}
           index={index}
           text={option}
           disabled={isWaitingForAI}
           onClick={() => selectOption(option)}
         />
       ))}
-      {/* 重roll 选项 */}
       <RerollBtn disabled={isWaitingForAI} onClick={() => reroll()} />
     </div>
   );
 }
 
-/* ── 像素选项按钮 ── */
-
 function PixelChoiceBtn({ index, text, disabled, onClick }: {
-  index: number; text: string; disabled?: boolean; onClick: () => void;
+  index: number;
+  text: string;
+  disabled?: boolean;
+  onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-
-  const isDisabled = disabled;
-  const bg = isDisabled
-    ? 'rgba(12, 12, 16, 0.4)'
-    : hovered ? 'rgba(107,143,196,0.1)' : PANEL_BG;
-  const border = isDisabled ? '#2a2a2e' : hovered ? BORDER_HOVER : BORDER;
-  const borderLeft = isDisabled
-    ? `2px solid #2a2a2e`
-    : hovered ? `4px solid ${ACCENT}` : `2px solid ${BORDER}`;
-  const textColor = isDisabled ? '#3a3632' : hovered ? TEXT_MAIN : TEXT_DIM;
-  const numColor = isDisabled ? '#3a3632' : hovered ? ACCENT : TEXT_DIM;
+  const [pressed, setPressed] = useState(false);
+  const isDisabled = !!disabled;
+  const state = isDisabled ? 'disabled' : hovered ? 'hover' : 'normal';
 
   return (
     <button
-      className="relative text-left select-none cursor-none transition-all duration-150"
+      data-cursor={isDisabled ? undefined : 'pointer'}
+      className="choice-button relative min-h-[86px] select-none overflow-hidden rounded-none text-left transition-[filter,transform] duration-100"
       style={{
-        background: bg,
-        border: borderLeft,
-        borderTop: `2px solid ${border}`,
-        borderRight: `2px solid ${border}`,
-        borderBottom: `2px solid ${border}`,
-        padding: '14px 20px',
-        color: textColor,
+        backgroundImage: `url(${assetUrl(`assets/ui/choice-frame-${state}.png`)})`,
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: '100% 100%',
+        padding: '16px 24px 16px 28px',
+        color: isDisabled ? TEXT_DISABLED : hovered ? TEXT_MAIN : TEXT_DIM,
         fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
-        fontSize: '24px',
-        lineHeight: 1.6,
-        opacity: isDisabled ? 0.4 : 1,
-        pointerEvents: isDisabled ? 'none' : 'auto',
-        boxShadow: hovered && !isDisabled
-          ? `inset 1px 1px 0 rgba(255,255,255,0.05), 3px 3px 0 rgba(0,0,0,0.35)`
-          : `inset 1px 1px 0 rgba(255,255,255,0.02), 2px 2px 0 rgba(0,0,0,0.3)`,
+        fontSize: '23px',
+        lineHeight: 1.55,
+        opacity: isDisabled ? 0.52 : 1,
+        cursor: isDisabled ? 'not-allowed' : 'pointer',
+        imageRendering: 'pixelated',
+        filter: hovered && !isDisabled ? 'drop-shadow(0 0 12px rgba(107,143,196,0.26))' : 'drop-shadow(3px 3px 0 rgba(0,0,0,0.42))',
+        transform: pressed ? 'translate(2px, 2px)' : hovered ? 'translate(1px, 0)' : 'translate(0, 0)',
       }}
-      onMouseEnter={() => { if (!isDisabled) setHovered(true); }}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => { if (!isDisabled) onClick(); }}
+      onMouseEnter={() => {
+        if (!isDisabled) setHovered(true);
+      }}
+      onMouseLeave={() => {
+        setHovered(false);
+        setPressed(false);
+      }}
+      onMouseDown={() => {
+        if (!isDisabled) setPressed(true);
+      }}
+      onMouseUp={() => setPressed(false)}
+      onClick={() => {
+        if (!isDisabled) onClick();
+      }}
       disabled={isDisabled}
     >
       <span
-        className="inline-block mr-3"
+        className="mr-4 inline-flex h-8 min-w-10 items-center justify-center align-top"
         style={{
-          color: numColor,
-          fontFamily: '"MuzaiPixel", monospace',
-          fontSize: '20px',
-          minWidth: 24,
+          color: isDisabled ? TEXT_DISABLED : hovered ? ACCENT : TEXT_DIM,
+          border: `2px solid ${hovered && !isDisabled ? ACCENT : '#3a3a42'}`,
+          background: 'rgba(0,0,0,0.22)',
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: '16px',
+          lineHeight: 1,
+          boxShadow: hovered && !isDisabled ? '0 0 8px rgba(107,143,196,0.28)' : 'none',
         }}
       >
         {String(index + 1).padStart(2, '0')}
       </span>
       <span>{text}</span>
+      {hovered && !isDisabled && (
+        <span
+          className="pointer-events-none absolute right-5 top-1/2 h-3 w-3 -translate-y-1/2"
+          style={{
+            background: ACCENT,
+            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
+            filter: 'drop-shadow(0 0 6px rgba(107,143,196,0.7))',
+          }}
+        />
+      )}
     </button>
   );
 }
 
-import { useState } from 'react';
-import { ArrowCounterClockwise } from '@phosphor-icons/react';
-
-/* ── 重roll 按钮 ── */
-
 function RerollBtn({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
-
-  const isDisabled = disabled;
-  const borderColor = isDisabled ? '#2a2a2e' : hovered ? '#8b6a7a' : '#3a3a42';
-  const textColor = isDisabled ? '#3a3632' : hovered ? '#b89a8a' : '#6a6560';
+  const [pressed, setPressed] = useState(false);
+  const isDisabled = !!disabled;
 
   return (
     <button
-      className="relative text-left select-none cursor-none transition-all duration-150 flex items-center gap-3"
+      data-cursor={isDisabled ? undefined : 'pointer'}
+      className="choice-reroll-button relative mt-2 flex min-h-14 select-none items-center gap-3 overflow-hidden rounded-none px-6 text-left transition-[filter,transform] duration-100"
       style={{
-        background: 'transparent',
-        border: `2px dashed ${borderColor}`,
-        padding: '12px 20px',
-        color: textColor,
+        backgroundImage: `url(${assetUrl(`assets/ui/choice-frame-${isDisabled ? 'disabled' : hovered ? 'hover' : 'normal'}.png`)})`,
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: '100% 100%',
+        color: isDisabled ? TEXT_DISABLED : hovered ? '#d4a853' : TEXT_DIM,
         fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
         fontSize: '18px',
-        lineHeight: 1.6,
-        opacity: isDisabled ? 0.4 : 1,
-        pointerEvents: isDisabled ? 'none' : 'auto',
-        marginTop: 8,
+        opacity: isDisabled ? 0.52 : 0.9,
+        cursor: isDisabled ? 'not-allowed' : 'pointer',
+        transform: pressed ? 'translate(2px, 2px)' : 'translate(0, 0)',
+        filter: hovered && !isDisabled ? 'drop-shadow(0 0 10px rgba(212,168,83,0.22))' : 'drop-shadow(2px 2px 0 rgba(0,0,0,0.36))',
+        imageRendering: 'pixelated',
       }}
-      onMouseEnter={() => { if (!isDisabled) setHovered(true); }}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => { if (!isDisabled) onClick(); }}
+      onMouseEnter={() => {
+        if (!isDisabled) setHovered(true);
+      }}
+      onMouseLeave={() => {
+        setHovered(false);
+        setPressed(false);
+      }}
+      onMouseDown={() => {
+        if (!isDisabled) setPressed(true);
+      }}
+      onMouseUp={() => setPressed(false)}
+      onClick={() => {
+        if (!isDisabled) onClick();
+      }}
       disabled={isDisabled}
     >
-      <ArrowCounterClockwise size={20} />
+      <GameIcon name="restart" size={20} />
       <span>尝试进入其他时间线</span>
     </button>
   );
