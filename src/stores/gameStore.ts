@@ -6,6 +6,14 @@ import type {
 } from '../sillytavern/types';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 
+export interface TurnRecoveryState {
+  phase: 'idle' | 'failed_stream' | 'blocked_pipeline';
+  userInput: string | null;
+  errorMessage: string | null;
+}
+
+export const IDLE_TURN_RECOVERY: TurnRecoveryState = { phase: 'idle', userInput: null, errorMessage: null };
+
 interface GameStore {
   game: {
     currentScene: Scene | null;
@@ -34,6 +42,8 @@ interface GameStore {
     endingCheckContext: EndingCheckContext;
     /** 结局面板状态 */
     endingPanel: EndingPanelState;
+    /** 待执行的轮回重置原因(体力/理智耗尽或一天结束)，场景播放完毕后由 CycleResetWatcher 执行 */
+    pendingCycleReset: string | null;
   };
   tavern: {
     settings: AppSettings | null;
@@ -49,6 +59,7 @@ interface GameStore {
     parsedContent: ParsedContent;
     error: string | null;
     abortController: AbortController | null;
+    turnRecovery: TurnRecoveryState;
   };
   ui: {
     showSettings: boolean;
@@ -57,9 +68,12 @@ interface GameStore {
     showHistory: boolean;
     showMap: boolean;
     showClues: boolean;
+    showCharacters: boolean;
     showTitle: boolean;
     showEndingEditor: boolean;
     showPromptInspector: boolean;
+    showOrchestrationLog: boolean;
+    showApiGuide: boolean;
     notifications: Notification[];
     introPlayed: boolean;
     /** 开场动画中的标题是否已显示（用于触发标题音乐） */
@@ -90,16 +104,22 @@ interface GameStore {
     setEndingPanel: (panel: Partial<EndingPanelState>) => void;
     setPendingEnding: (id: string | null) => void;
     setEndingCheckContext: (ctx: Partial<EndingCheckContext>) => void;
+    setPendingCycleReset: (reason: string | null) => void;
     addHistorySnapshot: (snapshot: TurnSnapshot) => void;
+    removeLastHistorySnapshot: () => void;
     setStreaming: (streaming: boolean) => void;
     setStreamBuffer: (buffer: string) => void;
     setParsedContent: (content: Partial<ParsedContent>) => void;
     setApiError: (error: string | null) => void;
     setAbortController: (controller: AbortController | null) => void;
-    toggleModal: (modal: 'settings' | 'lorebook' | 'preset' | 'history' | 'map' | 'clues') => void;
+    setTurnRecovery: (recovery: TurnRecoveryState) => void;
+    clearTurnRecovery: () => void;
+    toggleModal: (modal: 'settings' | 'lorebook' | 'preset' | 'history' | 'map' | 'clues' | 'characters') => void;
     setShowTitle: (show: boolean) => void;
     setShowEndingEditor: (show: boolean) => void;
     setShowPromptInspector: (show: boolean) => void;
+    setShowOrchestrationLog: (show: boolean) => void;
+    setShowApiGuide: (show: boolean) => void;
     addNotification: (notification: Omit<Notification, 'id'>) => void;
     removeNotification: (id: string) => void;
     setIntroPlayed: (played: boolean) => void;
@@ -120,6 +140,9 @@ const defaultCurrentState: CurrentState = {
   character: null,
   speaker: null,
   mood: 'calm',
+  effect: null,
+  environment: 'none',
+  item: null,
 };
 
 const defaultParsedContent: ParsedContent = {
@@ -133,166 +156,249 @@ const defaultParsedContent: ParsedContent = {
   actionItems: [],
 };
 
-/** 内置默认结局(可编辑) */
-function createDefaultEndings(): Ending[] {
+/** 内置默认结局(可编辑) — 三层体系: 锁凶层 A/B/C/NONE/FAKE + 解释层 CULT/PSYCH + 元层 STAY/TRUE + 兜底 LOOP */
+export function createDefaultEndings(): Ending[] {
+  const cg = (
+    id: string,
+    name: string,
+    conditions: Ending['conditionGroups'][number]['conditions'],
+  ): Ending['conditionGroups'][number] => ({ id, name, mode: 'all', conditions });
+
   return [
     {
       id: 'A-1',
-      name: '接受',
+      name: '报警·审判',
       truthType: 'A',
       tag: 'normal',
-      description: '主角在治疗与调查中接受真相，承认自己的记忆和罪责。灰暗但清醒的结局。',
-      conditionGroups: [
-        {
-          id: 'A-1-cg',
-          name: '自疑或心理调查',
-          mode: 'any',
-          conditions: [
-            { variablePath: 'suspicion.self', operator: '>=', targetValue: 60 },
-            { variablePath: 'investigation.psych', operator: '>=', targetValue: 70 },
-          ],
-        },
-      ],
+      description: '玩家带着祭坛证据报警。老头被逮捕，文穗的死被重新定性为他杀。法律正义无法让她回来。',
+      conditionGroups: [cg('A-1-cg', '锁定A线且选择报警', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
+        { variablePath: 'overlay', operator: '!=', targetValue: 'CULT' },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'report' },
+      ])],
       isUnlocked: false,
       order: 10,
     },
     {
       id: 'A-2',
-      name: '否认',
+      name: '私了·了断',
       truthType: 'A',
       tag: 'bad',
-      description: '主角拒绝接受自我罪责，继续轮回，陷入永恒的自我囚禁。',
-      conditionGroups: [
-        {
-          id: 'A-2-cg',
-          name: '低轮回自疑',
-          mode: 'all',
-          conditions: [
-            { variablePath: 'cycleCount', operator: '<=', targetValue: 3 },
-            { variablePath: 'suspicion.self', operator: '>=', targetValue: 60 },
-          ],
-        },
-      ],
+      description: '玩家选择自己处理。暴雨中的灰色了断——暴力填补不了空洞，玩家离"控制欲"比想象中更近。',
+      conditionGroups: [cg('A-2-cg', '锁定A线且选择私了', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
+        { variablePath: 'overlay', operator: '!=', targetValue: 'CULT' },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'private' },
+      ])],
       isUnlocked: false,
       order: 11,
     },
     {
       id: 'B-1',
-      name: '告别',
+      name: '报警·揭露',
       truthType: 'B',
-      tag: 'good',
-      description: '主角选择放手，文穗在梦中微笑消失。醒来后回到现实世界。',
-      conditionGroups: [
-        {
-          id: 'B-1-cg',
-          name: '文穗好感与心理调查',
-          mode: 'all',
-          conditions: [
-            { variablePath: 'affinity.fumi', operator: '>=', targetValue: 85 },
-            { variablePath: 'investigation.psych', operator: '>=', targetValue: 70 },
-          ],
-        },
-      ],
+      tag: 'normal',
+      description: '玩家将证据提交警方。侦探A/B被逮捕，生父的雇佣关系曝光。文穗用沉默交换了玩家的安心。',
+      conditionGroups: [cg('B-1-cg', '锁定B线且选择报警', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'B' },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'report' },
+      ])],
       isUnlocked: false,
       order: 20,
     },
     {
       id: 'B-2',
-      name: '沉溺',
+      name: '接受·妥协',
       truthType: 'B',
       tag: 'bad',
-      description: '主角选择永远和文穗停留在一起，温柔地困在梦境中。',
-      conditionGroups: [
-        {
-          id: 'B-2-cg',
-          name: '文穗依恋',
-          mode: 'all',
-          conditions: [
-            { variablePath: 'affinity.fumi', operator: '>=', targetValue: 85 },
-            { variablePath: 'affinity.touko', operator: '<=', targetValue: 20 },
-          ],
-        },
-      ],
+      description: '玩家接受生父的补偿，不再追究。真相被用钱买走，但良心不会。',
+      conditionGroups: [cg('B-2-cg', '锁定B线且选择妥协', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'B' },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'accept' },
+      ])],
       isUnlocked: false,
       order: 21,
     },
     {
       id: 'C-1',
-      name: '封印',
+      name: '接受·清醒',
       truthType: 'C',
       tag: 'normal',
-      description: '主角在时坂朔的帮助下重新封印异常。城市得救，文穗成为代价。',
-      conditionGroups: [
-        {
-          id: 'C-1-cg',
-          name: '超自然调查',
-          mode: 'all',
-          conditions: [
-            { variablePath: 'investigation.occult', operator: '>=', targetValue: 70 },
-            { variablePath: 'cycleCount', operator: '>=', targetValue: 8 },
-          ],
-        },
-      ],
+      description: '玩家承认自己杀了文穗。轮回停止——不是被打破，是不再被需要。灰暗但真实。',
+      conditionGroups: [cg('C-1-cg', '锁定C线且接受真相', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
+        { variablePath: 'overlay', operator: '!=', targetValue: 'PSYCH' },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'accept' },
+      ])],
       isUnlocked: false,
       order: 30,
     },
     {
-      id: 'D-1',
-      name: '放手',
-      truthType: 'D',
-      tag: 'normal',
-      description: '主角停止轮回，接受文穗的死亡。文穗以另一种方式成为锚点的守护者。',
-      conditionGroups: [
-        {
-          id: 'D-1-cg',
-          name: '科学调查与轮回',
-          mode: 'all',
-          conditions: [
-            { variablePath: 'investigation.science', operator: '>=', targetValue: 70 },
-            { variablePath: 'cycleCount', operator: '>=', targetValue: 5 },
-          ],
-        },
-      ],
+      id: 'C-2',
+      name: '否认·囚禁',
+      truthType: 'C',
+      tag: 'bad',
+      description: '玩家拒绝接受，继续寻找不存在的凶手。永恒的自我囚禁——玩家选择了幻觉。',
+      conditionGroups: [cg('C-2-cg', '锁定C线且否认真相', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
+        { variablePath: 'overlay', operator: '!=', targetValue: 'PSYCH' },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'deny' },
+      ])],
+      isUnlocked: false,
+      order: 31,
+    },
+    {
+      id: 'N-1',
+      name: '读信·放手',
+      truthType: 'NONE',
+      tag: 'good',
+      description: '没有凶手。玩家拼合告别信，接受文穗早已写好的告别。雨停了，"再见"第一次被完整说出。',
+      conditionGroups: [cg('N-1-cg', '无凶手真相且接受告别', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'NONE' },
+        { variablePath: 'letterFragmentCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'letgo' },
+      ])],
       isUnlocked: false,
       order: 40,
     },
     {
-      id: 'D-3',
-      name: '共生',
-      truthType: 'D',
-      tag: 'true',
-      description: '主角发现情感本身可以维持锚点。真正的告别让两人以不同形式继续相伴。',
-      conditionGroups: [
-        {
-          id: 'D-3-cg',
-          name: '均衡与科学调查',
-          mode: 'all',
-          conditions: [
-            { variablePath: 'investigation.science', operator: '>=', targetValue: 70 },
-            { variablePath: 'affinity.fumi', operator: '>=', targetValue: 60 },
-            { variablePath: 'cycleCount', operator: '>=', targetValue: 5 },
-          ],
-        },
-      ],
+      id: 'N-2',
+      name: '拒信·回环',
+      truthType: 'NONE',
+      tag: 'bad',
+      description: '玩家撕掉信，回到轮回。从此每轮清晨，口袋里都会多出一片湿透的碎纸。',
+      conditionGroups: [cg('N-2-cg', '无凶手真相且拒绝接受', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'NONE' },
+        { variablePath: 'letterFragmentCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'refuse' },
+      ])],
       isUnlocked: false,
-      order: 42,
+      order: 41,
     },
     {
-      id: 'E',
-      name: '观察者',
-      truthType: 'E',
+      id: 'F-1',
+      name: '放她走',
+      truthType: 'FAKE',
+      tag: 'good',
+      description: '文穗还活着。玩家在人群中与她对视，然后转身离开。唯一一个她活着的世界——代价是永远失去她。',
+      conditionGroups: [cg('F-1-cg', '识破假死且放手', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'FAKE' },
+        { variablePath: 'fakeEvidenceCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'release' },
+      ])],
+      isUnlocked: false,
+      order: 50,
+    },
+    {
+      id: 'F-2',
+      name: '追到底',
+      truthType: 'FAKE',
+      tag: 'bad',
+      description: '玩家抓住了她的手腕，也抓碎了她的计划。生父的人循着玩家找到了她。这一次是真的再见不到了。',
+      conditionGroups: [cg('F-2-cg', '识破假死且追寻', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'FAKE' },
+        { variablePath: 'fakeEvidenceCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'pursue' },
+      ])],
+      isUnlocked: false,
+      order: 51,
+    },
+    {
+      id: 'X-1',
+      name: '毁坛·渎神',
+      truthType: 'CULT',
+      tag: 'normal',
+      description: '献祭是真的。玩家砸毁祭坛，轮回的支点断了。世界正常了，也空了。',
+      conditionGroups: [cg('X-1-cg', '邪神真相且毁坛', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
+        { variablePath: 'overlay', operator: '=', targetValue: 'CULT' },
+        { variablePath: 'cultClueCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'destroy' },
+      ])],
+      isUnlocked: false,
+      order: 60,
+    },
+    {
+      id: 'X-2',
+      name: '献祭·续命',
+      truthType: 'CULT',
+      tag: 'bad',
+      description: '玩家读懂了仪式的另一种用法，让那个清晨永远凝固。文穗永远十七岁，而只有玩家在老去。',
+      conditionGroups: [cg('X-2-cg', '邪神真相且献祭', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
+        { variablePath: 'overlay', operator: '=', targetValue: 'CULT' },
+        { variablePath: 'cultClueCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'sacrifice' },
+      ])],
+      isUnlocked: false,
+      order: 61,
+    },
+    {
+      id: 'P-1',
+      name: '醒来',
+      truthType: 'PSYCH',
+      tag: 'normal',
+      description: '白墙。消毒水味盖过了草莓味。窗外在下雨——只是普通的、会停的雨。',
+      conditionGroups: [cg('P-1-cg', '内室真相且醒来', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
+        { variablePath: 'overlay', operator: '=', targetValue: 'PSYCH' },
+        { variablePath: 'glitchClueCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'wake' },
+      ])],
+      isUnlocked: false,
+      order: 70,
+    },
+    {
+      id: 'P-2',
+      name: '沉入',
+      truthType: 'PSYCH',
+      tag: 'bad',
+      description: '玩家选择永远住在内室里。病床上的人嘴唇动了动，像是在说"早安"。',
+      conditionGroups: [cg('P-2-cg', '内室真相且沉入', [
+        { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
+        { variablePath: 'overlay', operator: '=', targetValue: 'PSYCH' },
+        { variablePath: 'glitchClueCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'sink' },
+      ])],
+      isUnlocked: false,
+      order: 71,
+    },
+    {
+      id: 'STAY',
+      name: '早安·永远',
+      truthType: 'META',
       tag: 'hidden',
-      description: '四种真相都是部分正确。主角接受不确定性，不再强迫世界给出唯一答案。',
-      conditionGroups: [
-        {
-          id: 'E-cg',
-          name: '最难结局',
-          mode: 'all',
-          conditions: [
-            { variablePath: 'cycleCount', operator: '=', targetValue: 13 },
-          ],
-        },
-      ],
+      description: '知晓一切之后，玩家选择不出门，陪文穗过完今天。然后明天再来一次。最清醒的沉沦——软结局，可以反悔。',
+      conditionGroups: [cg('STAY-cg', '连续三轮选择留下', [
+        { variablePath: 'stayStreak', operator: '>=', targetValue: 3 },
+      ])],
+      isUnlocked: false,
+      order: 80,
+    },
+    {
+      id: 'TRUE',
+      name: '九点零一分',
+      truthType: 'META',
+      tag: 'true',
+      description: '最后一个清晨，玩家说出完整的告别。雨停，闹钟走到9:01——第一次，时间前进了。',
+      conditionGroups: [cg('TRUE-cg', '走完一切并选择告别', [
+        { variablePath: 'routesLockedCount', operator: '>=', targetValue: 3 },
+        { variablePath: 'stayedEver', operator: '=', targetValue: true },
+        { variablePath: 'finalChoice', operator: '=', targetValue: 'goodbye' },
+      ])],
+      isUnlocked: false,
+      order: 90,
+    },
+    {
+      id: 'LOOP',
+      name: '困局',
+      truthType: 'LOOP',
+      tag: 'bad',
+      description: '第七轮之后仍无法锁定任何真相。文穗不断死去，玩家不断重来，直到不记得她的样子。',
+      conditionGroups: [cg('LOOP-cg', '高轮回且一无所获', [
+        { variablePath: 'cycleCount', operator: '>=', targetValue: 7 },
+        { variablePath: 'routesLockedCount', operator: '=', targetValue: 0 },
+      ])],
       isUnlocked: false,
       order: 99,
     },
@@ -314,13 +420,14 @@ export const useGameStore = create<GameStore>((set) => ({
     endingsSeen: [],
     endingCheckContext: {
       cycleCount: 1,
-      affinity: { fumi: 70, touko: 40, saku: 0 },
-      suspicion: { self: 10, fumi: 0, touko: 5, occult: 0 },
+      affinity: { fumi: 70, touko: 40 },
+      suspicion: { 'old-man': 0, 'detective-a': 0, 'detective-b': 0, self: 10, clerk: 0, teacher: 0, senpai: 0 },
       investigation: { psych: 0, crime: 0, occult: 0, science: 0 },
       unlockedClues: [],
       endingsSeen: [],
     },
     endingPanel: { visible: false, activeEndingId: null, pendingEndingId: null, isPreview: false, isAnimating: false },
+    pendingCycleReset: null,
   },
   tavern: {
     settings: null,
@@ -333,6 +440,7 @@ export const useGameStore = create<GameStore>((set) => ({
   api: {
     isStreaming: false,
     streamBuffer: '',
+    turnRecovery: IDLE_TURN_RECOVERY,
     parsedContent: defaultParsedContent,
     error: null,
     abortController: null,
@@ -344,9 +452,12 @@ export const useGameStore = create<GameStore>((set) => ({
     showHistory: false,
     showMap: false,
     showClues: false,
+    showCharacters: false,
     showTitle: true,
     showEndingEditor: false,
     showPromptInspector: false,
+    showOrchestrationLog: false,
+    showApiGuide: false,
     notifications: [],
     introPlayed: false,
     titleRevealed: false,
@@ -407,12 +518,16 @@ export const useGameStore = create<GameStore>((set) => ({
     setEndingPanel: (panel) => set(state => ({ game: { ...state.game, endingPanel: { ...state.game.endingPanel, ...panel } } })),
     setPendingEnding: (id) => set(state => ({ game: { ...state.game, endingPanel: { ...state.game.endingPanel, pendingEndingId: id } } })),
     setEndingCheckContext: (ctx) => set(state => ({ game: { ...state.game, endingCheckContext: { ...state.game.endingCheckContext, ...ctx } } })),
+    setPendingCycleReset: (reason) => set(state => ({ game: { ...state.game, pendingCycleReset: reason } })),
     addHistorySnapshot: (snapshot) => set(state => ({ game: { ...state.game, history: [...state.game.history, snapshot] } })),
+    removeLastHistorySnapshot: () => set(state => ({ game: { ...state.game, history: state.game.history.slice(0, -1) } })),
     setStreaming: (streaming) => set(state => ({ api: { ...state.api, isStreaming: streaming } })),
     setStreamBuffer: (buffer) => set(state => ({ api: { ...state.api, streamBuffer: buffer } })),
     setParsedContent: (content) => set(state => ({ api: { ...state.api, parsedContent: { ...state.api.parsedContent, ...content } } })),
     setApiError: (error) => set(state => ({ api: { ...state.api, error } })),
     setAbortController: (controller) => set(state => ({ api: { ...state.api, abortController: controller } })),
+    setTurnRecovery: (recovery) => set(state => ({ api: { ...state.api, turnRecovery: recovery } })),
+    clearTurnRecovery: () => set(state => ({ api: { ...state.api, turnRecovery: IDLE_TURN_RECOVERY } })),
     toggleModal: (modal) => set(state => {
       const key = `show${modal.charAt(0).toUpperCase() + modal.slice(1)}` as keyof typeof state.ui;
       return { ui: { ...state.ui, [key]: !state.ui[key] } };
@@ -420,6 +535,8 @@ export const useGameStore = create<GameStore>((set) => ({
     setShowTitle: (show) => set(state => ({ ui: { ...state.ui, showTitle: show } })),
     setShowEndingEditor: (show) => set(state => ({ ui: { ...state.ui, showEndingEditor: show } })),
     setShowPromptInspector: (show) => set(state => ({ ui: { ...state.ui, showPromptInspector: show } })),
+    setShowOrchestrationLog: (show) => set(state => ({ ui: { ...state.ui, showOrchestrationLog: show } })),
+    setShowApiGuide: (show) => set(state => ({ ui: { ...state.ui, showApiGuide: show } })),
     addNotification: (notification) => set(state => ({
       ui: {
         ...state.ui,
@@ -433,3 +550,8 @@ export const useGameStore = create<GameStore>((set) => ({
     setTitleRevealed: (revealed) => set(state => ({ ui: { ...state.ui, titleRevealed: revealed } })),
   },
 }));
+
+// dev 调试钩子：供 Playwright/控制台直接操作 store(生产构建剔除)
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__gameStore = useGameStore;
+}
