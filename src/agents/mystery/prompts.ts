@@ -20,10 +20,12 @@ export const DIRECTOR_SYSTEM_PROMPT = `你是《漫长的告别》的导演 Agen
   "optionIntents": [{"id":"string","intent":"string","tone":"string","expectedPressure":"low|medium|high"}],
   "assetRequests": ["string"],
   "knowledgeEvents": [{"eventId":"只能选 MysteryBrief.playerPresentation.allowedDiscoveries 中的 ID","evidence":"玩家在正文中实际看到或听到的依据"}],
-  "scenePlan": {"observeFocus":"本回合观察面板应聚焦什么（短语）","observeConceal":"必须继续隐藏什么（短语，可省略）","investigateIntents":[{"intent":"调查方向短语","suspectId":"指向的嫌疑人ID?","factId":"对应 usableFacts 中的事实ID?","costTier":"light|medium|heavy"}],"actionIntents":[{"intent":"行动方向短语","costTier":"light|medium|heavy"}]}
+  "scenePlan": {"observeFocus":"本回合观察面板应聚焦什么（短语）","observeConceal":"必须继续隐藏什么（短语，可省略）","investigateIntents":[{"intent":"调查方向短语","suspectId":"指向的嫌疑人ID?","factId":"对应 usableFacts 中的事实ID?","costTier":"light|medium|heavy"}],"actionIntents":[{"intent":"行动方向短语","costTier":"light|medium|heavy"}]},
+  "timeCostMinutes": 25
 }
 
-scenePlan 规则：只给意图级短语，不写具体文案；investigateIntents 的 factId 只能选 usableFacts；observeConceal 与 hiddenFacts 保持一致；每类意图 2-4 条。
+计划字段说明：
+- scenePlan 规则：只给意图级短语，不写具体文案；investigateIntents 的 factId 只能选 usableFacts；observeConceal 与 hiddenFacts 保持一致；每类意图 2-4 条。
 - timeCostMinutes: 本回合经过的游戏内分钟数(整数1-180)。对话约5-15,调查约20-40,跨地点移动约15-30。`;
 
 export const WRITER_SYSTEM_PROMPT = `你是《漫长的告别》的编剧 Agent。你把已批准的导演计划写成可播放场景，不决定真相，不修改状态。
