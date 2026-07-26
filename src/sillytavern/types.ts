@@ -193,6 +193,8 @@ export interface AppSettings {
   musicVolume?: number;
   /** 音效音量 0-1 */
   soundVolume?: number;
+  /** 叙事 Agent 编排：旧流程 / 受控流水线 / 带语义复核的严格流水线 */
+  agentNarrativeMode?: 'legacy' | 'standard' | 'strict';
 }
 
 export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格式输出回复。除标签内容外,不要输出任何 Markdown、解释或额外文字。
@@ -203,8 +205,10 @@ export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格�
     场景|<场景文件名>              切换背景(资源路径: /assets/backgrounds/)
     音乐|<音乐文件名>              切换 BGM(资源路径: /assets/audio/bgm/)
     对话|<人物名>|<情绪>|<对话内容>   显示对话(人物 = "旁白" 时不显示角色名和立绘)
+    对话|<人物名>|<情绪>|<对话内容>|<物品id或文件名>   显示对话时居中展示一次关键物品,下一行自动隐藏
 
   情绪只允许: calm / horror / insane / sad / angry / happy
+  场景存在昼夜版本时使用 -day / -night 后缀,并严格匹配剧情当前时间;无后缀场景仅作日间兼容。
   同一场景/音乐下可有多段对话,只在变化时声明场景或音乐。
 
   示例:
@@ -212,6 +216,7 @@ export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格�
   音乐|silence.mp3
   对话|少女|horror|你来了。
   对话|旁白|calm|她背对着你,声音平淡得像背书。
+  对话|旁白|calm|你看见桌上那只马克杯。|opening-mug
 </maintext>
 
 ## 2. 玩家选项(必填)
@@ -226,8 +231,9 @@ export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格�
 <sum>本回合一句话总结</sum>
 
 ## 4. 状态变量(选填,但如有变化必须合法)
-<vars>{ "stamina": 80, "sanity": 75 }</vars>
-要求:必须是合法 JSON 对象,只包含发生变化的字段,不要注释。
+<vars>{ "location": "school", "stamina": 80, "sanity": 75 }</vars>
+要求:必须是合法 JSON 对象,只包含发生变化的字段,不要注释。location 表示玩家所在地图地点,必须使用系统资源清单中的地点 id。
+- vars 中额外输出 "timeCost": 本回合经过的分钟数(整数,1-180)。例如闲聊约10,搜查房间约30。系统据此推进游戏时钟,不会存档该字段。
 
 ## 5. 观察/调查/行动(选填,仅在需要时提供)
 <observe>
@@ -394,6 +400,9 @@ export interface CurrentState {
   character: string | null;
   speaker: string | null;
   mood: Mood;
+  effect: string | null;
+  environment: import('../data/backgroundAssets').SceneEnvironment;
+  item: string | null;
 }
 
 export type Mood = 'calm' | 'horror' | 'insane' | 'sad' | 'angry' | 'happy';
@@ -439,8 +448,16 @@ export interface SceneLine {
   character?: string;
   /** 情绪(影响 mood 特效) */
   emotion?: Mood;
+  /** 单次全屏动效文件名或 id */
+  effect?: string;
+  /** 当前行的角色演出动作，由动作指令显式指定 */
+  animation?: string;
+  /** 对话行附带的物品展示 id / file / object, 仅当前行显示 */
+  item?: string;
   /** 对话/旁白文本 */
   text: string;
+  /** 该行播放完成后提交的玩家认知事件（必须由导演授权） */
+  knowledgeEvents?: string[];
 }
 
 export interface StorylineData {
@@ -494,8 +511,8 @@ export interface SaveSlot {
 
 // ========== Ending System (多真相/多结局) ==========
 
-/** 真相类型: A-自刃者 B-梦觉 C-深渊 D-等价交换 E-观测者 */
-export type TruthType = 'A' | 'B' | 'C' | 'D' | 'E';
+/** 真相路线: 锁凶层 A-老头 B-侦探 C-玩家 NONE-无凶手 FAKE-假死；解释层 CULT-邪神(叠加A) PSYCH-精神疾病(叠加C)；META-元层(STAY/TRUE)；LOOP-兜底 */
+export type TruthType = 'A' | 'B' | 'C' | 'NONE' | 'FAKE' | 'CULT' | 'PSYCH' | 'META' | 'LOOP';
 
 /** 结局分类标签 */
 export type EndingTag = 'normal' | 'good' | 'bad' | 'true' | 'hidden';
