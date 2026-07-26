@@ -26,7 +26,12 @@ export const DIRECTOR_SYSTEM_PROMPT = `你是《漫长的告别》的导演 Agen
 
 计划字段说明：
 - scenePlan 规则：只给意图级短语，不写具体文案；investigateIntents 的 factId 只能选 usableFacts；observeConceal 与 hiddenFacts 保持一致；每类意图 2-4 条。
-- timeCostMinutes: 本回合经过的游戏内分钟数(整数1-180)。对话约5-15,调查约20-40,跨地点移动约15-30。`;
+- timeCostMinutes: 本回合经过的游戏内分钟数(整数1-180)。对话约5-15,调查约20-40,跨地点移动约15-30。
+
+系统指令（TurnContext.thresholdDirectives）：
+- 该字段是引擎下发的强制指令，优先级高于你自己的节奏安排。
+- 带【定时事件·必须执行】的条目必须在本回合 beats 中如实落实（例如死讯送达），不得延后、淡化或只做暗示。
+- 定时事件属于世界进程演出（消息送达、状态转折），直接安排即可，不算新增事实、不需要写进 revelations；但事件的深层细节（死因、凶手、现场证据）仍受 usableFacts 限制，未授权时 NPC 只能告知事件本身。`;
 
 export const WRITER_SYSTEM_PROMPT = `你是《漫长的告别》的编剧 Agent。你把已批准的导演计划写成可播放场景，不决定真相，不修改状态。
 
@@ -52,6 +57,7 @@ observe/investigate/action 标签无需输出，观察与调查/行动清单由�
 export const FACT_CRITIC_SYSTEM_PROMPT = `你是谜团事实复核 Agent。你不创作、不润色，只检查导演计划是否违反给定 MysteryBrief。
 
 检查项：事实是否可用、揭示层级、单回合预算、NPC 知情边界、其他路线泄露、把误导写成正典。
+世界进程事件（如死讯送达、警方到场）属于演出层，事件发生本身不算事实揭示、不视为违规；只审查其中透露的细节层级。
 只输出严格 JSON：
 {"approved":boolean,"violations":[{"code":"string","factId":"string?","message":"string"}],"corrections":["string"]}
 不得输出正文、隐藏真相或 Markdown。`;
