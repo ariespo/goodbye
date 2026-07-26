@@ -1,23 +1,44 @@
 import { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { assemblePrompt } from '../sillytavern/prompt-assembler';
-import { streamChatCompletion, callSecondaryApi } from '../sillytavern/api-router';
-import { maintextToScene } from '../engine/scene-parser';
-import { mergeVariables } from '../sillytavern/vars-merger';
+import { ApiCallError, streamChatCompletion } from '../sillytavern/api-router';
+import { augmentWithSecondary } from '../sillytavern/secondary-augment';
+import { maintextToScene, mergeParsedIntoScene } from '../engine/scene-parser';
+import { mergeVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
+import { checkCycleFailure } from '../utils/cycleLoop';
+import { translateForDirector } from '../engine/variable-thresholds';
+import { sanitizeVarsPatch } from '../sillytavern/vars-validator';
 import { checkEndingConditions } from '../sillytavern/ending-checker';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
 import { createOutputProtocol, formatValidationErrors } from '../sillytavern/output-protocol';
-import { saveChat } from '../sillytavern/database';
 import type { ChatMessage } from '../sillytavern/types';
-
-const SECONDARY_SYSTEM_PROMPT = `你是游戏状态分析助手。基于下面的回合剧情,仅输出两个标签,不写任何正文或解释:
-<sum>本回合一句话总结</sum>
-<vars>{ "变量名": 值, ... }</vars>
-
-要求:
-- vars 中只包含变量发生变化的字段(例如体力 stamina、理智 sanity、时间 time、物品 items 等)
-- vars 必须是合法 JSON 对象
-- 如果回合内没有数值变化,可以输出空对象 <vars>{}</vars>`;
+import { persistActiveChat } from '../utils/chatPersistence';
+import { appendResourcePrompt } from '../utils/resourcePrompt';
+import { parseTimeCost, clampTimeCost, advanceClock, laterTime } from '../engine/game-clock';
+import { checkScheduledEvents, buildScheduledDirectives } from '../engine/scheduled-events';
+import { gameLocations } from '../data/locations';
+import { buildPlayerKnowledgeBrief, normalizeKnowledgeEvents } from '../data/playerKnowledge';
+import {
+  consumePreplan,
+  invalidatePreplans,
+  MYSTERY_TRUTH_GRAPH,
+  MysteryPipelineBlockedError,
+  prepareMysteryTurn,
+  REVEAL_LEVELS,
+  startPreplan,
+  type AgentNarrativeMode,
+  type MysteryRouteId,
+  type PreparedMysteryTurn,
+  type RevealLevel,
+  type TruthContext,
+} from '../agents/mystery';
+import type { AppSettings } from '../sillytavern/types';
+import {
+  generateSceneChecklist,
+  insertTagsIntoMaintext,
+  mergeSceneChecklist,
+  serializeChecklistToTags,
+} from '../agents/mystery/scene-list';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -26,19 +47,119 @@ const outputProtocol = createOutputProtocol({
   checkUnclosedTags: true,
 });
 
+const mysteryFactIds = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => fact.id));
+const npcIdsByLocation: Record<string, string[]> = {
+  school: ['school-guard'],
+  'mountain-trail': ['morning-witness'],
+  'senpai-building': ['touko'],
+  'old-man-building': ['old-man'],
+  'detective-inn': ['detective-a', 'detective-b'],
+  'water-tower': ['detective-a'],
+};
+
+function resolveMysteryLocation(background: string | null): string {
+  const normalized = (background ?? '').replace(/\.png$/i, '');
+  if (!normalized || normalized.startsWith('home') || normalized.startsWith('bedroom')) return 'home';
+  const location = gameLocations.find(candidate =>
+    [candidate.id, candidate.background, candidate.dayBackground, candidate.nightBackground]
+      .filter(Boolean)
+      .includes(normalized)
+  );
+  return location?.id ?? 'home';
+}
+
+function readLockedRoute(variables: Record<string, any>): MysteryRouteId | null {
+  const value = variables.lockedRoute ?? variables.mysteryRoute;
+  return value === 'A' || value === 'B' || value === 'C' ? value : null;
+}
+
+function readPlayerKnowledge(variables: Record<string, any>, clueIds: string[]): Record<string, RevealLevel> {
+  const result: Record<string, RevealLevel> = {};
+  const stored = variables.mysteryKnowledge;
+  if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+    for (const [id, level] of Object.entries(stored)) {
+      if (mysteryFactIds.has(id) && REVEAL_LEVELS.includes(level as RevealLevel)) {
+        result[id] = level as RevealLevel;
+      }
+    }
+  }
+  for (const id of clueIds) {
+    if (mysteryFactIds.has(id) && !result[id]) result[id] = 'clue';
+  }
+  return result;
+}
+
+function mergeAuthorizedKnowledge(
+  variables: Record<string, any>,
+  prepared: PreparedMysteryTurn | null,
+): Record<string, any> {
+  if (!prepared) return variables;
+  const knowledge = readPlayerKnowledge(variables, Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []);
+  const unlockedClues = new Set<string>(Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []);
+  for (const fact of prepared.writerPacket.authorizedFacts) {
+    const previous = knowledge[fact.id];
+    if (!previous || REVEAL_LEVELS.indexOf(fact.level) > REVEAL_LEVELS.indexOf(previous)) {
+      knowledge[fact.id] = fact.level;
+    }
+    if (fact.level === 'clue' || fact.level === 'confirmation') unlockedClues.add(fact.id);
+  }
+  const knowledgeEvents = normalizeKnowledgeEvents(variables.knowledgeEvents, [...unlockedClues]);
+  return { ...variables, mysteryKnowledge: knowledge, unlockedClues: [...unlockedClues], knowledgeEvents };
+}
+
+function resolveAnalysisApi(settings: AppSettings) {
+  // 导演/审查是结构化 JSON 任务,优先走次 API(便宜模型),未配置时回退主 API
+  const sec = settings.api.secondary;
+  return sec?.enabled && sec.apiKey && sec.baseUrl
+    ? { baseUrl: sec.baseUrl, apiKey: sec.apiKey, model: sec.model }
+    : { baseUrl: settings.api.baseUrl, apiKey: settings.api.apiKey, model: settings.api.model };
+}
+
+function buildPreplanContextKey(
+  mode: AgentNarrativeMode,
+  chatId: string | null,
+  truthContext: Pick<TruthContext, 'cycleCount' | 'currentLocation' | 'lockedRoute'>,
+): string {
+  return [
+    mode,
+    truthContext.cycleCount,
+    truthContext.currentLocation,
+    truthContext.lockedRoute ?? 'none',
+    chatId ?? 'none',
+  ].join('|');
+}
+
+// 失败回合的编排结果缓存：重试时输入未变则跳过导演/审查重跑
+let cachedPreparedTurn: { chatId: string | null; input: string; turn: PreparedMysteryTurn } | null = null;
+
+// 玩家点击调查/行动项时缓存其标注耗时；重试同一输入时仍可命中
+let pendingTimeCost: { chatId: string; input: string; minutes: number } | null = null;
+
+export interface SendMessageOptions {
+  isReroll?: boolean;
+  /** 重试失败回合：复用已持久化的 user 消息，不重复追加 */
+  isRetry?: boolean;
+  /** 本回合强制回退 legacy 模式（编排阻塞后的逃生通道） */
+  forceLegacy?: boolean;
+}
+
 export function useGameLoop() {
   const store = useGameStore();
   const parseStateRef = useRef(createParseState());
   const sendingLockRef = useRef(false);
+  // 异步场景清单补全的竞态令牌：值为目标 assistant 消息 id，入口动作会置空使旧回调作废
+  const checklistTokenRef = useRef<string | null>(null);
 
-  const sendMessage = useCallback(async (userInput: string, opts?: { isReroll?: boolean }) => {
+  const sendMessage = useCallback(async (userInput: string, opts?: SendMessageOptions) => {
     if (sendingLockRef.current) {
       return;
     }
     sendingLockRef.current = true;
+    checklistTokenRef.current = null;
 
     const { tavern, game, actions } = store;
     const isReroll = opts?.isReroll ?? false;
+    const isRetry = opts?.isRetry ?? false;
 
     try {
       const settings = tavern.settings;
@@ -49,12 +170,31 @@ export function useGameLoop() {
         return;
       }
 
+      // API 未配置：不发请求、不报错，弹出引导卡（观察等本地操作不经过这里，不受影响）
+      if (!settings.api.apiKey || !settings.api.baseUrl) {
+        actions.setShowApiGuide(true);
+        return;
+      }
+
       const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
+      let baseMessages = activeChat ? [...activeChat.messages] : [];
+
+      // 玩家放弃失败回合、未撤回就直接输入新内容：先自动撤回孤儿 user 消息
+      if (!isRetry && !isReroll && store.api.turnRecovery.phase !== 'idle') {
+        if (baseMessages.length > 0 && baseMessages[baseMessages.length - 1].role === 'user') {
+          baseMessages = baseMessages.slice(0, -1);
+          if (activeChat) {
+            await persistActiveChat({ messages: baseMessages });
+          }
+        }
+      }
+      actions.clearTurnRecovery();
+
       let messages: ChatMessage[];
 
-      if (isReroll) {
-        // 重roll: 复用已有聊天记录，不添加新 user 消息
-        messages = activeChat ? [...activeChat.messages] : [];
+      if (isReroll || isRetry) {
+        // 重roll/重试: 复用已有聊天记录，不添加新 user 消息
+        messages = baseMessages;
       } else {
         const userMessage: ChatMessage = {
           id: crypto.randomUUID(),
@@ -63,12 +203,10 @@ export function useGameLoop() {
           timestamp: Date.now(),
           variables: { ...tavern.variables },
         };
-        messages = activeChat ? [...activeChat.messages, userMessage] : [userMessage];
+        messages = [...baseMessages, userMessage];
 
         if (activeChat) {
-          const updatedChat = { ...activeChat, messages, updatedAt: Date.now() };
-          await saveChat(updatedChat);
-          actions.setChats(tavern.chats.map(c => c.id === updatedChat.id ? updatedChat : c));
+          await persistActiveChat({ messages });
         }
       }
 
@@ -77,8 +215,12 @@ export function useGameLoop() {
       actions.setStreaming(true);
       parseStateRef.current = createParseState();
 
+      const scheduledDirectives = buildScheduledDirectives(tavern.variables);
+      const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
+      const promptUserInput = appendResourcePrompt(userInput, game.currentState.background, tavern.variables)
+        + (scheduledDirectives.length ? '\n\n' + scheduledDirectives.map(l => `[系统指令] ${l}`).join('\n') : '');
       const { messages: promptMessages } = assemblePrompt({
-        userInput,
+        userInput: promptUserInput,
         history: messages,
         preset: activePreset,
         lorebooks: tavern.lorebooks,
@@ -92,34 +234,165 @@ export function useGameLoop() {
       const abortController = new AbortController();
       actions.setAbortController(abortController);
 
+      let preparedTurn: PreparedMysteryTurn | null = null;
+      let requestMessages = promptMessages;
+      const agentMode: AgentNarrativeMode = opts?.forceLegacy ? 'legacy' : (settings.agentNarrativeMode ?? 'standard');
+      if (agentMode !== 'legacy') {
+        const knownClueIds = (Array.isArray(game.endingCheckContext.unlockedClues)
+          ? game.endingCheckContext.unlockedClues
+          : []).filter(id => mysteryFactIds.has(id));
+        const mysteryLocation = resolveMysteryLocation(game.currentState.background);
+        const playerPresentation = buildPlayerKnowledgeBrief({ ...tavern.variables, location: mysteryLocation });
+        const truthContext: TruthContext = {
+          cycleCount: Number(tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
+          currentLocation: mysteryLocation,
+          lockedRoute: readLockedRoute(tavern.variables),
+          unlockedClueIds: knownClueIds,
+          playerKnowledge: readPlayerKnowledge(tavern.variables, knownClueIds),
+          suspicion: {
+            ...game.endingCheckContext.suspicion,
+            ...(tavern.variables.suspicion && typeof tavern.variables.suspicion === 'object'
+              ? tavern.variables.suspicion
+              : {}),
+          },
+          activeNpcIds: npcIdsByLocation[resolveMysteryLocation(game.currentState.background)] ?? [],
+          playerPresentation,
+        };
+        const recentHistory = messages.slice(-8).map(message => ({ role: message.role, content: message.content }));
+        const analysisApi = resolveAnalysisApi(settings);
+        try {
+          // 失败回合重试：编排结果已缓存则直接复用，不重跑导演/审查
+          if (isRetry && cachedPreparedTurn
+            && cachedPreparedTurn.chatId === tavern.activeChatId
+            && cachedPreparedTurn.input === userInput) {
+            preparedTurn = cachedPreparedTurn.turn;
+          }
+          // 玩家阅读期间可能已预跑过同一输入的导演/审查，命中则直接复用
+          const preplanKey = buildPreplanContextKey(agentMode, tavern.activeChatId, truthContext);
+          preparedTurn ??= await consumePreplan(userInput, preplanKey);
+          preparedTurn ??= await prepareMysteryTurn({
+            mode: agentMode,
+            api: analysisApi,
+            preset: activePreset,
+            truthContext,
+            turnContext: {
+              playerInput: userInput,
+              recentHistory,
+              gameStatus: {
+                time: game.gameStatus.time.toISOString(),
+                stamina: game.gameStatus.stamina,
+                sanity: game.gameStatus.sanity,
+              },
+              investigation: game.endingCheckContext.investigation,
+              thresholdDirectives: translateForDirector(tavern.variables)
+                + (scheduledDirectives.length ? '\n' + scheduledDirectives.map(l => `- ${l}`).join('\n') : ''),
+            },
+            presentationContext: {
+              playerInput: userInput,
+              recentHistory,
+              currentLocation: truthContext.currentLocation,
+              currentBackground: game.currentState.background,
+              currentSpeaker: game.currentState.speaker,
+              userName: settings.userName,
+              characterName: settings.characterName,
+              resourceInstructions: promptUserInput,
+            },
+            formatPrompt: settings.formatPromptTemplate,
+            abortSignal: abortController.signal,
+          });
+          requestMessages = preparedTurn.writerMessages;
+          cachedPreparedTurn = { chatId: tavern.activeChatId, input: userInput, turn: preparedTurn };
+        } catch (pipelineError) {
+          preparedTurn = null;
+          if (pipelineError instanceof MysteryPipelineBlockedError) {
+            // 不硬终止：进入可恢复状态，玩家可选择重试编排或回退兼容模式
+            actions.setStreaming(false);
+            actions.setIsWaitingForAI(false);
+            actions.setTurnRecovery({
+              phase: 'blocked_pipeline',
+              userInput,
+              errorMessage: pipelineError.message,
+            });
+            return;
+          }
+          actions.addNotification({
+            type: 'warning',
+            message: `多 Agent 编排失败，本回合已回退兼容模式：${pipelineError instanceof Error ? pipelineError.message : String(pipelineError)}`,
+            duration: 8000,
+          });
+        }
+      } else {
+        invalidatePreplans();
+      }
+
       let fullText = '';
+      const prevScene = game.currentScene;
 
       const finalize = (apiUsed: 'primary' | 'dual') => {
         const parsed = parseStateRef.current.parsed;
-        const mergedVariables = mergeVariables(tavern.variables, parsed.vars);
+        const { timeCost: reportedTimeCost, ...varsPatch } = (parsed.vars ?? {}) as Record<string, any>;
+        const sanitized = sanitizeVarsPatch(varsPatch, tavern.variables);
+        if (sanitized.rejected.length > 0 || sanitized.clamped.length > 0) {
+          console.warn('[vars-validator] 拒绝:', sanitized.rejected, '钳制:', sanitized.clamped);
+        }
+        let mergedVariables = mergeVariables(tavern.variables, sanitized.vars);
+        mergedVariables = mergeAuthorizedKnowledge(mergedVariables, preparedTurn);
 
-        if (Object.keys(parsed.vars).length > 0) {
-          actions.setVariables(mergedVariables);
+        // 引擎时钟结算：优先用玩家点击项的标注耗时，其次 LLM 上报，最后兜底 10 分钟
+        const prevClockISO = typeof tavern.variables.time === 'string'
+          ? tavern.variables.time
+          : game.gameStatus.time.toISOString();
+        const actionCost = pendingTimeCost
+          && pendingTimeCost.chatId === tavern.activeChatId
+          && pendingTimeCost.input === userInput
+          ? pendingTimeCost.minutes : null;
+        const llmCostRaw = Number(reportedTimeCost ?? preparedTurn?.writerPacket.plan.timeCostMinutes);
+        const llmCost = Number.isFinite(llmCostRaw) && llmCostRaw > 0 ? clampTimeCost(llmCostRaw) : null;
+        let nextTimeISO = advanceClock(prevClockISO, actionCost ?? llmCost ?? 10);
+        // LLM 直接写了更晚的 time(剧情跳时间)则以更晚者为准；时钟只进不退
+        if (typeof sanitized.vars.time === 'string') nextTimeISO = laterTime(nextTimeISO, sanitized.vars.time);
+        pendingTimeCost = null;
 
-          if (parsed.vars.stamina !== undefined) {
-            actions.setGameStatus({ stamina: parsed.vars.stamina });
-          }
-          if (parsed.vars.sanity !== undefined) {
-            actions.setGameStatus({ sanity: parsed.vars.sanity });
-          }
-          if (parsed.vars.time !== undefined) {
-            actions.setGameStatus({ time: new Date(parsed.vars.time) });
-          }
+        // 死讯事件状态机: 跨16:00置pending；注入过指令的回合成功后转delivered
+        const eventPatch = checkScheduledEvents(prevClockISO, nextTimeISO, mergedVariables);
+        mergedVariables = { ...mergedVariables, time: nextTimeISO, ...eventPatch };
+        if (!eventPatch.deathNews && hadPendingDeathNews) {
+          mergedVariables = { ...mergedVariables, deathNews: 'delivered' };
         }
 
+        actions.setVariables(mergedVariables);
+        if (sanitized.vars.stamina !== undefined) {
+          actions.setGameStatus({ stamina: sanitized.vars.stamina });
+        }
+        if (sanitized.vars.sanity !== undefined) {
+          actions.setGameStatus({ sanity: sanitized.vars.sanity });
+        }
+        actions.setGameStatus({ time: new Date(nextTimeISO) });
+
+        const nextStatus = {
+          stamina: sanitized.vars.stamina !== undefined ? Number(sanitized.vars.stamina) : game.gameStatus.stamina,
+          sanity: sanitized.vars.sanity !== undefined ? Number(sanitized.vars.sanity) : game.gameStatus.sanity,
+          time: new Date(nextTimeISO),
+        };
+        let allowPreplan = agentMode !== 'legacy';
         const matchedEnding = checkEndingConditions(
-          mergedVariables,
+          variablesToEndingContext(mergedVariables, game.endingsSeen),
           game.endings,
           game.endingsSeen
         );
         if (matchedEnding && !game.endingPanel.visible && !game.endingPanel.pendingEndingId) {
+          allowPreplan = false;
           actions.setEndingPanel({ isPreview: false });
           actions.setPendingEnding(matchedEnding.id);
+        } else if (!matchedEnding) {
+          // 轮回失败判定: 体力/理智耗尽或一天结束 → 场景播完后由 CycleResetWatcher 结算重置
+          const failure = checkCycleFailure(nextStatus);
+          if (failure) {
+            allowPreplan = false;
+            actions.setPendingCycleReset(failure);
+          }
+        } else {
+          allowPreplan = false;
         }
 
         const assistantMessage: ChatMessage = {
@@ -133,9 +406,7 @@ export function useGameLoop() {
 
         const finalMessages = [...messages, assistantMessage];
         if (activeChat) {
-          const updated = { ...activeChat, messages: finalMessages, variables: mergedVariables, updatedAt: Date.now() };
-          saveChat(updated);
-          actions.setChats(tavern.chats.map(c => c.id === updated.id ? updated : c));
+          void persistActiveChat({ messages: finalMessages, variables: mergedVariables });
         }
 
         actions.addHistorySnapshot({
@@ -145,53 +416,141 @@ export function useGameLoop() {
           gameStatus: { ...game.gameStatus },
           variables: mergedVariables,
         });
+
+        cachedPreparedTurn = null;
+
+        // 写手未输出完整清单时，异步补全场景清单；不阻塞正文播放，失败静默（performAction 有 LLM fallback）
+        const needChecklist = preparedTurn && activeChat
+          && (!parsed.observe || !parsed.investigateItems?.length || !parsed.actionItems?.length);
+        if (needChecklist) {
+          const token = assistantMessage.id;
+          checklistTokenRef.current = token;
+          const existing = {
+            hasObserve: !!parsed.observe,
+            hasInvestigate: !!parsed.investigateItems?.length,
+            hasAction: !!parsed.actionItems?.length,
+          };
+          const writerScenePart = {
+            observe: parsed.observe ?? '',
+            investigateItems: parsed.investigateItems ?? [],
+            actionItems: parsed.actionItems ?? [],
+          };
+          void generateSceneChecklist({
+            maintext: parsed.maintext,
+            scenePlan: preparedTurn.writerPacket.plan.scenePlan ?? null,
+            currentLocation: resolveMysteryLocation(game.currentState.background),
+            previousScene: prevScene,
+            variables: mergedVariables,
+          }, {
+            api: resolveAnalysisApi(settings),
+            preset: activePreset,
+          }).then(checklist => {
+            // 竞态防护：下一回合/重roll/切会话已发生则丢弃
+            if (checklistTokenRef.current !== token) return;
+            const state = useGameStore.getState();
+            const chat = state.tavern.chats.find(c => c.id === state.tavern.activeChatId);
+            const lastAssistant = chat ? [...chat.messages].reverse().find(m => m.role === 'assistant') : null;
+            if (!chat || lastAssistant?.id !== token) return;
+
+            const current = state.game.currentScene;
+            if (current) {
+              const merged = mergeSceneChecklist({ ...current, ...writerScenePart }, checklist);
+              // 不走 setCurrentScene：它会重置播放进度，这里只补 currentScene 字段
+              useGameStore.setState(s => ({ game: { ...s.game, currentScene: merged } }));
+            }
+
+            // 回写标签到 </maintext> 前，重载时 rebuildSceneFromChat 才能反解还原
+            const tags = serializeChecklistToTags(checklist, existing);
+            const updatedContent = insertTagsIntoMaintext(lastAssistant.content, tags);
+            if (updatedContent !== lastAssistant.content) {
+              const updatedMessages = chat.messages.map(m => (m.id === token ? { ...m, content: updatedContent } : m));
+              void persistActiveChat({ messages: updatedMessages });
+            }
+          }).catch(error => {
+            console.warn('[scene-list] 场景清单补全失败:', error);
+          });
+        }
+
+        // 预规划: 玩家阅读期间按最可能的输入(第一个选项)后台预跑导演/审查
+        const firstOption = parsed.options?.[0]?.trim();
+        if (allowPreplan && firstOption && agentMode !== 'legacy') {
+          const mysteryLocation = resolveMysteryLocation(game.currentState.background);
+          const knownClueIds = (Array.isArray(mergedVariables.unlockedClues) ? mergedVariables.unlockedClues : [])
+            .filter((id: string) => mysteryFactIds.has(id));
+          const speculativeTruthContext: TruthContext = {
+            cycleCount: Number(mergedVariables.cycleCount ?? 1),
+            currentLocation: mysteryLocation,
+            lockedRoute: readLockedRoute(mergedVariables),
+            unlockedClueIds: knownClueIds,
+            playerKnowledge: readPlayerKnowledge(mergedVariables, knownClueIds),
+            suspicion: {
+              ...game.endingCheckContext.suspicion,
+              ...(mergedVariables.suspicion && typeof mergedVariables.suspicion === 'object'
+                ? mergedVariables.suspicion
+                : {}),
+            },
+            activeNpcIds: npcIdsByLocation[mysteryLocation] ?? [],
+            playerPresentation: buildPlayerKnowledgeBrief({ ...mergedVariables, location: mysteryLocation }),
+          };
+          const speculativeHistory = finalMessages.slice(-8).map(m => ({ role: m.role, content: m.content }));
+          const speculativePrompt = appendResourcePrompt(firstOption, game.currentState.background, mergedVariables);
+          startPreplan({
+            input: firstOption,
+            contextKey: buildPreplanContextKey(agentMode, tavern.activeChatId, speculativeTruthContext),
+            options: {
+              mode: agentMode as Exclude<AgentNarrativeMode, 'legacy'>,
+              api: resolveAnalysisApi(settings),
+              preset: activePreset,
+              truthContext: speculativeTruthContext,
+              turnContext: {
+                playerInput: firstOption,
+                recentHistory: speculativeHistory,
+                gameStatus: {
+                  time: Number.isNaN(nextStatus.time.getTime())
+                    ? game.gameStatus.time.toISOString()
+                    : nextStatus.time.toISOString(),
+                  stamina: nextStatus.stamina,
+                  sanity: nextStatus.sanity,
+                },
+                investigation: game.endingCheckContext.investigation,
+                thresholdDirectives: translateForDirector(mergedVariables),
+              },
+              presentationContext: {
+                playerInput: firstOption,
+                recentHistory: speculativeHistory,
+                currentLocation: mysteryLocation,
+                currentBackground: game.currentState.background,
+                currentSpeaker: game.currentState.speaker,
+                userName: settings.userName,
+                characterName: settings.characterName,
+                resourceInstructions: speculativePrompt,
+              },
+              formatPrompt: settings.formatPromptTemplate,
+            },
+          });
+        }
       };
 
-      // 主 API 完成后,如配置了次 API,用次 API 补 sum/vars
       const maybeAugmentWithSecondary = async () => {
-        const sec = settings.api.secondary;
-        if (!sec?.enabled || !sec.apiKey || !sec.baseUrl) return false;
-
         const parsed = parseStateRef.current.parsed;
-        try {
-          const result = await callSecondaryApi(
-            { baseUrl: sec.baseUrl, apiKey: sec.apiKey, model: sec.model },
-            [
-              { role: 'system', content: SECONDARY_SYSTEM_PROMPT },
-              { role: 'user', content: parsed.maintext || fullText },
-            ],
-            activePreset,
-            { temperature: sec.temperature, maxTokens: sec.maxTokens }
-          );
-
-          const sumMatch = result.match(/<sum>([\s\S]*?)<\/sum>/);
-          if (sumMatch) parsed.summary = sumMatch[1].trim();
-
-          const varsMatch = result.match(/<vars>([\s\S]*?)<\/vars>/);
-          if (varsMatch) {
-            try {
-              const v = JSON.parse(varsMatch[1].trim());
-              if (v && typeof v === 'object') parsed.vars = { ...parsed.vars, ...v };
-            } catch {
-              // 解析失败忽略
-            }
-          }
-
+        const result = await augmentWithSecondary(settings.api.secondary, activePreset, parsed, fullText);
+        if (result.status === 'ok') {
           actions.setParsedContent(parsed);
           return true;
-        } catch (e) {
+        }
+        if (result.status === 'error') {
           actions.addNotification({
             type: 'warning',
-            message: '次 API 调用失败,使用主 API 结果: ' + (e instanceof Error ? e.message : String(e)),
+            message: '次 API 调用失败,使用主 API 结果: ' + result.message,
             duration: 4000,
           });
-          return false;
         }
+        return false;
       };
 
       await streamChatCompletion(
         settings.api,
-        promptMessages,
+        requestMessages,
         activePreset,
         {
           onToken: (token) => {
@@ -201,12 +560,10 @@ export function useGameLoop() {
             actions.setParsedContent(parseStateRef.current.parsed);
 
             if (parseStateRef.current.parsed.maintext) {
-              const scene = maintextToScene(parseStateRef.current.parsed.maintext);
-              const parsed = parseStateRef.current.parsed;
-              if (parsed.observe) scene.observe = parsed.observe;
-              if (parsed.investigateItems?.length) scene.investigateItems = parsed.investigateItems;
-              if (parsed.actionItems?.length) scene.actionItems = parsed.actionItems;
-              actions.setCurrentScene(scene);
+              const scene = maintextToScene(parseStateRef.current.parsed.maintext, {
+                authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
+              });
+              actions.setCurrentScene(mergeParsedIntoScene(prevScene, scene, parseStateRef.current.parsed));
             }
           },
           onComplete: async () => {
@@ -221,33 +578,46 @@ export function useGameLoop() {
             }
             if (validationErrors.length > 0) {
               const detail = formatValidationErrors(validationErrors);
-              actions.addNotification({
-                type: 'error',
-                message: `AI 输出格式不合法,请点击"尝试进入其他时间线"重roll,或检查提示词设置。\n${detail}`,
-                duration: 12000,
-              });
               actions.setApiError('AI 输出格式不合法:\n' + detail);
+              actions.setTurnRecovery({
+                phase: 'failed_stream',
+                userInput,
+                errorMessage: 'AI 输出格式不合法:\n' + detail,
+              });
               return;
             }
 
-            const augmented = await maybeAugmentWithSecondary();
+            // agent 模式下写手已按协议输出 sum/vars,无需次 API 二次补全
+            const augmented = preparedTurn ? false : await maybeAugmentWithSecondary();
             finalize(augmented ? 'dual' : 'primary');
           },
           onError: (error) => {
             actions.setStreaming(false);
             actions.setIsWaitingForAI(false);
             actions.setApiError(error.message);
-            actions.addNotification({ type: 'error', message: error.message, duration: 6000 });
+            actions.setTurnRecovery({ phase: 'failed_stream', userInput, errorMessage: error.message });
           },
         },
-        abortController.signal
+        abortController.signal,
+        {
+          onRetry: (attempt, retryError) => {
+            actions.addNotification({
+              type: 'warning',
+              message: `连接失败，正在自动重试（第 ${attempt} 次）: ${retryError.message}`,
+              duration: 4000,
+            });
+          },
+        }
       );
     } catch (error) {
       actions.setStreaming(false);
       actions.setIsWaitingForAI(false);
       const message = error instanceof Error ? error.message : '未知错误';
       actions.setApiError(message);
-      actions.addNotification({ type: 'error', message, duration: 6000 });
+      // 玩家主动中止（切换会话/轮回重置等）不进入恢复流程
+      if (!(error instanceof ApiCallError && error.kind === 'abort')) {
+        actions.setTurnRecovery({ phase: 'failed_stream', userInput, errorMessage: message });
+      }
     } finally {
       sendingLockRef.current = false;
     }
@@ -289,22 +659,45 @@ export function useGameLoop() {
       actionItems: [],
     });
 
-    // 更新 chat（移除 assistant 回复）
-    const updatedChat = { ...activeChat, messages: trimmedMessages, updatedAt: Date.now() };
-    await saveChat(updatedChat);
-    actions.setChats(tavern.chats.map(c => c.id === updatedChat.id ? updatedChat : c));
+    // 重roll后上下文/历史已变化，旧预规划、失败回合缓存与清单补全回调均不可复用
+    invalidatePreplans();
+    cachedPreparedTurn = null;
+    checklistTokenRef.current = null;
+    actions.clearTurnRecovery();
 
-    // 从历史快照中移除最后一条（如果有）
-    const currentHistory = store.game.history;
-    if (currentHistory.length > 0) {
-      // 通过直接修改 gameStore 的 state 来移除最后一条 history
-      // 但 gameStore 没有提供 removeLastHistory 方法，暂时跳过
-      // history 多一条不影响功能，只是记录冗余
+    // 更新 chat（移除 assistant 回复）并回滚对应历史快照
+    // 失败回合没有 assistant 回复也没有新快照，此时不能误删上一成功回合的快照
+    const removedAssistant = activeChat.messages.slice(userMsgIndex + 1).some(m => m.role === 'assistant');
+    await persistActiveChat({ messages: trimmedMessages });
+    if (removedAssistant) {
+      actions.removeLastHistorySnapshot();
     }
 
     // 重新发送同样的输入
     await sendMessage(lastUserMsg.content, { isReroll: true });
   }, [store, sendMessage]);
+
+  /** 重试失败回合：复用已持久化的 user 消息与编排缓存 */
+  const retryTurn = useCallback(async (opts?: { forceLegacy?: boolean }) => {
+    const recovery = store.api.turnRecovery;
+    if (recovery.phase === 'idle' || !recovery.userInput) return;
+    await sendMessage(recovery.userInput, { isRetry: true, forceLegacy: opts?.forceLegacy });
+  }, [store, sendMessage]);
+
+  /** 放弃失败回合：撤回孤儿 user 消息，恢复到失败前状态 */
+  const dismissRecovery = useCallback(async () => {
+    const { tavern, actions } = store;
+    if (store.api.turnRecovery.phase === 'idle') return;
+    const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
+    if (activeChat && activeChat.messages.length > 0
+      && activeChat.messages[activeChat.messages.length - 1].role === 'user') {
+      await persistActiveChat({ messages: activeChat.messages.slice(0, -1) });
+    }
+    cachedPreparedTurn = null;
+    checklistTokenRef.current = null;
+    actions.setApiError(null);
+    actions.clearTurnRecovery();
+  }, [store]);
 
   const performAction = useCallback((actionType: 'observe' | 'investigate' | 'actions', itemIndex?: number) => {
     const { game, actions } = store;
@@ -327,6 +720,11 @@ export function useGameLoop() {
 
 请返回详细的调查结果，包含发现、疑点、可能的线索。
 输出格式：<action type="investigate">...</action>`;
+        const parsedCost = parseTimeCost(item.time);
+        const chatId = store.tavern.activeChatId;
+        pendingTimeCost = parsedCost > 0 && chatId
+          ? { chatId, input: prompt, minutes: clampTimeCost(parsedCost) }
+          : null;
         sendMessage(prompt);
         actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
       } else {
@@ -350,6 +748,11 @@ export function useGameLoop() {
 请描述行动过程、结果、场景变化（如果有）。
 如果行动导致场景切换，在文本末尾加上：[变化] 场景切换 → 新场景名
 输出格式：<action type="act">...</action>`;
+        const parsedCost = parseTimeCost(item.time);
+        const chatId = store.tavern.activeChatId;
+        pendingTimeCost = parsedCost > 0 && chatId
+          ? { chatId, input: prompt, minutes: clampTimeCost(parsedCost) }
+          : null;
         sendMessage(prompt);
         actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
       } else {
@@ -367,5 +770,5 @@ export function useGameLoop() {
     sendMessage(message);
   }, [sendMessage, store]);
 
-  return { sendMessage, selectOption, performAction, reroll };
+  return { sendMessage, selectOption, performAction, reroll, retryTurn, dismissRecovery };
 }
