@@ -552,6 +552,6 @@ export const useGameStore = create<GameStore>((set) => ({
 }));
 
 // dev 调试钩子：供 Playwright/控制台直接操作 store(生产构建剔除)
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__gameStore = useGameStore;
 }
