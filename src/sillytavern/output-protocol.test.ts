@@ -70,6 +70,21 @@ B</option>
     expect(errors.some(e => e.code === 'UNCLOSED_TAG' || e.code === 'MISMATCHED_TAG')).toBe(true);
   });
 
+  it('accepts 认知/动作 maintext lines', () => {
+    const parsed = {
+      ...baseParsed,
+      maintext: '场景|room.jpg\n对话|少女|calm|你好。\n动作|少女|nod\n认知|meet:old-man',
+    };
+    const errors = protocol.validate('x', parsed);
+    expect(errors.some(e => e.code === 'MAINTEXT_INVALID_LINES')).toBe(false);
+  });
+
+  it('reports unknown maintext line directives', () => {
+    const parsed = { ...baseParsed, maintext: '场景|room.jpg\n未知|xxx' };
+    const errors = protocol.validate('x', parsed);
+    expect(errors.some(e => e.code === 'MAINTEXT_INVALID_LINES')).toBe(true);
+  });
+
   it('formats errors', () => {
     const errors = [{ code: 'X', message: 'bad', tag: 'maintext' }];
     expect(formatValidationErrors(errors)).toContain('bad');

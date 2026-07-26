@@ -122,7 +122,8 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
         if (tag === 'vars' || tag === 'thinking' || tag === 'think') continue;
         const openCount = (rawText.match(new RegExp(`<${tag}\\b`, 'g')) || []).length;
         const closeCount = (rawText.match(new RegExp(`<\\/${tag}>`, 'g')) || []).length;
-        if (openCount !== closeCount && openCount > 0) {
+        // 多余的闭合标签无害（解析器会忽略），只有缺闭合才可能丢内容
+        if (openCount > closeCount && openCount > 0) {
           errors.push({
             code: 'MISMATCHED_TAG',
             message: `<${tag}> 开启(${openCount})与闭合(${closeCount})数量不匹配`,
@@ -163,7 +164,7 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
       const lines = parsed.maintext.split('\n').filter(l => l.trim());
       const invalidLines = lines.filter(line => {
         const type = line.split('|')[0]?.trim();
-        return !['场景', '音乐', '对话', '镜头', '效果'].includes(type);
+        return !['场景', '音乐', '对话', '镜头', '效果', '动作', '认知'].includes(type);
       });
       if (invalidLines.length > 0) {
         errors.push({
