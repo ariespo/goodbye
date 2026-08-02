@@ -192,6 +192,27 @@ describe('mystery orchestrator', () => {
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back when a proxy wraps response_format rejection as successful text', async () => {
+    const proxyError = 'Proxy error (HTTP 400): This response_format type is unavailable now';
+    const complete = vi.fn()
+      .mockResolvedValueOnce(proxyError)
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(approvedFactReview)
+      .mockResolvedValueOnce(approvedFactReview);
+    const result = await prepareMysteryTurn({
+      mode: 'standard',
+      api: { baseUrl: 'wrapped-proxy', apiKey: 'test', model: 'test' },
+      preset: null,
+      truthContext,
+      turnContext: {},
+      presentationContext: {},
+      complete,
+    });
+    expect(result.hardReview.approved).toBe(true);
+    expect(complete).toHaveBeenCalledTimes(4);
+    expect(complete.mock.calls[1]?.[1]?.responseFormat).toBeUndefined();
+  });
+
   it('records an orchestration log entry with stage timings on success', async () => {
     clearOrchestrationLog();
     const complete = completeApproved();

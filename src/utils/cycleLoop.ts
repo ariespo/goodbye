@@ -2,10 +2,13 @@ import { maintextToScene } from '../engine/scene-parser';
 import { invalidatePreplans } from '../agents/mystery';
 import type { ChatMessage } from '../sillytavern/types';
 import { persistActiveChat } from './chatPersistence';
-import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
+import { variablesToEndingContext } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
 import { createDefaultGameStatus } from './gameSession';
 import { resolveSceneEnvironment } from './sceneEnvironment';
+import { settleCycleVariables } from '../engine/cycle-settlement';
+
+export { settleCycleVariables } from '../engine/cycle-settlement';
 
 export const STAY_OPTION_TEXT = '不出门，陪文穗过完今天';
 export const GOODBYE_OPTION_TEXT = '对文穗说再见';
@@ -16,20 +19,6 @@ export interface CycleTransitionContext {
   lastPlayerChoice?: string;
   lastTurnSummary?: string;
 }
-
-/** 跨轮继承的字段(线索/认知/累计进度) */
-const INHERITED_KEYS = [
-  'unlockedClues',
-  'organizedClues',
-  'cultClues',
-  'worldGlitchClues',
-  'fakeEvidence',
-  'letterFragments',
-  'routesLockedEver',
-  'knowledgeEvents',
-  'mysteryKnowledge',
-  'suspicion',
-] as const;
 
 const DAY_END = new Date(2024, 8, 10, 0, 0);
 
@@ -47,24 +36,6 @@ export function checkCycleFailure(status: { stamina: number; sanity: number; tim
  * 轮回结算: 继承线索/认知/累计进度，重置当日状态，cycleCount+1。
  * stayed=true 表示本轮以「陪文穗过完今天」结束，stayStreak 累加，否则归零。
  */
-export function settleCycleVariables(
-  current: Record<string, any>,
-  opts: { stayed?: boolean } = {},
-): Record<string, any> {
-  const next = createDefaultVariables();
-  for (const key of INHERITED_KEYS) {
-    if (current[key] !== undefined) next[key] = current[key];
-  }
-  next.cycleCount = Number(current.cycleCount ?? 1) + 1;
-  next.stayStreak = opts.stayed ? Number(current.stayStreak ?? 0) + 1 : 0;
-  next.stayedEver = Boolean(current.stayedEver) || next.stayStreak >= 3;
-  next.loopSuspicionStart = { ...(next.suspicion ?? {}) };
-  next.time = '2024-09-09T08:00:00';
-  next.stamina = 100;
-  next.sanity = 70;
-  return next;
-}
-
 /** 元层选项: STAY 需锁定过≥1条路线且见过≥3个结局且在家；TRUE 需三线锁定且曾 STAY */
 export function getCycleMetaOptions(
   variables: Record<string, any>,

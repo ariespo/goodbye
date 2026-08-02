@@ -27,6 +27,11 @@ function isResponseFormatUnsupportedError(error: unknown): boolean {
   return /API error (400|404|422)/.test(message);
 }
 
+function isResponseFormatUnsupportedText(text: string): boolean {
+  if (!/(response_format|json_schema|json_object)/i.test(text)) return false;
+  return /(unavailable|unsupported|not supported|invalid_request_error|HTTP\s*(400|404|422))/i.test(text);
+}
+
 /** 优先带 response_format 调用；服务端不支持时降级为纯文本并缓存该结论。 */
 export async function completeStructured(
   complete: AgentCompletion,
@@ -37,7 +42,9 @@ export async function completeStructured(
 ): Promise<string> {
   if (responseFormatSupportCache.get(apiKey) !== false) {
     try {
-      return await complete(messages, { ...options, responseFormat });
+      const result = await complete(messages, { ...options, responseFormat });
+      if (!isResponseFormatUnsupportedText(result)) return result;
+      responseFormatSupportCache.set(apiKey, false);
     } catch (error) {
       if (!isResponseFormatUnsupportedError(error)) throw error;
       responseFormatSupportCache.set(apiKey, false);

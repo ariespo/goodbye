@@ -190,7 +190,7 @@ async function runMysteryPipeline(
   observe.setDirectorAttempts(directorAttempts);
   let directorPlan = parseDirectorPlan(await timeStage('director', () => completeStructured(
     complete, supportKey, directorMessages,
-    { temperature: 0.2, maxTokens: 1800 },
+    { temperature: 0.2, maxTokens: 4000 },
     DIRECTOR_PLAN_RESPONSE_FORMAT,
   )));
   observe.setDirectorPlan(directorPlan);
@@ -204,7 +204,7 @@ async function runMysteryPipeline(
     directorPlan = parseDirectorPlan(await timeStage('director-repair', () => completeStructured(complete, supportKey, [
       { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
       { role: 'user', content: repairPrompt(brief, rejectedPlan, rejectedReview) },
-    ], { temperature: 0.1, maxTokens: 1800 }, DIRECTOR_PLAN_RESPONSE_FORMAT)));
+    ], { temperature: 0.1, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT)));
     observe.setDirectorPlan(directorPlan);
     hardReview = await timeStage('hard-review-retry', () => reviewDirectorPlan(directorPlan, brief));
     observe.setHardReview(hardReview);
@@ -231,11 +231,11 @@ async function runMysteryPipeline(
           })),
         ),
       },
-    ], { temperature: 0, maxTokens: 900 }, FACT_REVIEW_RESPONSE_FORMAT));
+    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT));
     const pacingPromise = timeStage('pacing-review', () => completeStructured(complete, supportKey, [
       { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
       { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-    ], { temperature: 0, maxTokens: 900 }, FACT_REVIEW_RESPONSE_FORMAT));
+    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT));
     const [semanticText, pacingText] = await Promise.all([semanticPromise, pacingPromise]);
     semanticReview = parseFactReview(semanticText);
     pacingReview = parseFactReview(pacingText);
