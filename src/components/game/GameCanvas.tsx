@@ -22,6 +22,7 @@ import { CharacterProfileModal } from './CharacterProfileModal';
 import { ApiGuideCard } from './ApiGuideCard';
 import { KnowledgeUpdateOverlay } from './KnowledgeUpdateOverlay';
 import { CharacterSprite } from './CharacterSprite';
+import { ConclusionModal } from './ConclusionModal';
 import { LoadingOverlay } from '../system/LoadingOverlay';
 import { parseOpeningStoryline } from '../../engine/opening-storyline';
 import { rebuildSceneFromChat } from '../../utils/sceneFromChat';
@@ -77,6 +78,7 @@ export function GameCanvas() {
       <ActionPanel />
       <ClueModal />
       <CharacterProfileModal />
+      <ConclusionModal />
       <EndingPlayer />
       <CycleResetWatcher />
       {showEndingEditor && <Suspense fallback={null}><EndingEditor /></Suspense>}

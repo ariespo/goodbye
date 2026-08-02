@@ -14,7 +14,7 @@ export function GameplayGuide() {
   const ui = useGameStore(state => state.ui);
   const [dismissed, setDismissed] = useState(() => window.localStorage.getItem('farewell.gameplay-guide.dismissed') === 'true');
 
-  const modalOpen = ui.showSettings || ui.showLorebook || ui.showPreset || ui.showHistory || ui.showMap || ui.showClues || ui.showCharacters || ui.showEndingEditor;
+  const modalOpen = ui.showSettings || ui.showLorebook || ui.showPreset || ui.showHistory || ui.showMap || ui.showClues || ui.showCharacters || ui.showConclusion || ui.showEndingEditor;
   const visible = sceneComplete && !actionPanelVisible && !modalOpen && !dismissed;
 
   // 指引隐藏/卸载时清掉 hover 高亮标记，避免按钮微光残留

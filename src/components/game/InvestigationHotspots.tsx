@@ -23,7 +23,7 @@ export function InvestigationHotspots() {
   const ui = useGameStore(state => state.ui);
   const { performAction } = useGameLoop();
   const items = scene?.investigateItems ?? [];
-  const modalOpen = ui.showSettings || ui.showLorebook || ui.showPreset || ui.showHistory || ui.showMap || ui.showClues || ui.showCharacters || ui.showEndingEditor;
+  const modalOpen = ui.showSettings || ui.showLorebook || ui.showPreset || ui.showHistory || ui.showMap || ui.showClues || ui.showCharacters || ui.showConclusion || ui.showEndingEditor;
 
   if (!sceneComplete || waiting || actionPanelVisible || modalOpen || items.length === 0) return null;
   const positions = positionSet(background);

@@ -70,6 +70,7 @@ interface GameStore {
     showMap: boolean;
     showClues: boolean;
     showCharacters: boolean;
+    showConclusion: boolean;
     showTitle: boolean;
     showEndingEditor: boolean;
     showPromptInspector: boolean;
@@ -116,6 +117,7 @@ interface GameStore {
     setTurnRecovery: (recovery: TurnRecoveryState) => void;
     clearTurnRecovery: () => void;
     toggleModal: (modal: 'settings' | 'lorebook' | 'preset' | 'history' | 'map' | 'clues' | 'characters') => void;
+    setShowConclusion: (show: boolean) => void;
     setShowTitle: (show: boolean) => void;
     setShowEndingEditor: (show: boolean) => void;
     setShowPromptInspector: (show: boolean) => void;
@@ -454,6 +456,7 @@ export const useGameStore = create<GameStore>((set) => ({
     showMap: false,
     showClues: false,
     showCharacters: false,
+    showConclusion: false,
     showTitle: true,
     showEndingEditor: false,
     showPromptInspector: false,
@@ -554,6 +557,7 @@ export const useGameStore = create<GameStore>((set) => ({
       const key = `show${modal.charAt(0).toUpperCase() + modal.slice(1)}` as keyof typeof state.ui;
       return { ui: { ...state.ui, [key]: !state.ui[key] } };
     }),
+    setShowConclusion: (show) => set(state => ({ ui: { ...state.ui, showConclusion: show } })),
     setShowTitle: (show) => set(state => ({ ui: { ...state.ui, showTitle: show } })),
     setShowEndingEditor: (show) => set(state => ({ ui: { ...state.ui, showEndingEditor: show } })),
     setShowPromptInspector: (show) => set(state => ({ ui: { ...state.ui, showPromptInspector: show } })),

@@ -69,7 +69,7 @@ describe('validateStateAgentResponse', () => {
     expect(result.rejected).toHaveLength(5);
   });
 
-  it('证据通过后仍执行数值增幅和路线前置条件', () => {
+  it('证据通过后仍执行数值增幅并拒绝程序拥有的路线字段', () => {
     const result = validateStateAgentResponse({
       patch: {
         suspicion: { 'old-man': 50 },

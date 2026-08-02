@@ -12,9 +12,8 @@ export const SECONDARY_SYSTEM_PROMPT = `你是游戏状态分析助手。基于�
   suspicion: { "old-man" | "detective-a" | "detective-b" | "self" | "clerk" | "teacher" | "senpai": 数值 }
   affinity: { "fumi" | "touko": 0-100 }
   unlockedClues / organizedClues / cultClues / worldGlitchClues / fakeEvidence / letterFragments(字符串数组,只增不减)
-  lockedRoute("A"|"B"|"C"|"NONE"|"FAKE",需怀疑度/证据达标才会被接受) / overlay("CULT"|"PSYCH") / finalChoice
 - 数值单回合变化有限幅(怀疑度/好感度±15,体力±30),超限会被程序截断
-- 禁止写入: cycleCount、stayStreak、stayedEver、routesLockedEver、knowledgeEvents(程序专有)
+- 禁止写入: cycleCount、stayStreak、stayedEver、routesLockedEver、knowledgeEvents、lockedRoute、overlay、finalChoice(程序专有)
 - vars 必须是合法 JSON 对象
 - 如果回合内没有数值变化,可以输出空对象 <vars>{}</vars>`;
 

@@ -26,11 +26,11 @@ const tools: Array<{ id: ToolId; icon: GameIconName; label: string }> = [
   { id: 'settings', icon: 'settings', label: '设置' },
 ];
 
-const endingTool = { id: 'ending', icon: 'ending' as const, label: '结局' };
+const conclusionTool = { id: 'conclusion', icon: 'ending' as const, label: '指认' };
 
 export function ActionBar() {
   const toggleModal = useGameStore(state => state.actions.toggleModal);
-  const setShowEndingEditor = useGameStore(state => state.actions.setShowEndingEditor);
+  const setShowConclusion = useGameStore(state => state.actions.setShowConclusion);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const currentScene = useGameStore(state => state.game.currentScene);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
@@ -78,12 +78,12 @@ export function ActionBar() {
               />
             ))}
             <DrawerButton
-              iconName={endingTool.icon}
-              label={endingTool.label}
+              iconName={conclusionTool.icon}
+              label={conclusionTool.label}
               tone="gold"
               onClick={() => {
                 setMobileMoreOpen(false);
-                setShowEndingEditor(true);
+                setShowConclusion(true);
               }}
             />
           </div>
@@ -130,11 +130,11 @@ export function ActionBar() {
           />
         ))}
         <PixelActionBtn
-          iconName={endingTool.icon}
-          label={endingTool.label}
-          enabled={!isWaitingForAI}
+          iconName={conclusionTool.icon}
+          label={conclusionTool.label}
+          enabled={!isWaitingForAI && sceneComplete}
           tone="gold"
-          onClick={() => setShowEndingEditor(true)}
+          onClick={() => setShowConclusion(true)}
         />
       </div>
       <button

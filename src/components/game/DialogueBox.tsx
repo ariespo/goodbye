@@ -169,7 +169,7 @@ export function DialogueBox() {
       if (el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return true;
       const { ui, game } = useGameStore.getState();
       if (ui.showSettings || ui.showLorebook || ui.showPreset || ui.showHistory || ui.showMap
-        || ui.showClues || ui.showCharacters || ui.showEndingEditor || ui.showApiGuide
+        || ui.showClues || ui.showCharacters || ui.showConclusion || ui.showEndingEditor || ui.showApiGuide
         || ui.showTitle || ui.showPromptInspector || ui.showOrchestrationLog) return true;
       if (game.actionPanel.visible || game.endingPanel.visible) return true;
       // SaveModal 状态在组件内部，只能从 DOM 判断

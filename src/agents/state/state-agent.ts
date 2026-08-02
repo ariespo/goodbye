@@ -58,11 +58,11 @@ const STATE_AGENT_SYSTEM_PROMPT = `你是独立的游戏 State Agent。你只分
 - 只记录正文明确发生的变化。没有证据就不要改。
 - 固定行动成本由游戏引擎另行扣除，不要在 patch 中重复扣除。
 - 可写字段：stamina、sanity、location、suspicion.*、affinity.*、investigation.*、
-  organizedClues、lockedRoute、overlay、finalChoice。
+  organizedClues。
 - 禁止写入：time、cycleCount、stayStreak、stayedEver、routesLockedEver、endingsSeen、
   knowledgeEvents、mysteryKnowledge、unlockedClues、deathNews、tripProgress、cultClues、
-  worldGlitchClues、fakeEvidence、letterFragments。
-- 数值写变化后的绝对值；数组只增不减；路线和解释层只有正文明确完成锁定时才能写。
+  worldGlitchClues、fakeEvidence、letterFragments、lockedRoute、overlay、finalChoice。
+- 数值写变化后的绝对值；数组只增不减；路线指认、解释层和最终选择只由玩家界面与游戏程序写入。
 - 路线碎片、假死证据、隐藏层线索和行程进度由事实门在正文生成后另行结算，不要写入。
 - 不要使用 Markdown 代码块。`;
 
@@ -102,6 +102,9 @@ const STATE_AGENT_FORBIDDEN_ROOTS = new Set([
   'worldGlitchClues',
   'fakeEvidence',
   'letterFragments',
+  'lockedRoute',
+  'overlay',
+  'finalChoice',
 ]);
 
 export function validateStateAgentResponse(
