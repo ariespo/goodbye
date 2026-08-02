@@ -325,6 +325,15 @@ export async function streamChatCompletion(
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let contentEmitted = false;
+      let reasoningFallback = '';
+
+      const emitReasoningFallback = () => {
+        if (contentEmitted || !reasoningFallback.trim()) return;
+        onFirstToken();
+        callbacks.onToken(reasoningFallback);
+        contentEmitted = true;
+      };
 
       try {
         while (true) {
@@ -339,16 +348,22 @@ export async function streamChatCompletion(
           for (const line of lines) {
             if (line.trim() === '') continue;
             if (line.trim() === 'data: [DONE]') {
+              emitReasoningFallback();
               callbacks.onComplete();
               return;
             }
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                const token = data.choices?.[0]?.delta?.content || '';
+                const delta = data.choices?.[0]?.delta;
+                const token = typeof delta?.content === 'string' ? delta.content : '';
                 if (token) {
+                  contentEmitted = true;
                   onFirstToken();
                   callbacks.onToken(token);
+                }
+                if (typeof delta?.reasoning_content === 'string') {
+                  reasoningFallback += delta.reasoning_content;
                 }
               } catch {
                 // Ignore malformed JSON
@@ -360,6 +375,7 @@ export async function streamChatCompletion(
         reader.releaseLock();
       }
 
+      emitReasoningFallback();
       callbacks.onComplete();
     } finally {
       timeout.dispose();
@@ -433,7 +449,10 @@ export async function callSecondaryApi(
         { method: 'POST', body: JSON.stringify(body), signal: timeout.signal }
       );
       const data = await response.json();
-      return data.choices?.[0]?.message?.content || '';
+      const message = data.choices?.[0]?.message;
+      const content = typeof message?.content === 'string' ? message.content : '';
+      if (content.trim()) return content;
+      return typeof message?.reasoning_content === 'string' ? message.reasoning_content : '';
     } finally {
       timeout.dispose();
     }

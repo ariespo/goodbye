@@ -16,17 +16,30 @@ function jsonResponse(content: string): Response {
   return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
 }
 
+function reasoningJsonResponse(reasoningContent: string, content = ''): Response {
+  return new Response(JSON.stringify({
+    choices: [{ message: { content, reasoning_content: reasoningContent } }],
+  }), { status: 200 });
+}
+
 function errorResponse(status: number): Response {
   return new Response('server error', { status });
 }
 
 function sseResponse(chunks: string[], options?: { errorAfter?: boolean }): Response {
+  return sseDeltaResponse(chunks.map(content => ({ content })), options);
+}
+
+function sseDeltaResponse(
+  deltas: Array<{ content?: string; reasoning_content?: string }>,
+  options?: { errorAfter?: boolean }
+): Response {
   const encoder = new TextEncoder();
   let index = 0;
   const stream = new ReadableStream<Uint8Array>({
     pull(controller) {
-      if (index < chunks.length) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunks[index++] } }] })}\n`));
+      if (index < deltas.length) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: deltas[index++] }] })}\n`));
         return;
       }
       if (options?.errorAfter) {
@@ -42,6 +55,48 @@ function sseResponse(chunks: string[], options?: { errorAfter?: boolean }): Resp
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('reasoning_content compatibility', () => {
+  it('uses reasoning_content for a non-stream response only when content is empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reasoningJsonResponse('fallback')));
+    const result = await callSecondaryApi(config, [{ role: 'user', content: 'hi' }], null);
+    expect(result).toBe('fallback');
+  });
+
+  it('prefers content when both response fields are present', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reasoningJsonResponse('reasoning', 'answer')));
+    const result = await callSecondaryApi(config, [{ role: 'user', content: 'hi' }], null);
+    expect(result).toBe('answer');
+  });
+
+  it('buffers reasoning_content and emits it once when stream content stays empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseDeltaResponse([
+      { reasoning_content: 'fallback ' },
+      { reasoning_content: 'answer' },
+    ])));
+    const tokens: string[] = [];
+    await streamChatCompletion(config, [{ role: 'user', content: 'hi' }], null, {
+      onToken: token => tokens.push(token),
+      onComplete: vi.fn(),
+      onError: vi.fn(),
+    });
+    expect(tokens).toEqual(['fallback answer']);
+  });
+
+  it('discards buffered reasoning_content when stream content is present', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseDeltaResponse([
+      { reasoning_content: 'hidden reasoning' },
+      { content: 'visible answer' },
+    ])));
+    const tokens: string[] = [];
+    await streamChatCompletion(config, [{ role: 'user', content: 'hi' }], null, {
+      onToken: token => tokens.push(token),
+      onComplete: vi.fn(),
+      onError: vi.fn(),
+    });
+    expect(tokens).toEqual(['visible answer']);
+  });
 });
 
 describe('classifyHttpStatus / toApiCallError', () => {
