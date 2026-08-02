@@ -8,6 +8,7 @@ import {
 import { sanitizeVarsPatch, type SanitizeResult } from '../../sillytavern/vars-validator';
 import { setVariablePath } from '../../sillytavern/vars-merger';
 import { completeStructured, extractJson } from '../mystery/structured';
+import { LOOP_PACING_CONTRACT } from '../mystery/loop-contract';
 
 export interface StateEvidence {
   path: string;
@@ -42,7 +43,9 @@ export interface RunStateAgentOptions {
 
 const STATE_RESPONSE_FORMAT: ResponseFormat = { type: 'json_object' };
 
-const STATE_AGENT_SYSTEM_PROMPT = `你是独立的游戏 State Agent。你只分析已经发生的玩家输入和本回合正文，不续写剧情，不推测隐藏真相。
+const STATE_AGENT_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
+
+你是独立的游戏 State Agent。你只分析已经发生的玩家输入和本回合正文，不续写剧情，不推测隐藏真相。
 
 只返回一个 JSON 对象：
 {
@@ -56,6 +59,7 @@ const STATE_AGENT_SYSTEM_PROMPT = `你是独立的游戏 State Agent。你只分
 规则：
 - 每个 patch 叶节点必须有一条同 path 的 evidence；quote 必须是输入或正文中的原文。
 - 只记录正文明确发生的变化。没有证据就不要改。
+- 纯氛围、眼神、停顿、玩家主观猜测或同一证据的重复叙述，不足以支持新的决定性嫌疑增长。
 - 固定行动成本由游戏引擎另行扣除，不要在 patch 中重复扣除。
 - 可写字段：stamina、sanity、location、suspicion.*、affinity.*、investigation.*、
   organizedClues。

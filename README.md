@@ -4,6 +4,8 @@
 
 当前版本：`0.8.0`。项目处于可玩测试阶段，尚未作为正式发行版发布。
 
+剧情术语、轮回计数、前三轮节奏和 Agent 权限的权威约束见 [`docs/agent-story-contract.md`](docs/agent-story-contract.md)。
+
 ## 本地运行
 
 需要 Node.js 和 npm。

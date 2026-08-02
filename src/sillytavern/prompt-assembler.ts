@@ -12,6 +12,7 @@ import type { ChatPreset, Lorebook, ChatMessage, MatchedEntry } from './types';
 import { createLorebookEngine } from './lorebook-engine';
 import { getVariablePath } from './vars-merger';
 import { translateForWriter } from '../engine/variable-thresholds';
+import { buildLoopPacingContract } from '../agents/mystery/loop-contract';
 
 export interface AssembleOptions {
   userInput: string;
@@ -218,6 +219,7 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
   const varBlock = formatVariablesForPrompt(variables || {});
   if (varBlock) systemAcc += (systemAcc ? '\n\n' : '') + varBlock;
   systemAcc += (systemAcc ? '\n\n' : '') + translateForWriter(variables || {});
+  systemAcc += (systemAcc ? '\n\n' : '') + buildLoopPacingContract(variables?.cycleCount);
 
   // 5) 附加格式提示词(XML 标签约束)
   if (formatPrompt) systemAcc += (systemAcc ? '\n\n' : '') + formatPrompt;
@@ -455,6 +457,7 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
     let sys = systemAcc;
     if (varBlock) sys += (sys ? '\n\n' : '') + varBlock;
     sys += (sys ? '\n\n' : '') + translateForWriter(variables || {});
+    sys += (sys ? '\n\n' : '') + buildLoopPacingContract(variables?.cycleCount);
     if (formatPrompt) sys += (sys ? '\n\n' : '') + formatPrompt;
     finalMessages.push({ role: 'system', content: sys, index: finalMessages.length });
   }
@@ -466,7 +469,15 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   finalMessages.push({ role: 'user', content: replaceMacros(userInput, macroCtx), index: finalMessages.length });
 
   // 6) 统计
-  const systemTokens = Math.ceil((systemAcc.length + (varBlock?.length || 0) + (formatPrompt?.length || 0)) / 4);
+  const injectedWriterDirective = translateForWriter(variables || {});
+  const injectedLoopContract = buildLoopPacingContract(variables?.cycleCount);
+  const systemTokens = Math.ceil((
+    systemAcc.length
+    + (varBlock?.length || 0)
+    + injectedWriterDirective.length
+    + injectedLoopContract.length
+    + (formatPrompt?.length || 0)
+  ) / 4);
   const historyTokens = includedHistory.reduce((sum, m) => sum + m.tokens, 0);
   const userInputTokens = Math.ceil(userInput.length / 4);
 
