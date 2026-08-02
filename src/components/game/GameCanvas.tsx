@@ -1,7 +1,6 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { BackgroundLayer } from './BackgroundLayer';
-import { CharacterSprite } from './CharacterSprite';
 import { DialogueBox } from './DialogueBox';
 import { ChoiceMenu } from './ChoiceMenu';
 import { StatusPanel } from './StatusPanel';
@@ -11,17 +10,24 @@ import { MapModal } from './MapModal';
 import { UserInput } from './UserInput';
 import { ActionPanel } from './ActionPanel';
 import { ClueModal } from './ClueModal';
-import { EndingEditor } from './EndingEditor';
 import { EndingPlayer } from './EndingPlayer';
+import { CycleResetWatcher } from './CycleResetWatcher';
+import { RainOverlay } from './RainOverlay';
+import { EffectOverlay } from './EffectOverlay';
+import { ItemCallout } from './ItemCallout';
+import { GameplayGuide } from './GameplayGuide';
+import { ClueDiscoveryOverlay } from './ClueDiscoveryOverlay';
+import { InvestigationHotspots } from './InvestigationHotspots';
+import { CharacterProfileModal } from './CharacterProfileModal';
+import { ApiGuideCard } from './ApiGuideCard';
+import { KnowledgeUpdateOverlay } from './KnowledgeUpdateOverlay';
+import { CharacterSprite } from './CharacterSprite';
 import { LoadingOverlay } from '../system/LoadingOverlay';
-import { maintextToScene } from '../../engine/scene-parser';
-import { OPENING_STORYLINE } from '../../engine/opening-storyline';
+import { parseOpeningStoryline } from '../../engine/opening-storyline';
+import { rebuildSceneFromChat } from '../../utils/sceneFromChat';
 
-/** 从 assistant message 的 content 里提取 <maintext>...*/
-function extractMaintext(content: string): string {
-  const m = content.match(/<maintext>([\s\S]*?)<\/maintext>/);
-  return m ? m[1].trim() : '';
-}
+const EndingEditor = lazy(() => import('./EndingEditor')
+  .then(module => ({ default: module.EndingEditor })));
 
 export function GameCanvas() {
   const mood = useGameStore(state => state.game.currentState.mood);
@@ -31,33 +37,29 @@ export function GameCanvas() {
     return chats.find(c => c.id === state.tavern.activeChatId) || null;
   });
   const actions = useGameStore(state => state.actions);
+  const showEndingEditor = useGameStore(state => state.ui.showEndingEditor);
 
   // Fallback: 如果 currentScene 为 null 但 activeChat 有 assistant 消息,
   // 自动从最后一条 assistant message 重建 scene(解决刷新页面后 scene 丢失)
   useEffect(() => {
     if (currentScene) return;
-    if (activeChat && activeChat.messages.length > 0) {
-      const lastAssistant = [...activeChat.messages].reverse().find(m => m.role === 'assistant');
-      if (lastAssistant) {
-        const maintext = extractMaintext(lastAssistant.content);
-        if (maintext) {
-          const scene = maintextToScene(maintext);
-          // 只有提取的 scene 有交互数据时才使用它
-          if (scene.lines.length > 0 && (scene.observe || scene.investigateItems?.length || scene.actionItems?.length)) {
-            actions.setCurrentScene(scene);
-            return;
-          }
-        }
-      }
-    }
-    // 最终后备: 直接使用开场剧情确保用户永远能开始游戏
-    actions.setCurrentScene(maintextToScene(OPENING_STORYLINE));
+    // 最终后备: 开场剧情确保用户永远能开始游戏
+    actions.setCurrentScene(rebuildSceneFromChat(activeChat) ?? parseOpeningStoryline());
   }, [currentScene, activeChat, actions]);
 
+  // GalGame 惯例：点击舞台空白处（背景/立绘）也能推进对话，DialogueBox 监听该事件
+  const handleStageClick = (e: React.MouseEvent) => {
+    if (!(e.target as HTMLElement).closest?.('[data-stage-layer]')) return;
+    window.dispatchEvent(new CustomEvent('farewell:advance-dialogue'));
+  };
+
   return (
-    <div className="game-canvas relative w-full h-full overflow-hidden" data-mood={mood}>
+    <div className="game-canvas relative w-full h-full overflow-hidden" data-mood={mood} onClick={handleStageClick}>
       <BackgroundLayer />
+      <RainOverlay />
       <MoodOverlay />
+      <EffectOverlay />
+      <ItemCallout />
 
       {/* Noise texture */}
       <div
@@ -67,15 +69,22 @@ export function GameCanvas() {
         }}
       />
 
+      <InvestigationHotspots />
       <CharacterSprite />
       <DialogueBox />
       <ChoiceMenu />
       <UserInput />
       <ActionPanel />
       <ClueModal />
+      <CharacterProfileModal />
       <EndingPlayer />
-      <EndingEditor />
+      <CycleResetWatcher />
+      {showEndingEditor && <Suspense fallback={null}><EndingEditor /></Suspense>}
       <StatusPanel />
+      <ClueDiscoveryOverlay />
+      <KnowledgeUpdateOverlay />
+      <GameplayGuide />
+      <ApiGuideCard />
       <ActionBar />
       <MapModal />
       <LoadingOverlay />

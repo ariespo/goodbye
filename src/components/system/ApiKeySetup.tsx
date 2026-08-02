@@ -57,11 +57,9 @@ export function ApiKeySetup() {
       }}
     >
       <div
-        className="api-setup-modal relative w-full max-w-[620px] animate-[scaleIn_0.35s_ease-out] overflow-hidden px-10 py-9"
+        className="api-setup-modal clean-modal-frame clean-modal-frame-gold relative w-full max-w-[620px] animate-[scaleIn_0.35s_ease-out] overflow-hidden px-10 py-9"
         style={{
           minHeight: 606,
-          backgroundImage: `url(${assetUrl('assets/ui/modal-shell-gold.png')})`,
-          backgroundSize: '100% 100%',
           imageRendering: 'pixelated',
           filter: 'drop-shadow(0 24px 54px rgba(0,0,0,0.66))',
         }}
@@ -84,7 +82,7 @@ export function ApiKeySetup() {
             </div>
           </div>
           <p className="max-w-[500px] text-[13px] leading-relaxed text-[#aaa39a]">
-            API Key 仅保存在本机浏览器 IndexedDB 中，不会上传到任何服务器。你也可以稍后在设置里完成配置。
+            API Key 仅保存在本机浏览器 IndexedDB 中，不会上传到本项目服务器；发送请求时会直接交给你配置的 AI 服务商。你也可以稍后在设置里完成配置。
           </p>
         </div>
 
@@ -127,7 +125,6 @@ export function ApiKeySetup() {
             value={apiKey}
             onChange={setApiKey}
             placeholder="sk-..."
-            autoFocus
             onEnter={() => {
               if (apiKey.trim()) handleSave();
             }}

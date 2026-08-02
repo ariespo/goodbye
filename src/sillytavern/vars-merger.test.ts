@@ -36,6 +36,7 @@ describe('mergeVariables', () => {
   it('should create default gameplay variables', () => {
     const defaults = createDefaultVariables();
     expect(defaults.cycleCount).toBe(1);
+    expect(defaults.location).toBe('home');
     expect(defaults.affinity.fumi).toBeGreaterThan(0);
     expect(defaults.investigation.psych).toBe(0);
   });

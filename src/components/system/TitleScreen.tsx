@@ -12,7 +12,7 @@ import { FilmStrip } from './FilmStrip';
 
 import { FullScreenGrain } from './FullScreenGrain';
 
-import { openSaveModal } from './SaveModal';
+import { openSaveModal } from './saveModalEvents';
 import { startNewGame } from '../../utils/gameSession';
 
 
@@ -201,7 +201,17 @@ export function TitleScreen() {
 
       >
 
-        <div className="flex flex-col items-center gap-5 mb-9">
+        {/* 标题区暗色底衬：抬高 logo 与副标题在亮背景区域的对比度 */}
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{
+            width: 'min(92vw, 900px)',
+            height: '70vh',
+            background: 'radial-gradient(ellipse at 50% 42%, rgba(3,4,6,0.55) 0%, rgba(3,4,6,0.3) 45%, transparent 72%)',
+          }}
+        />
+
+        <div className="title-hero relative flex flex-col items-center gap-5 mb-9">
 
           <h1 className="sr-only">漫长的告别</h1>
 
@@ -219,7 +229,7 @@ export function TitleScreen() {
 
               imageRendering: 'pixelated',
 
-              filter: 'drop-shadow(0 16px 34px rgba(0,0,0,0.75)) drop-shadow(0 0 20px rgba(107,143,196,0.12))',
+              filter: 'brightness(1.18) contrast(1.06) drop-shadow(0 16px 34px rgba(0,0,0,0.85)) drop-shadow(0 0 26px rgba(122,158,210,0.32)) drop-shadow(0 0 2px rgba(230,235,245,0.25))',
 
               animation: 'titleLogoBreathe 5s ease-in-out infinite',
 
@@ -233,13 +243,13 @@ export function TitleScreen() {
 
             style={{
 
-              color: 'rgba(216,212,204,0.44)',
+              color: 'rgba(226,222,214,0.82)',
 
               fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
 
               letterSpacing: '0.18em',
 
-              textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+              textShadow: '0 2px 10px rgba(0,0,0,0.92), 0 0 16px rgba(0,0,0,0.65)',
 
             }}
 
@@ -269,7 +279,7 @@ export function TitleScreen() {
 
       <div className="absolute bottom-5 z-30 text-[9px] tracking-[0.4em]" style={{ color: 'rgba(138,133,128,0.18)', fontFamily: '"JetBrains Mono", monospace' }}>
 
-        VER 1.0.0
+        VER 0.8.0
 
       </div>
 
@@ -344,8 +354,6 @@ function PixelButton({ label, theme, icon, onClick }: PixelButtonProps) {
       onClick={onClick}
     >
       {/* 与局内 world-pixel-frame 一致的 L 角 */}
-      <span className="title-button-corner title-button-corner-tl" aria-hidden="true" />
-      <span className="title-button-corner title-button-corner-br" aria-hidden="true" />
 
       <span className="title-button-face">
         {hovered && !pressed && (

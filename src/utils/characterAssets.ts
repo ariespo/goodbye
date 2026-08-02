@@ -15,8 +15,10 @@ export function resolveCharacterSprite(character: string): string {
   return NORMALIZED_SPRITES[character] ?? character;
 }
 
-export function characterCanvasSize(character: string): { width: number; height: number } {
-  const sprite = resolveCharacterSprite(character);
-  if (sprite.startsWith('touko-')) return { width: 430, height: 580 };
-  return { width: 412, height: 606 };
-}
+export function characterCanvasSize(character: string): { width: number; height: number } {
+  const sprite = resolveCharacterSprite(character);
+  if (sprite.startsWith('fumi-') || sprite.startsWith('touko-')) return { width: 430, height: 606 };
+  if (sprite === 'chen-huihui-normal.png') return { width: 341, height: 606 };
+  if (sprite === 'liu-renguang-normal.png') return { width: 404, height: 606 };
+  return { width: 412, height: 606 };
+}

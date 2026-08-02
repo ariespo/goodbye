@@ -1,5 +1,6 @@
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
+import { PixelButton } from '../ui/PixelButton';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -19,10 +20,8 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: Co
       onClick={onCancel}
     >
       <div
-        className="relative h-[250px] w-[430px] max-w-[92vw] animate-[scaleIn_0.3s_ease-out] px-8 py-7"
+        className="clean-modal-frame clean-modal-frame-danger relative h-[250px] w-[430px] max-w-[92vw] animate-[scaleIn_0.3s_ease-out] px-8 py-7"
         style={{
-          backgroundImage: `url(${assetUrl('assets/ui/system-modal-danger.png')})`,
-          backgroundSize: '100% 100%',
           imageRendering: 'pixelated',
           filter: 'drop-shadow(0 22px 48px rgba(0,0,0,0.68))',
         }}
@@ -38,12 +37,12 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: Co
         <p className="mb-7 min-h-[52px] text-sm leading-relaxed text-[#aaa39a]">{message}</p>
 
         <div className="flex justify-end gap-3">
-          <button onClick={onCancel} data-cursor="pointer" className="h-10 px-5 text-sm tracking-[0.12em] text-[#aaa39a] hover:text-[#e8e4dc]" style={{ backgroundImage: `url(${assetUrl('assets/ui/system-button-gold.png')})`, backgroundSize: '100% 100%', cursor: 'pointer' }}>
+          <PixelButton variant="gold" onClick={onCancel} className="h-10 px-5 tracking-[0.12em]" style={{ fontWeight: 400 }}>
             取消
-          </button>
-          <button onClick={onConfirm} data-cursor="pointer" className="h-10 px-5 text-sm tracking-[0.12em] text-[#e8e4dc]" style={{ backgroundImage: `url(${assetUrl('assets/ui/system-button-red.png')})`, backgroundSize: '100% 100%', cursor: 'pointer' }}>
+          </PixelButton>
+          <PixelButton variant="red" onClick={onConfirm} className="h-10 px-5 tracking-[0.12em]" style={{ fontWeight: 400 }}>
             确认
-          </button>
+          </PixelButton>
         </div>
       </div>
     </div>

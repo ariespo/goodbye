@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
-import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
 import type { OrganizedClue } from '../../sillytavern/types';
 import { saveChat } from '../../sillytavern/database';
 import { ConfirmModal } from '../system/ConfirmModal';
 
 const TEXT_MAIN = '#e8e4dc';
-const TEXT_DIM = '#8a8580';
+const TEXT_DIM = '#aaa59e';
 const BLUE = '#86a8f2';
 
 export function ClueModal() {
@@ -87,13 +86,11 @@ ${clueText}
       onClick={close}
     >
       <div
-        className="clue-modal pixel-frame-corners relative w-[720px] max-w-[94vw] select-none px-8 py-7"
+        className="clue-modal clean-modal-frame clean-modal-frame-blue relative w-[720px] max-w-[94vw] select-none px-8 py-7"
         onClick={event => event.stopPropagation()}
         style={{
           minHeight: 460,
           maxHeight: '86vh',
-          backgroundImage: `url(${assetUrl('assets/ui/system-modal-frame.png')})`,
-          backgroundSize: '100% 100%',
           imageRendering: 'pixelated',
           filter: 'drop-shadow(0 24px 54px rgba(0,0,0,0.66))',
         }}
@@ -120,25 +117,17 @@ ${clueText}
             return (
               <div
                 key={clue.id}
-                className="relative px-4 py-3"
-                style={{
-                  backgroundImage: `url(${assetUrl(`assets/ui/panel-item-blue-${selected ? 'hover' : 'normal'}.png`)})`,
-                  backgroundSize: '100% 100%',
-                  imageRendering: 'pixelated',
-                }}
+                className={`clue-card relative px-4 py-3 ${selected ? 'is-selected' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   <button
                     data-cursor="pointer"
                     onClick={() => toggleSelect(clue.id)}
-                    className="mt-1 flex h-7 w-7 items-center justify-center border-2"
-                    style={{
-                      borderColor: selected ? BLUE : '#3a3a42',
-                      color: selected ? BLUE : TEXT_DIM,
-                      cursor: 'pointer',
-                    }}
+                    className="clue-select-button mt-1 flex h-8 w-8 shrink-0 items-center justify-center"
+                    aria-label={`${selected ? '取消选择' : '选择'}线索：${clue.title}`}
+                    aria-pressed={selected}
                   >
-                    {selected ? '✓' : ''}
+                    {selected && <GameIcon name="success" size={14} />}
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 font-serif-cn text-[18px]" style={{ color: selected ? BLUE : TEXT_MAIN }}>{clue.title}</div>
@@ -148,8 +137,7 @@ ${clueText}
                   <button
                     data-cursor="pointer"
                     onClick={() => setPendingDeleteId(clue.id)}
-                    className="flex h-8 w-8 items-center justify-center transition-colors hover:text-[#c94f4f]"
-                    style={{ color: TEXT_DIM, cursor: 'pointer' }}
+                    className="clue-delete-button flex h-8 w-8 shrink-0 items-center justify-center"
                     aria-label="删除线索"
                   >
                     <GameIcon name="trash" size={15} />
@@ -160,25 +148,21 @@ ${clueText}
           })}
         </div>
 
-        <div className="mt-5 flex items-center justify-between border-t-2 border-[#25252d] pt-4">
-          <div className="text-[13px]" style={{ color: TEXT_DIM }}>已选择 {selectedIds.length} 条</div>
+        <div className="clue-modal-footer mt-5 flex items-center justify-between gap-4 border-t-2 border-[#25252d] pt-4">
+          <div className="clue-selection-count text-[13px]" style={{ color: TEXT_DIM }}>
+            已选择 <strong>{selectedIds.length}</strong> 条
+          </div>
           <button
             data-sfx="deduction-start"
             data-cursor={isWaitingForAI ? undefined : 'pointer'}
+            data-ready={selectedIds.length >= 2 ? 'true' : 'false'}
             disabled={isWaitingForAI}
             onClick={handleInfer}
-            className="flex h-[46px] items-center gap-2 px-5 text-sm"
-            style={{
-              backgroundImage: `url(${assetUrl('assets/ui/system-button-blue.png')})`,
-              backgroundSize: '100% 100%',
-              color: isWaitingForAI ? '#4a4542' : '#f3efe7',
-              cursor: isWaitingForAI ? 'not-allowed' : 'pointer',
-              opacity: isWaitingForAI ? 0.55 : 1,
-              textShadow: '0 2px 0 rgba(0,0,0,0.72)',
-            }}
+            className="clue-infer-button flex h-[46px] min-w-[150px] items-center justify-center gap-2 px-5 text-sm"
+            aria-label={selectedIds.length >= 2 ? `使用已选中的${selectedIds.length}条线索尝试推理` : '尝试推理，至少需要选择两条线索'}
           >
-            <GameIcon name="lightning" size={16} />
-            尝试推理
+            <span className="clue-infer-icon"><GameIcon name="lightning" size={16} /></span>
+            {isWaitingForAI ? '推理中' : '尝试推理'}
           </button>
         </div>
       </div>

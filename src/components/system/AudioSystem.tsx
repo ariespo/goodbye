@@ -2,20 +2,28 @@ import { useEffect, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
 import { playSfx, setSfxVolume, type SfxName } from '../../utils/sfx';
+import { getRainAudioVolumeScale } from '../../utils/sceneEnvironment';
 
 const SFX_NAMES = new Set<SfxName>([
   'ui-hover', 'ui-click', 'ui-confirm', 'ui-cancel', 'dialogue-advance', 'choice-open',
   'clue-add', 'deduction-start', 'warning', 'success', 'sanity-drop', 'ending-signal',
+  'emotion-calm', 'emotion-happy', 'emotion-sad', 'emotion-angry', 'emotion-horror', 'emotion-insane',
+  'rain-loop', 'rain-heavy', 'thunder-distant', 'phone-vibrate', 'phone-ring', 'clock-tick',
+  'loop-reset', 'flashback-whoosh', 'investigate-paper', 'investigate-object', 'door-open', 'footstep-rain',
 ]);
 
 export function AudioSystem() {
   const bgm = useGameStore(state => state.game.currentState.bgm);
   const musicVolume = useGameStore(state => state.tavern.settings?.musicVolume ?? 0.5);
   const soundVolume = useGameStore(state => state.tavern.settings?.soundVolume ?? 0.65);
+  const environment = useGameStore(state => state.game.currentState.environment);
+  const showTitle = useGameStore(state => state.ui.showTitle);
   const notifications = useGameStore(state => state.ui.notifications);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
+  const rainRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const volumeRef = useRef(musicVolume);
+  const soundVolumeRef = useRef(soundVolume);
   const knownNotificationsRef = useRef<Set<string> | null>(null);
   const lastHoverRef = useRef<{ element: Element; time: number } | null>(null);
 
@@ -28,7 +36,11 @@ export function AudioSystem() {
 
   useEffect(() => {
     setSfxVolume(soundVolume);
-  }, [soundVolume]);
+    soundVolumeRef.current = soundVolume;
+    if (rainRef.current) {
+      rainRef.current.volume = soundVolume * getRainAudioVolumeScale(environment);
+    }
+  }, [soundVolume, environment]);
 
   useEffect(() => {
     const known = knownNotificationsRef.current;
@@ -56,6 +68,9 @@ export function AudioSystem() {
       if (bgmRef.current && bgmRef.current.paused) {
         bgmRef.current.play().catch(() => {});
       }
+      if (rainRef.current && rainRef.current.paused && getRainAudioVolumeScale(environment) > 0 && !showTitle) {
+        rainRef.current.play().catch(() => {});
+      }
     };
 
     document.addEventListener('click', initAudio);
@@ -65,7 +80,7 @@ export function AudioSystem() {
       document.removeEventListener('click', initAudio);
       document.removeEventListener('keydown', initAudio);
     };
-  }, []);
+  }, [environment, showTitle]);
 
   useEffect(() => {
     const interactiveSelector = 'button, a, [role="button"], [data-cursor="pointer"], [data-sfx]';
@@ -141,6 +156,38 @@ export function AudioSystem() {
       audio.removeEventListener('canplay', playAudio);
     };
   }, [bgm]);
+
+  useEffect(() => {
+    const rainVolumeScale = getRainAudioVolumeScale(environment);
+    if (showTitle) {
+      if (rainRef.current) {
+        rainRef.current.pause();
+      }
+      return;
+    }
+
+    if (rainVolumeScale <= 0) {
+      if (rainRef.current) {
+        rainRef.current.pause();
+      }
+      return;
+    }
+
+    if (!rainRef.current) {
+      const audio = new Audio(assetUrl('assets/audio/sfx/rain-loop.wav'));
+      audio.loop = true;
+      audio.volume = soundVolumeRef.current * rainVolumeScale;
+      audio.preload = 'auto';
+      rainRef.current = audio;
+    }
+
+    rainRef.current.volume = soundVolumeRef.current * rainVolumeScale;
+    rainRef.current.play().catch(() => {});
+
+    return () => {
+      rainRef.current?.pause();
+    };
+  }, [showTitle, environment]);
 
   return null;
 }

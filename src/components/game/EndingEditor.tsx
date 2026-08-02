@@ -13,19 +13,27 @@ const ACCENT = '#6b8fc4';
 const ACCENT_BG = 'rgba(107, 143, 196, 0.15)';
 
 const TRUTH_LABELS: Record<TruthType, string> = {
-  A: 'A-自刃者',
-  B: 'B-梦觉',
-  C: 'C-深渊',
-  D: 'D-等价交换',
-  E: 'E-观测者',
+  A: 'A-阳极献祭',
+  B: 'B-失手掩盖',
+  C: 'C-解离重演',
+  NONE: 'NONE-漫长的告别',
+  FAKE: 'FAKE-金蝉',
+  CULT: 'CULT-阳极真神',
+  PSYCH: 'PSYCH-内室',
+  META: 'META-元层',
+  LOOP: 'LOOP-困局',
 };
 
 const TRUTH_COLORS: Record<TruthType, string> = {
   A: '#8b7a6a',
   B: '#6a8b7a',
   C: '#8b6a7a',
-  D: '#7a7a8b',
-  E: '#a08a6a',
+  NONE: '#7a8b8b',
+  FAKE: '#8b8b6a',
+  CULT: '#a08a6a',
+  PSYCH: '#7a7a8b',
+  META: '#c4a86b',
+  LOOP: '#6a6a6a',
 };
 
 const TAG_LABELS: Record<EndingTag, string> = {
@@ -46,17 +54,28 @@ const TAG_COLORS: Record<EndingTag, string> = {
 
 const VARIABLE_OPTIONS = [
   { label: '轮回次数', value: 'cycleCount' },
-  { label: '文穂好感度', value: 'affinity.fumi' },
+  { label: '文穗好感度', value: 'affinity.fumi' },
   { label: '灯织好感度', value: 'affinity.touko' },
-  { label: '时坂好感度', value: 'affinity.saku' },
   { label: '自疑度', value: 'suspicion.self' },
-  { label: '疑文穂度', value: 'suspicion.fumi' },
-  { label: '疑灯织度', value: 'suspicion.touko' },
-  { label: '疑超自然度', value: 'suspicion.occult' },
-  { label: '心理方向', value: 'investigation.psych' },
-  { label: '犯罪方向', value: 'investigation.crime' },
-  { label: '超自然方向', value: 'investigation.occult' },
-  { label: '科学方向', value: 'investigation.science' },
+  { label: '疑老头度', value: 'suspicion.old-man' },
+  { label: '疑侦探A度', value: 'suspicion.detective-a' },
+  { label: '疑侦探B度', value: 'suspicion.detective-b' },
+  { label: '疑店员度', value: 'suspicion.clerk' },
+  { label: '疑体育老师度', value: 'suspicion.teacher' },
+  { label: '疑灯织度', value: 'suspicion.senpai' },
+  { label: '锁定路线', value: 'lockedRoute' },
+  { label: '解释层叠加', value: 'overlay' },
+  { label: '最终抉择', value: 'finalChoice' },
+  { label: '已锁路线数', value: 'routesLockedCount' },
+  { label: '行程还原进度', value: 'tripProgress' },
+  { label: '理智', value: 'sanity' },
+  { label: '邪神线索数', value: 'cultClueCount' },
+  { label: '异样线索数', value: 'glitchClueCount' },
+  { label: '假死证据数', value: 'fakeEvidenceCount' },
+  { label: '告别信碎片数', value: 'letterFragmentCount' },
+  { label: '陪伴连续轮数', value: 'stayStreak' },
+  { label: '曾进入STAY', value: 'stayedEver' },
+  { label: '已见结局数', value: 'endingsSeenCount' },
 ];
 
 const OPERATOR_OPTIONS = [
@@ -203,7 +222,7 @@ export function EndingEditor() {
 
           {/* 列表 */}
           <div className="flex-1 pixel-scroll-blue overflow-y-auto p-2 space-y-1">
-            {(['A', 'B', 'C', 'D', 'E'] as TruthType[]).map(truth => {
+            {(['A', 'B', 'C', 'NONE', 'FAKE', 'CULT', 'PSYCH', 'META', 'LOOP'] as TruthType[]).map(truth => {
               const group = endings.filter(e => e.truthType === truth).sort((a, b) => a.order - b.order);
               if (group.length === 0) return null;
               return (

@@ -1,6 +1,6 @@
 import { maintextToScene } from '../engine/scene-parser';
-import { OPENING_STORYLINE } from '../engine/opening-storyline';
-import { deleteChat, getChats, saveChat } from '../sillytavern/database';
+import { OPENING_STORYLINE, parseOpeningStoryline } from '../engine/opening-storyline';
+import { getChats, saveChat } from '../sillytavern/database';
 import type {
   ChatMessage,
   ChatSession,
@@ -11,15 +11,18 @@ import type {
 } from '../sillytavern/types';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
+import { invalidatePreplans } from '../agents/mystery';
+import { resolveSceneEnvironment } from './sceneEnvironment';
+import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
 
 const OPENING_ASSISTANT_CONTENT =
-  `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穂的早晨</sum>\n<vars>{ "stamina": 100, "sanity": 80 }</vars>`;
+  `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:暴雨第五天，文穗已出门，联系不上</sum>\n<vars>{ "location": "home", "stamina": 100, "sanity": 70 }</vars>`;
 
 export function createDefaultGameStatus(): GameStatus {
   return {
-    time: new Date(2024, 8, 9, 9, 0),
+    time: new Date(2024, 8, 9, 7, 30),
     stamina: 100,
-    sanity: 80,
+    sanity: 70,
     items: [],
   };
 }
@@ -31,6 +34,9 @@ export function createDefaultCurrentState(): CurrentState {
     character: null,
     speaker: null,
     mood: 'calm',
+    effect: null,
+    environment: 'none',
+    item: null,
   };
 }
 
@@ -59,6 +65,7 @@ function abortActiveStream() {
   if (api.abortController) {
     try { api.abortController.abort(); } catch { /* ignore */ }
   }
+  invalidatePreplans();
   actions.setAbortController(null);
   actions.setStreaming(false);
   actions.setStreamBuffer('');
@@ -77,7 +84,10 @@ export async function startNewGame(): Promise<void> {
 
   abortActiveStream();
 
-  const variables = createDefaultVariables();
+  const globalMeta = loadMetaProgress();
+  const mergedProgress = mergeMetaProgress(createDefaultVariables(), [], globalMeta);
+  const variables = mergedProgress.variables;
+  const endingsSeen = mergedProgress.endingsSeen;
   const openingMsg: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'assistant',
@@ -99,21 +109,18 @@ export async function startNewGame(): Promise<void> {
     updatedAt: Date.now(),
   };
 
-  // 清掉旧会话，避免刷新后又把上一局进度载回来
+  // 新游戏创建独立会话；保留旧会话，避免不可逆的数据丢失。
   const existingChats = await getChats();
-  for (const chat of existingChats) {
-    await deleteChat(chat.id);
-  }
   await saveChat(newChat);
 
-  const scene = maintextToScene(OPENING_STORYLINE);
+  const scene = parseOpeningStoryline();
   const first = scene.lines[0];
 
   // 保留设置/世界书/预设，只替换会话与局内运行时
   useGameStore.setState(s => ({
     tavern: {
       ...s.tavern,
-      chats: [newChat],
+      chats: [...existingChats.filter(chat => chat.id !== newChat.id), newChat],
       activeChatId: newChat.id,
       variables,
     },
@@ -129,6 +136,9 @@ export async function startNewGame(): Promise<void> {
             character: first.character ?? null,
             speaker: first.speaker || null,
             mood: first.emotion || 'calm',
+            effect: first.effect || null,
+            environment: resolveSceneEnvironment(first.background),
+            item: first.item || null,
           }
         : createDefaultCurrentState(),
       isTyping: false,
@@ -137,8 +147,8 @@ export async function startNewGame(): Promise<void> {
       autoMode: false,
       sceneComplete: false,
       actionPanel: { visible: false, type: null, content: '', selectedIndex: null },
-      endingsSeen: [],
-      endingCheckContext: variablesToEndingContext(variables, []) as typeof s.game.endingCheckContext,
+      endingsSeen,
+      endingCheckContext: variablesToEndingContext(variables, endingsSeen) as typeof s.game.endingCheckContext,
       endingPanel: {
         visible: false,
         activeEndingId: null,
@@ -146,6 +156,7 @@ export async function startNewGame(): Promise<void> {
         isPreview: false,
         isAnimating: false,
       },
+      pendingCycleReset: null,
     },
     api: {
       ...s.api,
@@ -161,6 +172,7 @@ export async function startNewGame(): Promise<void> {
       showHistory: false,
       showEndingEditor: false,
       showPromptInspector: false,
+      showOrchestrationLog: false,
       showTitle: false,
     },
   }));
@@ -178,7 +190,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
 
   abortActiveStream();
 
-  const variables = save.tavernState?.variables && Object.keys(save.tavernState.variables).length > 0
+  const savedVariables = save.tavernState?.variables && Object.keys(save.tavernState.variables).length > 0
     ? { ...createDefaultVariables(), ...save.tavernState.variables }
     : createDefaultVariables();
 
@@ -186,11 +198,14 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
   const history: TurnSnapshot[] = Array.isArray(save.gameState?.history)
     ? save.gameState.history
     : [];
-  const endingsSeen = Array.isArray(save.gameState?.endingsSeen)
+  const savedEndingsSeen = Array.isArray(save.gameState?.endingsSeen)
     ? save.gameState.endingsSeen
-    : Array.isArray(variables.endingsSeen)
-      ? variables.endingsSeen
+    : Array.isArray(savedVariables.endingsSeen)
+      ? savedVariables.endingsSeen
       : [];
+  const mergedProgress = mergeMetaProgress(savedVariables, savedEndingsSeen);
+  const variables = mergedProgress.variables;
+  const endingsSeen = mergedProgress.endingsSeen;
 
   const gameStatus = reviveGameStatus(save.gameState?.gameStatus);
   const currentState: CurrentState = {
@@ -260,6 +275,9 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
         character: line?.character ?? currentState.character,
         mood: line?.emotion || currentState.mood || 'calm',
         speaker: line?.speaker || currentState.speaker,
+        effect: line?.effect || null,
+        environment: resolveSceneEnvironment(line?.background || currentState.background),
+        item: line?.item || null,
       },
       isTyping: false,
       isWaitingForAI: false,
@@ -276,6 +294,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
         isPreview: false,
         isAnimating: false,
       },
+      pendingCycleReset: null,
     },
     api: {
       ...s.api,
@@ -291,6 +310,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
       showHistory: false,
       showEndingEditor: false,
       showPromptInspector: false,
+      showOrchestrationLog: false,
       showTitle: false,
     },
   }));

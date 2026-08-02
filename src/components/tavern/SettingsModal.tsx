@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useGameStore } from '../../stores/gameStore';
-import { GameIcon } from '../ui/GameIcon';
+import { GameIcon, type GameIconName } from '../ui/GameIcon';
 import { saveSettings } from '../../sillytavern/database';
 import { fetchModels, testConnectivity } from '../../sillytavern/api-router';
 import type { AppSettings } from '../../sillytavern/types';
@@ -23,12 +23,22 @@ interface ModelCache {
 
 const modelCache: ModelCache = {};
 const CACHE_TTL = 5 * 60 * 1000;
+type SettingsTab = 'game' | 'audio' | 'ai' | 'story' | 'advanced';
+
+const SETTINGS_TABS: Array<{ id: SettingsTab; label: string; icon: GameIconName }> = [
+  { id: 'game', label: '游戏', icon: 'action' },
+  { id: 'audio', label: '音频', icon: 'play' },
+  { id: 'ai', label: 'AI 接口', icon: 'lightning' },
+  { id: 'story', label: '剧情模式', icon: 'stack' },
+  { id: 'advanced', label: '高级', icon: 'settings' },
+];
 
 export function SettingsModal() {
   const settings = useGameStore(state => state.tavern.settings);
   const showSettings = useGameStore(state => state.ui.showSettings);
   const toggleModal = useGameStore(state => state.actions.toggleModal);
   const setShowPromptInspector = useGameStore(state => state.actions.setShowPromptInspector);
+  const setShowOrchestrationLog = useGameStore(state => state.actions.setShowOrchestrationLog);
   const actions = useGameStore(state => state.actions);
 
   const [draft, setDraft] = useState<AppSettings | null>(settings);
@@ -40,10 +50,17 @@ export function SettingsModal() {
   const [fetchingSec, setFetchingSec] = useState(false);
   const [testingMain, setTestingMain] = useState(false);
   const [testingSec, setTestingSec] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('game');
 
   useEffect(() => {
     if (settings) setDraft(settings);
   }, [settings, showSettings]);
+
+  useEffect(() => {
+    const onTab = (e: Event) => setActiveTab((e as CustomEvent<SettingsTab>).detail);
+    window.addEventListener('farewell:settings-tab', onTab);
+    return () => window.removeEventListener('farewell:settings-tab', onTab);
+  }, []);
 
   useEffect(() => {
     if (!showSettings || !draft) return;
@@ -179,6 +196,13 @@ export function SettingsModal() {
     actions.addNotification({ type: 'success', message: '设置已保存', duration: 2500 });
   };
 
+  const openAdvancedTool = (tool: 'lorebook' | 'preset' | 'prompt' | 'orchestration') => {
+    toggleModal('settings');
+    if (tool === 'prompt') setShowPromptInspector(true);
+    else if (tool === 'orchestration') setShowOrchestrationLog(true);
+    else toggleModal(tool);
+  };
+
   if (!showSettings || !draft) return null;
 
   return (
@@ -190,9 +214,6 @@ export function SettingsModal() {
         className="settings-modal relative w-[740px] max-h-[88vh] overflow-hidden animate-[scaleIn_0.35s_ease-out]"
         onClick={e => e.stopPropagation()}
       >
-        <span className="settings-modal-corner settings-modal-corner-tl" aria-hidden="true" />
-        <span className="settings-modal-corner settings-modal-corner-br" aria-hidden="true" />
-
         <div className="settings-modal-header flex items-center justify-between px-6 py-4">
           <div>
             <h2 className="settings-modal-title">设置</h2>
@@ -200,6 +221,7 @@ export function SettingsModal() {
           </div>
           <button
             type="button"
+            aria-label="关闭设置"
             data-cursor="pointer"
             onClick={() => toggleModal('settings')}
             className="pixel-close-button flex h-9 w-9 items-center justify-center"
@@ -208,123 +230,30 @@ export function SettingsModal() {
           </button>
         </div>
 
-        <div className="settings-modal-body pixel-scroll-blue space-y-6 overflow-y-auto p-6">
-          {/* API 模式 */}
-          <section className="settings-section">
-            <h3 className="settings-section-title">API 模式</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <ModeCard
-                active={apiMode === 'single'}
-                icon={<GameIcon name="lightning" size={18} />}
-                title="单 API"
-                desc="所有任务都走主 API"
-                onClick={() => switchMode('single')}
-              />
-              <ModeCard
-                active={apiMode === 'dual'}
-                icon={<GameIcon name="stack" size={18} />}
-                title="双 API 路由"
-                desc="次 API 跑变量/总结(可用更便宜模型)"
-                onClick={() => switchMode('dual')}
-              />
-            </div>
-          </section>
+        <nav className="settings-tabs" aria-label="设置分类">
+          {SETTINGS_TABS.map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              className={activeTab === tab.id ? 'is-active' : ''}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <GameIcon name={tab.icon} size={16} />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
 
-          {/* 主 API */}
-          <section className="settings-section">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="settings-section-title mb-0">主 API <span className="settings-section-hint">(剧情生成)</span></h3>
-              {mainConn && (
-                <span className={`settings-conn ${mainConn.ok ? 'is-ok' : 'is-bad'}`}>
-                  {mainConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}
-                  {mainConn.ok ? `${mainConn.latency}ms` : '未连通'}
-                </span>
-              )}
-            </div>
-            <ProviderPresets selected={draft.api.baseUrl} onPick={applyMainProvider} />
-            <ApiConfigSection
-              baseUrl={draft.api.baseUrl}
-              apiKey={draft.api.apiKey}
-              model={draft.api.model}
-              models={mainModels}
-              onChange={patchApi}
-              onFetchModels={() => handleFetchModels(false)}
-              onTest={() => handleTestConnectivity(false)}
-              fetching={fetchingMain}
-              testing={testingMain}
-            />
-          </section>
-
-          {/* 次 API */}
-          {apiMode === 'dual' && (
-            <section className="settings-section">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="settings-section-title mb-0">次 API <span className="settings-section-hint">(变量/总结)</span></h3>
-                {secConn && (
-                  <span className={`settings-conn ${secConn.ok ? 'is-ok' : 'is-bad'}`}>
-                    {secConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}
-                    {secConn.ok ? `${secConn.latency}ms` : '未连通'}
-                  </span>
-                )}
+        <div className="settings-modal-body pixel-scroll-blue overflow-y-auto p-6">
+          {activeTab === 'game' && (
+            <section className="settings-section settings-tab-panel">
+              <h3 className="settings-section-title">游戏与阅读</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <LabeledInput label="角色名" value={draft.characterName} onChange={v => patch({ characterName: v })} />
+                <LabeledInput label="玩家名" value={draft.userName} onChange={v => patch({ userName: v })} />
               </div>
-              <ProviderPresets selected={draft.api.secondary?.baseUrl ?? ''} onPick={applySecondaryProvider} />
-              <ApiConfigSection
-                baseUrl={draft.api.secondary?.baseUrl ?? ''}
-                apiKey={draft.api.secondary?.apiKey ?? ''}
-                model={draft.api.secondary?.model ?? ''}
-                models={secModels}
-                onChange={p => patchSecondary({
-                  baseUrl: p.baseUrl ?? draft.api.secondary?.baseUrl ?? '',
-                  apiKey: p.apiKey ?? draft.api.secondary?.apiKey ?? '',
-                  model: p.model ?? draft.api.secondary?.model ?? '',
-                })}
-                onFetchModels={() => handleFetchModels(true)}
-                onTest={() => handleTestConnectivity(true)}
-                fetching={fetchingSec}
-                testing={testingSec}
-                extraFields={(
-                  <div className="mt-2 grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="settings-label">温度</label>
-                      <input
-                        type="range"
-                        min={0}
-                        max={2}
-                        step={0.1}
-                        value={draft.api.secondary?.temperature ?? 0.3}
-                        onChange={e => patchSecondary({ temperature: Number(e.target.value) })}
-                        className="settings-range w-full"
-                      />
-                      <div className="settings-range-value">{draft.api.secondary?.temperature ?? 0.3}</div>
-                    </div>
-                    <LabeledInput
-                      label="最大 Token"
-                      value={String(draft.api.secondary?.maxTokens ?? 512)}
-                      mono
-                      onChange={v => patchSecondary({ maxTokens: parseInt(v, 10) || 512 })}
-                    />
-                  </div>
-                )}
-              />
-              <p className="settings-help mt-2">
-                次 API 仅用于无需高质量推理的辅助任务(变量更新、回合总结)。如调用失败会自动回退到主 API。
-              </p>
-            </section>
-          )}
-
-          {/* 角色 */}
-          <section className="settings-section">
-            <h3 className="settings-section-title">角色</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <LabeledInput label="角色名" value={draft.characterName} onChange={v => patch({ characterName: v })} />
-              <LabeledInput label="玩家名" value={draft.userName} onChange={v => patch({ userName: v })} />
-            </div>
-          </section>
-
-          {/* 游戏 */}
-          <section className="settings-section">
-            <h3 className="settings-section-title">游戏</h3>
-            <div className="space-y-4">
+              <div className="mt-5 space-y-4">
               <div>
                 <label className="settings-label">
                   打字速度: <span className="settings-value">{draft.typingSpeed} ms / 字</span>
@@ -384,32 +313,6 @@ export function SettingsModal() {
               )}
 
               <div>
-                <label className="settings-label">音乐音量: <span className="settings-value">{Math.round((draft.musicVolume ?? 0.5) * 100)}%</span></label>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={draft.musicVolume ?? 0.5}
-                  onChange={e => patch({ musicVolume: Number(e.target.value) })}
-                  className="settings-range w-full"
-                />
-              </div>
-
-              <div>
-                <label className="settings-label">音效音量: <span className="settings-value">{Math.round((draft.soundVolume ?? 0.65) * 100)}%</span></label>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={draft.soundVolume ?? 0.65}
-                  onChange={e => patch({ soundVolume: Number(e.target.value) })}
-                  className="settings-range w-full"
-                />
-              </div>
-
-              <div>
                 <label className="settings-label">字体</label>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {FONT_OPTIONS.map(font => {
@@ -449,18 +352,77 @@ export function SettingsModal() {
                 </div>
               </div>
             </div>
-          </section>
+            </section>
+          )}
+
+          {activeTab === 'audio' && (
+            <section className="settings-section settings-tab-panel">
+              <h3 className="settings-section-title">音频</h3>
+              <div className="space-y-6">
+                <VolumeControl label="音乐音量" value={draft.musicVolume ?? 0.5} onChange={value => patch({ musicVolume: value })} />
+                <VolumeControl label="音效音量" value={draft.soundVolume ?? 0.65} onChange={value => patch({ soundVolume: value })} />
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'story' && (
+            <section className="settings-section settings-tab-panel">
+              <h3 className="settings-section-title">剧情一致性</h3>
+              <p className="settings-help mb-4">“稳定剧情”和“严谨剧情”都会执行硬规则与语义事实复核；经典模式仅用于兼容旧存档与调试。</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <ModeCard active={(draft.agentNarrativeMode ?? 'standard') === 'standard'} icon={<GameIcon name="stack" size={18} />} title="稳定剧情" desc="推荐 · 硬规则、语义复核与事实隔离" onClick={() => patch({ agentNarrativeMode: 'standard' })} />
+                <ModeCard active={draft.agentNarrativeMode === 'strict'} icon={<GameIcon name="success" size={18} />} title="严谨剧情" desc="兼容档 · 当前采用同级事实审查" onClick={() => patch({ agentNarrativeMode: 'strict' })} />
+                <ModeCard active={draft.agentNarrativeMode === 'legacy'} icon={<GameIcon name="restart" size={18} />} title="经典模式" desc="沿用原有完整提示词生成流程" onClick={() => patch({ agentNarrativeMode: 'legacy' })} />
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'ai' && (
+            <div className="settings-tab-panel space-y-6">
+              <section className="settings-section">
+                <h3 className="settings-section-title">API 分工</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <ModeCard active={apiMode === 'single'} icon={<GameIcon name="lightning" size={18} />} title="单 API" desc="所有生成任务使用主接口" onClick={() => switchMode('single')} />
+                  <ModeCard active={apiMode === 'dual'} icon={<GameIcon name="stack" size={18} />} title="双 API" desc="使用次接口处理总结与状态" onClick={() => switchMode('dual')} />
+                </div>
+              </section>
+              <section className="settings-section">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="settings-section-title mb-0">主 API <span className="settings-section-hint">剧情生成</span></h3>
+                  {mainConn && <span className={`settings-conn ${mainConn.ok ? 'is-ok' : 'is-bad'}`}>{mainConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}{mainConn.ok ? `${mainConn.latency}ms` : '未连通'}</span>}
+                </div>
+                <ProviderPresets selected={draft.api.baseUrl} onPick={applyMainProvider} />
+                <ApiConfigSection baseUrl={draft.api.baseUrl} apiKey={draft.api.apiKey} model={draft.api.model} models={mainModels} onChange={patchApi} onFetchModels={() => handleFetchModels(false)} onTest={() => handleTestConnectivity(false)} fetching={fetchingMain} testing={testingMain} />
+              </section>
+              {apiMode === 'dual' && (
+                <section className="settings-section">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="settings-section-title mb-0">次 API <span className="settings-section-hint">Agent 编排 / 总结与状态</span></h3>
+                    {secConn && <span className={`settings-conn ${secConn.ok ? 'is-ok' : 'is-bad'}`}>{secConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}{secConn.ok ? `${secConn.latency}ms` : '未连通'}</span>}
+                  </div>
+                  <ProviderPresets selected={draft.api.secondary?.baseUrl ?? ''} onPick={applySecondaryProvider} />
+                  <ApiConfigSection baseUrl={draft.api.secondary?.baseUrl ?? ''} apiKey={draft.api.secondary?.apiKey ?? ''} model={draft.api.secondary?.model ?? ''} models={secModels} onChange={p => patchSecondary({ baseUrl: p.baseUrl ?? draft.api.secondary?.baseUrl ?? '', apiKey: p.apiKey ?? draft.api.secondary?.apiKey ?? '', model: p.model ?? draft.api.secondary?.model ?? '' })} onFetchModels={() => handleFetchModels(true)} onTest={() => handleTestConnectivity(true)} fetching={fetchingSec} testing={testingSec} extraFields={<div className="mt-3 grid grid-cols-2 gap-3"><VolumeLikeRange label="温度" value={draft.api.secondary?.temperature ?? 0.3} max={2} step={0.1} onChange={value => patchSecondary({ temperature: value })} /><LabeledInput label="最大 Token" value={String(draft.api.secondary?.maxTokens ?? 512)} mono onChange={value => patchSecondary({ maxTokens: parseInt(value, 10) || 512 })} /></div>} />
+                </section>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'advanced' && (
+            <section className="settings-section settings-tab-panel">
+              <h3 className="settings-section-title">创作与诊断工具</h3>
+              <p className="settings-help mb-4">以下入口用于调整生成资料和检查提示词，普通游玩无需使用。</p>
+              <div className="advanced-tool-grid">
+                <AdvancedTool icon="lorebook" title="世界书" desc="管理背景资料与触发条目" onClick={() => openAdvancedTool('lorebook')} />
+                <AdvancedTool icon="preset" title="预设" desc="导入和编辑模型预设" onClick={() => openAdvancedTool('preset')} />
+                <AdvancedTool icon="prompt" title="提示词检查" desc="查看最终发送给模型的内容" onClick={() => openAdvancedTool('prompt')} />
+                <AdvancedTool icon="history" title="编排日志" desc="查看多 Agent 编排的计划、审查与耗时" onClick={() => openAdvancedTool('orchestration')} />
+              </div>
+            </section>
+          )}
         </div>
 
         <div className="settings-modal-footer flex items-center justify-between gap-3 px-6 py-4">
-          <button
-            type="button"
-            data-cursor="pointer"
-            onClick={() => { toggleModal('settings'); setShowPromptInspector(true); }}
-            className="settings-btn settings-btn-ghost"
-          >
-            查看提示词
-          </button>
+          <span className="settings-footer-hint">更改将在保存后生效</span>
           <div className="flex gap-3">
             <button
               type="button"
@@ -632,5 +594,79 @@ function LabeledInput({ label, value, onChange, mono, password }: {
         className={`settings-input w-full ${mono ? 'font-mono' : ''}`}
       />
     </label>
+  );
+}
+
+function VolumeControl({ label, value, onChange }: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const percent = Math.round(value * 100);
+  return (
+    <label className="settings-volume-control">
+      <span className="settings-volume-control__header">
+        <span className="settings-label">{label}</span>
+        <span className="settings-value">{percent}%</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={value}
+        aria-label={label}
+        onChange={event => onChange(Number(event.target.value))}
+        className="settings-range w-full"
+      />
+      <span className="settings-volume-scale" aria-hidden="true">
+        <span>静音</span><span>最大</span>
+      </span>
+    </label>
+  );
+}
+
+function VolumeLikeRange({ label, value, max, step, onChange }: {
+  label: string;
+  value: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="settings-volume-control__header">
+        <span className="settings-label">{label}</span>
+        <span className="settings-value">{value.toFixed(1)}</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={label}
+        onChange={event => onChange(Number(event.target.value))}
+        className="settings-range w-full"
+      />
+    </label>
+  );
+}
+
+function AdvancedTool({ icon, title, desc, onClick }: {
+  icon: GameIconName;
+  title: string;
+  desc: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="advanced-tool-card" onClick={onClick}>
+      <span className="advanced-tool-card__icon"><GameIcon name={icon} size={22} /></span>
+      <span>
+        <strong>{title}</strong>
+        <small>{desc}</small>
+      </span>
+      <GameIcon name="back" size={14} className="advanced-tool-card__arrow" />
+    </button>
   );
 }

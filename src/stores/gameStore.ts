@@ -5,6 +5,7 @@ import type {
   ParsedContent, Ending, EndingPanelState, EndingCheckContext,
 } from '../sillytavern/types';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
+import { recordEndingProgress } from '../utils/metaProgress';
 
 export interface TurnRecoveryState {
   phase: 'idle' | 'failed_stream' | 'blocked_pipeline';
@@ -507,13 +508,34 @@ export const useGameStore = create<GameStore>((set) => ({
       },
     })),
     markEndingSeen: (id) => set(state => ({
-      game: {
-        ...state.game,
-        endingsSeen: state.game.endingsSeen.includes(id) ? state.game.endingsSeen : [...state.game.endingsSeen, id],
-        endings: state.game.endings.map(ending => ending.id === id
-          ? { ...ending, isUnlocked: true, unlockedAt: ending.unlockedAt ?? Date.now() }
-          : ending),
-      },
+      ...(() => {
+        const meta = recordEndingProgress(id, state.tavern.variables);
+        return {
+          tavern: {
+            ...state.tavern,
+            variables: {
+              ...state.tavern.variables,
+              routesLockedEver: meta.routesLockedEver,
+              stayedEver: meta.stayedEver,
+            },
+          },
+          game: {
+            ...state.game,
+            endingsSeen: meta.endingsSeen,
+            endings: state.game.endings.map(ending => ending.id === id
+              ? { ...ending, isUnlocked: true, unlockedAt: ending.unlockedAt ?? Date.now() }
+              : ending),
+            endingCheckContext: variablesToEndingContext(
+              {
+                ...state.tavern.variables,
+                routesLockedEver: meta.routesLockedEver,
+                stayedEver: meta.stayedEver,
+              },
+              meta.endingsSeen,
+            ) as EndingCheckContext,
+          },
+        };
+      })(),
     })),
     setEndingPanel: (panel) => set(state => ({ game: { ...state.game, endingPanel: { ...state.game.endingPanel, ...panel } } })),
     setPendingEnding: (id) => set(state => ({ game: { ...state.game, endingPanel: { ...state.game.endingPanel, pendingEndingId: id } } })),

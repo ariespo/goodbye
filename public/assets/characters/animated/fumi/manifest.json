@@ -1,0 +1,35 @@
+{
+  "character": "fumi",
+  "status": "stage-b-partial",
+  "frameWidth": 430,
+  "frameHeight": 606,
+  "clips": {
+    "idle.calm": {
+      "src": "fumi-idle-calm.sheet.png",
+      "frames": 4,
+      "frameMs": [1050, 90, 75, 1350],
+      "loop": true,
+      "holdLastFrame": false,
+      "reducedMotionFrame": 0,
+      "tailBlink": "tail-blink/idle-tail-blink.png"
+    },
+    "talk.calm": {
+      "src": "fumi-talk-calm.sheet.png",
+      "frames": 4,
+      "frameMs": [85, 75, 90, 70],
+      "loop": true,
+      "holdLastFrame": false,
+      "reducedMotionFrame": 0,
+      "tailBlink": "tail-blink/talk-tail-blink.png"
+    },
+    "gesture.fold-cloth": {
+      "src": "fumi-gesture-fold-cloth.sheet.png",
+      "frames": 6,
+      "frameMs": [280, 85, 90, 105, 150, 720],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 5,
+      "tailBlink": "tail-blink/fold-tail-blink.png"
+    }
+  }
+}

@@ -2,9 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
+import { PixelButton } from '../ui/PixelButton';
 import { maintextToScene } from '../../engine/scene-parser';
 import type { Ending, Scene } from '../../sillytavern/types';
 import { playSfx } from '../../utils/sfx';
+import { settleCycleVariables, startNextCycle } from '../../utils/cycleLoop';
+
+/** 软结局: 播放完毕后可以回到轮回清晨继续游戏 */
+const SOFT_LOOP_ENDING_IDS = new Set(['STAY', 'N-2']);
 
 const TEXT_MAIN = '#e8e4dc';
 const GOLD = '#d4a853';
@@ -141,6 +146,15 @@ export function EndingPlayer() {
     window.dispatchEvent(new CustomEvent('farewell:open-save-modal'));
   };
 
+  const returnToLoop = () => {
+    const endingId = activeEnding?.id;
+    resetEnding();
+    const variables = useGameStore.getState().tavern.variables;
+    // STAY 触发时变量已结算过；其他软结局在此结算进入下一轮
+    const settled = endingId === 'STAY' ? variables : settleCycleVariables(variables, { stayed: false });
+    void startNextCycle({ variables: settled, reason: endingId === 'STAY' ? 'stay' : 'day-end' });
+  };
+
   if (phase === 'transition' || phase === 'outro') {
     return (
       <div className="ending-transition fixed inset-0 z-[260] overflow-hidden bg-black">
@@ -195,22 +209,17 @@ export function EndingPlayer() {
           </h2>
           <div className="my-8 h-px w-full bg-gradient-to-r from-transparent via-[#86a8f2]/60 to-transparent" />
           <div className="flex w-full flex-col gap-3 sm:flex-row">
-            <button
-              data-cursor="pointer"
-              onClick={returnToTitle}
-              className="flex h-[50px] flex-1 items-center justify-center gap-2 px-5 text-sm font-semibold text-[#f4ead2] transition-[color,filter] hover:text-white hover:brightness-125"
-              style={{ backgroundImage: `url(${assetUrl('assets/ui/system-button-gold.png')})`, backgroundSize: '100% 100%', cursor: 'pointer', imageRendering: 'pixelated', textShadow: '0 1px 0 #000, 0 0 6px rgba(212,168,83,0.5)' }}
-            >
+            {SOFT_LOOP_ENDING_IDS.has(activeEnding.id) && (
+              <PixelButton variant="blue" onClick={returnToLoop} className="h-[50px] flex-1 px-5">
+                <GameIcon name="restart" size={16} /> 回到轮回清晨
+              </PixelButton>
+            )}
+            <PixelButton variant="gold" onClick={returnToTitle} className="h-[50px] flex-1 px-5">
               <GameIcon name="back" size={16} /> 回到标题
-            </button>
-            <button
-              data-cursor="pointer"
-              onClick={openLoadMenu}
-              className="flex h-[50px] flex-1 items-center justify-center gap-2 px-5 text-sm font-semibold text-[#e8efff] transition-[color,filter] hover:text-white hover:brightness-125"
-              style={{ backgroundImage: `url(${assetUrl('assets/ui/system-button-blue.png')})`, backgroundSize: '100% 100%', cursor: 'pointer', imageRendering: 'pixelated', textShadow: '0 1px 0 #000, 0 0 6px rgba(134,168,242,0.55)' }}
-            >
+            </PixelButton>
+            <PixelButton variant="blue" onClick={openLoadMenu} className="h-[50px] flex-1 px-5">
               <GameIcon name="save" size={16} /> 读取存档
-            </button>
+            </PixelButton>
           </div>
         </div>
       </div>

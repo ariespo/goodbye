@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useGameStore } from './stores/gameStore';
 import { initializeDatabase, getSettings, getLorebooks, getPresets, getChats, saveChat, savePreset, saveSettings } from './sillytavern/database';
 import { GameCanvas } from './components/game/GameCanvas';
@@ -9,13 +9,13 @@ import { TitleScreen } from './components/system/TitleScreen';
 import { TitleMusic } from './components/system/TitleMusic';
 import { AudioSystem } from './components/system/AudioSystem';
 import { NotificationToast } from './components/system/NotificationToast';
+import { TurnRecoveryBar } from './components/system/TurnRecoveryBar';
 import { ApiKeySetup } from './components/system/ApiKeySetup';
 import { SaveModal } from './components/system/SaveModal';
 import { SettingsModal } from './components/tavern/SettingsModal';
 import { LorebookModal } from './components/tavern/LorebookModal';
 import { PresetModal } from './components/tavern/PresetModal';
 import { HistoryDrawer } from './components/tavern/HistoryDrawer';
-import { PromptInspector } from './components/system/PromptInspector';
 import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
 import { OPENING_STORYLINE } from './engine/opening-storyline';
@@ -23,6 +23,13 @@ import { createDefaultVariables } from './sillytavern/vars-merger';
 import './styles/animations.css';
 import './styles/themes.css';
 import { applyFontFamily } from './utils/fonts';
+
+const CharacterPoseLab = lazy(() => import('./components/dev/CharacterPoseLab')
+  .then(module => ({ default: module.CharacterPoseLab })));
+const PromptInspector = lazy(() => import('./components/system/PromptInspector')
+  .then(module => ({ default: module.PromptInspector })));
+const OrchestrationLogPanel = lazy(() => import('./components/system/OrchestrationLogPanel')
+  .then(module => ({ default: module.OrchestrationLogPanel })));
 
 function App() {
   const actions = useGameStore(state => state.actions);
@@ -75,7 +82,7 @@ function App() {
           const openingMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穂的早晨</sum>\n<vars>{ "stamina": 100, "sanity": 80 }</vars>`,
+            content: `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穗的早晨</sum>\n<vars>{ "stamina": 100, "sanity": 80 }</vars>`,
             timestamp: Date.now(),
             variables: openingVariables,
           };
@@ -121,7 +128,14 @@ function App() {
   }, [actions]);
 
   const showTitle = useGameStore(state => state.ui.showTitle);
+  const showPromptInspector = useGameStore(state => state.ui.showPromptInspector);
+  const showOrchestrationLog = useGameStore(state => state.ui.showOrchestrationLog);
   const [openingVideoEnded, setOpeningVideoEnded] = useState(false);
+  const showCharacterPoseLab = new URLSearchParams(window.location.search).get('characterLab') === '1';
+
+  if (showCharacterPoseLab) {
+    return <Suspense fallback={null}><CharacterPoseLab /></Suspense>;
+  }
 
   if (!openingVideoEnded) {
     return (
@@ -136,7 +150,8 @@ function App() {
         <LorebookModal />
         <PresetModal />
         <HistoryDrawer />
-        <PromptInspector />
+        {showPromptInspector && <Suspense fallback={null}><PromptInspector /></Suspense>}
+        {showOrchestrationLog && <Suspense fallback={null}><OrchestrationLogPanel /></Suspense>}
       </div>
     );
   }
@@ -147,6 +162,7 @@ function App() {
       <AudioSystem />
       <IntroAnimation />
       <NotificationToast />
+      <TurnRecoveryBar />
       {showTitle && <TitleMusic />}
       {showTitle && <TitleScreen />}
       {!showTitle && <GameCanvas />}
@@ -156,7 +172,8 @@ function App() {
       <LorebookModal />
       <PresetModal />
       <HistoryDrawer />
-      <PromptInspector />
+      {showPromptInspector && <Suspense fallback={null}><PromptInspector /></Suspense>}
+      {showOrchestrationLog && <Suspense fallback={null}><OrchestrationLogPanel /></Suspense>}
     </div>
   );
 }

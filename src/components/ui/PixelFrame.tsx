@@ -65,8 +65,6 @@ export function PixelFrame({
 
     >
 
-      <span className="pixel-corner-bottom" />
-
       <div
 
         className={`relative ${contentClassName}`}

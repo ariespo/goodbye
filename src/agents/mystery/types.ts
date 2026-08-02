@@ -1,6 +1,8 @@
-export const MYSTERY_ROUTE_IDS = ['A', 'B', 'C'] as const;
+export const MYSTERY_ROUTE_IDS = ['A', 'B', 'C', 'NONE', 'FAKE'] as const;
 export type MysteryRouteId = (typeof MYSTERY_ROUTE_IDS)[number];
-export type MysteryFactRoute = MysteryRouteId | 'shared';
+export const MYSTERY_OVERLAY_IDS = ['CULT', 'PSYCH'] as const;
+export type MysteryOverlayId = (typeof MYSTERY_OVERLAY_IDS)[number];
+export type MysteryFactRoute = MysteryRouteId | MysteryOverlayId | 'shared';
 
 export const REVEAL_LEVELS = ['atmosphere', 'hint', 'clue', 'confirmation'] as const;
 export type RevealLevel = (typeof REVEAL_LEVELS)[number];
@@ -25,7 +27,16 @@ export interface MysteryFactAvailability {
   requiredClueIds?: string[];
   requiredAnyClueIds?: string[];
   minSuspicion?: SuspicionRequirement;
+  minAffinity?: SuspicionRequirement;
+  minTripProgress?: number;
+  requiredKnownFactSet?: {
+    factIds: string[];
+    minimum: number;
+  };
+  requiredBaseRoute?: MysteryRouteId;
+  maxSanity?: number;
   requiresRouteLock?: boolean;
+  requiresOverlayLock?: boolean;
   maxRevealBeforeRouteLock?: RevealLevel;
   maxRevealAfterRouteLock?: RevealLevel;
 }
@@ -61,6 +72,10 @@ export interface TruthContext {
   unlockedClueIds: string[];
   playerKnowledge: Record<string, RevealLevel>;
   suspicion: Record<string, number>;
+  affinity?: Record<string, number>;
+  tripProgress?: number;
+  sanity?: number;
+  activeOverlay?: MysteryOverlayId | null;
   activeNpcIds: string[];
   recentRevealedFactIds?: string[];
   playerPresentation?: PlayerKnowledgeBrief;

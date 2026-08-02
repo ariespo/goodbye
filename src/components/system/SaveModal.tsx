@@ -4,13 +4,7 @@ import { getSaves, saveSlot, deleteSave } from '../../sillytavern/database';
 import { GameIcon } from '../ui/GameIcon';
 import type { SaveSlot } from '../../sillytavern/types';
 import { buildSaveSlotPayload, loadGameFromSave } from '../../utils/gameSession';
-
-export type SaveModalMode = 'manage' | 'load';
-
-/** 从标题页/结局等外部打开读档或存档面板 */
-export function openSaveModal(mode: SaveModalMode = 'load') {
-  window.dispatchEvent(new CustomEvent('farewell:open-save-modal', { detail: { mode } }));
-}
+import type { SaveModalMode } from './saveModalEvents';
 
 export function SaveModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -107,9 +101,6 @@ export function SaveModal() {
         className="save-modal relative animate-[scaleIn_0.35s_ease-out]"
         onClick={e => e.stopPropagation()}
       >
-        <span className="save-modal-corner save-modal-corner-tl" aria-hidden="true" />
-        <span className="save-modal-corner save-modal-corner-br" aria-hidden="true" />
-
         <div className="save-modal-header mb-5 flex items-center justify-between pb-3">
           <div>
             <h2 className="save-modal-title">{mode === 'load' ? '读取存档' : '存档管理'}</h2>

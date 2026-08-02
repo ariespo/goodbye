@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
+import { getCycleMetaOptions, handleCycleMetaOption } from '../../utils/cycleLoop';
 
 const TEXT_MAIN = '#e2ded6';
 const TEXT_DIM = '#8a8580';
@@ -14,10 +15,16 @@ export function ChoiceMenu() {
   const isStreaming = useGameStore(state => state.api.isStreaming);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const endingVisible = useGameStore(state => state.game.endingPanel.visible);
+  const variables = useGameStore(state => state.tavern.variables);
+  const endingsSeen = useGameStore(state => state.game.endingsSeen);
   const { selectOption, reroll } = useGameLoop();
 
   const options = parsedContent.options;
-  if (endingVisible || isStreaming || options.length === 0) return null;
+  const metaOptions = useMemo(
+    () => getCycleMetaOptions(variables, endingsSeen).filter(option => !options.includes(option)),
+    [variables, endingsSeen, options],
+  );
+  if (endingVisible || isStreaming || (options.length === 0 && metaOptions.length === 0)) return null;
 
   return (
     <div
@@ -33,7 +40,16 @@ export function ChoiceMenu() {
           onClick={() => selectOption(option)}
         />
       ))}
-      <RerollBtn disabled={isWaitingForAI} onClick={() => reroll()} />
+      {metaOptions.map((option, index) => (
+        <PixelChoiceBtn
+          key={`meta-${option}`}
+          index={options.length + index}
+          text={option}
+          disabled={isWaitingForAI}
+          onClick={() => { void handleCycleMetaOption(option); }}
+        />
+      ))}
+      {options.length > 0 && <RerollBtn disabled={isWaitingForAI} onClick={() => reroll()} />}
     </div>
   );
 }

@@ -11,6 +11,7 @@
 import type { ChatPreset, Lorebook, ChatMessage, MatchedEntry } from './types';
 import { createLorebookEngine } from './lorebook-engine';
 import { getVariablePath } from './vars-merger';
+import { translateForWriter } from '../engine/variable-thresholds';
 
 export interface AssembleOptions {
   userInput: string;
@@ -216,6 +217,7 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
   // 4) 附加变量/状态块
   const varBlock = formatVariablesForPrompt(variables || {});
   if (varBlock) systemAcc += (systemAcc ? '\n\n' : '') + varBlock;
+  systemAcc += (systemAcc ? '\n\n' : '') + translateForWriter(variables || {});
 
   // 5) 附加格式提示词(XML 标签约束)
   if (formatPrompt) systemAcc += (systemAcc ? '\n\n' : '') + formatPrompt;
@@ -452,6 +454,7 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   if (systemAcc || varBlock || formatPrompt) {
     let sys = systemAcc;
     if (varBlock) sys += (sys ? '\n\n' : '') + varBlock;
+    sys += (sys ? '\n\n' : '') + translateForWriter(variables || {});
     if (formatPrompt) sys += (sys ? '\n\n' : '') + formatPrompt;
     finalMessages.push({ role: 'system', content: sys, index: finalMessages.length });
   }

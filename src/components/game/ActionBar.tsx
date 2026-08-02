@@ -5,7 +5,7 @@ import { useGameLoop } from '../../hooks/useGameLoop';
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon, type GameIconName } from '../ui/GameIcon';
 
-const TEXT_DIM = '#8a8580';
+const TEXT_DIM = '#aaa59e';
 const TEXT_DISABLED = '#4a4542';
 const ACCENT_BLUE = '#86a8f2';
 const ACCENT_GOLD = '#d4a853';
@@ -17,15 +17,13 @@ const gameActions = [
   { id: 'map' as const, icon: 'map' as const, label: '地图' },
 ] as const;
 
-type ToolId = 'clues' | 'history' | 'lorebook' | 'preset' | 'settings' | 'prompt';
+type ToolId = 'clues' | 'characters' | 'history' | 'settings';
 
 const tools: Array<{ id: ToolId; icon: GameIconName; label: string }> = [
   { id: 'clues', icon: 'stack', label: '线索' },
+  { id: 'characters', icon: 'info', label: '人物' },
   { id: 'history', icon: 'history', label: '历史' },
-  { id: 'lorebook', icon: 'lorebook', label: '世界书' },
-  { id: 'preset', icon: 'preset', label: '预设' },
   { id: 'settings', icon: 'settings', label: '设置' },
-  { id: 'prompt', icon: 'prompt', label: '提示词' },
 ];
 
 const endingTool = { id: 'ending', icon: 'ending' as const, label: '结局' };
@@ -33,12 +31,15 @@ const endingTool = { id: 'ending', icon: 'ending' as const, label: '结局' };
 export function ActionBar() {
   const toggleModal = useGameStore(state => state.actions.toggleModal);
   const setShowEndingEditor = useGameStore(state => state.actions.setShowEndingEditor);
-  const setShowPromptInspector = useGameStore(state => state.actions.setShowPromptInspector);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const currentScene = useGameStore(state => state.game.currentScene);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const endingVisible = useGameStore(state => state.game.endingPanel.visible);
   const { performAction } = useGameLoop();
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [observeGlowDone, setObserveGlowDone] = useState(
+    () => window.localStorage.getItem('farewell.observe-glow.done') === 'true',
+  );
 
   if (endingVisible) return null;
 
@@ -55,17 +56,61 @@ export function ActionBar() {
   };
 
   return (
-    <div className="action-bar absolute bottom-[5%] left-4 z-30 flex items-center gap-2" style={{ paddingBottom: 2 }}>
+    <>
+      {mobileMoreOpen && (
+        <div className="mobile-more-drawer" role="dialog" aria-label="更多菜单">
+          <div className="mobile-more-drawer__header">
+            <span>更多</span>
+            <button type="button" aria-label="关闭更多菜单" onClick={() => setMobileMoreOpen(false)}>
+              <GameIcon name="close" size={16} />
+            </button>
+          </div>
+          <div className="mobile-more-drawer__grid">
+            {tools.map(tool => (
+              <DrawerButton
+                key={tool.id}
+                iconName={tool.icon}
+                label={tool.label}
+                onClick={() => {
+                  setMobileMoreOpen(false);
+                  toggleModal(tool.id);
+                }}
+              />
+            ))}
+            <DrawerButton
+              iconName={endingTool.icon}
+              label={endingTool.label}
+              tone="gold"
+              onClick={() => {
+                setMobileMoreOpen(false);
+                setShowEndingEditor(true);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="action-bar absolute bottom-[5%] left-4 z-30 flex items-center gap-2" style={{ paddingBottom: 2 }}>
       {showGameActions && (
         <>
-          <div className="action-bar-group flex gap-2">
+          <div className="action-bar-group action-bar-primary flex gap-2">
             {gameActions.map(action => (
               <PixelActionBtn
                 key={action.id}
                 iconName={action.icon}
                 label={action.label}
+                showLabel
                 enabled={availability[action.id]}
-                onClick={() => action.id === 'map' ? toggleModal('map') : performAction(action.id)}
+                actionId={action.id}
+                breathe={action.id === 'observe' && !observeGlowDone && availability.observe}
+                onClick={() => {
+                  if (action.id === 'observe' && !observeGlowDone) {
+                    window.localStorage.setItem('farewell.observe-glow.done', 'true');
+                    setObserveGlowDone(true);
+                  }
+                  if (action.id === 'map') toggleModal('map');
+                  else performAction(action.id);
+                }}
               />
             ))}
           </div>
@@ -73,14 +118,15 @@ export function ActionBar() {
         </>
       )}
 
-      <div className="action-bar-group flex gap-2">
+      <div className="action-bar-group action-bar-secondary flex gap-2">
         {tools.map(tool => (
           <PixelActionBtn
             key={tool.id}
             iconName={tool.icon}
             label={tool.label}
             enabled={!isWaitingForAI}
-            onClick={() => tool.id === 'prompt' ? setShowPromptInspector(true) : toggleModal(tool.id)}
+            actionId={tool.id}
+            onClick={() => toggleModal(tool.id)}
           />
         ))}
         <PixelActionBtn
@@ -91,7 +137,18 @@ export function ActionBar() {
           onClick={() => setShowEndingEditor(true)}
         />
       </div>
-    </div>
+      <button
+        type="button"
+        className="action-bar-more"
+        aria-label="更多"
+        aria-expanded={mobileMoreOpen}
+        onClick={() => setMobileMoreOpen(value => !value)}
+      >
+        <GameIcon name="stack" size={21} />
+        <span>更多</span>
+      </button>
+      </div>
+    </>
   );
 }
 
@@ -100,12 +157,18 @@ function PixelActionBtn({
   label,
   enabled = true,
   tone = 'blue',
+  showLabel = false,
+  actionId,
+  breathe = false,
   onClick,
 }: {
   iconName: GameIconName;
   label: string;
   enabled?: boolean;
   tone?: 'blue' | 'gold';
+  showLabel?: boolean;
+  actionId?: string;
+  breathe?: boolean;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -120,7 +183,8 @@ function PixelActionBtn({
         aria-label={label}
         title={label}
         data-cursor={isDisabled ? undefined : 'pointer'}
-        className="action-bar-button relative flex h-12 w-12 select-none items-center justify-center overflow-hidden rounded-none transition-[filter,transform] duration-100"
+        data-action-id={actionId}
+        className={`action-bar-button relative flex h-12 select-none items-center justify-center overflow-hidden rounded-none transition-[filter,transform] duration-100 ${showLabel ? 'has-label' : ''} ${breathe ? 'guide-breathe' : ''}`}
         style={{
           backgroundImage: `url(${assetUrl(`assets/ui/action-slot-${tone}-${state}.png`)})`,
           backgroundRepeat: 'no-repeat',
@@ -151,6 +215,7 @@ function PixelActionBtn({
           style={{ background: accent }}
         />
         <GameIcon name={iconName} size={28} />
+        {showLabel && <span className="action-bar-button__label">{label}</span>}
         {hovered && !isDisabled && (
           <span
             className="pointer-events-none absolute -right-1 top-1 h-2 w-2"
@@ -183,5 +248,19 @@ function PixelActionBtn({
         </div>
       )}
     </div>
+  );
+}
+
+function DrawerButton({ iconName, label, tone = 'blue', onClick }: {
+  iconName: GameIconName;
+  label: string;
+  tone?: 'blue' | 'gold';
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className={`mobile-more-item is-${tone}`} onClick={onClick}>
+      <GameIcon name={iconName} size={22} />
+      <span>{label}</span>
+    </button>
   );
 }

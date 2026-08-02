@@ -4,18 +4,16 @@ import { assemblePrompt } from '../sillytavern/prompt-assembler';
 import { ApiCallError, streamChatCompletion } from '../sillytavern/api-router';
 import { augmentWithSecondary } from '../sillytavern/secondary-augment';
 import { maintextToScene, mergeParsedIntoScene } from '../engine/scene-parser';
-import { mergeVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
-import { checkCycleFailure } from '../utils/cycleLoop';
 import { translateForDirector } from '../engine/variable-thresholds';
 import { sanitizeVarsPatch } from '../sillytavern/vars-validator';
-import { checkEndingConditions } from '../sillytavern/ending-checker';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
 import { createOutputProtocol, formatValidationErrors } from '../sillytavern/output-protocol';
 import type { ChatMessage } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
 import { appendResourcePrompt } from '../utils/resourcePrompt';
-import { parseTimeCost, clampTimeCost, advanceClock, laterTime } from '../engine/game-clock';
-import { checkScheduledEvents, buildScheduledDirectives } from '../engine/scheduled-events';
+import { parseTimeCost, clampTimeCost } from '../engine/game-clock';
+import { buildScheduledDirectives } from '../engine/scheduled-events';
+import { settleGameTransaction, type GameResourceCosts } from '../engine/game-transaction';
 import { gameLocations } from '../data/locations';
 import { buildPlayerKnowledgeBrief, normalizeKnowledgeEvents } from '../data/playerKnowledge';
 import {
@@ -27,6 +25,7 @@ import {
   REVEAL_LEVELS,
   startPreplan,
   type AgentNarrativeMode,
+  type MysteryOverlayId,
   type MysteryRouteId,
   type PreparedMysteryTurn,
   type RevealLevel,
@@ -39,6 +38,13 @@ import {
   mergeSceneChecklist,
   serializeChecklistToTags,
 } from '../agents/mystery/scene-list';
+import { runStateAgent } from '../agents/state/state-agent';
+import { commitGameTransaction } from '../utils/gameTransactionStore';
+import { variablesToEndingContext } from '../sillytavern/vars-merger';
+import { rebuildSceneFromChat } from '../utils/sceneFromChat';
+import { excludeCurrentInputFromHistory } from '../sillytavern/history-cutoff';
+import { captureTurnState, resolveTurnRollback } from '../utils/turnStateSnapshot';
+import { deriveAuthorizedFactProgress } from '../agents/mystery/knowledge-progression';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -70,7 +76,9 @@ function resolveMysteryLocation(background: string | null): string {
 
 function readLockedRoute(variables: Record<string, any>): MysteryRouteId | null {
   const value = variables.lockedRoute ?? variables.mysteryRoute;
-  return value === 'A' || value === 'B' || value === 'C' ? value : null;
+  return value === 'A' || value === 'B' || value === 'C' || value === 'NONE' || value === 'FAKE'
+    ? value
+    : null;
 }
 
 function readPlayerKnowledge(variables: Record<string, any>, clueIds: string[]): Record<string, RevealLevel> {
@@ -97,14 +105,34 @@ function mergeAuthorizedKnowledge(
   const knowledge = readPlayerKnowledge(variables, Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []);
   const unlockedClues = new Set<string>(Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []);
   for (const fact of prepared.writerPacket.authorizedFacts) {
-    const previous = knowledge[fact.id];
+    const factId = prepared.factAliases.aliasToFactId[fact.id];
+    if (!factId) continue;
+    const previous = knowledge[factId];
     if (!previous || REVEAL_LEVELS.indexOf(fact.level) > REVEAL_LEVELS.indexOf(previous)) {
-      knowledge[fact.id] = fact.level;
+      knowledge[factId] = fact.level;
     }
-    if (fact.level === 'clue' || fact.level === 'confirmation') unlockedClues.add(fact.id);
+    if (fact.level === 'clue' || fact.level === 'confirmation') unlockedClues.add(factId);
   }
   const knowledgeEvents = normalizeKnowledgeEvents(variables.knowledgeEvents, [...unlockedClues]);
-  return { ...variables, mysteryKnowledge: knowledge, unlockedClues: [...unlockedClues], knowledgeEvents };
+  const factProgress = deriveAuthorizedFactProgress(variables, knowledge);
+  return {
+    ...variables,
+    ...factProgress,
+    mysteryKnowledge: knowledge,
+    unlockedClues: [...unlockedClues],
+    knowledgeEvents,
+  };
+}
+
+function readActiveOverlay(variables: Record<string, any>): MysteryOverlayId | null {
+  return variables.overlay === 'CULT' || variables.overlay === 'PSYCH'
+    ? variables.overlay
+    : null;
+}
+
+function finitePositive(value: unknown): boolean {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0;
 }
 
 function resolveAnalysisApi(settings: AppSettings) {
@@ -133,7 +161,11 @@ function buildPreplanContextKey(
 let cachedPreparedTurn: { chatId: string | null; input: string; turn: PreparedMysteryTurn } | null = null;
 
 // 玩家点击调查/行动项时缓存其标注耗时；重试同一输入时仍可命中
-let pendingTimeCost: { chatId: string; input: string; minutes: number } | null = null;
+let pendingActionCost: {
+  chatId: string;
+  input: string;
+  costs: GameResourceCosts;
+} | null = null;
 
 export interface SendMessageOptions {
   isReroll?: boolean;
@@ -157,7 +189,8 @@ export function useGameLoop() {
     sendingLockRef.current = true;
     checklistTokenRef.current = null;
 
-    const { tavern, game, actions } = store;
+    const liveStore = useGameStore.getState();
+    const { tavern, game, actions } = liveStore;
     const isReroll = opts?.isReroll ?? false;
     const isRetry = opts?.isRetry ?? false;
 
@@ -180,7 +213,7 @@ export function useGameLoop() {
       let baseMessages = activeChat ? [...activeChat.messages] : [];
 
       // 玩家放弃失败回合、未撤回就直接输入新内容：先自动撤回孤儿 user 消息
-      if (!isRetry && !isReroll && store.api.turnRecovery.phase !== 'idle') {
+      if (!isRetry && !isReroll && liveStore.api.turnRecovery.phase !== 'idle') {
         if (baseMessages.length > 0 && baseMessages[baseMessages.length - 1].role === 'user') {
           baseMessages = baseMessages.slice(0, -1);
           if (activeChat) {
@@ -202,6 +235,14 @@ export function useGameLoop() {
           content: userInput,
           timestamp: Date.now(),
           variables: { ...tavern.variables },
+          turnState: captureTurnState({
+            gameStatus: game.gameStatus,
+            currentState: game.currentState,
+            currentScene: game.currentScene,
+            currentLineIndex: game.currentLineIndex,
+            sceneComplete: game.sceneComplete,
+            variables: tavern.variables,
+          }),
         };
         messages = [...baseMessages, userMessage];
 
@@ -217,11 +258,12 @@ export function useGameLoop() {
 
       const scheduledDirectives = buildScheduledDirectives(tavern.variables);
       const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
+      const historyMessages = excludeCurrentInputFromHistory(messages, userInput);
       const promptUserInput = appendResourcePrompt(userInput, game.currentState.background, tavern.variables)
         + (scheduledDirectives.length ? '\n\n' + scheduledDirectives.map(l => `[系统指令] ${l}`).join('\n') : '');
       const { messages: promptMessages } = assemblePrompt({
         userInput: promptUserInput,
-        history: messages,
+        history: historyMessages,
         preset: activePreset,
         lorebooks: tavern.lorebooks,
         activeLorebookIds: settings.activeLorebookIds,
@@ -255,10 +297,19 @@ export function useGameLoop() {
               ? tavern.variables.suspicion
               : {}),
           },
+          affinity: {
+            ...game.endingCheckContext.affinity,
+            ...(tavern.variables.affinity && typeof tavern.variables.affinity === 'object'
+              ? tavern.variables.affinity
+              : {}),
+          },
+          tripProgress: Number(tavern.variables.tripProgress ?? 0),
+          sanity: game.gameStatus.sanity,
+          activeOverlay: readActiveOverlay(tavern.variables),
           activeNpcIds: npcIdsByLocation[resolveMysteryLocation(game.currentState.background)] ?? [],
           playerPresentation,
         };
-        const recentHistory = messages.slice(-8).map(message => ({ role: message.role, content: message.content }));
+        const recentHistory = historyMessages.slice(-8).map(message => ({ role: message.role, content: message.content }));
         const analysisApi = resolveAnalysisApi(settings);
         try {
           // 失败回合重试：编排结果已缓存则直接复用，不重跑导演/审查
@@ -328,72 +379,62 @@ export function useGameLoop() {
       let fullText = '';
       const prevScene = game.currentScene;
 
-      const finalize = (apiUsed: 'primary' | 'dual') => {
+      const resolvePendingCosts = (): GameResourceCosts | null => (
+        pendingActionCost
+        && pendingActionCost.chatId === tavern.activeChatId
+        && pendingActionCost.input === userInput
+          ? pendingActionCost.costs
+          : null
+      );
+
+      const finalize = (
+        apiUsed: 'primary' | 'dual',
+        stateAgentPatch: Record<string, any> = {},
+      ) => {
         const parsed = parseStateRef.current.parsed;
-        const { timeCost: reportedTimeCost, ...varsPatch } = (parsed.vars ?? {}) as Record<string, any>;
-        const sanitized = sanitizeVarsPatch(varsPatch, tavern.variables);
-        if (sanitized.rejected.length > 0 || sanitized.clamped.length > 0) {
-          console.warn('[vars-validator] 拒绝:', sanitized.rejected, '钳制:', sanitized.clamped);
-        }
-        let mergedVariables = mergeVariables(tavern.variables, sanitized.vars);
-        mergedVariables = mergeAuthorizedKnowledge(mergedVariables, preparedTurn);
+        const explicitCosts = resolvePendingCosts();
+        let variablePatch: Record<string, any>;
+        let reportedTimeCost: unknown;
 
-        // 引擎时钟结算：优先用玩家点击项的标注耗时，其次 LLM 上报，最后兜底 10 分钟
-        const prevClockISO = typeof tavern.variables.time === 'string'
-          ? tavern.variables.time
-          : game.gameStatus.time.toISOString();
-        const actionCost = pendingTimeCost
-          && pendingTimeCost.chatId === tavern.activeChatId
-          && pendingTimeCost.input === userInput
-          ? pendingTimeCost.minutes : null;
-        const llmCostRaw = Number(reportedTimeCost ?? preparedTurn?.writerPacket.plan.timeCostMinutes);
-        const llmCost = Number.isFinite(llmCostRaw) && llmCostRaw > 0 ? clampTimeCost(llmCostRaw) : null;
-        let nextTimeISO = advanceClock(prevClockISO, actionCost ?? llmCost ?? 10);
-        // LLM 直接写了更晚的 time(剧情跳时间)则以更晚者为准；时钟只进不退
-        if (typeof sanitized.vars.time === 'string') nextTimeISO = laterTime(nextTimeISO, sanitized.vars.time);
-        pendingTimeCost = null;
-
-        // 死讯事件状态机: 跨16:00置pending；注入过指令的回合成功后转delivered
-        const eventPatch = checkScheduledEvents(prevClockISO, nextTimeISO, mergedVariables);
-        mergedVariables = { ...mergedVariables, time: nextTimeISO, ...eventPatch };
-        if (!eventPatch.deathNews && hadPendingDeathNews) {
-          mergedVariables = { ...mergedVariables, deathNews: 'delivered' };
-        }
-
-        actions.setVariables(mergedVariables);
-        if (sanitized.vars.stamina !== undefined) {
-          actions.setGameStatus({ stamina: sanitized.vars.stamina });
-        }
-        if (sanitized.vars.sanity !== undefined) {
-          actions.setGameStatus({ sanity: sanitized.vars.sanity });
-        }
-        actions.setGameStatus({ time: new Date(nextTimeISO) });
-
-        const nextStatus = {
-          stamina: sanitized.vars.stamina !== undefined ? Number(sanitized.vars.stamina) : game.gameStatus.stamina,
-          sanity: sanitized.vars.sanity !== undefined ? Number(sanitized.vars.sanity) : game.gameStatus.sanity,
-          time: new Date(nextTimeISO),
-        };
-        let allowPreplan = agentMode !== 'legacy';
-        const matchedEnding = checkEndingConditions(
-          variablesToEndingContext(mergedVariables, game.endingsSeen),
-          game.endings,
-          game.endingsSeen
-        );
-        if (matchedEnding && !game.endingPanel.visible && !game.endingPanel.pendingEndingId) {
-          allowPreplan = false;
-          actions.setEndingPanel({ isPreview: false });
-          actions.setPendingEnding(matchedEnding.id);
-        } else if (!matchedEnding) {
-          // 轮回失败判定: 体力/理智耗尽或一天结束 → 场景播完后由 CycleResetWatcher 结算重置
-          const failure = checkCycleFailure(nextStatus);
-          if (failure) {
-            allowPreplan = false;
-            actions.setPendingCycleReset(failure);
-          }
+        if (preparedTurn) {
+          // 代理模式只信任独立 State Agent；Writer 的 <vars> 永远不进入状态。
+          variablePatch = { ...stateAgentPatch };
+          reportedTimeCost = preparedTurn.writerPacket.plan.timeCostMinutes;
+          // 清单固定成本由引擎扣除，避免 State Agent 重复计算。
+          if (finitePositive(explicitCosts?.stamina)) delete variablePatch.stamina;
+          if (finitePositive(explicitCosts?.sanity)) delete variablePatch.sanity;
         } else {
-          allowPreplan = false;
+          const { timeCost, ...writerPatch } = (parsed.vars ?? {}) as Record<string, any>;
+          reportedTimeCost = timeCost;
+          const sanitized = sanitizeVarsPatch(writerPatch, tavern.variables);
+          if (sanitized.rejected.length > 0 || sanitized.clamped.length > 0) {
+            console.warn('[vars-validator] 拒绝:', sanitized.rejected, '钳制:', sanitized.clamped);
+          }
+          variablePatch = sanitized.vars;
         }
+
+        const llmCostRaw = Number(reportedTimeCost);
+        const llmCost = Number.isFinite(llmCostRaw) && llmCostRaw > 0 ? clampTimeCost(llmCostRaw) : null;
+        const transaction = settleGameTransaction({
+          variables: mergeAuthorizedKnowledge(tavern.variables, preparedTurn),
+          gameStatus: game.gameStatus,
+          variablePatch,
+          costs: {
+            timeMinutes: explicitCosts?.timeMinutes ?? llmCost ?? 10,
+            stamina: explicitCosts?.stamina,
+            sanity: explicitCosts?.sanity,
+          },
+          endings: game.endings,
+          endingsSeen: game.endingsSeen,
+          hasEndingInProgress: game.endingPanel.visible || !!game.endingPanel.pendingEndingId,
+          deliverPendingDeathNews: hadPendingDeathNews,
+        });
+        pendingActionCost = null;
+        commitGameTransaction(transaction);
+
+        const mergedVariables = transaction.variables;
+        const nextStatus = transaction.gameStatus;
+        const allowPreplan = agentMode !== 'legacy' && !transaction.ending && !transaction.failure;
 
         const assistantMessage: ChatMessage = {
           id: crypto.randomUUID(),
@@ -413,7 +454,11 @@ export function useGameLoop() {
           turnIndex: game.history.length,
           timestamp: Date.now(),
           summary: parsed.summary || '回合结束',
-          gameStatus: { ...game.gameStatus },
+          gameStatus: {
+            ...transaction.gameStatus,
+            time: new Date(transaction.gameStatus.time),
+            items: [...transaction.gameStatus.items],
+          },
           variables: mergedVariables,
         });
 
@@ -473,7 +518,7 @@ export function useGameLoop() {
 
         // 预规划: 玩家阅读期间按最可能的输入(第一个选项)后台预跑导演/审查
         const firstOption = parsed.options?.[0]?.trim();
-        if (allowPreplan && firstOption && agentMode !== 'legacy') {
+        if (allowPreplan && firstOption) {
           const mysteryLocation = resolveMysteryLocation(game.currentState.background);
           const knownClueIds = (Array.isArray(mergedVariables.unlockedClues) ? mergedVariables.unlockedClues : [])
             .filter((id: string) => mysteryFactIds.has(id));
@@ -489,6 +534,12 @@ export function useGameLoop() {
                 ? mergedVariables.suspicion
                 : {}),
             },
+            affinity: mergedVariables.affinity && typeof mergedVariables.affinity === 'object'
+              ? mergedVariables.affinity
+              : {},
+            tripProgress: Number(mergedVariables.tripProgress ?? 0),
+            sanity: nextStatus.sanity,
+            activeOverlay: readActiveOverlay(mergedVariables),
             activeNpcIds: npcIdsByLocation[mysteryLocation] ?? [],
             playerPresentation: buildPlayerKnowledgeBrief({ ...mergedVariables, location: mysteryLocation }),
           };
@@ -587,9 +638,43 @@ export function useGameLoop() {
               return;
             }
 
-            // agent 模式下写手已按协议输出 sum/vars,无需次 API 二次补全
-            const augmented = preparedTurn ? false : await maybeAugmentWithSecondary();
-            finalize(augmented ? 'dual' : 'primary');
+            if (preparedTurn) {
+              try {
+                const stateResult = await runStateAgent({
+                  api: resolveAnalysisApi(settings),
+                  preset: activePreset,
+                  currentVariables: tavern.variables,
+                  gameStatus: game.gameStatus,
+                  playerInput: userInput,
+                  narrative: parseStateRef.current.parsed.maintext || fullText,
+                  deterministicCosts: resolvePendingCosts() ?? undefined,
+                  abortSignal: abortController.signal,
+                });
+                if (stateResult.summary) {
+                  parseStateRef.current.parsed.summary = stateResult.summary;
+                  actions.setParsedContent({ summary: stateResult.summary });
+                }
+                if (stateResult.rejected.length > 0 || stateResult.clamped.length > 0) {
+                  console.warn(
+                    '[state-agent] 拒绝:',
+                    stateResult.rejected,
+                    '钳制:',
+                    stateResult.clamped,
+                  );
+                }
+                finalize('dual', stateResult.vars);
+              } catch (stateError) {
+                actions.addNotification({
+                  type: 'warning',
+                  message: `状态分析失败，本回合仅结算固定成本：${stateError instanceof Error ? stateError.message : String(stateError)}`,
+                  duration: 6000,
+                });
+                finalize('primary');
+              }
+            } else {
+              const augmented = await maybeAugmentWithSecondary();
+              finalize(augmented ? 'dual' : 'primary');
+            }
           },
           onError: (error) => {
             actions.setStreaming(false);
@@ -621,14 +706,15 @@ export function useGameLoop() {
     } finally {
       sendingLockRef.current = false;
     }
-  }, [store]);
+  }, []);
 
   const selectOption = useCallback((optionText: string) => {
     sendMessage(optionText);
   }, [sendMessage]);
 
   const reroll = useCallback(async () => {
-    const { tavern, actions } = store;
+    const currentStore = useGameStore.getState();
+    const { tavern, actions } = currentStore;
     const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
     if (!activeChat || activeChat.messages.length === 0) {
       actions.addNotification({ type: 'warning', message: '暂无历史记录可供重roll', duration: 3000 });
@@ -645,6 +731,18 @@ export function useGameLoop() {
     // 移除该 user 消息之后的所有消息（assistant 回复等）
     const userMsgIndex = activeChat.messages.findIndex(m => m.id === lastUserMsg.id);
     const trimmedMessages = activeChat.messages.slice(0, userMsgIndex + 1);
+    const messagesBeforeTurn = trimmedMessages.slice(0, -1);
+    const rollback = resolveTurnRollback(lastUserMsg, {
+      gameStatus: currentStore.game.gameStatus,
+      currentState: currentStore.game.currentState,
+      currentScene: rebuildSceneFromChat({ ...activeChat, messages: messagesBeforeTurn }),
+      currentLineIndex: 0,
+      sceneComplete: true,
+      variables: tavern.variables,
+    });
+    const rollbackVariables = rollback.variables;
+    const rollbackStatus = rollback.gameStatus;
+    const rollbackScene = rollback.currentScene;
 
     // 清理流式状态
     actions.setStreamBuffer('');
@@ -668,14 +766,44 @@ export function useGameLoop() {
     // 更新 chat（移除 assistant 回复）并回滚对应历史快照
     // 失败回合没有 assistant 回复也没有新快照，此时不能误删上一成功回合的快照
     const removedAssistant = activeChat.messages.slice(userMsgIndex + 1).some(m => m.role === 'assistant');
-    await persistActiveChat({ messages: trimmedMessages });
+    await persistActiveChat({ messages: trimmedMessages, variables: rollbackVariables });
+    useGameStore.setState(state => ({
+      tavern: {
+        ...state.tavern,
+        variables: rollbackVariables,
+      },
+      game: {
+        ...state.game,
+        currentScene: rollbackScene,
+        currentLineIndex: rollback.currentLineIndex,
+        sceneComplete: rollback.sceneComplete,
+        currentState: rollback.currentState,
+        gameStatus: {
+          ...rollbackStatus,
+          time: new Date(rollbackStatus.time),
+          items: [...rollbackStatus.items],
+        },
+        endingCheckContext: variablesToEndingContext(
+          rollbackVariables,
+          state.game.endingsSeen,
+        ) as typeof state.game.endingCheckContext,
+        pendingCycleReset: null,
+        endingPanel: {
+          ...state.game.endingPanel,
+          visible: false,
+          activeEndingId: null,
+          pendingEndingId: null,
+          isAnimating: false,
+        },
+      },
+    }));
     if (removedAssistant) {
       actions.removeLastHistorySnapshot();
     }
 
     // 重新发送同样的输入
     await sendMessage(lastUserMsg.content, { isReroll: true });
-  }, [store, sendMessage]);
+  }, [sendMessage]);
 
   /** 重试失败回合：复用已持久化的 user 消息与编排缓存 */
   const retryTurn = useCallback(async (opts?: { forceLegacy?: boolean }) => {
@@ -719,11 +847,19 @@ export function useGameLoop() {
 结果风格：${item.style}
 
 请返回详细的调查结果，包含发现、疑点、可能的线索。
-输出格式：<action type="investigate">...</action>`;
+这是一个完整叙事回合。请按项目主输出协议返回 maintext、至少两个 option、sum 和空 vars；不要只返回 action 标签。`;
         const parsedCost = parseTimeCost(item.time);
         const chatId = store.tavern.activeChatId;
-        pendingTimeCost = parsedCost > 0 && chatId
-          ? { chatId, input: prompt, minutes: clampTimeCost(parsedCost) }
+        pendingActionCost = chatId
+          ? {
+              chatId,
+              input: prompt,
+              costs: {
+                timeMinutes: parsedCost > 0 ? clampTimeCost(parsedCost) : undefined,
+                stamina: Math.max(0, Number(item.stamina) || 0),
+                sanity: Math.max(0, Number(item.sanity) || 0),
+              },
+            }
           : null;
         sendMessage(prompt);
         actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
@@ -747,11 +883,19 @@ export function useGameLoop() {
 
 请描述行动过程、结果、场景变化（如果有）。
 如果行动导致场景切换，在文本末尾加上：[变化] 场景切换 → 新场景名
-输出格式：<action type="act">...</action>`;
+这是一个完整叙事回合。请按项目主输出协议返回 maintext、至少两个 option、sum 和空 vars；不要只返回 action 标签。`;
         const parsedCost = parseTimeCost(item.time);
         const chatId = store.tavern.activeChatId;
-        pendingTimeCost = parsedCost > 0 && chatId
-          ? { chatId, input: prompt, minutes: clampTimeCost(parsedCost) }
+        pendingActionCost = chatId
+          ? {
+              chatId,
+              input: prompt,
+              costs: {
+                timeMinutes: parsedCost > 0 ? clampTimeCost(parsedCost) : undefined,
+                stamina: Math.max(0, Number(item.stamina) || 0),
+                sanity: Math.max(0, Number(item.sanity) || 0),
+              },
+            }
           : null;
         sendMessage(prompt);
         actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });

@@ -7,9 +7,12 @@ import { GameIcon } from '../ui/GameIcon';
 import { PixelFrame } from '../ui/PixelFrame';
 import type { OrganizedClue } from '../../sillytavern/types';
 import { saveChat } from '../../sillytavern/database';
+import { findItemForInvestigation, getItemsForBackground } from '../../utils/itemAssetMatch';
+import type { ItemAsset } from '../../data/itemAssets';
+import { ItemViewer } from './ItemViewer';
 
 const TEXT_MAIN = '#e2ded6';
-const TEXT_DIM = '#8a8580';
+const TEXT_DIM = '#aaa59e';
 const BLUE = '#86a8f2';
 const GOLD = '#d4a853';
 const DANGER = '#c94f4f';
@@ -24,6 +27,8 @@ export function ActionPanel() {
   const setVariables = useGameStore(state => state.actions.setVariables);
   const setChats = useGameStore(state => state.actions.setChats);
   const addNotification = useGameStore(state => state.actions.addNotification);
+  const background = useGameStore(state => state.game.currentState.background);
+  const [viewingItem, setViewingItem] = useState<ItemAsset | null>(null);
   const { performAction } = useGameLoop();
 
   if (!actionPanel.visible) return null;
@@ -67,6 +72,7 @@ export function ActionPanel() {
       ? currentScene?.actionItems ?? []
       : [];
   const organizedClues: OrganizedClue[] = Array.isArray(variables.organizedClues) ? variables.organizedClues : [];
+  const sceneItems = actionPanel.type === 'investigate' ? getItemsForBackground(background) : [];
 
   const handleOrganizeClue = (candidate: ClueCandidate) => {
     if (organizedClues.length >= 6) {
@@ -167,12 +173,17 @@ export function ActionPanel() {
 
         {isListType ? (
           <div className="flex flex-col gap-3">
+            {actionPanel.type === 'investigate' && sceneItems.length > 0 && (
+              <SceneItemShelf items={sceneItems} onOpen={setViewingItem} />
+            )}
             {items.map((item, index) => (
               <ActionPanelItem
                 key={`${index}-${item.desc}`}
                 index={index}
                 item={item}
+                linkedItem={actionPanel.type === 'investigate' ? findItemForInvestigation(item.desc, background) : undefined}
                 tone={tone}
+                onOpenItem={setViewingItem}
                 onClick={() => handleSelectItem(index)}
               />
             ))}
@@ -185,6 +196,7 @@ export function ActionPanel() {
           />
         )}
       </PixelFrame>
+      {viewingItem && <ItemViewer item={viewingItem} onClose={() => setViewingItem(null)} />}
     </div>
   );
 }
@@ -198,10 +210,12 @@ type PanelItemData = {
   style?: string;
 };
 
-function ActionPanelItem({ index, item, tone, onClick }: {
+function ActionPanelItem({ index, item, linkedItem, tone, onOpenItem, onClick }: {
   index: number;
   item: PanelItemData;
+  linkedItem?: ItemAsset;
   tone: 'blue' | 'gold';
+  onOpenItem: (item: ItemAsset) => void;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -235,6 +249,35 @@ function ActionPanelItem({ index, item, tone, onClick }: {
       onClick={onClick}
     >
       <div className="mb-2 flex items-start gap-3">
+        {linkedItem && (
+          <button
+            type="button"
+            data-cursor="pointer"
+            data-sfx="investigate-object"
+            className="mt-1 flex h-14 w-14 shrink-0 items-center justify-center border-2 bg-[#050505]"
+            style={{
+              borderColor: hovered ? accent : '#3a3a42',
+              boxShadow: hovered ? `0 0 10px ${accent}33` : 'inset 0 0 0 1px #111',
+              cursor: 'pointer',
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenItem(linkedItem);
+            }}
+            aria-label={`查看${linkedItem.displayName}`}
+          >
+            <img
+              src={assetUrl(`assets/images/items/${linkedItem.file}`)}
+              alt={linkedItem.displayName}
+              style={{
+                maxWidth: 44,
+                maxHeight: 44,
+                imageRendering: 'pixelated',
+                filter: 'grayscale(1) contrast(1.2)',
+              }}
+            />
+          </button>
+        )}
         <span
           className="mt-1 inline-flex h-8 min-w-10 items-center justify-center"
           style={{
@@ -275,6 +318,52 @@ function ActionPanelItem({ index, item, tone, onClick }: {
         {'style' in item && item.style && <MetaChip label="方式" value={item.style} tone="gold" />}
       </div>
     </button>
+  );
+}
+
+function SceneItemShelf({ items, onOpen }: { items: ItemAsset[]; onOpen: (item: ItemAsset) => void }) {
+  return (
+    <div
+      className="mb-2 flex flex-wrap items-center gap-2 border-2 border-[#25252d] px-3 py-2"
+      style={{
+        background: 'rgba(0,0,0,0.28)',
+        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.04)',
+      }}
+    >
+      <span
+        className="mr-2 text-[12px]"
+        style={{
+          color: TEXT_DIM,
+          fontFamily: '"JetBrains Mono", monospace',
+          letterSpacing: '0.12em',
+        }}
+      >
+        SCENE ITEMS
+      </span>
+      {items.map(item => (
+        <button
+          key={item.id}
+          type="button"
+          data-cursor="pointer"
+          data-sfx="investigate-object"
+          className="flex h-11 w-11 items-center justify-center border-2 border-[#3a3a42] bg-[#050505] transition-[filter,transform] duration-100 hover:translate-x-px hover:border-[#86a8f2]"
+          style={{ cursor: 'pointer' }}
+          title={item.displayName}
+          onClick={() => onOpen(item)}
+        >
+          <img
+            src={assetUrl(`assets/images/items/${item.file}`)}
+            alt={item.displayName}
+            style={{
+              maxWidth: 34,
+              maxHeight: 34,
+              imageRendering: 'pixelated',
+              filter: 'grayscale(1) contrast(1.2)',
+            }}
+          />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -334,16 +423,12 @@ function ObserveContent({
             return (
               <div
                 key={`${candidate.marker}-${index}-${candidate.title}`}
-                className="relative w-full overflow-hidden rounded-none text-left"
+                className={`clue-candidate-card relative w-full overflow-hidden rounded-none text-left ${organized ? 'is-organized' : ''}`}
                 style={{
                   minHeight: 74,
                   padding: '12px 16px 12px 18px',
-                  backgroundImage: `url(${assetUrl(`assets/ui/panel-item-blue-${organized ? 'disabled' : 'normal'}.png`)})`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundSize: '100% 100%',
                   color: organized ? TEXT_DIM : TEXT_MAIN,
                   cursor: 'default',
-                  opacity: organized ? 0.62 : 1,
                   imageRendering: 'pixelated',
                 }}
               >
@@ -369,26 +454,11 @@ function ObserveContent({
                       event.stopPropagation();
                       onOrganize(candidate);
                     }}
-                    className={`clue-organize-btn inline-flex items-center gap-2 px-2 py-1 text-[13px] transition-[filter,transform] duration-100 disabled:cursor-default ${organized ? 'is-done' : ''}`}
-                    style={{
-                      color: organized ? TEXT_DIM : '#1a1408',
-                      background: organized ? 'transparent' : GOLD,
-                      border: `2px solid ${organized ? '#3a3a42' : GOLD}`,
-                      boxShadow: organized ? 'none' : '2px 2px 0 #000, 0 0 10px rgba(212,168,83,0.35)',
-                      cursor: organized ? 'default' : 'pointer',
-                    }}
-                    onMouseDown={(event) => {
-                      if (!organized) event.currentTarget.style.transform = 'translate(1px, 1px)';
-                    }}
-                    onMouseUp={(event) => {
-                      event.currentTarget.style.transform = 'translate(0, 0)';
-                    }}
-                    onMouseLeave={(event) => {
-                      event.currentTarget.style.transform = 'translate(0, 0)';
-                    }}
+                    className={`clue-organize-btn inline-flex min-h-9 items-center gap-2 px-3 py-1 text-[13px] ${organized ? 'is-done' : ''}`}
+                    aria-label={organized ? `线索已整理：${candidate.title}` : `整理线索：${candidate.title}`}
                   >
                     <GameIcon name={organized ? 'success' : 'plus'} size={14} />
-                    {organized ? '已整理' : '+整理该线索'}
+                    {organized ? '已整理' : '整理线索'}
                   </button>
                 </div>
                 <div style={{ fontSize: 17, lineHeight: 1.55 }}>{candidate.description}</div>

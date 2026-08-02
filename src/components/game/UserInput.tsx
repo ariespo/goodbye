@@ -98,6 +98,8 @@ function PixelSendBtn({ onClick, disabled }: { onClick: () => void; disabled: bo
 
   return (
     <button
+      type="button"
+      aria-label="发送消息"
       className="user-input-send flex items-center justify-center select-none cursor-none transition-all duration-150"
       style={{
         width: 48,

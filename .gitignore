@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local validation, browser profiles, and agent working notes
+tmp/
+task_plan.md
+docs/superpowers/completion-reports/
+
+# Large source/reference assets kept locally outside the deployable baseline
+docs/development-assets/
+docs/approved-art/

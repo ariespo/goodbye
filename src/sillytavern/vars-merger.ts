@@ -1,3 +1,14 @@
+const UNIQUE_ARRAY_KEYS = new Set([
+  'unlockedClues',
+  'organizedClues',
+  'knowledgeEvents',
+  'routesLockedEver',
+  'cultClues',
+  'worldGlitchClues',
+  'fakeEvidence',
+  'letterFragments',
+]);
+
 export function mergeVariables(
   current: Record<string, any>,
   updates: Record<string, any>
@@ -16,15 +27,24 @@ export function mergeVariables(
       !Array.isArray(result[key])
     ) {
       result[key] = mergeVariables(result[key] || {}, value);
-    } else if ((key === 'unlockedClues' || key === 'organizedClues') && Array.isArray(result[key]) && Array.isArray(value)) {
+    } else if (UNIQUE_ARRAY_KEYS.has(key) && Array.isArray(result[key]) && Array.isArray(value)) {
       result[key] = mergeUniqueArray(result[key], value);
     } else {
       result[key] = value;
     }
   }
 
+  if (typeof result.lockedRoute === 'string' && LOCKABLE_ROUTES.has(result.lockedRoute)) {
+    const ever = Array.isArray(result.routesLockedEver) ? result.routesLockedEver : [];
+    if (!ever.includes(result.lockedRoute)) {
+      result.routesLockedEver = [...ever, result.lockedRoute];
+    }
+  }
+
   return result;
 }
+
+const LOCKABLE_ROUTES = new Set(['A', 'B', 'C', 'NONE', 'FAKE']);
 
 function mergeUniqueArray(current: any[], updates: any[]): any[] {
   const result = [...current];
@@ -41,13 +61,35 @@ function mergeUniqueArray(current: any[], updates: any[]): any[] {
 
 export const DEFAULT_GAME_VARIABLES: Record<string, any> = {
   cycleCount: 1,
+  location: 'home',
   stamina: 100,
   sanity: 80,
-  affinity: { fumi: 70, touko: 40, saku: 0 },
-  suspicion: { self: 10, fumi: 0, touko: 5, occult: 0 },
+  affinity: { fumi: 70, touko: 40 },
+  suspicion: {
+    'old-man': 0,
+    'detective-a': 0,
+    'detective-b': 0,
+    self: 10,
+    clerk: 0,
+    teacher: 0,
+    senpai: 0,
+  },
   investigation: { psych: 0, crime: 0, occult: 0, science: 0 },
+  tripProgress: 0,
   unlockedClues: [],
   organizedClues: [],
+  knowledgeEvents: ['know:home', 'know:school', 'know:supermarket'],
+  // 三层结局体系
+  lockedRoute: null,
+  overlay: null,
+  finalChoice: null,
+  routesLockedEver: [],
+  cultClues: [],
+  worldGlitchClues: [],
+  fakeEvidence: [],
+  letterFragments: [],
+  stayStreak: 0,
+  stayedEver: false,
 };
 
 export function createDefaultVariables(): Record<string, any> {
@@ -90,6 +132,7 @@ export function variablesToEndingContext(
   endingsSeen: string[] = []
 ): Record<string, any> {
   const merged = mergeVariables(createDefaultVariables(), variables);
+  const arrayLength = (value: unknown) => (Array.isArray(value) ? value.length : 0);
   return {
     ...merged,
     cycleCount: Number(merged.cycleCount ?? 1),
@@ -99,5 +142,14 @@ export function variablesToEndingContext(
     unlockedClues: Array.isArray(merged.unlockedClues) ? merged.unlockedClues : [],
     organizedClues: Array.isArray(merged.organizedClues) ? merged.organizedClues : [],
     endingsSeen,
+    // 三层结局体系派生计数(供结局条件使用)
+    routesLockedCount: arrayLength(merged.routesLockedEver),
+    cultClueCount: arrayLength(merged.cultClues),
+    glitchClueCount: arrayLength(merged.worldGlitchClues),
+    fakeEvidenceCount: arrayLength(merged.fakeEvidence),
+    letterFragmentCount: arrayLength(merged.letterFragments),
+    stayStreak: Number(merged.stayStreak ?? 0),
+    stayedEver: Boolean(merged.stayedEver),
+    endingsSeenCount: endingsSeen.length,
   };
 }

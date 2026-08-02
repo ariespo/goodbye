@@ -56,4 +56,41 @@ describe('emotion sprite mapping', () => {
     // 代码会根据情绪返回对应文件名（若文件不存在，浏览器 404 后自然不显示立绘）
     expect(scene.lines[0].character).toBe('touko-happy.png');
   });
+
+  it('maps old man aliases to available emotion sprites', () => {
+    const horrorScene = maintextToScene('对话|周德明|horror|你看见了。');
+    expect(horrorScene.lines[0].character).toBe('old-man-horror.png');
+
+    const normalScene = maintextToScene('对话|老头|sad|唉。');
+    expect(normalScene.lines[0].character).toBe('old-man-normal.png');
+  });
+
+  it('maps detective aliases to available emotion sprites', () => {
+    const detectiveA = maintextToScene('对话|赵刚|sad|不是这样的。');
+    expect(detectiveA.lines[0].character).toBe('detective-a-sad.png');
+
+    const detectiveB = maintextToScene('对话|林静|angry|闭嘴。');
+    expect(detectiveB.lines[0].character).toBe('detective-b-angry.png');
+  });
+
+  it('maps the clerk and teacher to their default portraits', () => {
+    const clerk = maintextToScene('dialogue|chen-huihui|calm|欢迎光临。');
+    expect(clerk.lines[0].character).toBe('chen-huihui-normal.png');
+
+    const teacher = maintextToScene('dialogue|liu-renguang|calm|先去热身。');
+    expect(teacher.lines[0].character).toBe('liu-renguang-normal.png');
+  });
+
+  it('maps fixed special sprites', () => {
+    const touko = maintextToScene('对话|灯织半眯眼|calm|我在看你。');
+    expect(touko.lines[0].character).toBe('touko-half-closed.png');
+
+    const fumi = maintextToScene('对话|文穗剪影|calm|……');
+    expect(fumi.lines[0].character).toBe('fumi-silhouette.png');
+  });
+
+  it('passes through explicit sprite filenames', () => {
+    const scene = maintextToScene('对话|detective-a-normal.png|calm|沉默。');
+    expect(scene.lines[0].character).toBe('detective-a-normal.png');
+  });
 });

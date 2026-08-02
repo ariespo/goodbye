@@ -1,3 +1,4 @@
+import { getItemByReference } from '../data/itemAssets';
 import type { Scene, SceneLine, Mood } from '../sillytavern/types';
 
 /**
@@ -6,6 +7,7 @@ import type { Scene, SceneLine, Mood } from '../sillytavern/types';
  * 输入格式(每行一个指令,字段用全角或半角 | 分隔):
  *   场景|<场景名>
  *   音乐|<音乐名>
+ *   动作|<人物名>|<动作 id>
  *   对话|<人物名>|<情绪>|<对话内容>
  *
  * 同一组场景/音乐下可有多段对话(只在变化时声明)。
@@ -25,6 +27,8 @@ const EMOTION_MAP: Record<string, Mood> = {
   angry: 'angry', 愤怒: 'angry', 生气: 'angry', 暴怒: 'angry',
   happy: 'happy', 开心: 'happy', 高兴: 'happy', 喜悦: 'happy', 微笑: 'happy',
 };
+
+const CHARACTER_ANIMATIONS = new Set(['idle', 'fold-cloth', 'reset-cuff']);
 
 function normalizeEmotion(raw: string | undefined): Mood {
   if (!raw) return 'calm';
@@ -101,7 +105,11 @@ function extractXmlTags(text: string): {
   return result;
 }
 
-export function maintextToScene(maintext: string): Scene {
+export interface SceneParseOptions {
+  authorizedKnowledgeEvents?: string[];
+}
+
+export function maintextToScene(maintext: string, options: SceneParseOptions = {}): Scene {
   // 先提取 XML 标签
   const { cleanText, observe, investigateItems, actionItems } = extractXmlTags(maintext);
 
@@ -110,6 +118,10 @@ export function maintextToScene(maintext: string): Scene {
   // 当前上下文(被后续 对话| 行继承)
   let currentBackground: string | undefined;
   let currentBgm: string | undefined;
+  let pendingEffect: string | undefined;
+  let pendingCharacter: string | undefined;
+  let pendingAnimation: string | undefined;
+  const authorizedKnowledgeEvents = new Set(options.authorizedKnowledgeEvents ?? []);
 
   for (const rawLine of cleanText.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -128,10 +140,38 @@ export function maintextToScene(maintext: string): Scene {
       continue;
     }
 
+    if (head === '效果' || head === 'effect') {
+      if (fields[1]) pendingEffect = fields[1];
+      continue;
+    }
+
+    if (head === '动作' || head === 'animation') {
+      const actor = fields[1];
+      const animation = fields[2];
+      const character = actor ? speakerToCharacterAsset(actor, 'calm') : undefined;
+      if (character && animation && CHARACTER_ANIMATIONS.has(animation)) {
+        pendingCharacter = character;
+        pendingAnimation = animation;
+      }
+      continue;
+    }
+
+    if (head === '认知' || head === 'knowledge') {
+      const eventId = fields[1];
+      const previousLine = lines[lines.length - 1];
+      if (eventId && previousLine && authorizedKnowledgeEvents.has(eventId)) {
+        previousLine.knowledgeEvents = [...new Set([...(previousLine.knowledgeEvents ?? []), eventId])];
+      }
+      continue;
+    }
+
     if (head === '对话' || head === 'dialog' || head === 'dialogue') {
       const speaker = fields[1] || '旁白';
       const emotion = normalizeEmotion(fields[2]);
-      const text = fields.slice(3).join('|').trim() || '';
+      const itemCandidate = fields.length >= 5 ? fields[fields.length - 1]?.trim() : '';
+      const item = itemCandidate && getItemByReference(itemCandidate) ? itemCandidate : '';
+      const textFields = item ? fields.slice(3, -1) : fields.slice(3);
+      const text = textFields.join('|').trim() || '';
       if (!text) continue;
       lines.push({
         background: currentBackground,
@@ -139,8 +179,15 @@ export function maintextToScene(maintext: string): Scene {
         speaker,
         emotion,
         text,
-        character: speaker === '旁白' ? undefined : speakerToCharacterAsset(speaker, emotion),
+        effect: pendingEffect,
+        animation: pendingAnimation,
+        item: item || undefined,
+        character: pendingCharacter
+          ?? (speaker === '旁白' ? undefined : speakerToCharacterAsset(speaker, emotion)),
       });
+      pendingEffect = undefined;
+      pendingCharacter = undefined;
+      pendingAnimation = undefined;
       continue;
     }
 
@@ -151,7 +198,11 @@ export function maintextToScene(maintext: string): Scene {
       speaker: '旁白',
       emotion: 'calm',
       text: line,
+      effect: pendingEffect,
     });
+    pendingEffect = undefined;
+    pendingCharacter = undefined;
+    pendingAnimation = undefined;
   }
 
   return {
@@ -167,21 +218,79 @@ export function maintextToScene(maintext: string): Scene {
   };
 }
 
+export function mergeParsedIntoScene(
+  prev: Scene | null | undefined,
+  scene: Scene,
+  parsed: { observe?: string; investigateItems?: Scene['investigateItems']; actionItems?: Scene['actionItems'] },
+): Scene {
+  return {
+    ...scene,
+    observe: parsed.observe || scene.observe || prev?.observe,
+    investigateItems: parsed.investigateItems?.length
+      ? parsed.investigateItems
+      : scene.investigateItems?.length ? scene.investigateItems : prev?.investigateItems,
+    actionItems: parsed.actionItems?.length
+      ? parsed.actionItems
+      : scene.actionItems?.length ? scene.actionItems : prev?.actionItems,
+  };
+}
+
 const SPEAKER_SPRITE_MAP: Record<string, string> = {
-  '文穂': 'fumi',
-  'fumi': 'fumi',
-  '緋室灯織': 'touko',
-  'touko': 'touko',
+  陈慧慧: 'chen-huihui',
+  便利店员: 'chen-huihui',
+  'chen-huihui': 'chen-huihui',
+  刘仁光: 'liu-renguang',
+  体育老师: 'liu-renguang',
+  'liu-renguang': 'liu-renguang',
+  文穗: 'fumi',
+  文穂: 'fumi',
+  fumi: 'fumi',
+  沈灯织: 'touko',
+  灯织: 'touko',
+  緋室灯織: 'touko',
+  绯室灯织: 'touko',
+  touko: 'touko',
+  灯织半眯眼: 'touko-half-closed.png',
+  touko半眯眼: 'touko-half-closed.png',
+  'touko-half-closed': 'touko-half-closed.png',
+  周德明: 'old-man',
+  周德星: 'old-man',
+  独居老头: 'old-man',
+  老头: 'old-man',
+  'old-man': 'old-man',
+  侦探A: 'detective-a',
+  赵刚: 'detective-a',
+  'detective-a': 'detective-a',
+  侦探B: 'detective-b',
+  林静: 'detective-b',
+  'detective-b': 'detective-b',
+  文穗不在场: 'fumi-gone.png',
+  文穗剪影: 'fumi-silhouette.png',
+  幼年文穗: 'fumi-child.png',
 };
 
 /** 有独立立绘的情绪列表 */
 const EMOTION_SPRITES: Mood[] = ['angry', 'happy', 'horror', 'insane', 'sad'];
 
+const SPRITE_EMOTIONS_BY_BASE: Record<string, Mood[]> = {
+  fumi: EMOTION_SPRITES,
+  touko: EMOTION_SPRITES,
+  'old-man': ['happy', 'horror'],
+  'detective-a': ['sad'],
+  'detective-b': ['angry'],
+};
+
 /** 角色名 + 情绪 → 立绘文件名(无情绪立绘则回退到默认) */
 function speakerToCharacterAsset(speaker: string, emotion?: Mood): string | undefined {
-  const base = SPEAKER_SPRITE_MAP[speaker];
+  const normalizedSpeaker = speaker.trim();
+  if (/\.(png|jpg|jpeg|gif|webp)$/i.test(normalizedSpeaker)) return normalizedSpeaker;
+
+  const base = SPEAKER_SPRITE_MAP[normalizedSpeaker];
   if (!base) return undefined;
-  if (emotion && EMOTION_SPRITES.includes(emotion)) {
+  if (/\.(png|jpg|jpeg|gif|webp)$/i.test(base)) return base;
+
+  const availableEmotions = SPRITE_EMOTIONS_BY_BASE[base] || [];
+  if (emotion && availableEmotions.includes(emotion)) {
     return `${base}-${emotion}.png`;
   }
   return `${base}-normal.png`;

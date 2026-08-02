@@ -73,6 +73,20 @@ export class FarewellDatabase extends Dexie {
           if (s.soundVolume === undefined) s.soundVolume = 0.65;
         });
       });
+
+    this.version(6)
+      .stores({
+        settings: '++id',
+        presets: 'id, name, updatedAt',
+        lorebooks: 'id, name, updatedAt',
+        chats: 'id, name, updatedAt',
+        saves: 'id, name, createdAt',
+      })
+      .upgrade(async tx => {
+        await tx.table('settings').toCollection().modify((s: any) => {
+          if (!s.agentNarrativeMode) s.agentNarrativeMode = 'standard';
+        });
+      });
   }
 }
 
@@ -116,6 +130,7 @@ function getDefaultSettings(): AppSettings {
     fontFamily: 'renou-fangsong',
     musicVolume: 0.5,
     soundVolume: 0.65,
+    agentNarrativeMode: 'standard',
   };
 }
 

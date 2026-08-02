@@ -89,4 +89,37 @@ describe('stream-parser', () => {
     expect(state.parsed.options).toEqual(['选项A', '选项B']);
     expect(state.parsed.summary).toBe('回合总结');
   });
+
+  it('parses tags split across single-character chunks (token-level streaming)', () => {
+    // DeepSeek 等供应商逐 token 流式，闭合标签会被拆成 "</main" + "text>" 等碎片
+    const response = '<maintext>\n对话|文穗|calm|早安。\n</maintext>\n<option>\n选项A\n选项B\n</option>\n<sum>总结</sum>\n<vars>{"stamina": 90}</vars>';
+    let state = createParseState();
+    for (const ch of response) {
+      state = parseChunk(state, ch, { strict: true });
+    }
+    expect(state.parsed.maintext).toContain('对话|文穗|calm|早安。');
+    expect(state.parsed.options).toEqual(['选项A', '选项B']);
+    expect(state.parsed.summary).toBe('总结');
+    expect(state.parsed.vars).toEqual({ stamina: 90 });
+    expect(state.errors).toEqual([]);
+  });
+
+  it('preserves outer tag content when model nests tags inside maintext', () => {
+    const response = '<maintext>\n对话|文穗|calm|你好。\n<observe>\n[异常] 阳台门锁着。\n</observe>\n<action>\n检查门锁|现实|5分钟|1|0\n</action>\n</maintext>\n<option>\n选项A\n选项B\n</option>\n<sum>总结</sum>';
+    let state = createParseState();
+    for (const ch of response) {
+      state = parseChunk(state, ch, { strict: true });
+    }
+    expect(state.parsed.maintext).toContain('对话|文穗|calm|你好。');
+    expect(state.parsed.observe).toContain('阳台门锁着');
+    expect(state.parsed.actionItems).toHaveLength(1);
+    expect(state.parsed.options).toEqual(['选项A', '选项B']);
+    expect(state.parsed.summary).toBe('总结');
+  });
+
+  it('does not hold back literal "<" in prose forever', () => {
+    let state = createParseState();
+    state = parseChunk(state, '<maintext>\n对话|文穗|calm|温度 <10 度而且比昨天冷得多，风也大，完全不像春天该有的样子。\n</maintext>');
+    expect(state.parsed.maintext).toContain('温度 <10 度');
+  });
 });

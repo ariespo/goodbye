@@ -3,6 +3,8 @@ import { MysteryPipelineBlockedError, prepareMysteryTurn, resetResponseFormatSup
 import { DIRECTOR_PLAN_JSON_SCHEMA, FACT_REVIEW_JSON_SCHEMA } from './schemas';
 import { clearOrchestrationLog, getOrchestrationLog } from './orchestration-log';
 import type { DirectorPlan, TruthContext } from './types';
+import { createFactAliasTable } from './fact-aliases';
+import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
 
 const truthContext: TruthContext = {
   cycleCount: 2,
@@ -14,14 +16,26 @@ const truthContext: TruthContext = {
   activeNpcIds: [],
 };
 
+const factAliases = createFactAliasTable(MYSTERY_TRUTH_GRAPH);
+const apronFactAlias = factAliases.factIdToAlias['shared-apron-missing'];
+const approvedFactReview = JSON.stringify({ approved: true, violations: [], corrections: [] });
+
 const validPlan: DirectorPlan = {
   turnGoal: '检查衣柜里的异常',
   tone: '克制',
   beats: [{ id: 'beat-1', purpose: '发现缺失物', description: '查看衣柜' }],
-  revelations: [{ factId: 'shared-apron-missing', level: 'hint', delivery: 'object' }],
+  revelations: [{ factId: apronFactAlias, level: 'hint', delivery: 'object' }],
   optionIntents: [{ id: 'option-1', intent: '继续调查', tone: '谨慎', expectedPressure: 'low' }],
   assetRequests: ['bedroom-apron'],
 };
+
+function completeApproved(plan: DirectorPlan = validPlan) {
+  return vi.fn(async (messages: Array<{ content: string }>) => (
+    messages[0]?.content.includes('事实复核')
+      ? approvedFactReview
+      : JSON.stringify(plan)
+  ));
+}
 
 describe('mystery orchestrator', () => {
   beforeEach(() => {
@@ -29,7 +43,7 @@ describe('mystery orchestrator', () => {
   });
 
   it('prepares isolated writer messages after deterministic review', async () => {
-    const complete = vi.fn().mockResolvedValue(JSON.stringify(validPlan));
+    const complete = completeApproved();
     const result = await prepareMysteryTurn({
       mode: 'standard',
       api: { baseUrl: 'test', apiKey: 'test', model: 'test' },
@@ -40,9 +54,12 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(result.hardReview.approved).toBe(true);
-    expect(result.semanticReview).toBeNull();
-    expect(complete).toHaveBeenCalledTimes(1);
+    expect(result.semanticReview?.approved).toBe(true);
+    expect(complete).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(result.writerMessages)).not.toContain('c-player-killed-fumi');
+    expect(JSON.stringify(result.writerMessages)).not.toContain('shared-apron-missing');
+    expect(JSON.stringify(result.writerMessages)).toContain(apronFactAlias);
+    expect(result.factAliases.aliasToFactId[apronFactAlias]).toBe('shared-apron-missing');
   });
 
   it('repairs one invalid director plan', async () => {
@@ -51,7 +68,8 @@ describe('mystery orchestrator', () => {
     ] };
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(invalid))
-      .mockResolvedValueOnce(JSON.stringify(validPlan));
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(approvedFactReview);
     const result = await prepareMysteryTurn({
       mode: 'standard',
       api: { baseUrl: 'test', apiKey: 'test', model: 'test' },
@@ -65,10 +83,10 @@ describe('mystery orchestrator', () => {
     expect(result.hardReview.approved).toBe(true);
   });
 
-  it('runs semantic review only in strict mode', async () => {
+  it('runs semantic review in strict mode', async () => {
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(validPlan))
-      .mockResolvedValueOnce(JSON.stringify({ approved: true, violations: [], corrections: [] }));
+      .mockResolvedValueOnce(approvedFactReview);
     const result = await prepareMysteryTurn({
       mode: 'strict',
       api: { baseUrl: 'test', apiKey: 'test', model: 'test' },
@@ -100,7 +118,9 @@ describe('mystery orchestrator', () => {
   });
 
   it('requests structured output via response_format json_schema', async () => {
-    const complete = vi.fn().mockResolvedValue(JSON.stringify(validPlan));
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(approvedFactReview);
     await prepareMysteryTurn({
       mode: 'strict',
       api: { baseUrl: 'test', apiKey: 'test', model: 'test' },
@@ -123,7 +143,9 @@ describe('mystery orchestrator', () => {
       if (callOptions?.responseFormat) {
         throw new Error('API error 400: response_format is not supported');
       }
-      return JSON.stringify(validPlan);
+      return _messages[0]?.content.includes('事实复核')
+        ? approvedFactReview
+        : JSON.stringify(validPlan);
     });
     const result = await prepareMysteryTurn({
       mode: 'standard',
@@ -135,7 +157,7 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(result.hardReview.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete).toHaveBeenCalledTimes(3);
     expect(complete.mock.calls[1]?.[1]?.responseFormat).toBeUndefined();
 
     // 同一服务端的后续调用直接跳过 response_format，不再重复撞错
@@ -149,7 +171,7 @@ describe('mystery orchestrator', () => {
       presentationContext: {},
       complete,
     });
-    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete).toHaveBeenCalledTimes(2);
     expect(complete.mock.calls[0]?.[1]?.responseFormat).toBeUndefined();
   });
 
@@ -169,7 +191,7 @@ describe('mystery orchestrator', () => {
 
   it('records an orchestration log entry with stage timings on success', async () => {
     clearOrchestrationLog();
-    const complete = vi.fn().mockResolvedValue(JSON.stringify(validPlan));
+    const complete = completeApproved();
     await prepareMysteryTurn({
       mode: 'standard',
       api: { baseUrl: 'test', apiKey: 'test', model: 'log-model' },
@@ -188,7 +210,7 @@ describe('mystery orchestrator', () => {
     expect(entry.directorAttempts).toBe(1);
     expect(entry.directorPlan?.turnGoal).toBe(validPlan.turnGoal);
     expect(entry.hardReview?.approved).toBe(true);
-    expect(entry.stages.map(s => s.stage)).toEqual(['director', 'hard-review']);
+    expect(entry.stages.map(s => s.stage)).toEqual(['director', 'hard-review', 'semantic-review']);
     expect(entry.totalDurationMs).toBeGreaterThanOrEqual(0);
   });
 
@@ -226,7 +248,7 @@ describe('mystery orchestrator', () => {
   it('透传导演计划中的可选字段 timeCostMinutes', async () => {
     // 验证 timeCostMinutes 可选字段从导演 JSON 解析后原样保留到 writerPacket.plan
     const planWithTime = { ...validPlan, timeCostMinutes: 25 };
-    const complete = vi.fn().mockResolvedValue(JSON.stringify(planWithTime));
+    const complete = completeApproved(planWithTime);
     const result = await prepareMysteryTurn({
       mode: 'standard',
       api: { baseUrl: 'test', apiKey: 'test', model: 'test' },

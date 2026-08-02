@@ -49,7 +49,16 @@ export function parseChunk(state: ParseState, chunk: string, options: ParseOptio
 
     if (!isClosing) {
       if (state.currentTag) {
+        // 模型可能嵌套标签或漏写闭合标签（如把 <observe> 写进 <maintext> 内部），
+        // 遇到新开标签时先落盘当前标签内容，避免整段丢失
         state.tagBuffer += state.buffer.slice(0, tagIndex);
+        try {
+          flushTagBuffer(state, state.currentTag, options);
+        } catch (err) {
+          if (options.strict) {
+            state.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
       }
       state.currentTag = tagName;
       state.tagBuffer = '';
@@ -77,10 +86,15 @@ export function parseChunk(state: ParseState, chunk: string, options: ParseOptio
   }
 
   if (state.currentTag) {
-    const lastOpenIndex = state.buffer.lastIndexOf(`<${state.currentTag}>`);
-    if (lastOpenIndex === -1) {
-      state.tagBuffer += state.buffer;
-      state.buffer = '';
+    // 流式分片可能把标签拆开（如 "</main" + "text>"），末尾疑似半截标签的部分留在 buffer 等下一块
+    let safeEnd = state.buffer.length;
+    const lastLt = state.buffer.lastIndexOf('<');
+    if (lastLt !== -1 && /^<[^>]{0,40}$/.test(state.buffer.slice(lastLt))) {
+      safeEnd = lastLt;
+    }
+    if (safeEnd > 0) {
+      state.tagBuffer += state.buffer.slice(0, safeEnd);
+      state.buffer = state.buffer.slice(safeEnd);
     }
   }
 

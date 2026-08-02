@@ -317,6 +317,15 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   variables: Record<string, any>;
+  /** 该玩家回合开始前的可回滚运行时快照。旧消息可不存在。 */
+  turnState?: {
+    gameStatus: GameStatus;
+    currentState: CurrentState;
+    currentScene: Scene | null;
+    currentLineIndex: number;
+    sceneComplete: boolean;
+    variables: Record<string, any>;
+  };
   parsed?: ParsedContent;
   apiUsed?: ApiTarget;
 }

@@ -1,0 +1,52 @@
+{
+  "character": "touko",
+  "status": "art-pending",
+  "frameWidth": 430,
+  "frameHeight": 606,
+  "clips": {
+    "idle.calm": {
+      "src": "touko-idle-calm.sheet.png",
+      "frames": 4,
+      "frameMs": [1200, 140, 100, 1450],
+      "loop": true,
+      "holdLastFrame": false,
+      "reducedMotionFrame": 0,
+      "poses": [
+        "settled wrist hold",
+        "tiny controlled inhale",
+        "slow restrained blink",
+        "return to exact settled position"
+      ]
+    },
+    "talk.calm": {
+      "src": "touko-talk-calm.sheet.png",
+      "frames": 4,
+      "frameMs": [130, 100, 150, 100],
+      "loop": true,
+      "holdLastFrame": false,
+      "reducedMotionFrame": 0,
+      "poses": [
+        "mouth closed with calm smile",
+        "mouth small open",
+        "mouth medium open without head bob",
+        "mouth closed with calm smile"
+      ]
+    },
+    "gesture.reset-cuff": {
+      "src": "touko-gesture-reset-cuff.sheet.png",
+      "frames": 6,
+      "frameMs": [220, 130, 150, 180, 260, 750],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 5,
+      "poses": [
+        "settled wrist hold",
+        "raise fingertips to cuff",
+        "pinch cuff edge precisely",
+        "smooth cuff into alignment",
+        "release with a short appraisal pause",
+        "return to exact settled position"
+      ]
+    }
+  }
+}

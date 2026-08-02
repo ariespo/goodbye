@@ -1,5 +1,125 @@
 import type { ChatPreset } from './types';
 
+export type ApiErrorKind =
+  | 'network'
+  | 'timeout'
+  | 'http4xx'
+  | 'http5xx'
+  | 'rate_limit'
+  | 'abort'
+  | 'stream_interrupted';
+
+const RETRYABLE_KINDS: ReadonlySet<ApiErrorKind> = new Set(['network', 'timeout', 'http5xx', 'rate_limit']);
+
+export class ApiCallError extends Error {
+  readonly status: number | null;
+  readonly kind: ApiErrorKind;
+  readonly retryable: boolean;
+
+  constructor(message: string, kind: ApiErrorKind, status: number | null = null) {
+    super(message);
+    this.name = 'ApiCallError';
+    this.kind = kind;
+    this.status = status;
+    this.retryable = RETRYABLE_KINDS.has(kind);
+  }
+}
+
+export function classifyHttpStatus(status: number): ApiErrorKind {
+  if (status === 429) return 'rate_limit';
+  if (status >= 500) return 'http5xx';
+  return 'http4xx';
+}
+
+export function toApiCallError(cause: unknown): ApiCallError {
+  if (cause instanceof ApiCallError) return cause;
+  if (cause instanceof Error && cause.name === 'AbortError') {
+    return new ApiCallError('请求已中止', 'abort');
+  }
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return new ApiCallError(`网络错误: ${message}`, 'network');
+}
+
+export interface RetryOptions {
+  retries?: number;
+  baseDelayMs?: number;
+  signal?: AbortSignal;
+  onRetry?: (attempt: number, error: ApiCallError) => void;
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new ApiCallError('请求已中止', 'abort'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new ApiCallError('请求已中止', 'abort'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export async function withRetry<T>(fn: (attempt: number) => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const retries = options.retries ?? 2;
+  const baseDelayMs = options.baseDelayMs ?? 1000;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (cause) {
+      const error = toApiCallError(cause);
+      if (!error.retryable || attempt >= retries) throw error;
+      options.onRetry?.(attempt + 1, error);
+      await abortableDelay(baseDelayMs * 2 ** attempt, options.signal);
+    }
+  }
+}
+
+export interface TimeoutSignal {
+  signal: AbortSignal;
+  refresh: (ms?: number) => void;
+  dispose: () => void;
+}
+
+/** 可刷新的超时 signal，与父 signal 合成；超时以 ApiCallError('timeout') 作为 abort reason */
+export function createTimeoutSignal(parent: AbortSignal | undefined, ms: number): TimeoutSignal {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const onParentAbort = () => {
+    if (timer !== null) clearTimeout(timer);
+    controller.abort(new ApiCallError('请求已中止', 'abort'));
+  };
+  if (parent?.aborted) {
+    onParentAbort();
+  } else {
+    parent?.addEventListener('abort', onParentAbort, { once: true });
+  }
+
+  const refresh = (nextMs: number = ms) => {
+    if (timer !== null) clearTimeout(timer);
+    if (controller.signal.aborted) return;
+    timer = setTimeout(() => {
+      controller.abort(new ApiCallError(`请求超时（${Math.round(nextMs / 1000)}s 无响应）`, 'timeout'));
+    }, nextMs);
+  };
+  refresh();
+
+  return {
+    signal: controller.signal,
+    refresh,
+    dispose: () => {
+      if (timer !== null) clearTimeout(timer);
+      parent?.removeEventListener('abort', onParentAbort);
+    },
+  };
+}
+
 export interface ApiConfig {
   baseUrl: string;
   apiKey: string;
@@ -48,6 +168,7 @@ export async function fetchModels(config: ApiConfig): Promise<FetchedModel[]> {
         const models = (data.data || []).map((m: any) => ({ id: m.id, object: m.object }));
         return models;
       }
+      if (response.status !== 401 && response.status !== 403) break;
     } catch {
       // 尝试下一种 header 方式
     }
@@ -93,6 +214,7 @@ export async function testConnectivity(config: ApiConfig): Promise<{ ok: boolean
           model: data.model || config.model,
         };
       }
+      if (response.status !== 401 && response.status !== 403) break;
     } catch {
       // 尝试下一种 header 方式
     }
@@ -118,7 +240,7 @@ async function fetchWithAuthFallback(
   }
 
   const headersList = buildHeaders(apiKey);
-  let lastStatus = 0;
+  let lastStatus: number | null = null;
   let lastError = '';
 
   for (const headers of headersList) {
@@ -133,12 +255,31 @@ async function fetchWithAuthFallback(
       if (response.ok) return response;
       lastStatus = response.status;
       lastError = await response.text();
+      // 仅认证失败才换 api-key header 重试；400 等业务错误换 header 只会
+      // 产生误导性的 401（如 DeepSeek 对未知 header 返回 Authentication Fails），掩盖真实错误
+      if (response.status !== 401 && response.status !== 403) break;
     } catch (e) {
-      lastError = e instanceof Error ? e.message : String(e);
+      const classified = toApiCallError(e);
+      // 中止/超时不应再换 header 重试
+      if (classified.kind === 'abort' || classified.kind === 'timeout') throw classified;
+      lastError = classified.message;
     }
   }
 
-  throw new Error(`API error ${lastStatus}: ${lastError}`);
+  if (lastStatus !== null) {
+    throw new ApiCallError(`API error ${lastStatus}: ${lastError}`, classifyHttpStatus(lastStatus), lastStatus);
+  }
+  throw new ApiCallError(lastError || '网络错误', 'network');
+}
+
+export interface StreamRetryOptions {
+  onRetry?: (attempt: number, error: ApiCallError) => void;
+  /** 首字节超时，默认 30s */
+  firstByteTimeoutMs?: number;
+  /** 流式空闲超时，默认 60s */
+  idleTimeoutMs?: number;
+  retries?: number;
+  baseDelayMs?: number;
 }
 
 export async function streamChatCompletion(
@@ -146,7 +287,8 @@ export async function streamChatCompletion(
   messages: ChatCompletionMessage[],
   preset: ChatPreset | null,
   callbacks: StreamCallbacks,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  retryOptions?: StreamRetryOptions
 ): Promise<void> {
   const body: Record<string, any> = {
     model: config.model || preset?.settings.openai_model,
@@ -162,56 +304,103 @@ export async function streamChatCompletion(
     if (preset.settings.pres_pen_openai !== undefined) body.presence_penalty = preset.settings.pres_pen_openai;
   }
 
-  const response = await fetchWithAuthFallback(
-    `${config.baseUrl}/chat/completions`,
-    config.apiKey,
-    { method: 'POST', body: JSON.stringify(body), signal: abortSignal }
-  );
+  const firstByteTimeoutMs = retryOptions?.firstByteTimeoutMs ?? 30_000;
+  const idleTimeoutMs = retryOptions?.idleTimeoutMs ?? 60_000;
+  const retries = retryOptions?.retries ?? 2;
+  const baseDelayMs = retryOptions?.baseDelayMs ?? 1000;
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error('No response body');
-  }
+  const runStreamOnce = async (onFirstToken: () => void): Promise<void> => {
+    const timeout = createTimeoutSignal(abortSignal, firstByteTimeoutMs);
+    try {
+      const response = await fetchWithAuthFallback(
+        `${config.baseUrl}/chat/completions`,
+        config.apiKey,
+        { method: 'POST', body: JSON.stringify(body), signal: timeout.signal }
+      );
 
-  const decoder = new TextDecoder();
-  let buffer = '';
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new ApiCallError('响应无内容流', 'network');
+      }
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      try {
+        while (true) {
+          timeout.refresh(idleTimeoutMs);
+          const { done, value } = await reader.read();
+          if (done) break;
 
-      for (const line of lines) {
-        if (line.trim() === '') continue;
-        if (line.trim() === 'data: [DONE]') {
-          callbacks.onComplete();
-          return;
-        }
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            const token = data.choices?.[0]?.delta?.content || '';
-            if (token) callbacks.onToken(token);
-          } catch {
-            // Ignore malformed JSON
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.trim() === '') continue;
+            if (line.trim() === 'data: [DONE]') {
+              callbacks.onComplete();
+              return;
+            }
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                const token = data.choices?.[0]?.delta?.content || '';
+                if (token) {
+                  onFirstToken();
+                  callbacks.onToken(token);
+                }
+              } catch {
+                // Ignore malformed JSON
+              }
+            }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
-    }
-  } finally {
-    reader.releaseLock();
-  }
 
-  callbacks.onComplete();
+      callbacks.onComplete();
+    } finally {
+      timeout.dispose();
+    }
+  };
+
+  // 首字节前的失败对玩家无感，可自动重试；已输出内容后中断则交由调用方做回合级恢复
+  for (let attempt = 0; ; attempt++) {
+    let tokenEmitted = false;
+    try {
+      await runStreamOnce(() => { tokenEmitted = true; });
+      return;
+    } catch (cause) {
+      const error = toApiCallError(cause);
+      if (tokenEmitted) {
+        if (error.kind === 'abort') throw error;
+        throw new ApiCallError(`剧情生成中断: ${error.message}`, 'stream_interrupted', error.status);
+      }
+      if (!error.retryable || attempt >= retries) throw error;
+      retryOptions?.onRetry?.(attempt + 1, error);
+      await abortableDelay(baseDelayMs * 2 ** attempt, abortSignal);
+    }
+  }
 }
+
+export type ResponseFormat =
+  | { type: 'json_object' }
+  | {
+      type: 'json_schema';
+      json_schema: {
+        name: string;
+        strict?: boolean;
+        schema: Record<string, unknown>;
+      };
+    };
 
 export interface SecondaryApiOptions {
   temperature?: number;
   maxTokens?: number;
+  abortSignal?: AbortSignal;
+  responseFormat?: ResponseFormat;
 }
 
 export async function callSecondaryApi(
@@ -233,13 +422,20 @@ export async function callSecondaryApi(
   // 次 API 可覆盖预设参数
   if (options?.temperature !== undefined) body.temperature = options.temperature;
   if (options?.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+  if (options?.responseFormat !== undefined) body.response_format = options.responseFormat;
 
-  const response = await fetchWithAuthFallback(
-    `${config.baseUrl}/chat/completions`,
-    config.apiKey,
-    { method: 'POST', body: JSON.stringify(body) }
-  );
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  return withRetry(async () => {
+    const timeout = createTimeoutSignal(options?.abortSignal, 30_000);
+    try {
+      const response = await fetchWithAuthFallback(
+        `${config.baseUrl}/chat/completions`,
+        config.apiKey,
+        { method: 'POST', body: JSON.stringify(body), signal: timeout.signal }
+      );
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || '';
+    } finally {
+      timeout.dispose();
+    }
+  }, { signal: options?.abortSignal });
 }

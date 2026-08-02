@@ -12,7 +12,25 @@ export type SfxName =
   | 'warning'
   | 'success'
   | 'sanity-drop'
-  | 'ending-signal';
+  | 'ending-signal'
+  | 'emotion-calm'
+  | 'emotion-happy'
+  | 'emotion-sad'
+  | 'emotion-angry'
+  | 'emotion-horror'
+  | 'emotion-insane'
+  | 'rain-loop'
+  | 'rain-heavy'
+  | 'thunder-distant'
+  | 'phone-vibrate'
+  | 'phone-ring'
+  | 'clock-tick'
+  | 'loop-reset'
+  | 'flashback-whoosh'
+  | 'investigate-paper'
+  | 'investigate-object'
+  | 'door-open'
+  | 'footstep-rain';
 
 let soundVolume = 0.65;
 const pools = new Map<SfxName, HTMLAudioElement[]>();
