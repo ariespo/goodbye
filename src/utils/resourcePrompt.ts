@@ -1,4 +1,4 @@
-import { backgroundAssets } from '../data/backgroundAssets';
+import { backgroundAssets, getCanonicalBackgroundId } from '../data/backgroundAssets';
 import { characterCatalog } from '../data/characterCatalog';
 import {
   buildPlayerKnowledgeBrief,
@@ -62,9 +62,21 @@ function buildBackgroundLines(variables: Record<string, unknown>, currentBackgro
   }
   if (currentBackground) allowed.add(currentBackground.replace(/\.[^.]+$/, ''));
 
+  const canonicalIds = new Set<string>();
   return backgroundAssets
     .filter(background => allowed.has(background.id))
-    .map(background => `- ${background.id}: ${background.displayName} (${background.file}) - ${background.description}`)
+    .filter(background => {
+      const canonical = getCanonicalBackgroundId(background.id);
+      if (canonicalIds.has(canonical)) return false;
+      canonicalIds.add(canonical);
+      return true;
+    })
+    .map(background => {
+      const canonical = getCanonicalBackgroundId(background.id);
+      const displayName = background.displayName.replace(/（(?:默认)?(?:日间|夜间)）/g, '');
+      const description = background.description.replace(/[；。]?兼容旧场景文本。?/g, '。');
+      return `- ${canonical}: ${displayName} - ${description}`;
+    })
     .join('\n');
 }
 
@@ -107,9 +119,9 @@ export function appendResourcePrompt(
   return `${userInput}
 
 [系统资源清单]
-当前场景文件名：${scene}
-如需切换场景，只能使用下面背景 id 或文件名，输出格式为：场景|<背景id或文件名>
-带 -day / -night 的背景是同一地点的昼夜状态；必须根据剧情当前时间选择。无后缀旧 id 仅用于兼容，等同日间状态。
+当前空间名：${getCanonicalBackgroundId(scene)}
+如需切换场景，只能输出下面的空间名，格式为：场景|<空间名>。
+不要输出图片文件名，也不要添加 -day 或 -night；程序会读取游戏时间自动选择昼夜背景：08:00-18:30 为白天，18:31-00:00 为黑夜。
 清单只包含玩家当前已知晓的地点资源；未列出的场景一律不得切换或提及具体细节。
 ${buildBackgroundLines(variables, currentBackground)}
 

@@ -10,7 +10,8 @@ describe('appendResourcePrompt(按玩家知识过滤)', () => {
     expect(prompt).toContain('- home:');
     expect(prompt).toContain('- school:');
     expect(prompt).toContain('- supermarket:');
-    expect(prompt).toContain('school-night');
+    expect(prompt).not.toContain('school-night');
+    expect(prompt).toContain('不要添加 -day 或 -night');
   });
 
   it('初始状态不暴露未认识角色的真实姓名', () => {
@@ -67,6 +68,7 @@ describe('appendResourcePrompt(按玩家知识过滤)', () => {
 
   it('当前背景即使未解锁也保留在清单中', () => {
     const prompt = appendResourcePrompt('测试', 'observation-deck', { knowledgeEvents: [] });
-    expect(prompt).toContain('observation-deck.png');
+    expect(prompt).toContain('- observation-deck:');
+    expect(prompt).not.toContain('observation-deck.png');
   });
 });

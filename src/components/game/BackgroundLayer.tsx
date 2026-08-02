@@ -1,11 +1,13 @@
 import { useGameStore } from '../../stores/gameStore';
-import { getBackgroundById } from '../../data/backgroundAssets';
+import { getBackgroundById, resolveBackgroundForTime } from '../../data/backgroundAssets';
 import { assetUrl } from '../../utils/assetUrl';
 
 export function BackgroundLayer() {
   const background = useGameStore(state => state.game.currentState.background);
-  const backgroundAsset = background && !background.startsWith('http') ? getBackgroundById(background) : undefined;
-  const backgroundFile = backgroundAsset?.file || background;
+  const gameTime = useGameStore(state => state.game.gameStatus.time);
+  const resolvedBackground = background ? resolveBackgroundForTime(background, gameTime) : background;
+  const backgroundAsset = resolvedBackground && !resolvedBackground.startsWith('http') ? getBackgroundById(resolvedBackground) : undefined;
+  const backgroundFile = backgroundAsset?.file || resolvedBackground;
 
   return (
     <div

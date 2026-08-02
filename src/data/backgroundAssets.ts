@@ -275,6 +275,23 @@ export function getBackgroundById(id: string): BackgroundAsset | undefined {
   return backgroundAssets.find(background => background.id === normalized);
 }
 
+export function getCanonicalBackgroundId(id: string): string {
+  return id.replace(/\.[^.]+$/, '').replace(/-(day|night)$/i, '');
+}
+
+/** 08:00-18:30 is day; every other playable minute uses the night variant. */
+export function isDayBackgroundTime(time: Date): boolean {
+  const minutes = time.getHours() * 60 + time.getMinutes();
+  return minutes >= 8 * 60 && minutes <= 18 * 60 + 30;
+}
+
+export function resolveBackgroundForTime(id: string, time: Date): string {
+  if (!id || /^https?:\/\//i.test(id) || Number.isNaN(time.getTime())) return id;
+  const canonical = getCanonicalBackgroundId(id);
+  const timedId = `${canonical}-${isDayBackgroundTime(time) ? 'day' : 'night'}`;
+  return getBackgroundById(timedId)?.id ?? getBackgroundById(canonical)?.id ?? id;
+}
+
 export function getBackgroundPromptCatalog(): string {
   return backgroundAssets
     .map(background => `- ${background.id}: ${background.displayName} (${background.file}) - ${background.description}`)
