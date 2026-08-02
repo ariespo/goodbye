@@ -326,7 +326,7 @@ export function createDefaultEndings(): Ending[] {
       name: '献祭·续命',
       truthType: 'CULT',
       tag: 'bad',
-      description: '玩家读懂了仪式的另一种用法，让那个清晨永远凝固。文穗永远十七岁，而只有玩家在老去。',
+      description: '玩家读懂了仪式的另一种用法，让那个清晨永远凝固。文穗永远十四岁，而只有玩家在老去。',
       conditionGroups: [cg('X-2-cg', '邪神真相且献祭', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
         { variablePath: 'overlay', operator: '=', targetValue: 'CULT' },
