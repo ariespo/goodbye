@@ -228,6 +228,7 @@ export function createDefaultEndings(): Ending[] {
       truthType: 'C',
       tag: 'normal',
       description: '玩家承认自己杀了文穗。轮回停止——不是被打破，是不再被需要。灰暗但真实。',
+      backgroundImage: 'ending-c-1',
       conditionGroups: [cg('C-1-cg', '锁定C线且接受真相', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
         { variablePath: 'overlay', operator: '!=', targetValue: 'PSYCH' },
@@ -284,6 +285,7 @@ export function createDefaultEndings(): Ending[] {
       truthType: 'FAKE',
       tag: 'good',
       description: '文穗还活着。玩家在人群中与她对视，然后转身离开。唯一一个她活着的世界——代价是永远失去她。',
+      backgroundImage: 'ending-f-1',
       conditionGroups: [cg('F-1-cg', '识破假死且放手', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'FAKE' },
         { variablePath: 'fakeEvidenceCount', operator: '>=', targetValue: 3 },
@@ -372,6 +374,7 @@ export function createDefaultEndings(): Ending[] {
       truthType: 'META',
       tag: 'hidden',
       description: '知晓一切之后，玩家选择不出门，陪文穗过完今天。然后明天再来一次。最清醒的沉沦——软结局，可以反悔。',
+      backgroundImage: 'ending-stay',
       conditionGroups: [cg('STAY-cg', '连续三轮选择留下', [
         { variablePath: 'stayStreak', operator: '>=', targetValue: 3 },
       ])],
@@ -384,6 +387,7 @@ export function createDefaultEndings(): Ending[] {
       truthType: 'META',
       tag: 'true',
       description: '最后一个清晨，玩家说出完整的告别。雨停，闹钟走到9:01——第一次，时间前进了。',
+      backgroundImage: 'ending-true',
       conditionGroups: [cg('TRUE-cg', '走完一切并选择告别', [
         { variablePath: 'routesLockedCount', operator: '>=', targetValue: 3 },
         { variablePath: 'stayedEver', operator: '=', targetValue: true },
@@ -398,6 +402,7 @@ export function createDefaultEndings(): Ending[] {
       truthType: 'LOOP',
       tag: 'bad',
       description: '第七轮之后仍无法锁定任何真相。文穗不断死去，玩家不断重来，直到不记得她的样子。',
+      backgroundImage: 'ending-loop',
       conditionGroups: [cg('LOOP-cg', '高轮回且一无所获', [
         { variablePath: 'cycleCount', operator: '>=', targetValue: 7 },
         { variablePath: 'routesLockedCount', operator: '=', targetValue: 0 },

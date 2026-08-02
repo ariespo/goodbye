@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getBackgroundById } from './backgroundAssets';
+import { getBackgroundById, getBackgroundPromptCatalog } from './backgroundAssets';
 
 describe('backgroundAssets time variants', () => {
   it('keeps legacy IDs mapped to the day assets', () => {
@@ -19,5 +19,19 @@ describe('backgroundAssets time variants', () => {
 
   it('does not expose the retired bedroom2 scene', () => {
     expect(getBackgroundById('bedroom2')).toBeUndefined();
+  });
+
+  it('registers the first ending CG batch', () => {
+    expect(getBackgroundById('ending-c-1')?.file).toBe('ending-c-1.png');
+    expect(getBackgroundById('ending-f-1')?.file).toBe('ending-f-1.png');
+    expect(getBackgroundById('ending-loop')?.file).toBe('ending-loop.png');
+    expect(getBackgroundById('ending-stay')?.file).toBe('ending-stay.png');
+    expect(getBackgroundById('ending-true')?.file).toBe('ending-true.png');
+  });
+
+  it('keeps ending-only CGs out of the AI scene catalog', () => {
+    const catalog = getBackgroundPromptCatalog();
+    expect(catalog).not.toContain('ending-true');
+    expect(catalog).not.toContain('结局：九点零一分');
   });
 });

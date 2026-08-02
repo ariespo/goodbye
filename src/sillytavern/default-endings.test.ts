@@ -21,6 +21,17 @@ describe('default endings (三层体系)', () => {
     expect(endings.some(e => (e.truthType as string) === 'D' || (e.truthType as string) === 'E')).toBe(false);
   });
 
+  it('binds the first ending CG batch to dedicated backgrounds', () => {
+    const backgrounds = Object.fromEntries(endings.map(ending => [ending.id, ending.backgroundImage]));
+    expect(backgrounds).toMatchObject({
+      'C-1': 'ending-c-1',
+      'F-1': 'ending-f-1',
+      LOOP: 'ending-loop',
+      STAY: 'ending-stay',
+      TRUE: 'ending-true',
+    });
+  });
+
   it('锁定A线+报警 → A-1；叠加CULT后同条件不再触发A-1', () => {
     const real = contextWith({ lockedRoute: 'A', finalChoice: 'report' });
     expect(checkEndingConditions(real, endings)?.id).toBe('A-1');

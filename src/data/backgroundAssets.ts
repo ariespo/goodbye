@@ -268,6 +268,56 @@ export const backgroundAssets: BackgroundAsset[] = [
     tags: ['mountain', 'death-site'],
     environment: 'outdoor-heavy-rain',
   },
+  {
+    id: 'ending-c-1',
+    file: 'ending-c-1.png',
+    displayName: '结局：接受·清醒',
+    description: '医院诊室中的空椅、温水与逐渐淡去的文穗记忆。',
+    usage: 'C-1 结局专用',
+    priority: 'existing',
+    tags: ['ending', 'C-1', 'hospital'],
+    environment: 'none',
+  },
+  {
+    id: 'ending-f-1',
+    file: 'ending-f-1.png',
+    displayName: '结局：放她走',
+    description: '雨后车站的人群中，玩家选择不再靠近活着的文穗。',
+    usage: 'F-1 结局专用',
+    priority: 'existing',
+    tags: ['ending', 'F-1', 'bus-station'],
+    environment: 'none',
+  },
+  {
+    id: 'ending-loop',
+    file: 'ending-loop.png',
+    displayName: '结局：困局',
+    description: '记忆被轮回磨损后，只剩空白笔记本与九点整的空房间。',
+    usage: 'LOOP 结局专用',
+    priority: 'existing',
+    tags: ['ending', 'LOOP', 'bedroom'],
+    environment: 'none',
+  },
+  {
+    id: 'ending-stay',
+    file: 'ending-stay.png',
+    displayName: '结局：早安·永远',
+    description: '玩家主动留在永远九点整的早餐日常。',
+    usage: 'STAY 结局专用',
+    priority: 'existing',
+    tags: ['ending', 'STAY', 'home'],
+    environment: 'none',
+  },
+  {
+    id: 'ending-true',
+    file: 'ending-true.png',
+    displayName: '结局：九点零一分',
+    description: '雨停后文穗走出家门，时间第一次前进到九点零一分。',
+    usage: 'TRUE 结局专用',
+    priority: 'existing',
+    tags: ['ending', 'TRUE', 'home'],
+    environment: 'none',
+  },
 ];
 
 export function getBackgroundById(id: string): BackgroundAsset | undefined {
@@ -294,6 +344,7 @@ export function resolveBackgroundForTime(id: string, time: Date): string {
 
 export function getBackgroundPromptCatalog(): string {
   return backgroundAssets
+    .filter(background => !background.tags.includes('ending'))
     .map(background => `- ${background.id}: ${background.displayName} (${background.file}) - ${background.description}`)
     .join('\n');
 }
