@@ -12,6 +12,8 @@ import {
 import { variablesToEndingContext } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
 import { persistActiveChat } from './chatPersistence';
+import { maintextToScene } from '../engine/scene-parser';
+import { buildConclusionTransitionMaintext } from '../engine/conclusion-transition';
 
 function commitVariables(variables: ConclusionVariables, endingId?: string): void {
   useGameStore.setState(state => ({
@@ -72,5 +74,10 @@ export async function commitProgramConclusion(
     };
   }
   const decision = chooseConclusion(state.tavern.variables, choiceId);
-  return persistDecision(decision, decision.endingId);
+  const persisted = await persistDecision(decision, decision.endingId);
+  if (persisted.accepted && persisted.endingId) {
+    const bridge = maintextToScene(buildConclusionTransitionMaintext(persisted.endingId, choiceId));
+    useGameStore.getState().actions.setCurrentScene(bridge);
+  }
+  return persisted;
 }

@@ -31,7 +31,7 @@ const validPlan: DirectorPlan = {
 
 function completeApproved(plan: DirectorPlan = validPlan) {
   return vi.fn(async (messages: Array<{ content: string }>) => (
-    messages[0]?.content.includes('事实复核')
+    messages[0]?.content.includes('事实复核') || messages[0]?.content.includes('节奏与玩家能动性')
       ? approvedFactReview
       : JSON.stringify(plan)
   ));
@@ -55,7 +55,8 @@ describe('mystery orchestrator', () => {
     });
     expect(result.hardReview.approved).toBe(true);
     expect(result.semanticReview?.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(2);
+    expect(result.pacingReview?.approved).toBe(true);
+    expect(complete).toHaveBeenCalledTimes(3);
     expect(JSON.stringify(result.writerMessages)).not.toContain('c-player-killed-fumi');
     expect(JSON.stringify(result.writerMessages)).not.toContain('shared-apron-missing');
     expect(JSON.stringify(result.writerMessages)).toContain(apronFactAlias);
@@ -69,6 +70,7 @@ describe('mystery orchestrator', () => {
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(invalid))
       .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(approvedFactReview)
       .mockResolvedValueOnce(approvedFactReview);
     const result = await prepareMysteryTurn({
       mode: 'standard',
@@ -86,6 +88,7 @@ describe('mystery orchestrator', () => {
   it('runs semantic review in strict mode', async () => {
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(approvedFactReview)
       .mockResolvedValueOnce(approvedFactReview);
     const result = await prepareMysteryTurn({
       mode: 'strict',
@@ -97,7 +100,7 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(result.semanticReview?.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete).toHaveBeenCalledTimes(3);
     expect(complete.mock.calls[1]?.[0]?.[1]?.content).toContain('canonicalTruth');
   });
 
@@ -120,6 +123,7 @@ describe('mystery orchestrator', () => {
   it('requests structured output via response_format json_schema', async () => {
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(approvedFactReview)
       .mockResolvedValueOnce(approvedFactReview);
     await prepareMysteryTurn({
       mode: 'strict',
@@ -128,8 +132,7 @@ describe('mystery orchestrator', () => {
       truthContext,
       turnContext: {},
       presentationContext: {},
-      complete: complete.mockResolvedValueOnce(JSON.stringify(validPlan))
-        .mockResolvedValueOnce(JSON.stringify({ approved: true, violations: [], corrections: [] })),
+      complete,
     });
     const directorOptions = complete.mock.calls[0]?.[1];
     expect(directorOptions?.responseFormat?.type).toBe('json_schema');
@@ -143,7 +146,7 @@ describe('mystery orchestrator', () => {
       if (callOptions?.responseFormat) {
         throw new Error('API error 400: response_format is not supported');
       }
-      return _messages[0]?.content.includes('事实复核')
+      return _messages[0]?.content.includes('事实复核') || _messages[0]?.content.includes('节奏与玩家能动性')
         ? approvedFactReview
         : JSON.stringify(validPlan);
     });
@@ -157,7 +160,7 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(result.hardReview.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete).toHaveBeenCalledTimes(4);
     expect(complete.mock.calls[1]?.[1]?.responseFormat).toBeUndefined();
 
     // 同一服务端的后续调用直接跳过 response_format，不再重复撞错
@@ -171,7 +174,7 @@ describe('mystery orchestrator', () => {
       presentationContext: {},
       complete,
     });
-    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete).toHaveBeenCalledTimes(3);
     expect(complete.mock.calls[0]?.[1]?.responseFormat).toBeUndefined();
   });
 
@@ -210,7 +213,7 @@ describe('mystery orchestrator', () => {
     expect(entry.directorAttempts).toBe(1);
     expect(entry.directorPlan?.turnGoal).toBe(validPlan.turnGoal);
     expect(entry.hardReview?.approved).toBe(true);
-    expect(entry.stages.map(s => s.stage)).toEqual(['director', 'hard-review', 'semantic-review']);
+    expect(entry.stages.map(s => s.stage)).toEqual(expect.arrayContaining(['director', 'hard-review', 'semantic-review', 'pacing-review']));
     expect(entry.totalDurationMs).toBeGreaterThanOrEqual(0);
   });
 

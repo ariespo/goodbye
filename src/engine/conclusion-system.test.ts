@@ -10,7 +10,7 @@ import {
 
 function variables(overrides: Record<string, unknown> = {}) {
   return {
-    cycleCount: 1,
+    cycleCount: 4,
     sanity: 80,
     tripProgress: 0,
     suspicion: { 'old-man': 0, 'detective-a': 0, 'detective-b': 0, self: 0 },
@@ -21,6 +21,14 @@ function variables(overrides: Record<string, unknown> = {}) {
     lockedRoute: null,
     overlay: null,
     finalChoice: null,
+    mysteryKnowledge: {
+      'a-sacrifice-list': 'clue',
+      'a-lured-inside': 'clue',
+      'b-water-tower-blood': 'clue',
+      'b-detective-coverup': 'clue',
+      'c-player-made-leave-call': 'clue',
+      'c-loop-is-reenactment': 'clue',
+    },
     ...overrides,
   };
 }
@@ -69,12 +77,19 @@ describe('conclusion system', () => {
   });
 
   it('maps every final choice to a deterministic ending', () => {
-    const routeA = variables({ lockedRoute: 'A' });
-    const cult = variables({ lockedRoute: 'A', overlay: 'CULT', cycleCount: 4, cultClues: ['a', 'b', 'c'] });
+    const routeA = variables({ lockedRoute: 'A', mysteryKnowledge: { 'a-murder-staged-fall': 'confirmation' } });
+    const cult = variables({ lockedRoute: 'A', overlay: 'CULT', cycleCount: 4, cultClues: ['a', 'b', 'c'], mysteryKnowledge: { 'cult-sacrifice-powers-loop': 'confirmation' } });
 
     expect(getConclusionChoices(routeA).map(choice => choice.endingId)).toEqual(['A-1', 'A-2']);
     expect(chooseConclusion(routeA, 'report')).toMatchObject({ accepted: true, endingId: 'A-1' });
     expect(chooseConclusion(cult, 'destroy')).toMatchObject({ accepted: true, endingId: 'X-1' });
     expect(chooseConclusion(routeA, 'wake').accepted).toBe(false);
+  });
+
+  it('blocks route locking before three complete day resets', () => {
+    const early = variables({ cycleCount: 3, suspicion: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 } });
+    expect(lockConclusionRoute(early, 'A').accepted).toBe(false);
+    expect(getConclusionRoutes(early).find(route => route.id === 'A')?.criteria
+      .find(item => item.id === 'completed-loops')?.valueLabel).toBe('2 / 3');
   });
 });

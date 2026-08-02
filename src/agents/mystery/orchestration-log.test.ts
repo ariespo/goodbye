@@ -19,6 +19,7 @@ function makeEntry(overrides: Partial<OrchestrationLogEntry> = {}): Orchestratio
     directorPlan: null,
     hardReview: null,
     semanticReview: null,
+    pacingReview: null,
     directorAttempts: 1,
     stages: [{ stage: 'director', durationMs: 100 }],
     totalDurationMs: 120,

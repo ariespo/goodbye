@@ -69,6 +69,17 @@ export const FACT_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 {"approved":boolean,"violations":[{"code":"string","factId":"string?","message":"string"}],"corrections":["string"]}
 不得输出正文、隐藏真相或 Markdown。`;
 
+export const PACING_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
+
+你是只读的节奏与玩家能动性复核 Agent。你不创作正文、不改变事实，只检查 DirectorPlan：
+1. 玩家输入只能是一次尝试，计划不得把玩家宣称的结果直接当成世界事实。
+2. cycleCount 1 以日常和轻微不安为主；2 扩大异常并保留多种可能；3 加深矛盾与悬疑但不得收束；4 以后才可复盘分化。
+3. playerIntentPolicy.mode=divert 时，必须让尝试发生并用可信事件转向，不得继续增加目标嫌疑或重复生成目标证据。
+4. mode=fantasy 时，必须把越界内容限制为主观幻想或错觉，不能落为正典人物、能力、证据或结果。
+5. 不得把一个剧情回合称为轮回，不得在前三个完整日结束前确认真凶或安排结局。
+只输出严格 JSON：
+{"approved":boolean,"violations":[{"code":"string","message":"string"}],"corrections":["string"]}`;
+
 function jsonBlock(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
@@ -94,4 +105,12 @@ export function buildWriterUserPrompt(
   presentationContext: Record<string, unknown>,
 ): string {
   return `请生成可播放场景。\n\n[PresentationContext]\n${jsonBlock(presentationContext)}\n\n[WriterPacket]\n${jsonBlock(packet)}`;
+}
+
+export function buildPacingCriticUserPrompt(
+  brief: MysteryBrief,
+  plan: DirectorPlan,
+  turnContext: Record<string, unknown>,
+): string {
+  return `请复核导演计划的节奏与玩家能动性。\n\n[TurnContext]\n${jsonBlock(turnContext)}\n\n[MysteryBrief]\n${jsonBlock(brief)}\n\n[DirectorPlan]\n${jsonBlock(plan)}`;
 }

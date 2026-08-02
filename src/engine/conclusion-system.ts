@@ -163,6 +163,28 @@ function clampProgress(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+const ROUTE_SUPPORT_FACTS: Record<ConclusionRouteId, string[]> = {
+  A: ['a-sacrifice-list', 'a-lured-inside'],
+  B: ['b-water-tower-blood', 'b-detective-coverup'],
+  C: ['c-player-made-leave-call', 'c-loop-is-reenactment'],
+  NONE: [],
+  FAKE: [],
+};
+
+const SOLUTION_FACTS: Record<ConclusionRouteId | ConclusionOverlayId, string> = {
+  A: 'a-murder-staged-fall',
+  B: 'b-accidental-killing',
+  C: 'c-player-killed-fumi',
+  NONE: 'none-accidental-goodbye',
+  FAKE: 'fake-staged-death-escape',
+  CULT: 'cult-sacrifice-powers-loop',
+  PSYCH: 'psych-investigation-is-episode',
+};
+
+function knowledgeLevel(variables: ConclusionVariables, factId: string): unknown {
+  return getVariablePath(variables, `mysteryKnowledge.${factId}`);
+}
+
 function numericCriterion(id: string, label: string, value: number, target: number): ConclusionCriterion {
   return {
     id,
@@ -219,7 +241,17 @@ export function isConclusionOverlayId(value: unknown): value is ConclusionOverla
 
 export function getConclusionRoutes(variables: ConclusionVariables): ConclusionRouteOption[] {
   return (Object.keys(ROUTE_COPY) as ConclusionRouteId[]).map(id => {
-    const criteria = routeCriteria(id, variables);
+    const cycleCount = numberAt(variables, 'cycleCount');
+    const completedLoops = Math.max(0, cycleCount - 1);
+    const loopGate = numericCriterion('completed-loops', '完成整日轮回', completedLoops, 3);
+    const supportFacts = ROUTE_SUPPORT_FACTS[id];
+    const knownSupportFacts = supportFacts.filter(factId =>
+      ['clue', 'confirmation'].includes(String(knowledgeLevel(variables, factId)))
+    ).length;
+    const supportGate = supportFacts.length > 0
+      ? [numericCriterion('route-facts', '路线关键事实', knownSupportFacts, supportFacts.length)]
+      : [];
+    const criteria = [loopGate, ...supportGate, ...routeCriteria(id, variables)];
     const available = criteria.every(item => item.met);
     const progress = criteria.length > 0
       ? criteria.reduce((sum, item) => sum + item.progress, 0) / criteria.length
@@ -318,10 +350,28 @@ export function getConclusionChoices(variables: ConclusionVariables): Conclusion
   return CHOICES[effectiveRoute].map(choice => ({ ...choice }));
 }
 
+export function getConclusionFinalReadiness(variables: ConclusionVariables): ConclusionCriterion {
+  const effectiveRoute = isConclusionOverlayId(variables.overlay)
+    ? variables.overlay
+    : (isConclusionRouteId(variables.lockedRoute) ? variables.lockedRoute : null);
+  const factId = effectiveRoute ? SOLUTION_FACTS[effectiveRoute] : null;
+  const met = Boolean(factId && knowledgeLevel(variables, factId) === 'confirmation');
+  return {
+    id: 'solution-confirmed',
+    label: '最终事实已被剧情确认',
+    valueLabel: met ? '成立' : '尚未成立',
+    progress: met ? 1 : 0,
+    met,
+  };
+}
+
 export function chooseConclusion(
   variables: ConclusionVariables,
   choiceId: ConclusionChoiceId,
 ): FinalConclusionDecision {
+  if (!getConclusionFinalReadiness(variables).met) {
+    return { accepted: false, value: variables, reason: '路线已指认，但最终事实尚未在剧情中被确认。' };
+  }
   const choice = getConclusionChoices(variables).find(item => item.id === choiceId);
   if (!choice) {
     return { accepted: false, value: variables, reason: '这个选择不属于当前结论路线。' };

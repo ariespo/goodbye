@@ -74,6 +74,16 @@ export const DEFAULT_GAME_VARIABLES: Record<string, any> = {
     teacher: 0,
     senpai: 0,
   },
+  // Snapshot taken at 08:00. A suspect may gain at most 15 points before the next reset.
+  loopSuspicionStart: {
+    'old-man': 0,
+    'detective-a': 0,
+    'detective-b': 0,
+    self: 10,
+    clerk: 0,
+    teacher: 0,
+    senpai: 0,
+  },
   investigation: { psych: 0, crime: 0, occult: 0, science: 0 },
   tripProgress: 0,
   unlockedClues: [],

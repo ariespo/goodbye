@@ -20,7 +20,7 @@ describe('clampTimeCost', () => {
 describe('advanceClock', () => {
   it('推进分钟', () => expect(advanceClock('2024-09-09T07:30:00', 45)).toBe('2024-09-09T08:15:00'));
   it('跨日', () => expect(advanceClock('2024-09-09T23:50:00', 20)).toBe('2024-09-10T00:10:00'));
-  it('非法时间视为开局时刻', () => expect(advanceClock('garbage', 30)).toBe('2024-09-09T08:00:00'));
+  it('非法时间视为开局时刻', () => expect(advanceClock('garbage', 30)).toBe('2024-09-09T08:30:00'));
 });
 
 describe('laterTime', () => {

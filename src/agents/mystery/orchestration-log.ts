@@ -1,7 +1,7 @@
 import type { DirectorPlan, FactReview } from './types';
 
 export interface OrchestrationStageTiming {
-  stage: 'director' | 'hard-review' | 'director-repair' | 'hard-review-retry' | 'semantic-review';
+  stage: 'director' | 'hard-review' | 'director-repair' | 'hard-review-retry' | 'semantic-review' | 'pacing-review';
   durationMs: number;
 }
 
@@ -17,6 +17,7 @@ export interface OrchestrationLogEntry {
   directorPlan: DirectorPlan | null;
   hardReview: FactReview | null;
   semanticReview: FactReview | null;
+  pacingReview: FactReview | null;
   directorAttempts: number;
   stages: OrchestrationStageTiming[];
   totalDurationMs: number;

@@ -21,6 +21,7 @@ const STAGE_LABELS: Record<string, string> = {
   'director-repair': '导演修复',
   'hard-review-retry': '硬审查(重试)',
   'semantic-review': '语义审查',
+  'pacing-review': '节奏审查',
 };
 
 export function OrchestrationLogPanel() {
@@ -122,6 +123,7 @@ function EntryRow({ entry, expanded, toggle }: {
             <span>结构化输出: {entry.structuredOutput ? '是' : '否(已降级)'}</span>
             <span>硬审查: {entry.hardReview ? (entry.hardReview.approved ? '通过' : `${entry.hardReview.violations.length} 项违规`) : '未执行'}</span>
             <span>语义审查: {entry.semanticReview ? (entry.semanticReview.approved ? '通过' : '未通过') : '未执行'}</span>
+            <span>节奏审查: {entry.pacingReview ? (entry.pacingReview.approved ? '通过' : '未通过') : '未执行'}</span>
           </div>
 
           <div>
@@ -152,6 +154,9 @@ function EntryRow({ entry, expanded, toggle }: {
           )}
           {entry.semanticReview && (
             <JsonBlock label="语义审查结果" value={entry.semanticReview} />
+          )}
+          {entry.pacingReview && (
+            <JsonBlock label="节奏审查结果" value={entry.pacingReview} />
           )}
         </div>
       )}

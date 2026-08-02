@@ -46,6 +46,7 @@ const PROGRAM_OWNED_KEYS = new Set([
   'lockedRoute',
   'overlay',
   'finalChoice',
+  'loopSuspicionStart',
 ]);
 
 export interface SanitizeResult {
@@ -101,6 +102,13 @@ export function sanitizeVarsPatch(
       let result = next;
       if (Math.abs(next - prev) > rule.maxDelta) {
         result = prev + Math.sign(next - prev) * rule.maxDelta;
+      }
+      if (path.startsWith('suspicion.') && result > prev) {
+        const actorId = path.slice('suspicion.'.length);
+        const rawBaseline = Number(getVariablePath(current, `loopSuspicionStart.${actorId}`));
+        const baseline = Number.isFinite(rawBaseline) ? rawBaseline : prev;
+        // Never reduce a migrated save that already exceeds the new budget.
+        result = Math.min(result, Math.max(prev, baseline + 15));
       }
       if (rule.noDecrease && result < prev) result = prev;
       result = Math.min(rule.max, Math.max(rule.min, result));

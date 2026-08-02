@@ -20,7 +20,7 @@ const OPENING_ASSISTANT_CONTENT =
 
 export function createDefaultGameStatus(): GameStatus {
   return {
-    time: new Date(2024, 8, 9, 7, 30),
+    time: new Date(2024, 8, 9, 8, 0),
     stamina: 100,
     sanity: 70,
     items: [],

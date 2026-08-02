@@ -69,7 +69,9 @@ describe('settleCycleVariables', () => {
     expect(next.overlay ?? null).toBeNull();
     expect(next.finalChoice ?? null).toBeNull();
     expect(next.location).toBe('home');
-    expect(next.suspicion['old-man']).toBe(0);
+    expect(next.suspicion['old-man']).toBe(50);
+    expect(next.loopSuspicionStart['old-man']).toBe(50);
+    expect(next.time).toBe('2024-09-09T08:00:00');
   });
 
   it('stayed 累加 stayStreak，满3轮标记 stayedEver', () => {
@@ -115,5 +117,16 @@ describe('buildCycleOpeningMaintext', () => {
     expect(text).toContain('loop-transition');
     expect(text).toContain('第 4 次');
     expect(text).toContain('bedroom1-day');
+  });
+
+  it('把上一行动、重置和新日计划调整连成一段', () => {
+    const text = buildCycleOpeningMaintext(4, 'day-end', {
+      lastPlayerChoice: '在水塔下等赵刚',
+      lastTurnSummary: '赵刚没有赴约，午夜已经到来',
+    });
+    expect(text).toContain('确实尝试了');
+    expect(text).toContain('早上8:00');
+    expect(text).toContain('重置作废');
+    expect(text).toContain('赵刚没有赴约');
   });
 });

@@ -45,6 +45,7 @@ import { rebuildSceneFromChat } from '../utils/sceneFromChat';
 import { excludeCurrentInputFromHistory } from '../sillytavern/history-cutoff';
 import { captureTurnState, resolveTurnRollback } from '../utils/turnStateSnapshot';
 import { deriveAuthorizedFactProgress } from '../agents/mystery/knowledge-progression';
+import { evaluatePlayerIntent } from '../engine/player-intent-policy';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -257,9 +258,11 @@ export function useGameLoop() {
       parseStateRef.current = createParseState();
 
       const scheduledDirectives = buildScheduledDirectives(tavern.variables);
+      const intentPolicy = evaluatePlayerIntent(userInput, tavern.variables);
       const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
       const historyMessages = excludeCurrentInputFromHistory(messages, userInput);
       const promptUserInput = appendResourcePrompt(userInput, game.currentState.background, tavern.variables)
+        + `\n\n[玩家意图裁决] ${intentPolicy.directorDirective}`
         + (scheduledDirectives.length ? '\n\n' + scheduledDirectives.map(l => `[系统指令] ${l}`).join('\n') : '');
       const { messages: promptMessages } = assemblePrompt({
         userInput: promptUserInput,
@@ -328,6 +331,7 @@ export function useGameLoop() {
             truthContext,
             turnContext: {
               playerInput: userInput,
+              playerIntentPolicy: intentPolicy,
               recentHistory,
               gameStatus: {
                 time: game.gameStatus.time.toISOString(),
@@ -347,6 +351,7 @@ export function useGameLoop() {
               userName: settings.userName,
               characterName: settings.characterName,
               resourceInstructions: promptUserInput,
+              playerIntentPolicy: intentPolicy,
             },
             formatPrompt: settings.formatPromptTemplate,
             abortSignal: abortController.signal,
@@ -422,7 +427,7 @@ export function useGameLoop() {
           costs: {
             timeMinutes: explicitCosts?.timeMinutes ?? llmCost ?? 10,
             stamina: explicitCosts?.stamina,
-            sanity: explicitCosts?.sanity,
+            sanity: (explicitCosts?.sanity ?? 0) + intentPolicy.sanityPenalty || undefined,
           },
           endings: game.endings,
           endingsSeen: game.endingsSeen,

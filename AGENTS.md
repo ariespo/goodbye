@@ -16,6 +16,8 @@ The detailed, authoritative story contract is [docs/agent-story-contract.md](doc
 - The player must experience three complete day resets before a culprit can be confirmed or a normal route ending can be committed. In current numbering, the earliest branching day is `cycleCount >= 4`.
 - Days 1–3 are investigation and failed-rescue days. They may build hypotheses, suspicion, memories, and evidence, but must not confirm a culprit, expose a solution fact, or enter a normal route ending.
 - Suspicion is a focus signal, not proof. Reaching `50` must not by itself bypass loop gates or required evidence.
+- Suspicion persists across loops, but one actor may gain at most 15 points during one complete repeated day. `loopSuspicionStart` is the program-owned 08:00 baseline.
+- Player input is an attempted action, never a world fact or guaranteed outcome. Over-cap repeated investigations must be honored and plausibly diverted; impossible, rule-breaking, invented-character, or deus-ex-machina input is rendered as a non-canonical fantasy and costs 8 sanity.
 - Final accusation and ending eligibility must ultimately be enforced by deterministic program rules, not prompt wording alone.
 - The target repeated-morning reset time is **08:00**. The current engine still contains 07:30 assumptions; treat this as an explicit implementation mismatch, not a new source of truth. Until migrated, runtime agents must obey the actual `gameStatus.time` shown to the player and must not invent a conflicting clock time.
 
@@ -25,6 +27,8 @@ The detailed, authoritative story contract is [docs/agent-story-contract.md](doc
 - The writer never receives canonical truth and never owns state.
 - The state agent may only report changes supported by the player input or rendered narrative. It never owns loop counters, route locks, endings, or fact collections.
 - Parallel work may be used for independent read-only analysis or candidate generation, but agents must not concurrently mutate the same canonical story state. Final facts, route eligibility, and state commits always pass through a single ordered authority path.
+- The implemented hybrid path runs semantic fact review and pacing/agency review in parallel after deterministic hard review; both must approve before the single Writer and single deterministic commit.
+- Reset scenes must bridge prior action consequence -> reset to 08:00 -> retained-memory reaction -> invalidation and replanning of prior appointments/plans. Final choices must play a route-specific bridge before the static ending.
 
 ## Verification expectations
 

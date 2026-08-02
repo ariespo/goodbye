@@ -31,7 +31,17 @@ describe('sanitizeVarsPatch', () => {
   it('烟雾弹角色怀疑度上限 25', () => {
     const current = { ...createDefaultVariables(), suspicion: { clerk: 20 } };
     const result = sanitizeVarsPatch({ suspicion: { clerk: 35 } }, current);
-    expect(result.vars['suspicion.clerk']).toBe(25);
+    expect(result.vars['suspicion.clerk']).toBe(20);
+  });
+
+  it('同一完整日内同一角色累计最多增加 15', () => {
+    const current = {
+      ...createDefaultVariables(),
+      suspicion: { ...createDefaultVariables().suspicion, 'old-man': 14 },
+      loopSuspicionStart: { ...createDefaultVariables().loopSuspicionStart, 'old-man': 0 },
+    };
+    const result = sanitizeVarsPatch({ suspicion: { 'old-man': 30 } }, current);
+    expect(result.vars['suspicion.old-man']).toBe(15);
   });
 
   it('tripProgress 不允许下降', () => {

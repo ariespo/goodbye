@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   getConclusionChoices,
+  getConclusionFinalReadiness,
   getConclusionOverlays,
   getConclusionRoutes,
   isConclusionOverlayId,
@@ -34,6 +35,7 @@ export function ConclusionModal() {
   const routes = useMemo(() => getConclusionRoutes(variables), [variables]);
   const overlays = useMemo(() => getConclusionOverlays(variables), [variables]);
   const choices = useMemo(() => getConclusionChoices(variables), [variables]);
+  const finalReadiness = useMemo(() => getConclusionFinalReadiness(variables), [variables]);
   const lockedRoute = isConclusionRouteId(variables.lockedRoute) ? variables.lockedRoute : null;
   const selectedOverlay = isConclusionOverlayId(variables.overlay) ? variables.overlay : null;
   const activeRoute = routes.find(route => route.id === lockedRoute) ?? null;
@@ -253,7 +255,7 @@ export function ConclusionModal() {
                         key={choice.id}
                         type="button"
                         className={`conclusion-choice-card tone-${choice.tone}`}
-                        disabled={busy || !canConclude}
+                        disabled={busy || !canConclude || !finalReadiness.met}
                         onClick={() => setPending({ kind: 'choice', id: choice.id, title: choice.title })}
                       >
                         <span className="conclusion-choice-card__number">0{index + 1}</span>
@@ -266,6 +268,11 @@ export function ConclusionModal() {
                       </button>
                     ))}
                   </div>
+                  {!finalReadiness.met && (
+                    <div className="conclusion-blocked-note">
+                      <GameIcon name="warning" size={15} /> 路线已经锁定，但还需要在剧情中确认最终事实后才能作出结局选择。
+                    </div>
+                  )}
                 </section>
               </div>
             </div>

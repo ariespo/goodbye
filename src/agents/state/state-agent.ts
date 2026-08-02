@@ -109,6 +109,7 @@ const STATE_AGENT_FORBIDDEN_ROOTS = new Set([
   'lockedRoute',
   'overlay',
   'finalChoice',
+  'loopSuspicionStart',
 ]);
 
 export function validateStateAgentResponse(

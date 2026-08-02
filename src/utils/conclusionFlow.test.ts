@@ -36,7 +36,9 @@ function setTestState(variables: Record<string, unknown>, sceneComplete = true) 
 describe('program conclusion flow', () => {
   it('locks an eligible route in the store', async () => {
     setTestState({
+      cycleCount: 4,
       suspicion: { ...createDefaultVariables().suspicion, 'old-man': 50 },
+      mysteryKnowledge: { 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' },
     });
 
     const result = await lockProgramConclusion('A');
@@ -47,7 +49,7 @@ describe('program conclusion flow', () => {
   });
 
   it('commits a deterministic ending and closes the conclusion panel', async () => {
-    setTestState({ lockedRoute: 'A' });
+    setTestState({ lockedRoute: 'A', mysteryKnowledge: { 'a-murder-staged-fall': 'confirmation' } });
 
     const result = await commitProgramConclusion('private');
     const state = useGameStore.getState();
@@ -55,6 +57,8 @@ describe('program conclusion flow', () => {
     expect(result).toMatchObject({ accepted: true, endingId: 'A-2' });
     expect(state.tavern.variables.finalChoice).toBe('private');
     expect(state.game.endingPanel.pendingEndingId).toBe('A-2');
+    expect(state.game.sceneComplete).toBe(false);
+    expect(state.game.currentScene?.lines.some(line => line.text.includes('最后一次对质'))).toBe(true);
     expect(state.ui.showConclusion).toBe(false);
   });
 

@@ -13,9 +13,11 @@ import {
 import {
   buildDirectorUserPrompt,
   buildFactCriticUserPrompt,
+  buildPacingCriticUserPrompt,
   buildWriterUserPrompt,
   DIRECTOR_SYSTEM_PROMPT,
   FACT_CRITIC_SYSTEM_PROMPT,
+  PACING_CRITIC_SYSTEM_PROMPT,
   WRITER_SYSTEM_PROMPT,
 } from './prompts';
 import { buildWriterPacket, reviewDirectorPlan } from './review';
@@ -48,6 +50,7 @@ export interface PreparedMysteryTurn {
   directorPlan: DirectorPlan;
   hardReview: FactReview;
   semanticReview: FactReview | null;
+  pacingReview: FactReview | null;
   writerPacket: WriterPacket;
   writerMessages: ChatCompletionMessage[];
   directorAttempts: number;
@@ -108,6 +111,7 @@ export async function prepareMysteryTurn(options: PrepareMysteryTurnOptions): Pr
   let directorPlan: DirectorPlan | null = null;
   let hardReview: FactReview | null = null;
   let semanticReview: FactReview | null = null;
+  let pacingReview: FactReview | null = null;
   let directorAttempts = 0;
 
   const record = (outcome: OrchestrationOutcome, error: string | null) => {
@@ -121,6 +125,7 @@ export async function prepareMysteryTurn(options: PrepareMysteryTurnOptions): Pr
       directorPlan,
       hardReview,
       semanticReview,
+      pacingReview,
       directorAttempts,
       stages,
       totalDurationMs: Math.round(now() - startedAt),
@@ -137,6 +142,7 @@ export async function prepareMysteryTurn(options: PrepareMysteryTurnOptions): Pr
       setDirectorPlan: plan => { directorPlan = plan; },
       setHardReview: review => { hardReview = review; },
       setSemanticReview: review => { semanticReview = review; },
+      setPacingReview: review => { pacingReview = review; },
       setDirectorAttempts: attempts => { directorAttempts = attempts; },
     });
     record('success', null);
@@ -155,6 +161,7 @@ interface PipelineObservers {
   setDirectorPlan: (plan: DirectorPlan) => void;
   setHardReview: (review: FactReview) => void;
   setSemanticReview: (review: FactReview) => void;
+  setPacingReview: (review: FactReview) => void;
   setDirectorAttempts: (attempts: number) => void;
 }
 
@@ -207,8 +214,9 @@ async function runMysteryPipeline(
   }
 
   let semanticReview: FactReview | null = null;
+  let pacingReview: FactReview | null = null;
   if (options.mode === 'strict' || options.mode === 'standard') {
-    semanticReview = parseFactReview(await timeStage('semantic-review', () => completeStructured(complete, supportKey, [
+    const semanticPromise = timeStage('semantic-review', () => completeStructured(complete, supportKey, [
       { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
       {
         role: 'user',
@@ -223,10 +231,21 @@ async function runMysteryPipeline(
           })),
         ),
       },
-    ], { temperature: 0, maxTokens: 900 }, FACT_REVIEW_RESPONSE_FORMAT)));
+    ], { temperature: 0, maxTokens: 900 }, FACT_REVIEW_RESPONSE_FORMAT));
+    const pacingPromise = timeStage('pacing-review', () => completeStructured(complete, supportKey, [
+      { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
+      { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
+    ], { temperature: 0, maxTokens: 900 }, FACT_REVIEW_RESPONSE_FORMAT));
+    const [semanticText, pacingText] = await Promise.all([semanticPromise, pacingPromise]);
+    semanticReview = parseFactReview(semanticText);
+    pacingReview = parseFactReview(pacingText);
     observe.setSemanticReview(semanticReview);
+    observe.setPacingReview(pacingReview);
     if (!semanticReview.approved) {
       throw new MysteryPipelineBlockedError('语义事实复核发现潜在泄密，本回合已停止。');
+    }
+    if (!pacingReview.approved) {
+      throw new MysteryPipelineBlockedError('节奏或玩家能动性复核未通过，本回合已停止。');
     }
   }
 
@@ -244,6 +263,7 @@ async function runMysteryPipeline(
     directorPlan,
     hardReview,
     semanticReview,
+    pacingReview,
     writerPacket,
     writerMessages,
     directorAttempts,

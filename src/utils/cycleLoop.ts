@@ -12,6 +12,11 @@ export const GOODBYE_OPTION_TEXT = '对文穗说再见';
 
 export type CycleResetReason = 'stamina' | 'sanity' | 'day-end' | 'stay';
 
+export interface CycleTransitionContext {
+  lastPlayerChoice?: string;
+  lastTurnSummary?: string;
+}
+
 /** 跨轮继承的字段(线索/认知/累计进度) */
 const INHERITED_KEYS = [
   'unlockedClues',
@@ -23,6 +28,7 @@ const INHERITED_KEYS = [
   'routesLockedEver',
   'knowledgeEvents',
   'mysteryKnowledge',
+  'suspicion',
 ] as const;
 
 const DAY_END = new Date(2024, 8, 10, 0, 0);
@@ -52,7 +58,8 @@ export function settleCycleVariables(
   next.cycleCount = Number(current.cycleCount ?? 1) + 1;
   next.stayStreak = opts.stayed ? Number(current.stayStreak ?? 0) + 1 : 0;
   next.stayedEver = Boolean(current.stayedEver) || next.stayStreak >= 3;
-  next.time = '2024-09-09T07:30:00';
+  next.loopSuspicionStart = { ...(next.suspicion ?? {}) };
+  next.time = '2024-09-09T08:00:00';
   next.stamina = 100;
   next.sanity = 70;
   return next;
@@ -82,15 +89,35 @@ const REASON_LINES: Record<CycleResetReason, string> = {
   stay: '你留了下来。这一天像糖一样慢慢化完。然后，闹钟又响了。',
 };
 
-export function buildCycleOpeningMaintext(cycleCount: number, reason: CycleResetReason): string {
-  return `场景|black
+export function buildCycleOpeningMaintext(
+  cycleCount: number,
+  reason: CycleResetReason,
+  context: CycleTransitionContext = {},
+): string {
+  const choice = context.lastPlayerChoice?.trim().slice(0, 100);
+  const summary = context.lastTurnSummary?.trim().slice(0, 120);
+  const consequenceBridge = choice
+    ? `对话|旁白|tense|你确实尝试了“${choice}”。这次行动的后果留在了这一天里，却没能阻止时间走到尽头。\n`
+    : '';
+  const memoryBridge = summary
+    ? `\n对话|旁白|calm|重置前最后发生的事仍留在你的记忆里：${summary}`
+    : '';
+  return `${consequenceBridge}场景|black
 效果|loop-transition
 音乐|silence
 对话|旁白|calm|${REASON_LINES[reason]}
 场景|bedroom1-day
-对话|旁白|calm|9月9日，早上7:30。闹钟响了。暴雨的第五天——和之前的每一次一模一样。
+对话|旁白|calm|9月9日，早上8:00。闹钟响了。暴雨的第五天——和之前的每一次一模一样。
 对话|旁白|calm|被子的另一半叠得整整齐齐。桌上会有还温着的早餐，和一张纸条。你已经知道上面写着什么。
-对话|旁白|calm|这是第 ${cycleCount} 次。你记得的一切都还在。但这个世界不记得。`;
+对话|旁白|calm|这是第 ${cycleCount} 次。你记得的一切都还在。但这个世界不记得。${memoryBridge}
+对话|旁白|calm|昨天约好的人、等候的位置和正在执行的计划都已被重置作废。你必须依据保留下来的记忆，重新决定今天怎么做。`;
+}
+
+function transitionContextFromMessages(messages: ChatMessage[]): CycleTransitionContext {
+  const user = [...messages].reverse().find(message => message.role === 'user');
+  const assistant = [...messages].reverse().find(message => message.role === 'assistant');
+  const summary = assistant?.content.match(/<sum>([\s\S]*?)<\/sum>/i)?.[1];
+  return { lastPlayerChoice: user?.content, lastTurnSummary: summary };
 }
 
 /**
@@ -109,16 +136,20 @@ export async function startNextCycle(opts: {
   // 轮回重置后世界状态归零，作废阅读期预跑的编排结果
   invalidatePreplans();
 
-  const maintext = buildCycleOpeningMaintext(cycleCount, opts.reason);
+  const activeChat = state.tavern.chats.find(c => c.id === state.tavern.activeChatId);
+  const maintext = buildCycleOpeningMaintext(
+    cycleCount,
+    opts.reason,
+    activeChat ? transitionContextFromMessages(activeChat.messages) : {},
+  );
   const assistantMsg: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'assistant',
-    content: `<maintext>\n${maintext}\n</maintext>\n<sum>第${cycleCount}轮开始:回到9月9日清晨7:30，线索与记忆保留，当日状态重置</sum>\n<vars>{}</vars>`,
+    content: `<maintext>\n${maintext}\n</maintext>\n<sum>第${cycleCount}轮开始:回到9月9日早上8:00，线索与记忆保留，当日状态重置，旧计划失效</sum>\n<vars>{}</vars>`,
     timestamp: Date.now(),
     variables,
   };
 
-  const activeChat = state.tavern.chats.find(c => c.id === state.tavern.activeChatId);
   if (activeChat) {
     await persistActiveChat({ messages: [...activeChat.messages, assistantMsg], variables });
   }

@@ -1,4 +1,4 @@
-const FALLBACK_TIME = '2024-09-09T07:30:00';
+const FALLBACK_TIME = '2024-09-09T08:00:00';
 
 function toDate(iso: string): Date | null {
   const d = new Date(iso);
