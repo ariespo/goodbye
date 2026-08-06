@@ -1,30 +1,18 @@
 import type { CharacterAnimationClip, CharacterBlinkClip } from '../engine/character-animation';
 import { assetUrl } from '../utils/assetUrl';
 
-export type FumiAnimationId = 'idle' | 'talk';
-export type ToukoAnimationId = 'idle' | 'talk';
+export type FumiAnimationId = 'idle' | 'talk' | 'fold';
+export type ToukoAnimationId = 'idle' | 'talk' | 'reset-cuff';
 
 const TOUKO_ANIMATION_ASSET_REVISION = '20260723-matted-cleaned-9-v1';
 const TOUKO_SAD_ANIMATION_ASSET_REVISION = '20260807-talk-sad-12-v1';
 const FUMI_ANIMATION_ASSET_REVISION = '20260725-matted-cleaned-9-v1';
-const FUMI_HAPPY_ANIMATION_ASSET_REVISION = '20260806-talk-happy-22-v1';
-const FUMI_HAPPY_BLINK_ASSET_REVISION = '20260805-blink-happy-7-v2';
-const FUMI_SAD_ANIMATION_ASSET_REVISION = '20260806-talk-sad-12-v2';
-const FUMI_ANGRY_ANIMATION_ASSET_REVISION = '20260805-talk-angry-20-v1';
 const toukoAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_ANIMATION_ASSET_REVISION}`);
 const toukoSadAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_SAD_ANIMATION_ASSET_REVISION}`);
 const fumiAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${FUMI_ANIMATION_ASSET_REVISION}`);
-const fumiHappyAnimationAsset = (path: string) =>
-  assetUrl(`${path}?v=${FUMI_HAPPY_ANIMATION_ASSET_REVISION}`);
-const fumiHappyBlinkAsset = (path: string) =>
-  assetUrl(`${path}?v=${FUMI_HAPPY_BLINK_ASSET_REVISION}`);
-const fumiSadAnimationAsset = (path: string) =>
-  assetUrl(`${path}?v=${FUMI_SAD_ANIMATION_ASSET_REVISION}`);
-const fumiAngryAnimationAsset = (path: string) =>
-  assetUrl(`${path}?v=${FUMI_ANGRY_ANIMATION_ASSET_REVISION}`);
 const toukoMattedBlinkFrames = Array.from({ length: 9 }, (_, index) =>
   toukoAnimationAsset(
     `assets/characters/concepts/touko-blink-frames-user-v3-cleaned/matte_${String(index + 1).padStart(5, '0')}.png`,
@@ -59,100 +47,6 @@ const fumiCalmRestClip: CharacterAnimationClip = {
   reducedMotionFrame: 0,
 };
 
-export const FUMI_HAPPY_TALK_FRAMES = Array.from({ length: 22 }, (_, index) =>
-  fumiHappyAnimationAsset(
-    `assets/characters/animated/fumi/talk-happy/${String(index + 1).padStart(2, '0')}.png`,
-  ),
-);
-
-// A happy line first plays this complete gesture once. The final frame remains
-// visible until the player advances; the happy blink loop will later attach as
-// the tailBlink sequence and use that same final pose as its resting frame.
-export const FUMI_HAPPY_TALK_CLIP: CharacterAnimationClip = {
-  src: FUMI_HAPPY_TALK_FRAMES[0],
-  sources: FUMI_HAPPY_TALK_FRAMES,
-  frames: FUMI_HAPPY_TALK_FRAMES.length,
-  frameMs: Array.from({ length: FUMI_HAPPY_TALK_FRAMES.length }, () => 42),
-  loop: false,
-  holdLastFrame: true,
-  reducedMotionFrame: FUMI_HAPPY_TALK_FRAMES.length - 1,
-};
-
-export const FUMI_HAPPY_TAIL_BLINK_FRAMES = Array.from({ length: 7 }, (_, index) =>
-  fumiHappyBlinkAsset(
-    `assets/characters/animated/fumi/tail-blink-happy/${String(index).padStart(2, '0')}.png`,
-  ),
-);
-
-export const FUMI_HAPPY_TAIL_BLINK: CharacterBlinkClip = {
-  src: FUMI_HAPPY_TAIL_BLINK_FRAMES[0],
-  sources: FUMI_HAPPY_TAIL_BLINK_FRAMES,
-  frames: FUMI_HAPPY_TAIL_BLINK_FRAMES.length,
-  frameMs: Array.from({ length: FUMI_HAPPY_TAIL_BLINK_FRAMES.length }, () => 42),
-};
-
-export const FUMI_SAD_TALK_FRAMES = Array.from({ length: 12 }, (_, index) =>
-  fumiSadAnimationAsset(
-    `assets/characters/animated/fumi/talk-sad/${String(index).padStart(2, '0')}.png`,
-  ),
-);
-
-// Sad lines play the supplied downcast motion once and return to the approved
-// sad anchor. A dedicated tail blink can be attached after its frames arrive.
-export const FUMI_SAD_TALK_CLIP: CharacterAnimationClip = {
-  src: FUMI_SAD_TALK_FRAMES[0],
-  sources: FUMI_SAD_TALK_FRAMES,
-  frames: FUMI_SAD_TALK_FRAMES.length,
-  frameMs: Array.from({ length: FUMI_SAD_TALK_FRAMES.length }, () => 55),
-  loop: false,
-  holdLastFrame: true,
-  reducedMotionFrame: FUMI_SAD_TALK_FRAMES.length - 1,
-};
-
-export const FUMI_SAD_TAIL_BLINK_FRAMES = Array.from({ length: 8 }, (_, index) =>
-  fumiSadAnimationAsset(
-    `assets/characters/animated/fumi/tail-blink-sad/${String(index).padStart(2, '0')}.png`,
-  ),
-);
-
-export const FUMI_SAD_TAIL_BLINK: CharacterBlinkClip = {
-  src: FUMI_SAD_TAIL_BLINK_FRAMES[0],
-  sources: FUMI_SAD_TAIL_BLINK_FRAMES,
-  frames: FUMI_SAD_TAIL_BLINK_FRAMES.length,
-  frameMs: Array.from({ length: FUMI_SAD_TAIL_BLINK_FRAMES.length }, () => 42),
-};
-
-export const FUMI_ANGRY_TALK_FRAMES = Array.from({ length: 20 }, (_, index) =>
-  fumiAngryAnimationAsset(
-    `assets/characters/animated/fumi/talk-angry/${String(index).padStart(2, '0')}.png`,
-  ),
-);
-
-// Angry lines play the supplied tightening motion once and settle back onto
-// the approved angry anchor. Its dedicated blink tail will be attached later.
-export const FUMI_ANGRY_TALK_CLIP: CharacterAnimationClip = {
-  src: FUMI_ANGRY_TALK_FRAMES[0],
-  sources: FUMI_ANGRY_TALK_FRAMES,
-  frames: FUMI_ANGRY_TALK_FRAMES.length,
-  frameMs: Array.from({ length: FUMI_ANGRY_TALK_FRAMES.length }, () => 42),
-  loop: false,
-  holdLastFrame: true,
-  reducedMotionFrame: FUMI_ANGRY_TALK_FRAMES.length - 1,
-};
-
-export const FUMI_ANGRY_TAIL_BLINK_FRAMES = Array.from({ length: 10 }, (_, index) =>
-  fumiAngryAnimationAsset(
-    `assets/characters/animated/fumi/tail-blink-angry/${String(index).padStart(2, '0')}.png`,
-  ),
-);
-
-export const FUMI_ANGRY_TAIL_BLINK: CharacterBlinkClip = {
-  src: FUMI_ANGRY_TAIL_BLINK_FRAMES[0],
-  sources: FUMI_ANGRY_TAIL_BLINK_FRAMES,
-  frames: FUMI_ANGRY_TAIL_BLINK_FRAMES.length,
-  frameMs: Array.from({ length: FUMI_ANGRY_TAIL_BLINK_FRAMES.length }, () => 42),
-};
-
 export const TOUKO_SAD_TALK_FRAMES = Array.from({ length: 12 }, (_, index) =>
   toukoSadAnimationAsset(
     `assets/characters/animated/touko/talk-sad/${String(index).padStart(2, '0')}.png`,
@@ -183,6 +77,16 @@ export const TOUKO_SAD_TAIL_BLINK: CharacterBlinkClip = {
 export const FUMI_ANIMATION_CLIPS: Record<FumiAnimationId, CharacterAnimationClip> = {
   idle: fumiCalmRestClip,
   talk: fumiCalmRestClip,
+  fold: {
+    src: assetUrl('assets/characters/animated/fumi/fumi-gesture-fold-cloth.sheet.png'),
+    frames: 6,
+    // Pose-to-pose timing: readable anticipation, fast action, clear settle.
+    // Slow exposure of the six large key poses reads as missing frames.
+    frameMs: [280, 85, 90, 105, 150, 720],
+    loop: false,
+    holdLastFrame: true,
+    reducedMotionFrame: 5,
+  },
 };
 
 const fumiFullFrameBlink: CharacterBlinkClip = {
@@ -196,11 +100,20 @@ const fumiFullFrameBlink: CharacterBlinkClip = {
 export const FUMI_TAIL_BLINKS: Record<FumiAnimationId, CharacterBlinkClip> = {
   idle: fumiFullFrameBlink,
   talk: fumiFullFrameBlink,
+  fold: fumiFullFrameBlink,
 };
 
 export const TOUKO_ANIMATION_CLIPS: Record<ToukoAnimationId, CharacterAnimationClip> = {
   idle: toukoCalmRestClip,
   talk: toukoCalmRestClip,
+  'reset-cuff': {
+    src: toukoAnimationAsset('assets/characters/animated/touko/touko-gesture-reset-cuff.sheet.png'),
+    frames: 6,
+    frameMs: [320, 90, 95, 105, 170, 760],
+    loop: false,
+    holdLastFrame: true,
+    reducedMotionFrame: 5,
+  },
 };
 
 const toukoFullFrameBlink: CharacterBlinkClip = {
@@ -214,12 +127,14 @@ const toukoFullFrameBlink: CharacterBlinkClip = {
 export const TOUKO_TAIL_BLINKS: Record<ToukoAnimationId, CharacterBlinkClip> = {
   idle: toukoFullFrameBlink,
   talk: toukoFullFrameBlink,
+  'reset-cuff': toukoFullFrameBlink,
 };
 
 export function resolveFumiAnimation(
   animation: string | undefined,
   speaker: string,
 ): FumiAnimationId {
+  if (animation === 'fold-cloth') return 'fold';
   if (animation === 'idle') return 'idle';
   if (speaker === '文穗' || speaker === '文穂' || speaker === 'fumi') return 'talk';
   return 'idle';
@@ -229,6 +144,7 @@ export function resolveToukoAnimation(
   animation: string | undefined,
   speaker: string,
 ): ToukoAnimationId {
+  if (animation === 'reset-cuff') return 'reset-cuff';
   if (animation === 'idle') return 'idle';
   if (/^(沈灯织|灯织|緋室灯織|绯室灯织|touko)$/i.test(speaker)) return 'talk';
   return 'idle';
