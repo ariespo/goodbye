@@ -4,44 +4,25 @@
   "frameWidth": 430,
   "frameHeight": 606,
   "clips": {
-    "idle.calm": {
-      "src": "touko-idle-calm.sheet.png",
-      "frames": 5,
-      "frameMs": [1200, 45, 60, 45, 1450],
-      "loop": true,
-      "holdLastFrame": false,
-      "reducedMotionFrame": 0,
-      "tailBlink": {
-        "src": "touko-blink-calm.sheet.png",
-        "frames": 5,
-        "frameMs": [35, 45, 60, 45, 35]
-      }
-    },
-    "talk.calm": {
-      "src": "touko-talk-calm.sheet.png",
-      "frames": 4,
-      "frameMs": [100, 80, 105, 80],
-      "loop": true,
-      "holdLastFrame": false,
-      "reducedMotionFrame": 0,
-      "tailBlink": {
-        "src": "touko-blink-calm.sheet.png",
-        "frames": 5,
-        "frameMs": [35, 45, 60, 45, 35]
-      }
-    },
-    "gesture.reset-cuff": {
-      "src": "touko-gesture-reset-cuff.sheet.png",
-      "frames": 6,
-      "frameMs": [320, 90, 95, 105, 170, 760],
+    "talk.sad": {
+      "src": "talk-sad/00.png",
+      "sources": [
+        "talk-sad/00.png", "talk-sad/01.png", "talk-sad/02.png", "talk-sad/03.png",
+        "talk-sad/04.png", "talk-sad/05.png", "talk-sad/06.png", "talk-sad/07.png",
+        "talk-sad/08.png", "talk-sad/09.png", "talk-sad/10.png", "talk-sad/11.png"
+      ],
+      "frames": 12,
+      "frameMs": [55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55],
       "loop": false,
       "holdLastFrame": true,
-      "reducedMotionFrame": 5,
-      "tailBlink": {
-        "src": "touko-blink-calm.sheet.png",
-        "frames": 5,
-        "frameMs": [35, 45, 60, 45, 35]
-      }
+      "reducedMotionFrame": 11,
+      "tailBlink": "talk-sad/00.png",
+      "tailBlinkSources": [
+        "talk-sad/00.png", "talk-sad/01.png", "talk-sad/02.png", "talk-sad/03.png",
+        "talk-sad/04.png", "talk-sad/05.png", "talk-sad/06.png", "talk-sad/07.png",
+        "talk-sad/08.png", "talk-sad/09.png", "talk-sad/10.png", "talk-sad/11.png"
+      ],
+      "tailBlinkFrameMs": [55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55]
     }
   }
 }
