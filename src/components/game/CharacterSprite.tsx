@@ -33,7 +33,6 @@ export function CharacterSprite() {
 
   const character = useGameStore(state => state.game.currentState.character);
   const mood = useGameStore(state => state.game.currentState.mood);
-  const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
   const currentLine = useGameStore(state => {
     const scene = state.game.currentScene;
     return scene?.lines[state.game.currentLineIndex];
@@ -96,7 +95,11 @@ export function CharacterSprite() {
             : toukoCalm
               ? TOUKO_TAIL_BLINKS[toukoAnimationId]
               : undefined;
-  const stopAfterCycle = false;
+  const stopAfterCycle = fumiCalm
+    ? fumiAnimationId === 'fold'
+    : toukoCalm
+      ? toukoAnimationId === 'reset-cuff'
+      : false;
 
 
 
@@ -119,7 +122,7 @@ export function CharacterSprite() {
     >
       {animationClip && (
         <CharacterAnimationPlayer
-          key={`${sprite}:${mood}:${currentLineIndex}:${currentLine?.animation ?? 'idle'}:${currentLine?.speaker ?? ''}`}
+          key={`${sprite}:${mood}:${currentLine?.animation ?? 'idle'}:${currentLine?.speaker ?? ''}`}
           clip={animationClip}
           fallbackSrc={fumiHappy
             ? FUMI_HAPPY_TALK_FRAMES[0]
