@@ -27,6 +27,26 @@ const GOLD = '#d4a853';
 const TEXT_MAIN = '#e8e4dc';
 const TEXT_DIM = '#8a8580';
 
+// Visual anchors for the illustrated RPG map. Travel distance continues to use
+// the canonical coordinates in data/locations.ts, so artwork revisions cannot
+// silently change time or stamina costs.
+const MAP_LOCATION_POSITIONS: Record<string, { x: number; y: number }> = {
+  home: { x: 44, y: 50 },
+  'senpai-building': { x: 46, y: 39 },
+  school: { x: 43, y: 71 },
+  supermarket: { x: 20, y: 71 },
+  'old-man-building': { x: 4, y: 84 },
+  'mountain-trail': { x: 67, y: 71 },
+  'detective-inn': { x: 79, y: 68 },
+  'water-tower': { x: 51, y: 8 },
+  'community-hospital': { x: 57, y: 38 },
+  'observation-deck': { x: 86, y: 42 },
+};
+
+function getMapPosition(location: { id: string; x: number; y: number }) {
+  return MAP_LOCATION_POSITIONS[location.id] ?? { x: location.x, y: location.y };
+}
+
 export function MapModal() {
   const showMap = useGameStore(state => state.ui.showMap);
   const variables = useGameStore(state => state.tavern.variables);
@@ -58,6 +78,7 @@ export function MapModal() {
   }, [currentLocationId, showMap]);
 
   const currentLocation = getLocationById(currentLocationId) ?? getLocationById(DEFAULT_LOCATION_ID)!;
+  const currentMapPosition = getMapPosition(currentLocation);
   const currentPresentation = getCurrentLocationPresentation(variables);
   const selectedPresentation = visibleLocations.find(location => location.id === selectedLocationId) ?? currentPresentation;
   const selectedLocation = getLocationById(selectedPresentation.id) ?? currentLocation;
@@ -206,8 +227,13 @@ export function MapModal() {
         <div ref={mapViewportRef} className="map-modal-map pixel-scroll-blue absolute bottom-[174px] left-8 right-8 top-[94px] overflow-hidden border-2 border-[#30343a] bg-[#08090c]">
           <div className="map-canvas relative h-full min-w-full overflow-hidden">
             <div
-              className="map-pixel-background absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${assetUrl('assets/map/guiyang-old-district-pixel.svg')})` }}
+              className="map-pixel-background absolute inset-0"
+              style={{
+                backgroundImage: `url(${assetUrl('assets/map/guiyang-old-district-rpg-gray-v2.png?v=20260808-rpg-gray-v2')})`,
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                backgroundSize: '100% 100%',
+              }}
             />
             <div
               className="absolute inset-0 opacity-30 mix-blend-screen"
@@ -219,7 +245,7 @@ export function MapModal() {
 
             <div
               className="map-player-marker"
-              style={{ left: `${currentLocation.x}%`, top: `${currentLocation.y}%` }}
+              style={{ left: `${currentMapPosition.x}%`, top: `${currentMapPosition.y}%` }}
               aria-hidden="true"
             >
               <span className="map-player-marker__shadow" />
@@ -234,6 +260,7 @@ export function MapModal() {
             {visibleLocations.map(location => {
               const selected = selectedLocation.id === location.id;
               const current = currentLocation.id === location.id;
+              const mapPosition = getMapPosition(location);
               return (
               <button
                 key={location.id}
@@ -246,7 +273,7 @@ export function MapModal() {
                 onClick={() => setSelectedLocationId(location.id)}
                 className="map-location-node group absolute h-12 w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#86a8f2]"
                 data-knowledge-stage={location.stage}
-                style={{ left: `${location.x}%`, top: `${location.y}%`, cursor: 'pointer', opacity: location.stage === 'rumored' ? 0.72 : 1 }}
+                style={{ left: `${mapPosition.x}%`, top: `${mapPosition.y}%`, cursor: 'pointer', opacity: location.stage === 'rumored' ? 0.72 : 1 }}
               >
                 <span
                   className="absolute inset-0 border-2 bg-[#0b0c0f]"
