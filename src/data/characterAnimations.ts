@@ -7,12 +7,15 @@ export type ToukoAnimationId = 'idle' | 'talk' | 'reset-cuff';
 const TOUKO_ANIMATION_ASSET_REVISION = '20260723-matted-cleaned-9-v1';
 const TOUKO_SAD_ANIMATION_ASSET_REVISION = '20260807-talk-sad-12-v1';
 const FUMI_ANIMATION_ASSET_REVISION = '20260725-matted-cleaned-9-v1';
+const FUMI_EMOTION_ASSET_REVISION = '20260807-fumi-emotion-v1';
 const toukoAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_ANIMATION_ASSET_REVISION}`);
 const toukoSadAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_SAD_ANIMATION_ASSET_REVISION}`);
 const fumiAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${FUMI_ANIMATION_ASSET_REVISION}`);
+const fumiEmotionAsset = (path: string) =>
+  assetUrl(`${path}?v=${FUMI_EMOTION_ASSET_REVISION}`);
 const toukoMattedBlinkFrames = Array.from({ length: 9 }, (_, index) =>
   toukoAnimationAsset(
     `assets/characters/concepts/touko-blink-frames-user-v3-cleaned/matte_${String(index + 1).padStart(5, '0')}.png`,
@@ -72,6 +75,126 @@ export const TOUKO_SAD_TAIL_BLINK: CharacterBlinkClip = {
   sources: TOUKO_SAD_TAIL_BLINK_FRAMES,
   frames: TOUKO_SAD_TAIL_BLINK_FRAMES.length,
   frameMs: Array.from({ length: TOUKO_SAD_TAIL_BLINK_FRAMES.length }, () => 55),
+};
+
+const TOUKO_INSANE_ANIMATION_ASSET_REVISION = '20260807-insane-10-v1';
+const toukoInsaneAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${TOUKO_INSANE_ANIMATION_ASSET_REVISION}`);
+
+export const TOUKO_INSANE_TALK_FRAMES = Array.from({ length: 10 }, (_, index) =>
+  toukoInsaneAnimationAsset(
+    `assets/characters/animated/touko/talk-insane/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const TOUKO_INSANE_TALK_CLIP: CharacterAnimationClip = {
+  src: TOUKO_INSANE_TALK_FRAMES[0],
+  sources: TOUKO_INSANE_TALK_FRAMES,
+  frames: TOUKO_INSANE_TALK_FRAMES.length,
+  frameMs: Array.from({ length: TOUKO_INSANE_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: TOUKO_INSANE_TALK_FRAMES.length - 1,
+};
+
+export const TOUKO_INSANE_TAIL_BLINK_FRAMES = Array.from({ length: 14 }, (_, index) =>
+  toukoInsaneAnimationAsset(
+    `assets/characters/animated/touko/tail-blink-insane/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const TOUKO_INSANE_TAIL_BLINK: CharacterBlinkClip = {
+  src: TOUKO_INSANE_TAIL_BLINK_FRAMES[0],
+  sources: TOUKO_INSANE_TAIL_BLINK_FRAMES,
+  frames: TOUKO_INSANE_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: TOUKO_INSANE_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const FUMI_HAPPY_TALK_FRAMES = Array.from({ length: 22 }, (_, index) =>
+  fumiEmotionAsset(
+    `assets/characters/animated/fumi/talk-happy/${String(index + 1).padStart(2, '0')}.png`,
+  ),
+);
+
+export const FUMI_HAPPY_TALK_CLIP: CharacterAnimationClip = {
+  src: FUMI_HAPPY_TALK_FRAMES[0],
+  sources: FUMI_HAPPY_TALK_FRAMES,
+  frames: FUMI_HAPPY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: FUMI_HAPPY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: FUMI_HAPPY_TALK_FRAMES.length - 1,
+};
+
+export const FUMI_HAPPY_TAIL_BLINK_FRAMES = Array.from({ length: 7 }, (_, index) =>
+  fumiEmotionAsset(
+    `assets/characters/animated/fumi/tail-blink-happy/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const FUMI_HAPPY_TAIL_BLINK: CharacterBlinkClip = {
+  src: FUMI_HAPPY_TAIL_BLINK_FRAMES[0],
+  sources: FUMI_HAPPY_TAIL_BLINK_FRAMES,
+  frames: FUMI_HAPPY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: FUMI_HAPPY_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const FUMI_SAD_TALK_FRAMES = Array.from({ length: 12 }, (_, index) =>
+  fumiEmotionAsset(
+    `assets/characters/animated/fumi/talk-sad/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const FUMI_SAD_TALK_CLIP: CharacterAnimationClip = {
+  src: FUMI_SAD_TALK_FRAMES[0],
+  sources: FUMI_SAD_TALK_FRAMES,
+  frames: FUMI_SAD_TALK_FRAMES.length,
+  frameMs: Array.from({ length: FUMI_SAD_TALK_FRAMES.length }, () => 55),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: FUMI_SAD_TALK_FRAMES.length - 1,
+};
+
+export const FUMI_SAD_TAIL_BLINK_FRAMES = Array.from({ length: 8 }, (_, index) =>
+  fumiEmotionAsset(
+    `assets/characters/animated/fumi/tail-blink-sad/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const FUMI_SAD_TAIL_BLINK: CharacterBlinkClip = {
+  src: FUMI_SAD_TAIL_BLINK_FRAMES[0],
+  sources: FUMI_SAD_TAIL_BLINK_FRAMES,
+  frames: FUMI_SAD_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: FUMI_SAD_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const FUMI_ANGRY_TALK_FRAMES = Array.from({ length: 20 }, (_, index) =>
+  fumiEmotionAsset(
+    `assets/characters/animated/fumi/talk-angry/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const FUMI_ANGRY_TALK_CLIP: CharacterAnimationClip = {
+  src: FUMI_ANGRY_TALK_FRAMES[0],
+  sources: FUMI_ANGRY_TALK_FRAMES,
+  frames: FUMI_ANGRY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: FUMI_ANGRY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: FUMI_ANGRY_TALK_FRAMES.length - 1,
+};
+
+export const FUMI_ANGRY_TAIL_BLINK_FRAMES = Array.from({ length: 10 }, (_, index) =>
+  fumiEmotionAsset(
+    `assets/characters/animated/fumi/tail-blink-angry/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const FUMI_ANGRY_TAIL_BLINK: CharacterBlinkClip = {
+  src: FUMI_ANGRY_TAIL_BLINK_FRAMES[0],
+  sources: FUMI_ANGRY_TAIL_BLINK_FRAMES,
+  frames: FUMI_ANGRY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: FUMI_ANGRY_TAIL_BLINK_FRAMES.length }, () => 42),
 };
 
 export const FUMI_ANIMATION_CLIPS: Record<FumiAnimationId, CharacterAnimationClip> = {

@@ -146,6 +146,11 @@ export function CharacterAnimationPlayer({
 
   useEffect(() => {
     const sheet = new Image();
+    const clipImages = clip.sources?.map(source => {
+      const image = new Image();
+      image.src = source;
+      return image;
+    }) ?? [];
     const blinkImages = tailBlink
       ? (tailBlink.sources ?? [tailBlink.src]).map(source => {
           const image = new Image();
@@ -159,13 +164,19 @@ export function CharacterAnimationPlayer({
     return () => {
       sheet.onload = null;
       sheet.onerror = null;
+      clipImages.forEach(image => {
+        image.onload = null;
+        image.onerror = null;
+      });
       blinkImages.forEach(image => {
         image.onload = null;
         image.onerror = null;
       });
     };
-  }, [clip.src, tailBlink]);
+  }, [clip.src, clip.sources, tailBlink]);
 
+  const clipUsesFrameFiles = Boolean(clip.sources?.length);
+  const displayedClipHref = clip.sources?.[frame] ?? clip.src;
   const blinkUsesFrameFiles = Boolean(tailBlink?.sources?.length);
   // A direct frame sequence (currently Touko's approved matte set) supplies
   // its own canonical resting pose. Once the action has settled, keep that
@@ -174,7 +185,8 @@ export function CharacterAnimationPlayer({
   const restOnBlinkSource = held && !tailBlinkClosed && blinkUsesFrameFiles;
   const displayedTailFrame = tailBlinkClosed ? tailBlinkFrame : 0;
   const displayedBlinkHref = tailBlink?.sources?.[displayedTailFrame] ?? tailBlink?.src;
-  const displaysFrameFile = (tailBlinkClosed || restOnBlinkSource) && blinkUsesFrameFiles;
+  const displaysFrameFile = clipUsesFrameFiles
+    || ((tailBlinkClosed || restOnBlinkSource) && blinkUsesFrameFiles);
 
   return (
     <div
@@ -197,12 +209,12 @@ export function CharacterAnimationPlayer({
             ? fallbackSrc
             : (tailBlinkClosed || restOnBlinkSource) && tailBlink
               ? displayedBlinkHref
-              : clip.src}
+              : displayedClipHref}
           x={sheetFailed
             ? 0
             : (tailBlinkClosed || restOnBlinkSource) && tailBlink
               ? blinkUsesFrameFiles ? 0 : -tailBlinkFrame * STANDARD_CHARACTER_CANVAS.width
-              : -frame * STANDARD_CHARACTER_CANVAS.width}
+              : clipUsesFrameFiles ? 0 : -frame * STANDARD_CHARACTER_CANVAS.width}
           y={0}
           width={sheetFailed
             ? STANDARD_CHARACTER_CANVAS.width
@@ -210,7 +222,9 @@ export function CharacterAnimationPlayer({
               ? blinkUsesFrameFiles
                 ? STANDARD_CHARACTER_CANVAS.width
                 : tailBlink.frames * STANDARD_CHARACTER_CANVAS.width
-              : clip.frames * STANDARD_CHARACTER_CANVAS.width}
+              : clipUsesFrameFiles
+                ? STANDARD_CHARACTER_CANVAS.width
+                : clip.frames * STANDARD_CHARACTER_CANVAS.width}
           height={STANDARD_CHARACTER_CANVAS.height}
           preserveAspectRatio={displaysFrameFile ? 'xMidYMax meet' : 'xMinYMin meet'}
           style={{ imageRendering: 'pixelated' }}

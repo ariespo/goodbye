@@ -13,6 +13,78 @@
       "reducedMotionFrame": 0,
       "tailBlink": "tail-blink/idle-tail-blink.png"
     },
+    "talk.happy": {
+      "src": "talk-happy/01.png",
+      "sources": [
+        "talk-happy/01.png", "talk-happy/02.png", "talk-happy/03.png",
+        "talk-happy/04.png", "talk-happy/05.png", "talk-happy/06.png", "talk-happy/07.png",
+        "talk-happy/08.png", "talk-happy/09.png", "talk-happy/10.png", "talk-happy/11.png",
+        "talk-happy/12.png", "talk-happy/13.png", "talk-happy/14.png", "talk-happy/15.png",
+        "talk-happy/16.png", "talk-happy/17.png", "talk-happy/18.png", "talk-happy/19.png",
+        "talk-happy/20.png", "talk-happy/21.png", "talk-happy/22.png"
+      ],
+      "frames": 22,
+      "frameMs": [
+        42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42,
+        42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42
+      ],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 21,
+      "tailBlink": "tail-blink-happy/00.png",
+      "tailBlinkSources": [
+        "tail-blink-happy/00.png", "tail-blink-happy/01.png", "tail-blink-happy/02.png",
+        "tail-blink-happy/03.png", "tail-blink-happy/04.png", "tail-blink-happy/05.png",
+        "tail-blink-happy/06.png"
+      ],
+      "tailBlinkFrameMs": [42, 42, 42, 42, 42, 42, 42]
+    },
+    "talk.sad": {
+      "src": "talk-sad/00.png",
+      "sources": [
+        "talk-sad/00.png", "talk-sad/01.png", "talk-sad/02.png", "talk-sad/03.png",
+        "talk-sad/04.png", "talk-sad/05.png", "talk-sad/06.png", "talk-sad/07.png",
+        "talk-sad/08.png", "talk-sad/09.png", "talk-sad/10.png", "talk-sad/11.png"
+      ],
+      "frames": 12,
+      "frameMs": [55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 11,
+      "tailBlink": "tail-blink-sad/00.png",
+      "tailBlinkSources": [
+        "tail-blink-sad/00.png", "tail-blink-sad/01.png", "tail-blink-sad/02.png",
+        "tail-blink-sad/03.png", "tail-blink-sad/04.png", "tail-blink-sad/05.png",
+        "tail-blink-sad/06.png", "tail-blink-sad/07.png"
+      ],
+      "tailBlinkFrameMs": [42, 42, 42, 42, 42, 42, 42, 42]
+    },
+    "talk.angry": {
+      "src": "talk-angry/00.png",
+      "sources": [
+        "talk-angry/00.png", "talk-angry/01.png", "talk-angry/02.png", "talk-angry/03.png",
+        "talk-angry/04.png", "talk-angry/05.png", "talk-angry/06.png", "talk-angry/07.png",
+        "talk-angry/08.png", "talk-angry/09.png", "talk-angry/10.png", "talk-angry/11.png",
+        "talk-angry/12.png", "talk-angry/13.png", "talk-angry/14.png", "talk-angry/15.png",
+        "talk-angry/16.png", "talk-angry/17.png", "talk-angry/18.png", "talk-angry/19.png"
+      ],
+      "frames": 20,
+      "frameMs": [
+        42, 42, 42, 42, 42, 42, 42, 42, 42, 42,
+        42, 42, 42, 42, 42, 42, 42, 42, 42, 42
+      ],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 19,
+      "tailBlink": "tail-blink-angry/00.png",
+      "tailBlinkSources": [
+        "tail-blink-angry/00.png", "tail-blink-angry/01.png", "tail-blink-angry/02.png",
+        "tail-blink-angry/03.png", "tail-blink-angry/04.png", "tail-blink-angry/05.png",
+        "tail-blink-angry/06.png", "tail-blink-angry/07.png", "tail-blink-angry/08.png",
+        "tail-blink-angry/09.png"
+      ],
+      "tailBlinkFrameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42]
+    },
     "talk.calm": {
       "src": "fumi-talk-calm.sheet.png",
       "frames": 4,

@@ -8,8 +8,20 @@ import { playSfx } from '../../utils/sfx';
 import { CharacterAnimationPlayer } from './CharacterAnimationPlayer';
 import {
   FUMI_ANIMATION_CLIPS,
+  FUMI_ANGRY_TALK_CLIP,
+  FUMI_ANGRY_TALK_FRAMES,
+  FUMI_ANGRY_TAIL_BLINK,
+  FUMI_HAPPY_TALK_CLIP,
+  FUMI_HAPPY_TALK_FRAMES,
+  FUMI_HAPPY_TAIL_BLINK,
+  FUMI_SAD_TALK_CLIP,
+  FUMI_SAD_TALK_FRAMES,
+  FUMI_SAD_TAIL_BLINK,
   FUMI_TAIL_BLINKS,
   TOUKO_ANIMATION_CLIPS,
+  TOUKO_INSANE_TALK_CLIP,
+  TOUKO_INSANE_TALK_FRAMES,
+  TOUKO_INSANE_TAIL_BLINK,
   TOUKO_SAD_TALK_CLIP,
   TOUKO_SAD_TALK_FRAMES,
   TOUKO_SAD_TAIL_BLINK,
@@ -53,29 +65,60 @@ export function CharacterSprite() {
   const src = sprite.startsWith('http') ? sprite : assetUrl(`assets/characters/${sprite}`);
   const isCalm = mood === 'calm';
   const fumiCalm = isCalm && /^fumi-(normal|calm)\.png$/i.test(sprite);
+  const fumiHappy = mood === 'happy' && /^fumi-happy(?:-normalized)?\.png$/i.test(sprite);
+  const fumiSad = mood === 'sad' && /^fumi-sad(?:-normalized)?\.png$/i.test(sprite);
+  const fumiAngry = mood === 'angry' && /^fumi-angry(?:-normalized)?\.png$/i.test(sprite);
   const toukoCalm = isCalm && /^touko-(normal|calm)\.png$/i.test(sprite);
   const toukoSad = mood === 'sad' && /^touko-sad(?:-normalized)?\.png$/i.test(sprite);
+  const toukoInsane = mood === 'insane' && /^touko-insane(?:-normalized)?\.png$/i.test(sprite);
   const fumiAnimationId = resolveFumiAnimation(currentLine?.animation, currentLine?.speaker ?? '');
   const toukoAnimationId = resolveToukoAnimation(currentLine?.animation, currentLine?.speaker ?? '');
-  const animationClip = fumiCalm
-    ? FUMI_ANIMATION_CLIPS[fumiAnimationId]
-    : toukoSad
-      ? TOUKO_SAD_TALK_CLIP
-      : toukoCalm
-        ? TOUKO_ANIMATION_CLIPS[toukoAnimationId]
-        : null;
-  const tailBlink = fumiCalm
-    ? FUMI_TAIL_BLINKS[fumiAnimationId]
-    : toukoSad
-      ? TOUKO_SAD_TAIL_BLINK
-      : toukoCalm
-        ? TOUKO_TAIL_BLINKS[toukoAnimationId]
-        : undefined;
+  const animationClip = fumiHappy
+    ? FUMI_HAPPY_TALK_CLIP
+    : fumiSad
+      ? FUMI_SAD_TALK_CLIP
+      : fumiAngry
+        ? FUMI_ANGRY_TALK_CLIP
+        : fumiCalm
+          ? FUMI_ANIMATION_CLIPS[fumiAnimationId]
+          : toukoInsane
+            ? TOUKO_INSANE_TALK_CLIP
+            : toukoSad
+              ? TOUKO_SAD_TALK_CLIP
+              : toukoCalm
+                ? TOUKO_ANIMATION_CLIPS[toukoAnimationId]
+                : null;
+  const tailBlink = fumiHappy
+    ? FUMI_HAPPY_TAIL_BLINK
+    : fumiSad
+      ? FUMI_SAD_TAIL_BLINK
+      : fumiAngry
+        ? FUMI_ANGRY_TAIL_BLINK
+        : fumiCalm
+          ? FUMI_TAIL_BLINKS[fumiAnimationId]
+          : toukoInsane
+            ? TOUKO_INSANE_TAIL_BLINK
+            : toukoSad
+              ? TOUKO_SAD_TAIL_BLINK
+              : toukoCalm
+                ? TOUKO_TAIL_BLINKS[toukoAnimationId]
+                : undefined;
   const stopAfterCycle = fumiCalm
     ? fumiAnimationId === 'fold'
     : toukoCalm
       ? toukoAnimationId === 'reset-cuff'
       : false;
+  const fallbackSrc = fumiHappy
+    ? FUMI_HAPPY_TALK_FRAMES[0]
+    : fumiSad
+      ? FUMI_SAD_TALK_FRAMES[0]
+      : fumiAngry
+        ? FUMI_ANGRY_TALK_FRAMES[0]
+        : toukoInsane
+          ? TOUKO_INSANE_TALK_FRAMES[0]
+          : toukoSad
+            ? TOUKO_SAD_TALK_FRAMES[0]
+            : src;
 
 
 
@@ -101,7 +144,7 @@ export function CharacterSprite() {
         <CharacterAnimationPlayer
           key={`${sprite}:${mood}:${currentLine?.animation ?? 'idle'}:${currentLine?.speaker ?? ''}`}
           clip={animationClip}
-          fallbackSrc={toukoSad ? TOUKO_SAD_TALK_FRAMES[0] : src}
+          fallbackSrc={fallbackSrc}
           tailBlink={tailBlink}
           stopAfterCycle={stopAfterCycle}
           className="h-full w-full"

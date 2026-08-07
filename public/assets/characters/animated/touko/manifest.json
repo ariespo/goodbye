@@ -62,6 +62,28 @@
         "talk-sad/08.png", "talk-sad/09.png", "talk-sad/10.png", "talk-sad/11.png"
       ],
       "tailBlinkFrameMs": [55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55]
+    },
+    "talk.insane": {
+      "src": "talk-insane/00.png",
+      "sources": [
+        "talk-insane/00.png", "talk-insane/01.png", "talk-insane/02.png", "talk-insane/03.png",
+        "talk-insane/04.png", "talk-insane/05.png", "talk-insane/06.png", "talk-insane/07.png",
+        "talk-insane/08.png", "talk-insane/09.png"
+      ],
+      "frames": 10,
+      "frameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 9,
+      "tailBlink": "tail-blink-insane/00.png",
+      "tailBlinkSources": [
+        "tail-blink-insane/00.png", "tail-blink-insane/01.png", "tail-blink-insane/02.png",
+        "tail-blink-insane/03.png", "tail-blink-insane/04.png", "tail-blink-insane/05.png",
+        "tail-blink-insane/06.png", "tail-blink-insane/07.png", "tail-blink-insane/08.png",
+        "tail-blink-insane/09.png", "tail-blink-insane/10.png", "tail-blink-insane/11.png",
+        "tail-blink-insane/12.png", "tail-blink-insane/13.png"
+      ],
+      "tailBlinkFrameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42]
     }
   }
 }

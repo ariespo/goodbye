@@ -2,6 +2,8 @@ export const STANDARD_CHARACTER_CANVAS = Object.freeze({ width: 430, height: 606
 
 export interface CharacterAnimationClip {
   src: string;
+  /** Optional complete frame files. When present, they are played directly in array order. */
+  sources?: string[];
   frames: number;
   frameMs: number[];
   loop: boolean;
@@ -53,6 +55,12 @@ export function validateCharacterAnimationManifest(manifest: CharacterAnimationM
     }
     if (clip.frameMs.length !== clip.frames) {
       errors.push(`${clipId}: frameMs must contain one duration per frame.`);
+    }
+    if (clip.sources && clip.sources.length !== clip.frames) {
+      errors.push(`${clipId}: sources must contain one file per frame.`);
+    }
+    if (clip.sources?.some(source => !source.trim())) {
+      errors.push(`${clipId}: every frame source is required.`);
     }
     if (clip.frameMs.some(duration => !Number.isFinite(duration) || duration <= 0)) {
       errors.push(`${clipId}: every frame duration must be greater than zero.`);

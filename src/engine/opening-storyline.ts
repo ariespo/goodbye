@@ -29,13 +29,12 @@ export const OPENING_STORYLINE = `场景|opening-rain-black
 对话|旁白|calm|你走出卧室。
 动作|文穗|idle
 对话|旁白|calm|在你真正看清空荡的客厅以前，记忆先一步替这个清晨补上了她。
-对话|文穗|calm|“醒啦？早餐放在桌上了。牛奶要趁热喝。”
-对话|文穗|calm|“还有，公交卡在书包外层。别又找半天。”
-动作|文穗|fold-cloth
+对话|文穗|happy|“醒啦？早餐放在桌上了。牛奶要趁热喝。”
+对话|文穗|angry|“还有，公交卡在书包外层。别又找半天。”
 对话|文穗|calm|“等一下……这边没有叠齐。”
 动作|文穗|idle
 对话|旁白|calm|她把抹布重新折好，指腹沿着折痕轻轻压了一遍，然后抬眼看向你。
-对话|文穗|calm|“好了。现在才算整齐。”
+对话|文穗|sad|“好了。现在才算整齐……你怎么一直不说话？”
 对话|旁白|calm|你眨了一下眼。
 对话|旁白|calm|桌边没有人。只有雨声，和一份仍带着余温的早餐。
 对话|旁白|calm|客厅不大，但很干净。桌上的早餐还温着——三明治切成了三角形，边角修得仔细，面包皮被去掉了。她知道你喜欢这个形状。
@@ -74,6 +73,7 @@ export const OPENING_STORYLINE = `场景|opening-rain-black
 对话|touko|calm|“我刚才看见你一直站在阳台边。文穗还没回来？”
 对话|旁白|calm|你摇头，把两次无人接听的通话记录给她看。
 对话|touko|sad|“她昨晚也没有回我的消息。”
+对话|touko|insane|“……但她一定还在某个地方笑着。雨这么大，她怎么可能舍得离开。”
 对话|旁白|calm|灯织的视线越过你，落在桌上那份仍有余温的早餐，又很快移开。
 对话|touko|calm|“先去学校确认。要是还找不到她，就来对面找我。别一个人往山里走。”
 对话|旁白|calm|她把一把折叠伞靠在门边，转身走进楼道。那句“别往山里走”留得太轻，轻得反而让人无法忽略。
@@ -130,17 +130,6 @@ export function parseOpeningStoryline() {
   const scene = maintextToScene(OPENING_STORYLINE, {
     authorizedKnowledgeEvents: [...OPENING_KNOWLEDGE_EVENTS],
   });
-
-  // Demonstrate Touko's signature action only after the player has visually
-  // identified her.  The first Touko line is heard through the closed door;
-  // attaching the gesture there would reveal her portrait too early.
-  const revealIndex = scene.lines.findIndex(line =>
-    line.knowledgeEvents?.includes('meet:touko'),
-  );
-  const toukoActionLine = scene.lines
-    .slice(revealIndex + 1)
-    .find(line => line.character === 'touko-normal.png');
-  if (toukoActionLine) toukoActionLine.animation = 'reset-cuff';
 
   return scene;
 }
