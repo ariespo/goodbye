@@ -38,4 +38,19 @@ describe('character animation timing', () => {
     });
     expect(errors).toContain('Character canvas must be 430x606.');
   });
+
+  it('rejects incomplete direct frame sequences', () => {
+    const errors = validateCharacterAnimationManifest({
+      character: 'fumi',
+      frameWidth: 430,
+      frameHeight: 606,
+      clips: {
+        'talk.happy': {
+          ...loopClip,
+          sources: ['00.png', '01.png'],
+        },
+      },
+    });
+    expect(errors).toContain('talk.happy: sources must contain one file per frame.');
+  });
 });

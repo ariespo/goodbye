@@ -26,7 +26,7 @@ describe('backgroundAssets time variants', () => {
     expect(getBackgroundById('ending-f-1')?.file).toBe('ending-f-1.png');
     expect(getBackgroundById('ending-loop')?.file).toBe('ending-loop.png');
     expect(getBackgroundById('ending-stay')?.file).toBe('ending-stay.png');
-    expect(getBackgroundById('ending-true')?.file).toBe('ending-true.png');
+    expect(getBackgroundById('ending-true')?.file).toBe('ending-true-retro-v5.png');
   });
 
   it('keeps ending-only CGs out of the AI scene catalog', () => {

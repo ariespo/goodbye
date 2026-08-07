@@ -310,7 +310,7 @@ export const backgroundAssets: BackgroundAsset[] = [
   },
   {
     id: 'ending-true',
-    file: 'ending-true.png',
+    file: 'ending-true-retro-v5.png',
     displayName: '结局：九点零一分',
     description: '雨停后文穗走出家门，时间第一次前进到九点零一分。',
     usage: 'TRUE 结局专用',

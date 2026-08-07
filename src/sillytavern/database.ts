@@ -134,8 +134,35 @@ function getDefaultSettings(): AppSettings {
   };
 }
 
+function normalizeSettings(partial: AppSettings | Partial<AppSettings> | undefined): AppSettings {
+  const defaults = getDefaultSettings();
+  if (!partial) return defaults;
+  return {
+    ...defaults,
+    ...partial,
+    api: {
+      ...defaults.api,
+      ...(partial.api || {}),
+      secondary: {
+        ...defaults.api.secondary,
+        ...(partial.api?.secondary || {}),
+      },
+    },
+    activeLorebookIds: Array.isArray(partial.activeLorebookIds)
+      ? partial.activeLorebookIds
+      : defaults.activeLorebookIds,
+    customTags: Array.isArray(partial.customTags)
+      ? partial.customTags
+      : defaults.customTags,
+    opaqueTags: Array.isArray(partial.opaqueTags)
+      ? partial.opaqueTags
+      : defaults.opaqueTags,
+  };
+}
+
 export async function getSettings(): Promise<AppSettings | undefined> {
-  return (await db.settings.toArray())[0];
+  const stored = (await db.settings.toArray())[0];
+  return normalizeSettings(stored);
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {

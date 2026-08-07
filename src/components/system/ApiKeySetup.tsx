@@ -16,13 +16,13 @@ export function ApiKeySetup() {
   const introPlayed = useGameStore(state => state.ui.introPlayed);
   const actions = useGameStore(state => state.actions);
 
-  const [baseUrl, setBaseUrl] = useState(settings?.api.baseUrl || PRESET_PROVIDERS[0].baseUrl);
+  const [baseUrl, setBaseUrl] = useState(settings?.api?.baseUrl || PRESET_PROVIDERS[0].baseUrl);
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState(settings?.api.model || PRESET_PROVIDERS[0].model);
+  const [model, setModel] = useState(settings?.api?.model || PRESET_PROVIDERS[0].model);
   const [dismissed, setDismissed] = useState(false);
 
   if (!introPlayed || !settings || dismissed) return null;
-  if (settings.api.apiKey) return null;
+  if (settings.api?.apiKey) return null;
 
   const handlePreset = (preset: typeof PRESET_PROVIDERS[0]) => {
     setBaseUrl(preset.baseUrl);

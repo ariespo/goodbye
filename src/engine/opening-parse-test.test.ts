@@ -36,6 +36,7 @@ describe('opening storyline parse', () => {
   it('shows Fumi as a memory before Touko and exercises the opening animations', () => {
     const scene = parseOpeningStoryline();
     const fumiFirstLine = scene.lines.findIndex((line) => line.character === 'fumi-normal.png');
+    const imaginedFumiLines = scene.lines.filter((line) => line.speaker === '文穗');
     const toukoFirstLine = scene.lines.findIndex((line) => line.speaker === 'touko');
     const animationIds = scene.lines
       .map((line) => line.animation)
@@ -44,8 +45,12 @@ describe('opening storyline parse', () => {
     expect(fumiFirstLine).toBeGreaterThan(-1);
     expect(fumiFirstLine).toBeLessThan(toukoFirstLine);
     expect(animationIds).toContain('idle');
-    expect(animationIds).toContain('fold-cloth');
-    expect(animationIds).toContain('reset-cuff');
+    expect(imaginedFumiLines.map((line) => line.emotion)).toEqual([
+      'happy',
+      'angry',
+      'calm',
+      'sad',
+    ]);
     expect(scene.lines.some((line) => line.text.includes('桌边没有人'))).toBe(true);
   });
 });
