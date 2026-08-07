@@ -50,7 +50,18 @@ describe('opening storyline parse', () => {
       'angry',
       'calm',
       'sad',
+      'insane',
     ]);
+    expect(imaginedFumiLines.at(-1)?.character).toBe('fumi-insane.png');
     expect(scene.lines.some((line) => line.text.includes('桌边没有人'))).toBe(true);
+  });
+
+  it('exercises Touko happy and angry emotion animations in the opening', () => {
+    const toukoLines = parseOpeningStoryline().lines.filter((line) => line.speaker === 'touko');
+    const happyLine = toukoLines.find((line) => line.emotion === 'happy');
+    const angryLine = toukoLines.find((line) => line.emotion === 'angry');
+
+    expect(happyLine?.character).toBe('touko-happy.png');
+    expect(angryLine?.character).toBe('touko-angry.png');
   });
 });

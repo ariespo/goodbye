@@ -12,6 +12,14 @@ import {
   FUMI_SAD_TALK_CLIP,
   FUMI_SAD_TALK_FRAMES,
   FUMI_SAD_TAIL_BLINK,
+  TOUKO_ANGRY_TALK_CLIP,
+  TOUKO_ANGRY_TALK_FRAMES,
+  TOUKO_ANGRY_TAIL_BLINK,
+  TOUKO_ANGRY_TAIL_BLINK_FRAMES,
+  TOUKO_HAPPY_TALK_CLIP,
+  TOUKO_HAPPY_TALK_FRAMES,
+  TOUKO_HAPPY_TAIL_BLINK,
+  TOUKO_HAPPY_TAIL_BLINK_FRAMES,
   TOUKO_INSANE_TALK_CLIP,
   TOUKO_INSANE_TALK_FRAMES,
   TOUKO_INSANE_TAIL_BLINK,
@@ -34,7 +42,7 @@ describe('Touko sad talk animation', () => {
   const framePaths = Array.from({ length: 12 }, (_, index) =>
     resolve(
       process.cwd(),
-      `public/assets/characters/animated/touko/talk-sad/${String(index).padStart(2, '0')}.png`,
+      `public/assets/characters/animated/touko/talk-sad-cleaned/${String(index).padStart(2, '0')}.png`,
     ),
   );
 
@@ -68,17 +76,87 @@ describe('Touko sad talk animation', () => {
   });
 });
 
+describe('Touko happy talk animation', () => {
+  const framePaths = Array.from({ length: 14 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/touko/talk-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 14 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the last frame, and reuses the same sequence for blinking', () => {
+    expect(TOUKO_HAPPY_TALK_FRAMES).toHaveLength(14);
+    expect(TOUKO_HAPPY_TALK_CLIP).toMatchObject({
+      src: TOUKO_HAPPY_TALK_FRAMES[0],
+      sources: TOUKO_HAPPY_TALK_FRAMES,
+      frames: 14,
+      frameMs: Array.from({ length: 14 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 13,
+    });
+    expect(TOUKO_HAPPY_TAIL_BLINK_FRAMES).toBe(TOUKO_HAPPY_TALK_FRAMES);
+    expect(TOUKO_HAPPY_TAIL_BLINK).toMatchObject({
+      src: TOUKO_HAPPY_TALK_FRAMES[0],
+      sources: TOUKO_HAPPY_TALK_FRAMES,
+      frames: 14,
+      frameMs: Array.from({ length: 14 }, () => 42),
+    });
+  });
+});
+
+describe('Touko angry talk animation', () => {
+  const framePaths = Array.from({ length: 22 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/touko/talk-angry-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 22 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the last frame, and reuses the same sequence for blinking', () => {
+    expect(TOUKO_ANGRY_TALK_FRAMES).toHaveLength(22);
+    expect(TOUKO_ANGRY_TALK_CLIP).toMatchObject({
+      src: TOUKO_ANGRY_TALK_FRAMES[0],
+      sources: TOUKO_ANGRY_TALK_FRAMES,
+      frames: 22,
+      frameMs: Array.from({ length: 22 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 21,
+    });
+    expect(TOUKO_ANGRY_TAIL_BLINK_FRAMES).toBe(TOUKO_ANGRY_TALK_FRAMES);
+    expect(TOUKO_ANGRY_TAIL_BLINK).toMatchObject({
+      src: TOUKO_ANGRY_TALK_FRAMES[0],
+      sources: TOUKO_ANGRY_TALK_FRAMES,
+      frames: 22,
+      frameMs: Array.from({ length: 22 }, () => 42),
+    });
+  });
+});
+
 describe('Touko insane talk animation', () => {
   const talkPaths = Array.from({ length: 10 }, (_, index) =>
     resolve(
       process.cwd(),
-      `public/assets/characters/animated/touko/talk-insane/${String(index).padStart(2, '0')}.png`,
+      `public/assets/characters/animated/touko/talk-insane-cleaned/${String(index).padStart(2, '0')}.png`,
     ),
   );
   const blinkPaths = Array.from({ length: 14 }, (_, index) =>
     resolve(
       process.cwd(),
-      `public/assets/characters/animated/touko/tail-blink-insane/${String(index).padStart(2, '0')}.png`,
+      `public/assets/characters/animated/touko/tail-blink-insane-cleaned/${String(index).padStart(2, '0')}.png`,
     ),
   );
 

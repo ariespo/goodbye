@@ -43,45 +43,93 @@
         "frameMs": [35, 45, 60, 45, 35]
       }
     },
-    "talk.sad": {
-      "src": "talk-sad/00.png",
+    "talk.happy": {
+      "src": "talk-happy-cleaned/00.png",
       "sources": [
-        "talk-sad/00.png", "talk-sad/01.png", "talk-sad/02.png", "talk-sad/03.png",
-        "talk-sad/04.png", "talk-sad/05.png", "talk-sad/06.png", "talk-sad/07.png",
-        "talk-sad/08.png", "talk-sad/09.png", "talk-sad/10.png", "talk-sad/11.png"
+        "talk-happy-cleaned/00.png", "talk-happy-cleaned/01.png", "talk-happy-cleaned/02.png", "talk-happy-cleaned/03.png",
+        "talk-happy-cleaned/04.png", "talk-happy-cleaned/05.png", "talk-happy-cleaned/06.png", "talk-happy-cleaned/07.png",
+        "talk-happy-cleaned/08.png", "talk-happy-cleaned/09.png", "talk-happy-cleaned/10.png", "talk-happy-cleaned/11.png",
+        "talk-happy-cleaned/12.png", "talk-happy-cleaned/13.png"
+      ],
+      "frames": 14,
+      "frameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 13,
+      "tailBlink": "talk-happy-cleaned/00.png",
+      "tailBlinkSources": [
+        "talk-happy-cleaned/00.png", "talk-happy-cleaned/01.png", "talk-happy-cleaned/02.png", "talk-happy-cleaned/03.png",
+        "talk-happy-cleaned/04.png", "talk-happy-cleaned/05.png", "talk-happy-cleaned/06.png", "talk-happy-cleaned/07.png",
+        "talk-happy-cleaned/08.png", "talk-happy-cleaned/09.png", "talk-happy-cleaned/10.png", "talk-happy-cleaned/11.png",
+        "talk-happy-cleaned/12.png", "talk-happy-cleaned/13.png"
+      ],
+      "tailBlinkFrameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42]
+    },
+    "talk.sad": {
+      "src": "talk-sad-cleaned/00.png",
+      "sources": [
+        "talk-sad-cleaned/00.png", "talk-sad-cleaned/01.png", "talk-sad-cleaned/02.png", "talk-sad-cleaned/03.png",
+        "talk-sad-cleaned/04.png", "talk-sad-cleaned/05.png", "talk-sad-cleaned/06.png", "talk-sad-cleaned/07.png",
+        "talk-sad-cleaned/08.png", "talk-sad-cleaned/09.png", "talk-sad-cleaned/10.png", "talk-sad-cleaned/11.png"
       ],
       "frames": 12,
       "frameMs": [55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55],
       "loop": false,
       "holdLastFrame": true,
       "reducedMotionFrame": 11,
-      "tailBlink": "talk-sad/00.png",
+      "tailBlink": "talk-sad-cleaned/00.png",
       "tailBlinkSources": [
-        "talk-sad/00.png", "talk-sad/01.png", "talk-sad/02.png", "talk-sad/03.png",
-        "talk-sad/04.png", "talk-sad/05.png", "talk-sad/06.png", "talk-sad/07.png",
-        "talk-sad/08.png", "talk-sad/09.png", "talk-sad/10.png", "talk-sad/11.png"
+        "talk-sad-cleaned/00.png", "talk-sad-cleaned/01.png", "talk-sad-cleaned/02.png", "talk-sad-cleaned/03.png",
+        "talk-sad-cleaned/04.png", "talk-sad-cleaned/05.png", "talk-sad-cleaned/06.png", "talk-sad-cleaned/07.png",
+        "talk-sad-cleaned/08.png", "talk-sad-cleaned/09.png", "talk-sad-cleaned/10.png", "talk-sad-cleaned/11.png"
       ],
       "tailBlinkFrameMs": [55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55, 55]
     },
-    "talk.insane": {
-      "src": "talk-insane/00.png",
+    "talk.angry": {
+      "src": "talk-angry-cleaned/00.png",
       "sources": [
-        "talk-insane/00.png", "talk-insane/01.png", "talk-insane/02.png", "talk-insane/03.png",
-        "talk-insane/04.png", "talk-insane/05.png", "talk-insane/06.png", "talk-insane/07.png",
-        "talk-insane/08.png", "talk-insane/09.png"
+        "talk-angry-cleaned/00.png", "talk-angry-cleaned/01.png", "talk-angry-cleaned/02.png", "talk-angry-cleaned/03.png",
+        "talk-angry-cleaned/04.png", "talk-angry-cleaned/05.png", "talk-angry-cleaned/06.png", "talk-angry-cleaned/07.png",
+        "talk-angry-cleaned/08.png", "talk-angry-cleaned/09.png", "talk-angry-cleaned/10.png", "talk-angry-cleaned/11.png",
+        "talk-angry-cleaned/12.png", "talk-angry-cleaned/13.png", "talk-angry-cleaned/14.png", "talk-angry-cleaned/15.png",
+        "talk-angry-cleaned/16.png", "talk-angry-cleaned/17.png", "talk-angry-cleaned/18.png", "talk-angry-cleaned/19.png",
+        "talk-angry-cleaned/20.png", "talk-angry-cleaned/21.png"
+      ],
+      "frames": 22,
+      "frameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42],
+      "loop": false,
+      "holdLastFrame": true,
+      "reducedMotionFrame": 21,
+      "tailBlink": "talk-angry-cleaned/00.png",
+      "tailBlinkSources": [
+        "talk-angry-cleaned/00.png", "talk-angry-cleaned/01.png", "talk-angry-cleaned/02.png", "talk-angry-cleaned/03.png",
+        "talk-angry-cleaned/04.png", "talk-angry-cleaned/05.png", "talk-angry-cleaned/06.png", "talk-angry-cleaned/07.png",
+        "talk-angry-cleaned/08.png", "talk-angry-cleaned/09.png", "talk-angry-cleaned/10.png", "talk-angry-cleaned/11.png",
+        "talk-angry-cleaned/12.png", "talk-angry-cleaned/13.png", "talk-angry-cleaned/14.png", "talk-angry-cleaned/15.png",
+        "talk-angry-cleaned/16.png", "talk-angry-cleaned/17.png", "talk-angry-cleaned/18.png", "talk-angry-cleaned/19.png",
+        "talk-angry-cleaned/20.png", "talk-angry-cleaned/21.png"
+      ],
+      "tailBlinkFrameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42]
+    },
+    "talk.insane": {
+      "src": "talk-insane-cleaned/00.png",
+      "sources": [
+        "talk-insane-cleaned/00.png", "talk-insane-cleaned/01.png", "talk-insane-cleaned/02.png", "talk-insane-cleaned/03.png",
+        "talk-insane-cleaned/04.png", "talk-insane-cleaned/05.png", "talk-insane-cleaned/06.png", "talk-insane-cleaned/07.png",
+        "talk-insane-cleaned/08.png", "talk-insane-cleaned/09.png"
       ],
       "frames": 10,
       "frameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42],
       "loop": false,
       "holdLastFrame": true,
       "reducedMotionFrame": 9,
-      "tailBlink": "tail-blink-insane/00.png",
+      "tailBlink": "tail-blink-insane-cleaned/00.png",
       "tailBlinkSources": [
-        "tail-blink-insane/00.png", "tail-blink-insane/01.png", "tail-blink-insane/02.png",
-        "tail-blink-insane/03.png", "tail-blink-insane/04.png", "tail-blink-insane/05.png",
-        "tail-blink-insane/06.png", "tail-blink-insane/07.png", "tail-blink-insane/08.png",
-        "tail-blink-insane/09.png", "tail-blink-insane/10.png", "tail-blink-insane/11.png",
-        "tail-blink-insane/12.png", "tail-blink-insane/13.png"
+        "tail-blink-insane-cleaned/00.png", "tail-blink-insane-cleaned/01.png", "tail-blink-insane-cleaned/02.png",
+        "tail-blink-insane-cleaned/03.png", "tail-blink-insane-cleaned/04.png", "tail-blink-insane-cleaned/05.png",
+        "tail-blink-insane-cleaned/06.png", "tail-blink-insane-cleaned/07.png", "tail-blink-insane-cleaned/08.png",
+        "tail-blink-insane-cleaned/09.png", "tail-blink-insane-cleaned/10.png", "tail-blink-insane-cleaned/11.png",
+        "tail-blink-insane-cleaned/12.png", "tail-blink-insane-cleaned/13.png"
       ],
       "tailBlinkFrameMs": [42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42]
     }

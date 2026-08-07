@@ -5,13 +5,13 @@ export type FumiAnimationId = 'idle' | 'talk' | 'fold';
 export type ToukoAnimationId = 'idle' | 'talk' | 'reset-cuff';
 
 const TOUKO_ANIMATION_ASSET_REVISION = '20260723-matted-cleaned-9-v1';
-const TOUKO_SAD_ANIMATION_ASSET_REVISION = '20260807-talk-sad-12-v1';
+const TOUKO_EMOTION_ANIMATION_ASSET_REVISION = '20260808-emotion-alpha-clean-v1';
 const FUMI_ANIMATION_ASSET_REVISION = '20260725-matted-cleaned-9-v1';
 const FUMI_EMOTION_ASSET_REVISION = '20260807-fumi-emotion-v1';
 const toukoAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_ANIMATION_ASSET_REVISION}`);
-const toukoSadAnimationAsset = (path: string) =>
-  assetUrl(`${path}?v=${TOUKO_SAD_ANIMATION_ASSET_REVISION}`);
+const toukoEmotionAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${TOUKO_EMOTION_ANIMATION_ASSET_REVISION}`);
 const fumiAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${FUMI_ANIMATION_ASSET_REVISION}`);
 const fumiEmotionAsset = (path: string) =>
@@ -50,9 +50,34 @@ const fumiCalmRestClip: CharacterAnimationClip = {
   reducedMotionFrame: 0,
 };
 
+export const TOUKO_HAPPY_TALK_FRAMES = Array.from({ length: 14 }, (_, index) =>
+  toukoEmotionAnimationAsset(
+    `assets/characters/animated/touko/talk-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const TOUKO_HAPPY_TALK_CLIP: CharacterAnimationClip = {
+  src: TOUKO_HAPPY_TALK_FRAMES[0],
+  sources: TOUKO_HAPPY_TALK_FRAMES,
+  frames: TOUKO_HAPPY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: TOUKO_HAPPY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: TOUKO_HAPPY_TALK_FRAMES.length - 1,
+};
+
+export const TOUKO_HAPPY_TAIL_BLINK_FRAMES = TOUKO_HAPPY_TALK_FRAMES;
+
+export const TOUKO_HAPPY_TAIL_BLINK: CharacterBlinkClip = {
+  src: TOUKO_HAPPY_TAIL_BLINK_FRAMES[0],
+  sources: TOUKO_HAPPY_TAIL_BLINK_FRAMES,
+  frames: TOUKO_HAPPY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: TOUKO_HAPPY_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
 export const TOUKO_SAD_TALK_FRAMES = Array.from({ length: 12 }, (_, index) =>
-  toukoSadAnimationAsset(
-    `assets/characters/animated/touko/talk-sad/${String(index).padStart(2, '0')}.png`,
+  toukoEmotionAnimationAsset(
+    `assets/characters/animated/touko/talk-sad-cleaned/${String(index).padStart(2, '0')}.png`,
   ),
 );
 
@@ -77,13 +102,38 @@ export const TOUKO_SAD_TAIL_BLINK: CharacterBlinkClip = {
   frameMs: Array.from({ length: TOUKO_SAD_TAIL_BLINK_FRAMES.length }, () => 55),
 };
 
-const TOUKO_INSANE_ANIMATION_ASSET_REVISION = '20260807-insane-10-v1';
+export const TOUKO_ANGRY_TALK_FRAMES = Array.from({ length: 22 }, (_, index) =>
+  toukoEmotionAnimationAsset(
+    `assets/characters/animated/touko/talk-angry-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const TOUKO_ANGRY_TALK_CLIP: CharacterAnimationClip = {
+  src: TOUKO_ANGRY_TALK_FRAMES[0],
+  sources: TOUKO_ANGRY_TALK_FRAMES,
+  frames: TOUKO_ANGRY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: TOUKO_ANGRY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: TOUKO_ANGRY_TALK_FRAMES.length - 1,
+};
+
+export const TOUKO_ANGRY_TAIL_BLINK_FRAMES = TOUKO_ANGRY_TALK_FRAMES;
+
+export const TOUKO_ANGRY_TAIL_BLINK: CharacterBlinkClip = {
+  src: TOUKO_ANGRY_TAIL_BLINK_FRAMES[0],
+  sources: TOUKO_ANGRY_TAIL_BLINK_FRAMES,
+  frames: TOUKO_ANGRY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: TOUKO_ANGRY_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+const TOUKO_INSANE_ANIMATION_ASSET_REVISION = '20260808-insane-alpha-clean-v1';
 const toukoInsaneAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_INSANE_ANIMATION_ASSET_REVISION}`);
 
 export const TOUKO_INSANE_TALK_FRAMES = Array.from({ length: 10 }, (_, index) =>
   toukoInsaneAnimationAsset(
-    `assets/characters/animated/touko/talk-insane/${String(index).padStart(2, '0')}.png`,
+    `assets/characters/animated/touko/talk-insane-cleaned/${String(index).padStart(2, '0')}.png`,
   ),
 );
 
@@ -99,7 +149,7 @@ export const TOUKO_INSANE_TALK_CLIP: CharacterAnimationClip = {
 
 export const TOUKO_INSANE_TAIL_BLINK_FRAMES = Array.from({ length: 14 }, (_, index) =>
   toukoInsaneAnimationAsset(
-    `assets/characters/animated/touko/tail-blink-insane/${String(index).padStart(2, '0')}.png`,
+    `assets/characters/animated/touko/tail-blink-insane-cleaned/${String(index).padStart(2, '0')}.png`,
   ),
 );
 
