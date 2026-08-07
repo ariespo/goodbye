@@ -93,11 +93,20 @@ def protected_component(points: list[tuple[int, int]], size: tuple[int, int]) ->
 
     # Preserve the central face and its small white facial/jewelry details.
     face_or_earring = min_x >= width * 0.30 and max_x <= width * 0.70 and min_y < height * 0.35
-    # Preserve the two large hand components.
-    hand = len(points) >= 1_000 and min_y >= height * 0.50
+    # Preserve the two large hand components plus the upper hand's finger
+    # segments. The black ink between its fingers splits the pale skin into
+    # several small white components, so an area-only rule mistakes those
+    # fingertips for trapped background.
+    large_hand = len(points) >= 1_000 and min_y >= height * 0.50
+    upper_hand_detail = (
+        min_x >= width * 0.38
+        and max_x <= width * 0.63
+        and min_y >= height * 0.62
+        and max_y <= height * 0.75
+    )
     # Preserve the bright belt buckle shared by all three poses.
     belt_buckle = min_x >= width * 0.53 and min_y >= height * 0.55 and max_y <= height * 0.66
-    return face_or_earring or hand or belt_buckle
+    return face_or_earring or large_hand or upper_hand_detail or belt_buckle
 
 
 def lies_in_hair_background_zone(points: list[tuple[int, int]], size: tuple[int, int]) -> bool:

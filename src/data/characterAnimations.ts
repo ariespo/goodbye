@@ -5,7 +5,7 @@ export type FumiAnimationId = 'idle' | 'talk' | 'fold';
 export type ToukoAnimationId = 'idle' | 'talk' | 'reset-cuff';
 
 const TOUKO_ANIMATION_ASSET_REVISION = '20260723-matted-cleaned-9-v1';
-const TOUKO_EMOTION_ANIMATION_ASSET_REVISION = '20260808-emotion-alpha-clean-v1';
+const TOUKO_EMOTION_ANIMATION_ASSET_REVISION = '20260808-emotion-alpha-clean-v2';
 const FUMI_ANIMATION_ASSET_REVISION = '20260725-matted-cleaned-9-v1';
 const FUMI_EMOTION_ASSET_REVISION = '20260807-fumi-emotion-v1';
 const toukoAnimationAsset = (path: string) =>
