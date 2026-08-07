@@ -42,13 +42,21 @@ function App() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        await initializeDatabase();
+        const dbReady = await initializeDatabase();
         const [settings, lorebooks, presets, chats] = await Promise.all([
           getSettings(),
           getLorebooks(),
           getPresets(),
           getChats(),
         ]);
+
+        if (!dbReady) {
+          actions.addNotification({
+            type: 'warning',
+            message: '浏览器存储不可用，已切换至临时内存模式（刷新后数据会丢失）',
+            duration: 6000,
+          });
+        }
 
         if (settings) {
           actions.setSettings(settings);

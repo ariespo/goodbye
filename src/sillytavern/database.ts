@@ -90,13 +90,98 @@ export class FarewellDatabase extends Dexie {
   }
 }
 
-export const db = new FarewellDatabase();
+interface TableLike<T> {
+  toArray(): Promise<T[]>;
+  put(item: T): Promise<void>;
+  add(item: T): Promise<string | number | undefined>;
+  delete(id: string | number): Promise<void>;
+  clear(): Promise<void>;
+  orderBy(field: keyof T): { reverse: () => { toArray: () => Promise<T[]> } };
+}
 
-export async function initializeDatabase(): Promise<void> {
-  await db.open();
-  const settings = await db.settings.toArray();
-  if (settings.length === 0) {
+interface StorageDatabase {
+  settings: TableLike<AppSettings>;
+  presets: TableLike<ChatPreset>;
+  lorebooks: TableLike<Lorebook>;
+  chats: TableLike<ChatSession>;
+  saves: TableLike<SaveSlot>;
+  open(): Promise<Dexie | void>;
+}
+
+class MemoryTable<T extends { id?: string | number }> implements TableLike<T> {
+  private items: T[] = [];
+
+  toArray(): Promise<T[]> {
+    return Promise.resolve([...this.items]);
+  }
+
+  async put(item: T): Promise<void> {
+    const id = (item as { id?: string | number }).id;
+    const index = id === undefined ? -1 : this.items.findIndex(i => i.id === id);
+    if (index >= 0) {
+      this.items[index] = item;
+    } else {
+      this.items.push(item);
+    }
+  }
+
+  async add(item: T): Promise<string | number | undefined> {
+    this.items.push(item);
+    return item.id;
+  }
+
+  async delete(id: string | number): Promise<void> {
+    this.items = this.items.filter(i => i.id !== id);
+  }
+
+  async clear(): Promise<void> {
+    this.items = [];
+  }
+
+  orderBy(field: keyof T): { reverse: () => { toArray: () => Promise<T[]> } } {
+    return {
+      reverse: () => ({
+        toArray: async () =>
+          [...this.items].sort((a, b) => {
+            const av = a[field] as number | undefined;
+            const bv = b[field] as number | undefined;
+            if (av === undefined || bv === undefined) return 0;
+            return bv - av;
+          }),
+      }),
+    };
+  }
+}
+
+class MemoryDatabase implements StorageDatabase {
+  settings = new MemoryTable<AppSettings>();
+  presets = new MemoryTable<ChatPreset>();
+  lorebooks = new MemoryTable<Lorebook>();
+  chats = new MemoryTable<ChatSession>();
+  saves = new MemoryTable<SaveSlot>();
+
+  async open(): Promise<void> {
+    // 内存数据库无需初始化
+  }
+}
+
+export let db: StorageDatabase = new FarewellDatabase();
+
+export async function initializeDatabase(): Promise<boolean> {
+  try {
+    await db.open();
+    const settings = await db.settings.toArray();
+    if (settings.length === 0) {
+      await db.settings.add(getDefaultSettings());
+    }
+    return true;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('IndexedDB 无法打开，切换到内存存储:', error);
+    db = new MemoryDatabase();
+    await db.open();
     await db.settings.add(getDefaultSettings());
+    return false;
   }
 }
 
