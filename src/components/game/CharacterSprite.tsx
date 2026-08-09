@@ -18,6 +18,9 @@ import {
   FUMI_SAD_TALK_FRAMES,
   FUMI_SAD_TAIL_BLINK,
   FUMI_TAIL_BLINKS,
+  OLD_MAN_CALM_TALK_CLIP,
+  OLD_MAN_CALM_TALK_FRAMES,
+  OLD_MAN_CALM_TAIL_BLINK,
   TOUKO_ANIMATION_CLIPS,
   TOUKO_ANGRY_TALK_CLIP,
   TOUKO_ANGRY_TALK_FRAMES,
@@ -79,6 +82,7 @@ export function CharacterSprite() {
   const toukoSad = mood === 'sad' && /^touko-sad(?:-normalized)?\.png$/i.test(sprite);
   const toukoAngry = mood === 'angry' && /^touko-angry(?:-normalized)?\.png$/i.test(sprite);
   const toukoInsane = mood === 'insane' && /^touko-insane(?:-normalized)?\.png$/i.test(sprite);
+  const oldManCalm = isCalm && /^old-man-(normal|calm)(?:-normalized)?\.png$/i.test(sprite);
   const fumiAnimationId = resolveFumiAnimation(currentLine?.animation, currentLine?.speaker ?? '');
   const toukoAnimationId = resolveToukoAnimation(currentLine?.animation, currentLine?.speaker ?? '');
   const animationClip = fumiHappy
@@ -99,7 +103,9 @@ export function CharacterSprite() {
                   ? TOUKO_INSANE_TALK_CLIP
                   : toukoCalm
                     ? TOUKO_ANIMATION_CLIPS[toukoAnimationId]
-                    : null;
+                    : oldManCalm
+                      ? OLD_MAN_CALM_TALK_CLIP
+                      : null;
   const tailBlink = fumiHappy
     ? FUMI_HAPPY_TAIL_BLINK
     : fumiSad
@@ -118,7 +124,9 @@ export function CharacterSprite() {
                   ? TOUKO_INSANE_TAIL_BLINK
                   : toukoCalm
                     ? TOUKO_TAIL_BLINKS[toukoAnimationId]
-                    : undefined;
+                    : oldManCalm
+                      ? OLD_MAN_CALM_TAIL_BLINK
+                      : undefined;
   const stopAfterCycle = fumiCalm
     ? fumiAnimationId === 'fold'
     : toukoCalm
@@ -138,7 +146,9 @@ export function CharacterSprite() {
               ? TOUKO_ANGRY_TALK_FRAMES[0]
               : toukoInsane
                 ? TOUKO_INSANE_TALK_FRAMES[0]
-                : src;
+                : oldManCalm
+                  ? OLD_MAN_CALM_TALK_FRAMES[0]
+                  : src;
 
 
 

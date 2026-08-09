@@ -12,6 +12,10 @@ import {
   FUMI_SAD_TALK_CLIP,
   FUMI_SAD_TALK_FRAMES,
   FUMI_SAD_TAIL_BLINK,
+  OLD_MAN_CALM_TALK_CLIP,
+  OLD_MAN_CALM_TALK_FRAMES,
+  OLD_MAN_CALM_TAIL_BLINK,
+  OLD_MAN_CALM_TAIL_BLINK_FRAMES,
   TOUKO_ANGRY_TALK_CLIP,
   TOUKO_ANGRY_TALK_FRAMES,
   TOUKO_ANGRY_TAIL_BLINK,
@@ -37,6 +41,41 @@ function pngSize(file: string): { width: number; height: number } {
     height: bytes.readUInt32BE(20),
   };
 }
+
+describe('Zhou Deming calm/default animation', () => {
+  const framePaths = Array.from({ length: 8 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/old-man/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 8 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the last frame, and reuses the same sequence for blinking', () => {
+    expect(OLD_MAN_CALM_TALK_FRAMES).toHaveLength(8);
+    expect(OLD_MAN_CALM_TALK_CLIP).toMatchObject({
+      src: OLD_MAN_CALM_TALK_FRAMES[0],
+      sources: OLD_MAN_CALM_TALK_FRAMES,
+      frames: 8,
+      frameMs: Array.from({ length: 8 }, () => 55),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 7,
+    });
+    expect(OLD_MAN_CALM_TAIL_BLINK_FRAMES).toBe(OLD_MAN_CALM_TALK_FRAMES);
+    expect(OLD_MAN_CALM_TAIL_BLINK).toMatchObject({
+      src: OLD_MAN_CALM_TALK_FRAMES[0],
+      sources: OLD_MAN_CALM_TALK_FRAMES,
+      frames: 8,
+      frameMs: Array.from({ length: 8 }, () => 55),
+    });
+  });
+});
 
 describe('Touko sad talk animation', () => {
   const framePaths = Array.from({ length: 12 }, (_, index) =>

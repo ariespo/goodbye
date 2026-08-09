@@ -8,6 +8,7 @@ const TOUKO_ANIMATION_ASSET_REVISION = '20260723-matted-cleaned-9-v1';
 const TOUKO_EMOTION_ANIMATION_ASSET_REVISION = '20260808-emotion-alpha-clean-v2';
 const FUMI_ANIMATION_ASSET_REVISION = '20260725-matted-cleaned-9-v1';
 const FUMI_EMOTION_ASSET_REVISION = '20260807-fumi-emotion-v1';
+const OLD_MAN_CALM_ANIMATION_ASSET_REVISION = '20260809-calm-alpha-clean-v1';
 const toukoAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_ANIMATION_ASSET_REVISION}`);
 const toukoEmotionAnimationAsset = (path: string) =>
@@ -16,6 +17,8 @@ const fumiAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${FUMI_ANIMATION_ASSET_REVISION}`);
 const fumiEmotionAsset = (path: string) =>
   assetUrl(`${path}?v=${FUMI_EMOTION_ASSET_REVISION}`);
+const oldManCalmAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${OLD_MAN_CALM_ANIMATION_ASSET_REVISION}`);
 const toukoMattedBlinkFrames = Array.from({ length: 9 }, (_, index) =>
   toukoAnimationAsset(
     `assets/characters/concepts/touko-blink-frames-user-v3-cleaned/matte_${String(index + 1).padStart(5, '0')}.png`,
@@ -26,6 +29,32 @@ const fumiMattedBlinkFrames = Array.from({ length: 9 }, (_, index) =>
     `assets/characters/concepts/fumi-blink-frames-user-v4-cleaned/matte_${String(index + 1).padStart(5, '0')}.png`,
   ),
 );
+
+export const OLD_MAN_CALM_TALK_FRAMES = Array.from({ length: 8 }, (_, index) =>
+  oldManCalmAnimationAsset(
+    `assets/characters/animated/old-man/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const OLD_MAN_CALM_TALK_CLIP: CharacterAnimationClip = {
+  src: OLD_MAN_CALM_TALK_FRAMES[0],
+  sources: OLD_MAN_CALM_TALK_FRAMES,
+  frames: OLD_MAN_CALM_TALK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_CALM_TALK_FRAMES.length }, () => 55),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: OLD_MAN_CALM_TALK_FRAMES.length - 1,
+};
+
+// The supplied calm/default sequence is also Zhou Deming's approved blink.
+export const OLD_MAN_CALM_TAIL_BLINK_FRAMES = OLD_MAN_CALM_TALK_FRAMES;
+
+export const OLD_MAN_CALM_TAIL_BLINK: CharacterBlinkClip = {
+  src: OLD_MAN_CALM_TAIL_BLINK_FRAMES[0],
+  sources: OLD_MAN_CALM_TAIL_BLINK_FRAMES,
+  frames: OLD_MAN_CALM_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_CALM_TAIL_BLINK_FRAMES.length }, () => 55),
+};
 
 // The approved first frame is Touko's canonical calm pose. A one-frame clip
 // settles onto it immediately; CharacterAnimationPlayer then runs the direct
