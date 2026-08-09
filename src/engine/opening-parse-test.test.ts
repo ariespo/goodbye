@@ -31,6 +31,15 @@ describe('opening storyline parse', () => {
     expect(scene.lines[toukoUnlockLine]?.text).toContain('商住楼');
     expect(scene.lines[oldManUnlockLine]?.text).toContain('周大爷');
     expect(scene.lines[oldManUnlockLine]?.text).toContain('旧楼');
+
+    const oldManGreeting = scene.lines.find((line) =>
+      line.text.includes('这么早就出门？雨大，走慢些。'),
+    );
+    expect(oldManGreeting).toMatchObject({
+      speaker: 'old-man',
+      emotion: 'happy',
+      character: 'old-man-happy.png',
+    });
   });
 
   it('shows Fumi as a memory before Touko and exercises the opening animations', () => {

@@ -9,6 +9,10 @@ const TOUKO_EMOTION_ANIMATION_ASSET_REVISION = '20260808-emotion-alpha-clean-v2'
 const FUMI_ANIMATION_ASSET_REVISION = '20260725-matted-cleaned-9-v1';
 const FUMI_EMOTION_ASSET_REVISION = '20260807-fumi-emotion-v1';
 const OLD_MAN_CALM_ANIMATION_ASSET_REVISION = '20260809-calm-alpha-clean-v1';
+const OLD_MAN_HAPPY_ANIMATION_ASSET_REVISION = '20260809-happy-alpha-clean-v1';
+const OLD_MAN_ANGRY_ANIMATION_ASSET_REVISION = '20260809-angry-alpha-clean-v1';
+const OLD_MAN_SAD_ANIMATION_ASSET_REVISION = '20260809-sad-alpha-clean-v1';
+const OLD_MAN_INSANE_ANIMATION_ASSET_REVISION = '20260810-insane-alpha-clean-v2';
 const toukoAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_ANIMATION_ASSET_REVISION}`);
 const toukoEmotionAnimationAsset = (path: string) =>
@@ -19,6 +23,14 @@ const fumiEmotionAsset = (path: string) =>
   assetUrl(`${path}?v=${FUMI_EMOTION_ASSET_REVISION}`);
 const oldManCalmAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${OLD_MAN_CALM_ANIMATION_ASSET_REVISION}`);
+const oldManHappyAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${OLD_MAN_HAPPY_ANIMATION_ASSET_REVISION}`);
+const oldManAngryAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${OLD_MAN_ANGRY_ANIMATION_ASSET_REVISION}`);
+const oldManSadAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${OLD_MAN_SAD_ANIMATION_ASSET_REVISION}`);
+const oldManInsaneAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${OLD_MAN_INSANE_ANIMATION_ASSET_REVISION}`);
 const toukoMattedBlinkFrames = Array.from({ length: 9 }, (_, index) =>
   toukoAnimationAsset(
     `assets/characters/concepts/touko-blink-frames-user-v3-cleaned/matte_${String(index + 1).padStart(5, '0')}.png`,
@@ -54,6 +66,114 @@ export const OLD_MAN_CALM_TAIL_BLINK: CharacterBlinkClip = {
   sources: OLD_MAN_CALM_TAIL_BLINK_FRAMES,
   frames: OLD_MAN_CALM_TAIL_BLINK_FRAMES.length,
   frameMs: Array.from({ length: OLD_MAN_CALM_TAIL_BLINK_FRAMES.length }, () => 55),
+};
+
+export const OLD_MAN_HAPPY_TALK_FRAMES = Array.from({ length: 14 }, (_, index) =>
+  oldManHappyAnimationAsset(
+    `assets/characters/animated/old-man/talk-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const OLD_MAN_HAPPY_TALK_CLIP: CharacterAnimationClip = {
+  src: OLD_MAN_HAPPY_TALK_FRAMES[0],
+  sources: OLD_MAN_HAPPY_TALK_FRAMES,
+  frames: OLD_MAN_HAPPY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_HAPPY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: OLD_MAN_HAPPY_TALK_FRAMES.length - 1,
+};
+
+export const OLD_MAN_HAPPY_TAIL_BLINK_FRAMES = Array.from({ length: 8 }, (_, index) =>
+  oldManHappyAnimationAsset(
+    `assets/characters/animated/old-man/tail-blink-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const OLD_MAN_HAPPY_TAIL_BLINK: CharacterBlinkClip = {
+  src: OLD_MAN_HAPPY_TAIL_BLINK_FRAMES[0],
+  sources: OLD_MAN_HAPPY_TAIL_BLINK_FRAMES,
+  frames: OLD_MAN_HAPPY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_HAPPY_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const OLD_MAN_ANGRY_TALK_FRAMES = Array.from({ length: 12 }, (_, index) =>
+  oldManAngryAnimationAsset(
+    `assets/characters/animated/old-man/talk-angry-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const OLD_MAN_ANGRY_TALK_CLIP: CharacterAnimationClip = {
+  src: OLD_MAN_ANGRY_TALK_FRAMES[0],
+  sources: OLD_MAN_ANGRY_TALK_FRAMES,
+  frames: OLD_MAN_ANGRY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_ANGRY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: OLD_MAN_ANGRY_TALK_FRAMES.length - 1,
+};
+
+export const OLD_MAN_ANGRY_TAIL_BLINK_FRAMES = OLD_MAN_ANGRY_TALK_FRAMES;
+
+export const OLD_MAN_ANGRY_TAIL_BLINK: CharacterBlinkClip = {
+  src: OLD_MAN_ANGRY_TAIL_BLINK_FRAMES[0],
+  sources: OLD_MAN_ANGRY_TAIL_BLINK_FRAMES,
+  frames: OLD_MAN_ANGRY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_ANGRY_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const OLD_MAN_SAD_TALK_FRAMES = Array.from({ length: 15 }, (_, index) =>
+  oldManSadAnimationAsset(
+    `assets/characters/animated/old-man/talk-sad-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const OLD_MAN_SAD_TALK_CLIP: CharacterAnimationClip = {
+  src: OLD_MAN_SAD_TALK_FRAMES[0],
+  sources: OLD_MAN_SAD_TALK_FRAMES,
+  frames: OLD_MAN_SAD_TALK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_SAD_TALK_FRAMES.length }, () => 55),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: OLD_MAN_SAD_TALK_FRAMES.length - 1,
+};
+
+export const OLD_MAN_SAD_TAIL_BLINK_FRAMES = OLD_MAN_SAD_TALK_FRAMES;
+
+export const OLD_MAN_SAD_TAIL_BLINK: CharacterBlinkClip = {
+  src: OLD_MAN_SAD_TAIL_BLINK_FRAMES[0],
+  sources: OLD_MAN_SAD_TAIL_BLINK_FRAMES,
+  frames: OLD_MAN_SAD_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_SAD_TAIL_BLINK_FRAMES.length }, () => 55),
+};
+
+export const OLD_MAN_INSANE_TALK_FRAMES = Array.from({ length: 13 }, (_, index) =>
+  oldManInsaneAnimationAsset(
+    `assets/characters/animated/old-man/talk-insane-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const OLD_MAN_INSANE_TALK_CLIP: CharacterAnimationClip = {
+  src: OLD_MAN_INSANE_TALK_FRAMES[0],
+  sources: OLD_MAN_INSANE_TALK_FRAMES,
+  frames: OLD_MAN_INSANE_TALK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_INSANE_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: OLD_MAN_INSANE_TALK_FRAMES.length - 1,
+};
+
+export const OLD_MAN_INSANE_TAIL_BLINK_FRAMES = Array.from({ length: 18 }, (_, index) =>
+  oldManInsaneAnimationAsset(
+    `assets/characters/animated/old-man/tail-blink-insane-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const OLD_MAN_INSANE_TAIL_BLINK: CharacterBlinkClip = {
+  src: OLD_MAN_INSANE_TAIL_BLINK_FRAMES[0],
+  sources: OLD_MAN_INSANE_TAIL_BLINK_FRAMES,
+  frames: OLD_MAN_INSANE_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: OLD_MAN_INSANE_TAIL_BLINK_FRAMES.length }, () => 42),
 };
 
 // The approved first frame is Touko's canonical calm pose. A one-frame clip

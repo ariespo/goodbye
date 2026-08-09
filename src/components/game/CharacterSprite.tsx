@@ -18,9 +18,21 @@ import {
   FUMI_SAD_TALK_FRAMES,
   FUMI_SAD_TAIL_BLINK,
   FUMI_TAIL_BLINKS,
+  OLD_MAN_ANGRY_TALK_CLIP,
+  OLD_MAN_ANGRY_TALK_FRAMES,
+  OLD_MAN_ANGRY_TAIL_BLINK,
   OLD_MAN_CALM_TALK_CLIP,
   OLD_MAN_CALM_TALK_FRAMES,
   OLD_MAN_CALM_TAIL_BLINK,
+  OLD_MAN_HAPPY_TALK_CLIP,
+  OLD_MAN_HAPPY_TALK_FRAMES,
+  OLD_MAN_HAPPY_TAIL_BLINK,
+  OLD_MAN_INSANE_TALK_CLIP,
+  OLD_MAN_INSANE_TALK_FRAMES,
+  OLD_MAN_INSANE_TAIL_BLINK,
+  OLD_MAN_SAD_TALK_CLIP,
+  OLD_MAN_SAD_TALK_FRAMES,
+  OLD_MAN_SAD_TAIL_BLINK,
   TOUKO_ANIMATION_CLIPS,
   TOUKO_ANGRY_TALK_CLIP,
   TOUKO_ANGRY_TALK_FRAMES,
@@ -82,7 +94,14 @@ export function CharacterSprite() {
   const toukoSad = mood === 'sad' && /^touko-sad(?:-normalized)?\.png$/i.test(sprite);
   const toukoAngry = mood === 'angry' && /^touko-angry(?:-normalized)?\.png$/i.test(sprite);
   const toukoInsane = mood === 'insane' && /^touko-insane(?:-normalized)?\.png$/i.test(sprite);
-  const oldManCalm = isCalm && /^old-man-(normal|calm)(?:-normalized)?\.png$/i.test(sprite);
+  // Zhou Deming's retired horror portrait may still exist in old saves. Both
+  // that legacy id and newly parsed horror lines use the current calm animation.
+  const oldManCalm = (isCalm || mood === 'horror')
+    && /^old-man-(normal|calm|horror)(?:-normalized)?\.png$/i.test(sprite);
+  const oldManHappy = mood === 'happy' && /^old-man-happy(?:-normalized)?\.png$/i.test(sprite);
+  const oldManAngry = mood === 'angry' && /^old-man-angry(?:-normalized)?\.png$/i.test(sprite);
+  const oldManSad = mood === 'sad' && /^old-man-sad(?:-normalized)?\.png$/i.test(sprite);
+  const oldManInsane = mood === 'insane' && /^old-man-insane(?:-normalized)?\.png$/i.test(sprite);
   const fumiAnimationId = resolveFumiAnimation(currentLine?.animation, currentLine?.speaker ?? '');
   const toukoAnimationId = resolveToukoAnimation(currentLine?.animation, currentLine?.speaker ?? '');
   const animationClip = fumiHappy
@@ -105,7 +124,15 @@ export function CharacterSprite() {
                     ? TOUKO_ANIMATION_CLIPS[toukoAnimationId]
                     : oldManCalm
                       ? OLD_MAN_CALM_TALK_CLIP
-                      : null;
+                      : oldManHappy
+                        ? OLD_MAN_HAPPY_TALK_CLIP
+                        : oldManAngry
+                          ? OLD_MAN_ANGRY_TALK_CLIP
+                          : oldManSad
+                            ? OLD_MAN_SAD_TALK_CLIP
+                            : oldManInsane
+                              ? OLD_MAN_INSANE_TALK_CLIP
+                              : null;
   const tailBlink = fumiHappy
     ? FUMI_HAPPY_TAIL_BLINK
     : fumiSad
@@ -126,7 +153,15 @@ export function CharacterSprite() {
                     ? TOUKO_TAIL_BLINKS[toukoAnimationId]
                     : oldManCalm
                       ? OLD_MAN_CALM_TAIL_BLINK
-                      : undefined;
+                      : oldManHappy
+                        ? OLD_MAN_HAPPY_TAIL_BLINK
+                        : oldManAngry
+                          ? OLD_MAN_ANGRY_TAIL_BLINK
+                        : oldManSad
+                          ? OLD_MAN_SAD_TAIL_BLINK
+                          : oldManInsane
+                            ? OLD_MAN_INSANE_TAIL_BLINK
+                            : undefined;
   const stopAfterCycle = fumiCalm
     ? fumiAnimationId === 'fold'
     : toukoCalm
@@ -148,7 +183,15 @@ export function CharacterSprite() {
                 ? TOUKO_INSANE_TALK_FRAMES[0]
                 : oldManCalm
                   ? OLD_MAN_CALM_TALK_FRAMES[0]
-                  : src;
+                  : oldManHappy
+                    ? OLD_MAN_HAPPY_TALK_FRAMES[0]
+                    : oldManAngry
+                      ? OLD_MAN_ANGRY_TALK_FRAMES[0]
+                      : oldManSad
+                        ? OLD_MAN_SAD_TALK_FRAMES[0]
+                        : oldManInsane
+                          ? OLD_MAN_INSANE_TALK_FRAMES[0]
+                          : src;
 
 
 

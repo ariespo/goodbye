@@ -22,13 +22,6 @@ export const characterCatalog: CharacterCatalogEntry[] = [
     tags: ['old-man', 'happy'],
   },
   {
-    id: 'old-man-horror',
-    file: 'old-man-horror.png',
-    displayName: '周德明空白脸',
-    description: '祭坛前或真相暴露时的空白脸。',
-    tags: ['old-man', 'horror', 'truth'],
-  },
-  {
     id: 'detective-a-normal',
     file: 'detective-a-normal.png',
     displayName: '侦探A赵刚',

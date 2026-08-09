@@ -12,10 +12,26 @@ import {
   FUMI_SAD_TALK_CLIP,
   FUMI_SAD_TALK_FRAMES,
   FUMI_SAD_TAIL_BLINK,
+  OLD_MAN_ANGRY_TALK_CLIP,
+  OLD_MAN_ANGRY_TALK_FRAMES,
+  OLD_MAN_ANGRY_TAIL_BLINK,
+  OLD_MAN_ANGRY_TAIL_BLINK_FRAMES,
   OLD_MAN_CALM_TALK_CLIP,
   OLD_MAN_CALM_TALK_FRAMES,
   OLD_MAN_CALM_TAIL_BLINK,
   OLD_MAN_CALM_TAIL_BLINK_FRAMES,
+  OLD_MAN_HAPPY_TALK_CLIP,
+  OLD_MAN_HAPPY_TALK_FRAMES,
+  OLD_MAN_HAPPY_TAIL_BLINK,
+  OLD_MAN_HAPPY_TAIL_BLINK_FRAMES,
+  OLD_MAN_INSANE_TALK_CLIP,
+  OLD_MAN_INSANE_TALK_FRAMES,
+  OLD_MAN_INSANE_TAIL_BLINK,
+  OLD_MAN_INSANE_TAIL_BLINK_FRAMES,
+  OLD_MAN_SAD_TALK_CLIP,
+  OLD_MAN_SAD_TALK_FRAMES,
+  OLD_MAN_SAD_TAIL_BLINK,
+  OLD_MAN_SAD_TAIL_BLINK_FRAMES,
   TOUKO_ANGRY_TALK_CLIP,
   TOUKO_ANGRY_TALK_FRAMES,
   TOUKO_ANGRY_TAIL_BLINK,
@@ -73,6 +89,164 @@ describe('Zhou Deming calm/default animation', () => {
       sources: OLD_MAN_CALM_TALK_FRAMES,
       frames: 8,
       frameMs: Array.from({ length: 8 }, () => 55),
+    });
+  });
+});
+
+describe('Zhou Deming angry animation', () => {
+  const framePaths = Array.from({ length: 12 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/old-man/talk-angry-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 12 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the last frame, and reuses the same sequence for blinking', () => {
+    expect(OLD_MAN_ANGRY_TALK_FRAMES).toHaveLength(12);
+    expect(OLD_MAN_ANGRY_TALK_CLIP).toMatchObject({
+      src: OLD_MAN_ANGRY_TALK_FRAMES[0],
+      sources: OLD_MAN_ANGRY_TALK_FRAMES,
+      frames: 12,
+      frameMs: Array.from({ length: 12 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 11,
+    });
+    expect(OLD_MAN_ANGRY_TAIL_BLINK_FRAMES).toBe(OLD_MAN_ANGRY_TALK_FRAMES);
+    expect(OLD_MAN_ANGRY_TAIL_BLINK).toMatchObject({
+      src: OLD_MAN_ANGRY_TALK_FRAMES[0],
+      sources: OLD_MAN_ANGRY_TALK_FRAMES,
+      frames: 12,
+      frameMs: Array.from({ length: 12 }, () => 42),
+    });
+  });
+});
+
+describe('Zhou Deming sad animation', () => {
+  const framePaths = Array.from({ length: 15 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/old-man/talk-sad-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 15 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the last frame, and reuses the same sequence for blinking', () => {
+    expect(OLD_MAN_SAD_TALK_FRAMES).toHaveLength(15);
+    expect(OLD_MAN_SAD_TALK_CLIP).toMatchObject({
+      src: OLD_MAN_SAD_TALK_FRAMES[0],
+      sources: OLD_MAN_SAD_TALK_FRAMES,
+      frames: 15,
+      frameMs: Array.from({ length: 15 }, () => 55),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 14,
+    });
+    expect(OLD_MAN_SAD_TAIL_BLINK_FRAMES).toBe(OLD_MAN_SAD_TALK_FRAMES);
+    expect(OLD_MAN_SAD_TAIL_BLINK).toMatchObject({
+      src: OLD_MAN_SAD_TALK_FRAMES[0],
+      sources: OLD_MAN_SAD_TALK_FRAMES,
+      frames: 15,
+      frameMs: Array.from({ length: 15 }, () => 55),
+    });
+  });
+});
+
+describe('Zhou Deming insane animation', () => {
+  const framePaths = Array.from({ length: 13 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/old-man/talk-insane-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+  const blinkPaths = Array.from({ length: 18 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/old-man/tail-blink-insane-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 13 }, () => ({ width: 430, height: 606 })),
+    );
+    expect(blinkPaths.map(pngSize)).toEqual(
+      Array.from({ length: 18 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the last frame, and uses the supplied blink sequence', () => {
+    expect(OLD_MAN_INSANE_TALK_FRAMES).toHaveLength(13);
+    expect(OLD_MAN_INSANE_TALK_CLIP).toMatchObject({
+      src: OLD_MAN_INSANE_TALK_FRAMES[0],
+      sources: OLD_MAN_INSANE_TALK_FRAMES,
+      frames: 13,
+      frameMs: Array.from({ length: 13 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 12,
+    });
+    expect(OLD_MAN_INSANE_TAIL_BLINK_FRAMES).not.toBe(OLD_MAN_INSANE_TALK_FRAMES);
+    expect(OLD_MAN_INSANE_TAIL_BLINK).toMatchObject({
+      src: OLD_MAN_INSANE_TAIL_BLINK_FRAMES[0],
+      sources: OLD_MAN_INSANE_TAIL_BLINK_FRAMES,
+      frames: 18,
+      frameMs: Array.from({ length: 18 }, () => 42),
+    });
+  });
+});
+
+describe('Zhou Deming happy animation', () => {
+  const framePaths = Array.from({ length: 14 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/old-man/talk-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+  const blinkPaths = Array.from({ length: 8 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/old-man/tail-blink-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 14 }, () => ({ width: 430, height: 606 })),
+    );
+    expect(blinkPaths.map(pngSize)).toEqual(
+      Array.from({ length: 8 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the last frame, and uses the supplied blink sequence', () => {
+    expect(OLD_MAN_HAPPY_TALK_FRAMES).toHaveLength(14);
+    expect(OLD_MAN_HAPPY_TALK_CLIP).toMatchObject({
+      src: OLD_MAN_HAPPY_TALK_FRAMES[0],
+      sources: OLD_MAN_HAPPY_TALK_FRAMES,
+      frames: 14,
+      frameMs: Array.from({ length: 14 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 13,
+    });
+    expect(OLD_MAN_HAPPY_TAIL_BLINK_FRAMES).not.toBe(OLD_MAN_HAPPY_TALK_FRAMES);
+    expect(OLD_MAN_HAPPY_TAIL_BLINK).toMatchObject({
+      src: OLD_MAN_HAPPY_TAIL_BLINK_FRAMES[0],
+      sources: OLD_MAN_HAPPY_TAIL_BLINK_FRAMES,
+      frames: 8,
+      frameMs: Array.from({ length: 8 }, () => 42),
     });
   });
 });

@@ -275,7 +275,7 @@ const EMOTION_SPRITES: Mood[] = ['angry', 'happy', 'horror', 'insane', 'sad'];
 const SPRITE_EMOTIONS_BY_BASE: Record<string, Mood[]> = {
   fumi: EMOTION_SPRITES,
   touko: EMOTION_SPRITES,
-  'old-man': ['happy', 'horror'],
+  'old-man': ['angry', 'happy', 'insane', 'sad'],
   'detective-a': ['sad'],
   'detective-b': ['angry'],
 };

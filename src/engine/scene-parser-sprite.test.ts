@@ -58,10 +58,19 @@ describe('emotion sprite mapping', () => {
   });
 
   it('maps old man aliases to available emotion sprites', () => {
-    const horrorScene = maintextToScene('对话|周德明|horror|你看见了。');
-    expect(horrorScene.lines[0].character).toBe('old-man-horror.png');
+    const angryScene = maintextToScene('对话|周德明|angry|别再问了。');
+    expect(angryScene.lines[0].character).toBe('old-man-angry.png');
 
-    const normalScene = maintextToScene('对话|老头|sad|唉。');
+    const sadScene = maintextToScene('对话|周德明|sad|是我没能救她。');
+    expect(sadScene.lines[0].character).toBe('old-man-sad.png');
+
+    const insaneScene = maintextToScene('对话|周德明|insane|轮到你了。');
+    expect(insaneScene.lines[0].character).toBe('old-man-insane.png');
+
+    const horrorScene = maintextToScene('对话|周德明|horror|你看见了。');
+    expect(horrorScene.lines[0].character).toBe('old-man-normal.png');
+
+    const normalScene = maintextToScene('对话|老头|calm|唉。');
     expect(normalScene.lines[0].character).toBe('old-man-normal.png');
   });
 
