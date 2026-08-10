@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   FUMI_ANIMATION_CLIPS,
   FUMI_TAIL_BLINKS,
+  OLD_MAN_CALM_TAIL_BLINK,
+  OLD_MAN_CALM_TALK_CLIP,
   TOUKO_ANIMATION_CLIPS,
   TOUKO_TAIL_BLINKS,
 } from '../../data/characterAnimations';
@@ -40,7 +42,8 @@ export function CharacterProfileModal() {
     : '';
   const isToukoProfile = selected?.id === 'touko' && /^touko-(normal|calm)\.png$/i.test(selectedPortrait);
   const isFumiProfile = selected?.id === 'fumi' && /^fumi-(normal|calm)\.png$/i.test(selectedPortrait);
-  const usesAnimatedProfile = isToukoProfile || isFumiProfile;
+  const isOldManProfile = selected?.id === 'old-man' && /^old-man-(normal|calm)\.png$/i.test(selectedPortrait);
+  const usesAnimatedProfile = isToukoProfile || isFumiProfile || isOldManProfile;
 
   return (
     <div
@@ -114,9 +117,17 @@ export function CharacterProfileModal() {
               {usesAnimatedProfile && (
                 <CharacterAnimationPlayer
                   key={selected.id}
-                  clip={isFumiProfile ? FUMI_ANIMATION_CLIPS.idle : TOUKO_ANIMATION_CLIPS.idle}
+                  clip={isFumiProfile
+                    ? FUMI_ANIMATION_CLIPS.idle
+                    : isToukoProfile
+                      ? TOUKO_ANIMATION_CLIPS.idle
+                      : OLD_MAN_CALM_TALK_CLIP}
                   fallbackSrc={selectedPortraitSrc}
-                  tailBlink={isFumiProfile ? FUMI_TAIL_BLINKS.idle : TOUKO_TAIL_BLINKS.idle}
+                  tailBlink={isFumiProfile
+                    ? FUMI_TAIL_BLINKS.idle
+                    : isToukoProfile
+                      ? TOUKO_TAIL_BLINKS.idle
+                      : OLD_MAN_CALM_TAIL_BLINK}
                   className="h-full w-full"
                   style={{ imageRendering: 'pixelated' }}
                 />

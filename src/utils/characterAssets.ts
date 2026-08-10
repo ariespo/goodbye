@@ -1,5 +1,7 @@
-const NORMALIZED_SPRITES: Record<string, string> = {
-  'fumi-angry.png': 'fumi-angry-normalized.png',
+const NORMALIZED_SPRITES: Record<string, string> = {
+  'detective-a-normal.png': 'detective-a-normal-v8.png',
+  'detective-b-normal.png': 'detective-b-normal-v7.png',
+  'fumi-angry.png': 'fumi-angry-normalized.png',
   'fumi-happy.png': 'fumi-happy-normalized.png',
   'fumi-horror.png': 'fumi-horror-normalized.png',
   'fumi-insane.png': 'fumi-insane-normalized.png',
@@ -18,6 +20,7 @@ export function resolveCharacterSprite(character: string): string {
 export function characterCanvasSize(character: string): { width: number; height: number } {
   const sprite = resolveCharacterSprite(character);
   if (sprite.startsWith('fumi-') || sprite.startsWith('touko-')) return { width: 430, height: 606 };
+  if (sprite.startsWith('detective-a-') || sprite.startsWith('detective-b-')) return { width: 430, height: 606 };
   if (sprite === 'chen-huihui-normal.png') return { width: 341, height: 606 };
   if (sprite === 'liu-renguang-normal.png') return { width: 404, height: 606 };
   return { width: 412, height: 606 };
