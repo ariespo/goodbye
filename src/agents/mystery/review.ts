@@ -69,9 +69,113 @@ export function ensureSaturationPivotOrder(plan: DirectorPlan, brief: MysteryBri
   };
 }
 
+/** 将确定性场景契约落实为导演节拍；只补角色与地点，不新增案件事实。 */
+export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
+  const contract = brief.sceneContract;
+  if (!contract) return plan;
+  const forbidden = new Set(contract.forbiddenNpcIds);
+  let beats = plan.beats.map(beat => ({
+    ...beat,
+    speakerIds: beat.speakerIds?.filter(id => !forbidden.has(id)),
+  }));
+
+  const destinationIndex = beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
+  const destinationSpeakers = contract.requiredDestinationNpcIds;
+  if (destinationIndex >= 0) {
+    const beat = beats[destinationIndex];
+    beats[destinationIndex] = {
+      ...beat,
+      speakerIds: [...new Set([...(beat.speakerIds ?? []), ...destinationSpeakers])],
+      description: beat.description.includes(contract.directive)
+        ? beat.description
+        : `${beat.description} ${contract.directive}`,
+    };
+  } else {
+    beats.push({
+      id: 'scene-contract-destination',
+      purpose: '抵达目的地并由固定在场人物承接剧情',
+      description: contract.directive,
+      locationId: contract.destinationLocationId,
+      speakerIds: destinationSpeakers,
+    });
+  }
+
+  const missingEnRoute = contract.requiredEnRouteNpcIds.filter(
+    npcId => !beats.some(beat => beat.speakerIds?.includes(npcId)),
+  );
+  if (missingEnRoute.length > 0) {
+    beats = [{
+      id: 'scene-contract-en-route',
+      purpose: '在前往目的地途中落实固定概率遭遇',
+      description: '玩家先在暴雨街道途中遇到本回合已确定的在途人物；只按其公开身份进行短暂而有后果的互动，然后继续前往目的地。',
+      locationId: 'street',
+      speakerIds: missingEnRoute,
+    }, ...beats];
+  }
+  const forbiddenKnowledgeEvents = new Set(contract.forbiddenKnowledgeEventIds);
+  const knowledgeEvents = (plan.knowledgeEvents ?? [])
+    .filter(item => !forbiddenKnowledgeEvents.has(item.eventId));
+  for (const required of contract.requiredKnowledgeEvents) {
+    if (!knowledgeEvents.some(item => item.eventId === required.eventId)) knowledgeEvents.push(required);
+  }
+  return { ...plan, beats, knowledgeEvents };
+}
+
 export function reviewDirectorPlan(plan: DirectorPlan, brief: MysteryBrief): FactReview {
   const violations: FactReviewViolation[] = [];
   const seen = new Set<string>();
+
+  if (brief.sceneContract) {
+    const contract = brief.sceneContract;
+    const destinationIndex = plan.beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
+    if (destinationIndex < 0) {
+      violations.push({
+        code: 'scene-contract-violation',
+        message: `beats 必须明确抵达目的地 ${contract.destinationLocationId}。`,
+      });
+    }
+    for (const npcId of contract.requiredDestinationNpcIds) {
+      if (!plan.beats.some(beat => beat.locationId === contract.destinationLocationId && beat.speakerIds?.includes(npcId))) {
+        violations.push({
+          code: 'scene-contract-violation',
+          message: `目的地 ${contract.destinationLocationId} 必须由 ${npcId} 实际参与剧情，不能用泛称或临时 NPC 替代。`,
+        });
+      }
+    }
+    for (const npcId of contract.requiredEnRouteNpcIds) {
+      const encounterIndex = plan.beats.findIndex(beat => beat.locationId === 'street' && beat.speakerIds?.includes(npcId));
+      if (encounterIndex < 0 || (destinationIndex >= 0 && encounterIndex >= destinationIndex)) {
+        violations.push({
+          code: 'scene-contract-violation',
+          message: `在抵达目的地前，必须先在 street 安排 ${npcId} 的途中遭遇。`,
+        });
+      }
+    }
+    for (const npcId of contract.forbiddenNpcIds) {
+      if (plan.beats.some(beat => beat.speakerIds?.includes(npcId))) {
+        violations.push({
+          code: 'scene-contract-violation',
+          message: `当前进入条件不成立，禁止安排 ${npcId} 出场。`,
+        });
+      }
+    }
+    for (const required of contract.requiredKnowledgeEvents) {
+      if (!(plan.knowledgeEvents ?? []).some(item => item.eventId === required.eventId)) {
+        violations.push({
+          code: 'scene-contract-violation',
+          message: `本场景必须在正文证据后提交认知事件 ${required.eventId}。`,
+        });
+      }
+    }
+    for (const eventId of contract.forbiddenKnowledgeEventIds) {
+      if ((plan.knowledgeEvents ?? []).some(item => item.eventId === eventId)) {
+        violations.push({
+          code: 'scene-contract-violation',
+          message: `本场景不得更新尚未被玩家确认的认知事件 ${eventId}。`,
+        });
+      }
+    }
+  }
 
   if (brief.saturationPivot) {
     const pivot = brief.saturationPivot;
@@ -297,10 +401,15 @@ export function buildWriterPacket(plan: DirectorPlan, brief: MysteryBrief): Writ
       '不得让 NPC 说出其授权范围外的信息。',
       '不得新增关键证据、凶手、动机、死因或时间线节点。',
       ...brief.playerPresentation.namingRules,
+      ...(brief.npcPlayerKnowledge ?? []).map(item => item.knowsPlayerName
+        ? `${item.npcId} 称呼玩家时只可使用“${item.allowedAddress}”。`
+        : `${item.npcId} 不知道玩家姓名，不得说出或猜中姓名。`),
       'authorizedKnowledgeEvents 中的新人或新地点只能在 evidence 所描述的玩家可见事件发生后，才可使用新称呼或地址。',
     ],
     playerPresentation: brief.playerPresentation,
     characterPerformances: brief.characterPerformances,
+    npcPlayerKnowledge: brief.npcPlayerKnowledge,
+    sceneContract: brief.sceneContract,
     saturationPivot: brief.saturationPivot,
   };
 }

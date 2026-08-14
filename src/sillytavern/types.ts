@@ -172,6 +172,8 @@ export interface AppSettings {
   api: ApiSettings;
   characterName: string;
   userName: string;
+  playerGender?: 'male' | 'female';
+  playerIdentityConfirmed?: boolean;
   activePresetId: string | null;
   activeLorebookIds: string[];
   uiMode: 'game' | 'chat';
@@ -474,6 +476,8 @@ export interface SceneLine {
   knowledgeEvents?: string[];
   /** 剧情要求该行的角色动作完整播放时，推进前至少停留的毫秒数。 */
   minimumDisplayMs?: number;
+  /** 该行播放完成并由玩家推进时，必须先完成开场身份确认。 */
+  playerIdentityPrompt?: boolean;
 }
 
 export interface StorylineData {

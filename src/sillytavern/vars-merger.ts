@@ -2,6 +2,7 @@ const UNIQUE_ARRAY_KEYS = new Set([
   'unlockedClues',
   'organizedClues',
   'knowledgeEvents',
+  'playerNameKnownByNpcIds',
   'routesLockedEver',
   'cultClues',
   'worldGlitchClues',
@@ -89,6 +90,8 @@ export const DEFAULT_GAME_VARIABLES: Record<string, any> = {
   unlockedClues: [],
   organizedClues: [],
   knowledgeEvents: ['know:home', 'know:school', 'know:supermarket'],
+  /** 除固定熟人外，后续通过明确自我介绍得知玩家姓名的 NPC。由程序事件维护。 */
+  playerNameKnownByNpcIds: [],
   // 三层结局体系
   lockedRoute: null,
   overlay: null,

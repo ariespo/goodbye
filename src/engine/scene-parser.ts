@@ -168,6 +168,12 @@ export function maintextToScene(maintext: string, options: SceneParseOptions = {
       continue;
     }
 
+    if (head === '身份确认' || head === 'identity-prompt') {
+      const previousLine = lines[lines.length - 1];
+      if (previousLine) previousLine.playerIdentityPrompt = true;
+      continue;
+    }
+
     if (head === '对话' || head === 'dialog' || head === 'dialogue') {
       const speaker = fields[1] || '旁白';
       const requestedEmotion = normalizeEmotion(fields[2]);
@@ -251,6 +257,7 @@ export function mergeParsedIntoScene(
 
 const SPEAKER_SPRITE_MAP: Record<string, string> = {
   陈慧慧: 'chen-huihui',
+  店员: 'chen-huihui',
   便利店员: 'chen-huihui',
   'chen-huihui': 'chen-huihui',
   刘仁光: 'liu-renguang',
@@ -274,9 +281,15 @@ const SPEAKER_SPRITE_MAP: Record<string, string> = {
   'old-man': 'old-man',
   侦探A: 'detective-a',
   赵刚: 'detective-a',
+  寸头男人: 'detective-a',
+  货车司机: 'detective-a',
+  陌生货车司机: 'detective-a',
   'detective-a': 'detective-a',
   侦探B: 'detective-b',
   林静: 'detective-b',
+  护士: 'detective-b',
+  陌生护士: 'detective-b',
+  新来的护士: 'detective-b',
   'detective-b': 'detective-b',
   文穗不在场: 'fumi-gone.png',
   文穗剪影: 'fumi-silhouette.png',

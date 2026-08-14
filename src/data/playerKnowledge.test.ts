@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addPresentedAuthorizedKnowledgeEvents,
   buildPlayerKnowledgeBrief,
   getLocationPresentation,
   getPlayerEntities,
@@ -10,6 +11,19 @@ import {
 } from './playerKnowledge';
 
 describe('player knowledge projection', () => {
+  it('persists only knowledge events that were both authorized and presented in the scene', () => {
+    expect(addPresentedAuthorizedKnowledgeEvents(
+      [],
+      ['meet:chen-huihui', 'identify:lin-jing-name'],
+      ['meet:chen-huihui'],
+    )).toContain('meet:chen-huihui');
+    expect(addPresentedAuthorizedKnowledgeEvents(
+      [],
+      ['meet:chen-huihui', 'identify:lin-jing-name'],
+      ['meet:chen-huihui'],
+    )).not.toContain('identify:lin-jing-name');
+  });
+
   it('starts with only locations the player can reasonably know', () => {
     const visible = getVisibleLocationPresentations({ location: 'home', knowledgeEvents: [] });
     expect(visible.map(location => location.id)).toEqual(['home', 'school', 'supermarket']);

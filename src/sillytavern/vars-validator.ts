@@ -43,6 +43,7 @@ const PROGRAM_OWNED_KEYS = new Set([
   'routesLockedEver',
   'endingsSeen',
   'knowledgeEvents',
+  'playerNameKnownByNpcIds',
   'lockedRoute',
   'overlay',
   'finalChoice',

@@ -20,7 +20,13 @@ import {
   PACING_CRITIC_SYSTEM_PROMPT,
   WRITER_SYSTEM_PROMPT,
 } from './prompts';
-import { buildWriterPacket, ensureSaturationPivotOrder, removeConfessionBySilence, reviewDirectorPlan } from './review';
+import {
+  buildWriterPacket,
+  enforceNarrativeSceneContract,
+  ensureSaturationPivotOrder,
+  removeConfessionBySilence,
+  reviewDirectorPlan,
+} from './review';
 import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
 import type { DirectorPlan, FactReview, MysteryBrief, TruthContext, WriterPacket } from './types';
 import { selectSaturationPivot } from './saturation-pivot';
@@ -407,6 +413,7 @@ async function runMysteryPipeline(
     DIRECTOR_PLAN_RESPONSE_FORMAT,
     parseDirectorPlan,
   ));
+  directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
   observe.setDirectorPlan(directorPlan);
   let hardReview = await timeStage('hard-review', () => reviewDirectorPlan(directorPlan, brief));
   observe.setHardReview(hardReview);
@@ -419,6 +426,7 @@ async function runMysteryPipeline(
       { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
       { role: 'user', content: repairPrompt(brief, rejectedPlan, rejectedReview) },
     ], { temperature: 0.1, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT, parseDirectorPlan));
+    directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
     observe.setDirectorPlan(directorPlan);
     hardReview = await timeStage('hard-review-retry', () => reviewDirectorPlan(directorPlan, brief));
     observe.setHardReview(hardReview);
@@ -435,6 +443,14 @@ async function runMysteryPipeline(
     directorAttempts += 1;
     observe.setDirectorAttempts(directorAttempts);
     directorPlan = await timeStage('director-repair-final', () => removeConfessionBySilence(directorPlan, brief));
+    observe.setDirectorPlan(directorPlan);
+    hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief));
+    observe.setHardReview(hardReview);
+  }
+  if (!hardReview.approved && hardReview.violations.every(item => item.code === 'scene-contract-violation')) {
+    directorAttempts += 1;
+    observe.setDirectorAttempts(directorAttempts);
+    directorPlan = await timeStage('director-repair-final', () => enforceNarrativeSceneContract(directorPlan, brief));
     observe.setDirectorPlan(directorPlan);
     hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief));
     observe.setHardReview(hardReview);
@@ -484,6 +500,7 @@ async function runMysteryPipeline(
         { role: 'user', content: repairPrompt(brief, directorPlan, combinedReview) },
       ], { temperature: 0.05, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT, parseDirectorPlan));
       directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
+      directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
       observe.setDirectorPlan(directorPlan);
       hardReview = await timeStage('hard-review-after-semantic-repair', () => reviewDirectorPlan(directorPlan, brief));
       observe.setHardReview(hardReview);
@@ -520,6 +537,7 @@ async function runMysteryPipeline(
           { role: 'user', content: repairPrompt(brief, directorPlan, finalCombinedReview) },
         ], { temperature: 0, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT, parseDirectorPlan));
         directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
+        directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
         observe.setDirectorPlan(directorPlan);
         hardReview = await timeStage('hard-review-after-semantic-final', () => reviewDirectorPlan(directorPlan, brief));
         observe.setHardReview(hardReview);

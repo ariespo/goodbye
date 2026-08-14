@@ -69,7 +69,7 @@ const STATE_AGENT_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 - 可写字段：stamina、sanity、location、suspicion.*、affinity.*、investigation.*、
   organizedClues。
 - 禁止写入：time、cycleCount、stayStreak、stayedEver、routesLockedEver、endingsSeen、
-  knowledgeEvents、mysteryKnowledge、unlockedClues、deathNews、tripProgress、cultClues、
+  knowledgeEvents、playerNameKnownByNpcIds、mysteryKnowledge、unlockedClues、deathNews、tripProgress、cultClues、
   worldGlitchClues、fakeEvidence、letterFragments、lockedRoute、overlay、finalChoice。
 - 数值写变化后的绝对值；数组只增不减；路线指认、解释层和最终选择只由玩家界面与游戏程序写入。
 - 如果请求中有 saturationPivot，且正文确实落地该转场：绝对禁止增加 blockedActorId 的嫌疑；必须把 redirectedActorId 的嫌疑在当前值基础上增加 requiredSuspicionGain。该增量来自程序已审查的线索归属，不得转给其他角色。
@@ -104,6 +104,7 @@ const STATE_AGENT_FORBIDDEN_ROOTS = new Set([
   'routesLockedEver',
   'endingsSeen',
   'knowledgeEvents',
+  'playerNameKnownByNpcIds',
   'mysteryKnowledge',
   'unlockedClues',
   'deathNews',

@@ -71,6 +71,18 @@ export interface MysteryTruthGraph {
   npcKnowledge: NpcFactKnowledge[];
 }
 
+export interface NarrativeSceneContract {
+  destinationLocationId: string;
+  destinationBackground: string;
+  entryMode: 'exterior' | 'interior' | 'destination';
+  requiredDestinationNpcIds: string[];
+  requiredEnRouteNpcIds: string[];
+  forbiddenNpcIds: string[];
+  requiredKnowledgeEvents: Array<{ eventId: string; evidence: string }>;
+  forbiddenKnowledgeEventIds: string[];
+  directive: string;
+}
+
 export interface TruthContext {
   cycleCount: number;
   currentLocation: string;
@@ -85,6 +97,9 @@ export interface TruthContext {
   activeNpcIds: string[];
   recentRevealedFactIds?: string[];
   playerPresentation?: PlayerKnowledgeBrief;
+  playerIdentity?: PlayerIdentity;
+  playerIdentityVariables?: Record<string, unknown>;
+  sceneContract?: NarrativeSceneContract;
 }
 
 export interface ProjectedFact {
@@ -146,6 +161,8 @@ export interface MysteryBrief {
   continuityWarnings: string[];
   playerPresentation: PlayerKnowledgeBrief;
   characterPerformances: CharacterPerformanceProfile[];
+  npcPlayerKnowledge?: NpcPlayerKnowledgeBrief[];
+  sceneContract?: NarrativeSceneContract;
   /** 当玩家继续追查已达当日上限的角色时，由引擎选定并强制审查的异角色转场。 */
   saturationPivot?: SaturationPivotBrief;
 }
@@ -207,7 +224,8 @@ export type FactReviewViolationCode =
   | 'npc-knowledge-violation'
   | 'saturation-pivot-violation'
   | 'character-performance-violation'
-  | 'player-knowledge-violation';
+  | 'player-knowledge-violation'
+  | 'scene-contract-violation';
 
 export interface FactReviewViolation {
   code: FactReviewViolationCode;
@@ -237,6 +255,8 @@ export interface WriterPacket {
   forbiddenInstructions: string[];
   playerPresentation: PlayerKnowledgeBrief;
   characterPerformances: CharacterPerformanceProfile[];
+  npcPlayerKnowledge?: NpcPlayerKnowledgeBrief[];
+  sceneContract?: NarrativeSceneContract;
   saturationPivot?: SaturationPivotBrief;
 }
 
@@ -251,3 +271,4 @@ export interface SaturationPivotBrief {
 }
 import type { PlayerKnowledgeBrief } from '../../data/playerKnowledge';
 import type { CharacterPerformanceProfile } from '../../data/characterPerformance';
+import type { NpcPlayerKnowledgeBrief, PlayerIdentity } from '../../data/npcPlayerKnowledge';

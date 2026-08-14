@@ -34,7 +34,16 @@ export function emotionTextStyle(emotion: string | undefined): CSSProperties {
   }
 }
 
-export function applyMacros(text: string, user: string, character: string): string {
+export function applyMacros(
+  text: string,
+  user: string,
+  character: string,
+  extra: Record<string, string> = {},
+): string {
   if (!text) return text;
-  return text.replace(/\{\{user\}\}/g, user).replace(/\{\{char\}\}/g, character);
+  let result = text.replace(/\{\{user\}\}/g, user).replace(/\{\{char\}\}/g, character);
+  for (const [key, value] of Object.entries(extra)) {
+    result = result.replaceAll(`{{${key}}}`, value);
+  }
+  return result;
 }

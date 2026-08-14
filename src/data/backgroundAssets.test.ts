@@ -7,6 +7,8 @@ describe('backgroundAssets time variants', () => {
     expect(getBackgroundById('home')?.file).toBe('home.png');
     expect(getBackgroundById('school')?.file).toBe('school.png');
     expect(getBackgroundById('supermarket')?.file).toBe('supermarket.png');
+    expect(getBackgroundById('street')?.file).toBe('street-redraw-v2.png');
+    expect(getBackgroundById('street-night')?.file).toBe('street-night-redraw-v1.png');
   });
 
   it('maps explicit day and night IDs to the intended files', () => {

@@ -11,6 +11,16 @@ describe('opening storyline parse', () => {
     expect(scene.actionItems).toHaveLength(7);
   });
 
+  it('pauses the black-screen prologue for player identity confirmation', () => {
+    const scene = parseOpeningStoryline();
+    const identityLine = scene.lines.find(line => line.playerIdentityPrompt);
+    const identityIndex = scene.lines.findIndex(line => line.playerIdentityPrompt);
+
+    expect(identityLine?.background).toBe('opening-rain-black');
+    expect(identityLine?.text).toBe('我是——');
+    expect(scene.lines[identityIndex + 1]?.text).toBe('对了，我是{{user}}。');
+  });
+
   it('introduces Touko and the old man before unlocking their profiles', () => {
     const scene = parseOpeningStoryline();
     const toukoFirstLine = scene.lines.findIndex((line) => line.speaker === 'touko');

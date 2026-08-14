@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { saveSettings } from '../../sillytavern/database';
+import { fetchModels } from '../../sillytavern/api-router';
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
 
@@ -19,7 +20,15 @@ export function ApiKeySetup() {
   const [baseUrl, setBaseUrl] = useState(settings?.api?.baseUrl || PRESET_PROVIDERS[0].baseUrl);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState(settings?.api?.model || PRESET_PROVIDERS[0].model);
+  const [models, setModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!settings || settings.api.apiKey) return;
+    setBaseUrl(settings.api.baseUrl || PRESET_PROVIDERS[0].baseUrl);
+    setModel(settings.api.model || PRESET_PROVIDERS[0].model);
+  }, [settings]);
 
   if (!introPlayed || !settings || dismissed) return null;
   if (settings.api?.apiKey) return null;
@@ -27,11 +36,37 @@ export function ApiKeySetup() {
   const handlePreset = (preset: typeof PRESET_PROVIDERS[0]) => {
     setBaseUrl(preset.baseUrl);
     setModel(preset.model);
+    setModels([]);
+  };
+
+  const handleFetchModels = async () => {
+    const normalizedBaseUrl = baseUrl.trim();
+    const normalizedApiKey = apiKey.trim();
+    if (!normalizedBaseUrl || !normalizedApiKey) {
+      actions.addNotification({ type: 'warning', message: '请先填写 Base URL 和 API Key', duration: 3000 });
+      return;
+    }
+    setFetchingModels(true);
+    try {
+      const fetched = await fetchModels({ baseUrl: normalizedBaseUrl, apiKey: normalizedApiKey, model: '' });
+      const ids = [...new Set(fetched.map(item => item.id).filter(Boolean))];
+      setModels(ids);
+      if (ids.length > 0 && !ids.includes(model)) setModel(ids[0]);
+      actions.addNotification({ type: 'success', message: `读取到 ${ids.length} 个模型，请从列表中选择`, duration: 3000 });
+    } catch (error) {
+      actions.addNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : '读取模型列表失败',
+        duration: 4500,
+      });
+    } finally {
+      setFetchingModels(false);
+    }
   };
 
   const handleSave = async () => {
-    if (!apiKey.trim()) {
-      actions.addNotification({ type: 'warning', message: '请先填入 API Key', duration: 2500 });
+    if (!baseUrl.trim() || !apiKey.trim() || !model.trim()) {
+      actions.addNotification({ type: 'warning', message: '请完整填写 Base URL、API Key 和模型', duration: 2500 });
       return;
     }
     const next = {
@@ -57,7 +92,7 @@ export function ApiKeySetup() {
       }}
     >
       <div
-        className="api-setup-modal clean-modal-frame clean-modal-frame-gold relative w-full max-w-[620px] animate-[scaleIn_0.35s_ease-out] overflow-hidden px-10 py-9"
+        className="api-setup-modal clean-modal-frame clean-modal-frame-gold relative max-h-[92vh] w-full max-w-[620px] animate-[scaleIn_0.35s_ease-out] overflow-y-auto px-10 py-9"
         style={{
           minHeight: 606,
           imageRendering: 'pixelated',
@@ -117,7 +152,22 @@ export function ApiKeySetup() {
             </div>
           </section>
 
-          <PixelInput label="Base URL" value={baseUrl} onChange={setBaseUrl} placeholder="https://api.openai.com/v1" />
+          <div className="flex items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <PixelInput label="Base URL" value={baseUrl} onChange={value => { setBaseUrl(value); setModels([]); }} placeholder="https://api.openai.com/v1" />
+            </div>
+            <button
+              type="button"
+              data-cursor="pointer"
+              onClick={handleFetchModels}
+              disabled={fetchingModels}
+              className="mb-0 inline-flex h-[46px] shrink-0 items-center gap-2 border border-[#45434a] bg-[#17171b] px-4 font-serif-cn text-[14px] tracking-[0.08em] text-[#d8d4cc] disabled:opacity-50"
+              style={{ cursor: fetchingModels ? 'wait' : 'pointer' }}
+            >
+              <GameIcon name="restart" size={13} className={fetchingModels ? 'animate-spin' : ''} />
+              {fetchingModels ? '读取中' : '读取模型'}
+            </button>
+          </div>
           <PixelInput
             label="API Key"
             required
@@ -129,7 +179,29 @@ export function ApiKeySetup() {
               if (apiKey.trim()) handleSave();
             }}
           />
-          <PixelInput label="模型" value={model} onChange={setModel} placeholder="gpt-4o-mini" />
+          {models.length > 0 ? (
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[12px] tracking-[0.16em] text-[#8a8580]">模型</span>
+              <span
+                className="block h-[46px] px-4"
+                style={{
+                  backgroundImage: `url(${assetUrl('assets/ui/input-frame-blue.png')})`,
+                  backgroundSize: '100% 100%',
+                  imageRendering: 'pixelated',
+                }}
+              >
+                <select
+                  value={model}
+                  onChange={event => setModel(event.target.value)}
+                  className="h-full w-full bg-[#111216] font-mono text-[14px] text-[#e8e4dc] outline-none"
+                >
+                  {models.map(item => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </span>
+            </label>
+          ) : (
+            <PixelInput label="模型" value={model} onChange={setModel} placeholder="gpt-4o-mini" />
+          )}
         </div>
 
         <div className="api-setup-actions mt-7 flex items-center justify-between border-t-2 border-[#25252d] pt-4">
@@ -153,7 +225,7 @@ export function ApiKeySetup() {
               cursor: 'pointer',
             }}
           >
-            开始
+            保存
             <GameIcon name="action" size={14} />
           </button>
         </div>

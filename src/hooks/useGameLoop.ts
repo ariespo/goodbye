@@ -12,11 +12,23 @@ import type { ChatMessage } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
 import { appendResourcePrompt } from '../utils/resourcePrompt';
 import { appendCharacterPerformancePrompt } from '../data/characterPerformance';
+import {
+  buildNpcPlayerKnowledgeBrief,
+  doesPlayerIntroduceName,
+  formatNpcPlayerKnowledgeDirective,
+  npcPlayerKnowledgeError,
+  type PlayerIdentity,
+} from '../data/npcPlayerKnowledge';
 import { parseTimeCost, clampTimeCost } from '../engine/game-clock';
 import { buildScheduledDirectives } from '../engine/scheduled-events';
 import { settleGameTransaction, type GameResourceCosts } from '../engine/game-transaction';
 import { gameLocations } from '../data/locations';
-import { buildPlayerKnowledgeBrief, normalizeKnowledgeEvents } from '../data/playerKnowledge';
+import {
+  addKnowledgeEvent,
+  addPresentedAuthorizedKnowledgeEvents,
+  buildPlayerKnowledgeBrief,
+  normalizeKnowledgeEvents,
+} from '../data/playerKnowledge';
 import {
   consumePreplan,
   invalidatePreplans,
@@ -48,6 +60,11 @@ import { excludeCurrentInputFromHistory } from '../sillytavern/history-cutoff';
 import { captureTurnState, resolveTurnRollback } from '../utils/turnStateSnapshot';
 import { deriveAuthorizedFactProgress } from '../agents/mystery/knowledge-progression';
 import { evaluatePlayerIntent } from '../engine/player-intent-policy';
+import {
+  actionNarrativeContextError,
+  resolveActionNarrativeContext,
+  type ActionNarrativeContext,
+} from '../engine/action-narrative-context';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -58,6 +75,8 @@ const outputProtocol = createOutputProtocol({
 
 const mysteryFactIds = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => fact.id));
 const npcIdsByLocation: Record<string, string[]> = {
+  supermarket: ['chen-huihui'],
+  'community-hospital': ['detective-b'],
   school: ['school-guard'],
   'mountain-trail': ['morning-witness'],
   'senpai-building': ['touko'],
@@ -103,6 +122,7 @@ function readPlayerKnowledge(variables: Record<string, any>, clueIds: string[]):
 function mergeAuthorizedKnowledge(
   variables: Record<string, any>,
   prepared: PreparedMysteryTurn | null,
+  presentedKnowledgeEventIds: readonly string[] = [],
 ): Record<string, any> {
   if (!prepared) return variables;
   const knowledge = readPlayerKnowledge(variables, Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []);
@@ -116,7 +136,11 @@ function mergeAuthorizedKnowledge(
     }
     if (fact.level === 'clue' || fact.level === 'confirmation') unlockedClues.add(factId);
   }
-  const knowledgeEvents = normalizeKnowledgeEvents(variables.knowledgeEvents, [...unlockedClues]);
+  const knowledgeEvents = addPresentedAuthorizedKnowledgeEvents(
+    normalizeKnowledgeEvents(variables.knowledgeEvents, [...unlockedClues]),
+    presentedKnowledgeEventIds,
+    prepared.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId),
+  );
   const factProgress = deriveAuthorizedFactProgress(variables, knowledge);
   return {
     ...variables,
@@ -146,6 +170,12 @@ function resolveAnalysisApi(settings: AppSettings) {
     : { baseUrl: settings.api.baseUrl, apiKey: settings.api.apiKey, model: settings.api.model };
 }
 
+function readConfirmedPlayerIdentity(settings: AppSettings): PlayerIdentity | undefined {
+  if (!settings.playerIdentityConfirmed || !settings.userName.trim()) return undefined;
+  if (settings.playerGender !== 'male' && settings.playerGender !== 'female') return undefined;
+  return { name: settings.userName.trim(), gender: settings.playerGender };
+}
+
 function buildPreplanContextKey(
   mode: AgentNarrativeMode,
   chatId: string | null,
@@ -168,6 +198,7 @@ let pendingActionCost: {
   chatId: string;
   input: string;
   costs: GameResourceCosts;
+  narrativeContext?: ActionNarrativeContext;
 } | null = null;
 
 export interface SendMessageOptions {
@@ -259,20 +290,60 @@ export function useGameLoop() {
       actions.setStreaming(true);
       parseStateRef.current = createParseState();
 
-      const scheduledDirectives = buildScheduledDirectives(tavern.variables);
-      const intentPolicy = evaluatePlayerIntent(userInput, tavern.variables);
+      const pendingNarrativeContext = pendingActionCost
+        && pendingActionCost.chatId === tavern.activeChatId
+        && pendingActionCost.input === userInput
+          ? pendingActionCost.narrativeContext ?? null
+          : null;
+      const currentLocationId = typeof tavern.variables.location === 'string'
+        ? tavern.variables.location
+        : resolveMysteryLocation(game.currentState.background);
+      const actionNarrativeContext = pendingNarrativeContext ?? resolveActionNarrativeContext(
+        userInput,
+        game.gameStatus.time,
+        0,
+        {
+          currentLocationId,
+          cycleCount: Number(tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
+          knowledgeEvents: tavern.variables.knowledgeEvents,
+        },
+      );
+      const narrativeVariables = actionNarrativeContext
+        ? { ...tavern.variables, location: actionNarrativeContext.locationId }
+        : tavern.variables;
+      const narrativeBackground = actionNarrativeContext?.background ?? game.currentState.background;
+      const scheduledDirectives = buildScheduledDirectives(narrativeVariables);
+      const intentPolicy = evaluatePlayerIntent(userInput, narrativeVariables);
       const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
       const historyMessages = excludeCurrentInputFromHistory(messages, userInput);
       const agentMode: AgentNarrativeMode = opts?.forceLegacy ? 'legacy' : (settings.agentNarrativeMode ?? 'standard');
-      const mysteryLocation = resolveMysteryLocation(game.currentState.background);
-      const basePromptUserInput = appendResourcePrompt(userInput, game.currentState.background, tavern.variables)
+      const mysteryLocation = actionNarrativeContext?.locationId ?? resolveMysteryLocation(narrativeBackground);
+      const activeNpcIds = [...new Set([
+        ...(npcIdsByLocation[mysteryLocation] ?? []),
+        ...(actionNarrativeContext?.requiredNpcIds ?? []),
+        ...(actionNarrativeContext?.enRouteNpcIds ?? []),
+      ])];
+      const playerIdentity = readConfirmedPlayerIdentity(settings);
+      const introducesPlayerName = doesPlayerIntroduceName(userInput, playerIdentity);
+      const knownByNpcIds = new Set(Array.isArray(narrativeVariables.playerNameKnownByNpcIds)
+        ? narrativeVariables.playerNameKnownByNpcIds.filter((id): id is string => typeof id === 'string')
+        : []);
+      if (introducesPlayerName) activeNpcIds.forEach(id => knownByNpcIds.add(id));
+      const playerIdentityVariables = {
+        ...narrativeVariables,
+        playerNameKnownByNpcIds: [...knownByNpcIds],
+      };
+      const npcPlayerKnowledge = buildNpcPlayerKnowledgeBrief(activeNpcIds, playerIdentity, playerIdentityVariables);
+      const basePromptUserInput = appendResourcePrompt(userInput, narrativeBackground, narrativeVariables)
+        + (actionNarrativeContext ? `\n\n${actionNarrativeContext.directive}` : '')
+        + (npcPlayerKnowledge.length ? `\n\n${formatNpcPlayerKnowledgeDirective(npcPlayerKnowledge)}` : '')
         + `\n\n[玩家意图裁决] ${intentPolicy.directorDirective}`
         + (scheduledDirectives.length ? '\n\n' + scheduledDirectives.map(l => `[系统指令] ${l}`).join('\n') : '');
       const promptUserInput = agentMode === 'legacy'
         ? appendCharacterPerformancePrompt(
             basePromptUserInput,
-            buildPlayerKnowledgeBrief({ ...tavern.variables, location: mysteryLocation }),
-            npcIdsByLocation[mysteryLocation] ?? [],
+            buildPlayerKnowledgeBrief({ ...narrativeVariables, location: mysteryLocation }),
+            activeNpcIds,
           )
         : basePromptUserInput;
       const { messages: promptMessages } = assemblePrompt({
@@ -283,7 +354,7 @@ export function useGameLoop() {
         activeLorebookIds: settings.activeLorebookIds,
         userName: settings.userName,
         characterName: settings.characterName,
-        variables: tavern.variables,
+        variables: narrativeVariables,
         formatPrompt: settings.formatPromptTemplate,
       });
 
@@ -296,30 +367,33 @@ export function useGameLoop() {
         const knownClueIds = (Array.isArray(game.endingCheckContext.unlockedClues)
           ? game.endingCheckContext.unlockedClues
           : []).filter(id => mysteryFactIds.has(id));
-        const playerPresentation = buildPlayerKnowledgeBrief({ ...tavern.variables, location: mysteryLocation });
+        const playerPresentation = buildPlayerKnowledgeBrief({ ...narrativeVariables, location: mysteryLocation });
         const truthContext: TruthContext = {
-          cycleCount: Number(tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
+          cycleCount: Number(narrativeVariables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
           currentLocation: mysteryLocation,
-          lockedRoute: readLockedRoute(tavern.variables),
+          lockedRoute: readLockedRoute(narrativeVariables),
           unlockedClueIds: knownClueIds,
-          playerKnowledge: readPlayerKnowledge(tavern.variables, knownClueIds),
+          playerKnowledge: readPlayerKnowledge(narrativeVariables, knownClueIds),
           suspicion: {
             ...game.endingCheckContext.suspicion,
-            ...(tavern.variables.suspicion && typeof tavern.variables.suspicion === 'object'
-              ? tavern.variables.suspicion
+            ...(narrativeVariables.suspicion && typeof narrativeVariables.suspicion === 'object'
+              ? narrativeVariables.suspicion
               : {}),
           },
           affinity: {
             ...game.endingCheckContext.affinity,
-            ...(tavern.variables.affinity && typeof tavern.variables.affinity === 'object'
-              ? tavern.variables.affinity
+            ...(narrativeVariables.affinity && typeof narrativeVariables.affinity === 'object'
+              ? narrativeVariables.affinity
               : {}),
           },
-          tripProgress: Number(tavern.variables.tripProgress ?? 0),
+          tripProgress: Number(narrativeVariables.tripProgress ?? 0),
           sanity: game.gameStatus.sanity,
-          activeOverlay: readActiveOverlay(tavern.variables),
-          activeNpcIds: npcIdsByLocation[resolveMysteryLocation(game.currentState.background)] ?? [],
+          activeOverlay: readActiveOverlay(narrativeVariables),
+          activeNpcIds,
           playerPresentation,
+          playerIdentity,
+          playerIdentityVariables,
+          sceneContract: actionNarrativeContext?.sceneContract,
         };
         const recentHistory = historyMessages.slice(-8).map(message => ({ role: message.role, content: message.content }));
         const analysisApi = resolveAnalysisApi(settings);
@@ -341,6 +415,7 @@ export function useGameLoop() {
             turnContext: {
               playerInput: userInput,
               playerIntentPolicy: intentPolicy,
+              sceneContract: actionNarrativeContext?.sceneContract,
               recentHistory,
               gameStatus: {
                 time: game.gameStatus.time.toISOString(),
@@ -355,7 +430,7 @@ export function useGameLoop() {
               playerInput: userInput,
               recentHistory,
               currentLocation: truthContext.currentLocation,
-              currentBackground: game.currentState.background,
+              currentBackground: narrativeBackground,
               currentSpeaker: game.currentState.speaker,
               userName: settings.userName,
               characterName: settings.characterName,
@@ -398,7 +473,7 @@ export function useGameLoop() {
         && pendingActionCost.chatId === tavern.activeChatId
         && pendingActionCost.input === userInput
           ? pendingActionCost.costs
-          : null
+          : actionNarrativeContext?.costs ?? null
       );
 
       const finalize = (
@@ -429,8 +504,29 @@ export function useGameLoop() {
 
         const llmCostRaw = Number(reportedTimeCost);
         const llmCost = Number.isFinite(llmCostRaw) && llmCostRaw > 0 ? clampTimeCost(llmCostRaw) : null;
+        const presentedKnowledgeEventIds = parsed.maintext
+          ? maintextToScene(parsed.maintext, {
+              authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
+              variables: narrativeVariables,
+            }).lines.flatMap(line => line.knowledgeEvents ?? [])
+          : [];
+        const authorizedVariables = mergeAuthorizedKnowledge(
+          tavern.variables,
+          preparedTurn,
+          presentedKnowledgeEventIds,
+        );
+        if (actionNarrativeContext) {
+          variablePatch.location = actionNarrativeContext.locationId;
+          variablePatch.knowledgeEvents = addKnowledgeEvent(
+            authorizedVariables.knowledgeEvents,
+            `visit:${actionNarrativeContext.locationId}`,
+          );
+        }
+        if (introducesPlayerName) {
+          variablePatch.playerNameKnownByNpcIds = [...knownByNpcIds];
+        }
         const transaction = settleGameTransaction({
-          variables: mergeAuthorizedKnowledge(tavern.variables, preparedTurn),
+          variables: authorizedVariables,
           gameStatus: game.gameStatus,
           variablePatch,
           costs: {
@@ -556,6 +652,8 @@ export function useGameLoop() {
             activeOverlay: readActiveOverlay(mergedVariables),
             activeNpcIds: npcIdsByLocation[mysteryLocation] ?? [],
             playerPresentation: buildPlayerKnowledgeBrief({ ...mergedVariables, location: mysteryLocation }),
+            playerIdentity: readConfirmedPlayerIdentity(settings),
+            playerIdentityVariables: mergedVariables,
           };
           const speculativeHistory = finalMessages.slice(-8).map(m => ({ role: m.role, content: m.content }));
           const speculativePrompt = appendResourcePrompt(firstOption, game.currentState.background, mergedVariables);
@@ -627,7 +725,7 @@ export function useGameLoop() {
             if (parseStateRef.current.parsed.maintext) {
               const scene = maintextToScene(parseStateRef.current.parsed.maintext, {
                 authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
-                variables: tavern.variables,
+                variables: narrativeVariables,
               });
               actions.setCurrentScene(mergeParsedIntoScene(prevScene, scene, parseStateRef.current.parsed));
             }
@@ -641,6 +739,26 @@ export function useGameLoop() {
             const streamErrors = parseStateRef.current.errors;
             if (streamErrors.length > 0) {
               validationErrors.push(...streamErrors.map(msg => ({ code: 'STREAM_PARSE_ERROR', message: msg })));
+            }
+            if (parseStateRef.current.parsed.maintext) {
+              const completedScene = maintextToScene(parseStateRef.current.parsed.maintext, {
+                authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
+                variables: narrativeVariables,
+              });
+              if (actionNarrativeContext) {
+                const contextError = actionNarrativeContextError(actionNarrativeContext, completedScene);
+                if (contextError) {
+                  validationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
+                }
+              }
+              const playerAddressError = npcPlayerKnowledgeError(
+                completedScene.lines,
+                playerIdentity,
+                npcPlayerKnowledge,
+              );
+              if (playerAddressError) {
+                validationErrors.push({ code: 'NPC_PLAYER_KNOWLEDGE_MISMATCH', message: playerAddressError });
+              }
             }
             if (validationErrors.length > 0) {
               const detail = formatValidationErrors(validationErrors);
@@ -915,14 +1033,27 @@ export function useGameLoop() {
       if (itemIndex !== undefined) {
         // 选择了具体行动项：构造 prompt 发送给 LLM 获取详细结果
         const item = scene.actionItems[itemIndex];
+        const parsedCost = parseTimeCost(item.time);
+        const narrativeContext = resolveActionNarrativeContext(
+          item.desc,
+          game.gameStatus.time,
+          parsedCost,
+          {
+            currentLocationId: typeof store.tavern.variables.location === 'string'
+              ? store.tavern.variables.location
+              : resolveMysteryLocation(game.currentState.background),
+            cycleCount: Number(store.tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
+            knowledgeEvents: store.tavern.variables.knowledgeEvents,
+          },
+        );
         const prompt = `[系统] 玩家执行了行动："${item.desc}"
 当前场景：${game.currentState.background || '未知'}
 结果风格：${item.style}
 
 请描述行动过程、结果、场景变化（如果有）。
 如果行动导致场景切换，在文本末尾加上：[变化] 场景切换 → 新场景名
+${narrativeContext ? `\n${narrativeContext.directive}\n` : ''}
 这是一个完整叙事回合。请按项目主输出协议返回 maintext、至少两个 option、sum 和空 vars；不要只返回 action 标签。`;
-        const parsedCost = parseTimeCost(item.time);
         const chatId = store.tavern.activeChatId;
         pendingActionCost = chatId
           ? {
@@ -933,6 +1064,7 @@ export function useGameLoop() {
                 stamina: Math.max(0, Number(item.stamina) || 0),
                 sanity: Math.max(0, Number(item.sanity) || 0),
               },
+              narrativeContext: narrativeContext ?? undefined,
             }
           : null;
         sendMessage(prompt);

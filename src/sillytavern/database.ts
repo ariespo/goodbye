@@ -201,6 +201,8 @@ function getDefaultSettings(): AppSettings {
     },
     characterName: '少女',
     userName: '玩家',
+    playerGender: undefined,
+    playerIdentityConfirmed: false,
     activePresetId: null,
     activeLorebookIds: [],
     uiMode: 'game',
@@ -222,9 +224,16 @@ function getDefaultSettings(): AppSettings {
 function normalizeSettings(partial: AppSettings | Partial<AppSettings> | undefined): AppSettings {
   const defaults = getDefaultSettings();
   if (!partial) return defaults;
+  const playerGender = partial.playerGender === 'male' || partial.playerGender === 'female'
+    ? partial.playerGender
+    : undefined;
   return {
     ...defaults,
     ...partial,
+    playerGender,
+    playerIdentityConfirmed: partial.playerIdentityConfirmed === true
+      && !!partial.userName?.trim()
+      && !!playerGender,
     api: {
       ...defaults.api,
       ...(partial.api || {}),

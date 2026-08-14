@@ -249,11 +249,7 @@ export function SettingsModal() {
           {activeTab === 'game' && (
             <section className="settings-section settings-tab-panel">
               <h3 className="settings-section-title">游戏与阅读</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <LabeledInput label="角色名" value={draft.characterName} onChange={v => patch({ characterName: v })} />
-                <LabeledInput label="玩家名" value={draft.userName} onChange={v => patch({ userName: v })} />
-              </div>
-              <div className="mt-5 space-y-4">
+              <div className="space-y-4">
               <div>
                 <label className="settings-label">
                   打字速度: <span className="settings-value">{draft.typingSpeed} ms / 字</span>

@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildNpcPlayerKnowledgeBrief,
+  doesPlayerIntroduceName,
+  npcPlayerKnowledgeError,
+  resolveNpcPlayerKnowledge,
+} from './npcPlayerKnowledge';
+
+const identity = { name: '张明', gender: 'male' as const };
+
+describe('NPC knowledge of player identity', () => {
+  it('gives established relationships distinct natural forms of address', () => {
+    expect(resolveNpcPlayerKnowledge('fumi', identity).allowedAddress).toBe('张明');
+    expect(resolveNpcPlayerKnowledge('touko', identity).allowedAddress).toBe('张明');
+    expect(resolveNpcPlayerKnowledge('chen-huihui', identity).allowedAddress).toBe('张哥');
+    expect(resolveNpcPlayerKnowledge('old-man', identity).allowedAddress).toBe('小张');
+  });
+
+  it('keeps strangers from knowing the name until explicitly recorded', () => {
+    expect(resolveNpcPlayerKnowledge('detective-b', identity).knowsPlayerName).toBe(false);
+    expect(resolveNpcPlayerKnowledge('detective-b', identity, {
+      playerNameKnownByNpcIds: ['detective-b'],
+    }).allowedAddress).toBe('张明');
+  });
+
+  it('recognizes an explicit self-introduction but not a refusal to share the name', () => {
+    expect(doesPlayerIntroduceName('我叫张明，是来找人的。', identity)).toBe(true);
+    expect(doesPlayerIntroduceName('先自我介绍，再询问值班记录。', identity)).toBe(true);
+    expect(doesPlayerIntroduceName('我不想告诉她我的名字。', identity)).toBe(false);
+  });
+
+  it('rejects an unknown NPC saying the player name but permits established addresses', () => {
+    const briefs = buildNpcPlayerKnowledgeBrief(['detective-b', 'chen-huihui'], identity);
+    expect(npcPlayerKnowledgeError([
+      { speaker: '新来的护士', text: '张明，请在这里登记。' },
+    ], identity, briefs)).toContain('不知道玩家姓名');
+    expect(npcPlayerKnowledgeError([
+      { speaker: '新来的护士', text: '{{user}}，请在这里登记。' },
+    ], identity, briefs)).toContain('不知道玩家姓名');
+    expect(npcPlayerKnowledgeError([
+      { speaker: '店员', text: '张、张哥，欢迎光临……吃吃。' },
+    ], identity, briefs)).toBeNull();
+  });
+});

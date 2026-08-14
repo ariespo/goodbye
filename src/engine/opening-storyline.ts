@@ -12,6 +12,13 @@ export const OPENING_KNOWLEDGE_EVENTS = ['meet:touko', 'meet:old-man'] as const;
 
 export const OPENING_STORYLINE = `场景|opening-rain-black
 音乐|silence
+对话|旁白|calm|意识像沉在一片没有边际的黑水里。
+对话|旁白|calm|脑袋好沉……要快点清醒过来……
+对话|旁白|calm|想一想重要的事情。
+对话|旁白|calm|我是——
+身份确认
+对话|旁白|calm|对了，我是{{user}}。
+对话|旁白|calm|雨声渐渐从黑暗深处浮了上来。
 对话|旁白|calm|雨声。
 对话|旁白|calm|不是那种能被听见的雨——是那种把整座城市泡在水里的、连绵不绝的、让人分不清白天和夜晚的雨。
 对话|旁白|calm|这已经是第五天了。
@@ -29,7 +36,7 @@ export const OPENING_STORYLINE = `场景|opening-rain-black
 对话|旁白|calm|你走出卧室。
 动作|文穗|idle
 对话|旁白|calm|在你真正看清空荡的客厅以前，记忆先一步替这个清晨补上了她。
-对话|文穗|happy|“醒啦？早餐放在桌上了。牛奶要趁热喝。”
+对话|文穗|happy|“醒啦，{{user}}？早餐放在桌上了。牛奶要趁热喝。”
 对话|文穗|angry|“还有，公交卡在书包外层。别又找半天。”
 对话|文穗|calm|“等一下……这边没有叠齐。”
 动作|文穗|idle
@@ -71,7 +78,7 @@ export const OPENING_STORYLINE = `场景|opening-rain-black
 对话|旁白|calm|门外站着一个被雨水打湿了肩膀的女人。她叫灯织，是住在对面那栋商住楼里的学姐。你当然认识她；可直到此刻，她才第一次在这段混乱的早晨里有了清晰的面孔。
 认知|meet:touko
 音乐|peace
-对话|touko|calm|“我刚才看见你一直站在阳台边。文穗还没回来？”
+对话|touko|calm|“{{user}}，我刚才看见你一直站在阳台边。文穗还没回来？”
 对话|旁白|calm|你摇头，把两次无人接听的通话记录给她看。
 对话|touko|sad|“她昨晚也没有回我的消息。”
 对话|touko|happy|“等找到她，我们三个去吃那家新开的甜品店。她上次可是亲口答应了。”
@@ -83,7 +90,7 @@ export const OPENING_STORYLINE = `场景|opening-rain-black
 
 对话|旁白|calm|你穿上鞋，拿上钥匙。纸条在口袋里硌着你的手指——"今天可能晚一点回来。"
 对话|旁白|calm|楼下雨棚积着一层浑浊的水。你刚推开单元门，一个提着旧布袋的老人便从雨幕里认出了你。
-对话|old-man|happy|“这么早就出门？雨大，走慢些。”
+对话|old-man|happy|“{{player.oldManAddress}}，这么早就出门？雨大，走慢些。”
 对话|旁白|calm|你下意识叫了声“周大爷”。他独自住在两条街外、麻将馆楼上的旧楼里，平时总爱在这一带慢慢散步。
 认知|meet:old-man
 对话|old-man|calm|“是在找文穗吧？早上我碰见她的时候，她也走得很急。”

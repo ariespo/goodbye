@@ -9,6 +9,7 @@ import { useGameStore } from '../stores/gameStore';
 export async function persistActiveChat(patch: {
   messages?: ChatMessage[];
   variables?: Record<string, any>;
+  userName?: string;
 }): Promise<ChatSession | null> {
   const state = useGameStore.getState();
   const activeChat = state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId);
@@ -18,6 +19,7 @@ export async function persistActiveChat(patch: {
     ...activeChat,
     ...(patch.messages ? { messages: patch.messages } : {}),
     ...(patch.variables ? { variables: patch.variables } : {}),
+    ...(patch.userName ? { userName: patch.userName } : {}),
     updatedAt: Date.now(),
   };
   await saveChat(updated);

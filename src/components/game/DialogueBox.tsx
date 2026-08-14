@@ -18,6 +18,8 @@ import {
 } from './DialogueBoxParts';
 import { applyMacros, emotionLabel, emotionTextClass, emotionTextStyle } from './dialogueText';
 import { applyCharacterEmotionPolicies } from '../../engine/character-emotion-policy';
+import { PlayerIdentityPrompt } from './PlayerIdentityPrompt';
+import { resolveNpcPlayerKnowledge } from '../../data/npcPlayerKnowledge';
 
 /* ── 像素风对话框 ── */
 
@@ -49,21 +51,33 @@ export function DialogueBox() {
 
   const userName = settings?.userName || '玩家';
   const characterName = settings?.characterName || '少女';
+  const playerIdentity = settings?.playerIdentityConfirmed
+    && (settings.playerGender === 'male' || settings.playerGender === 'female')
+    ? { name: userName, gender: settings.playerGender }
+    : undefined;
+  const dialogueMacros = playerIdentity ? {
+    'player.oldManAddress': resolveNpcPlayerKnowledge('old-man', playerIdentity, variables).allowedAddress,
+    'player.huihuiAddress': resolveNpcPlayerKnowledge('chen-huihui', playerIdentity, variables).allowedAddress,
+  } : {};
   const playerFacingSpeaker = resolvePlayerFacingSpeaker(
     currentLine?.speaker || '',
     currentLine?.character,
     variables,
   );
-  const displaySpeaker = applyMacros(playerFacingSpeaker, userName, characterName);
-  const displayText = applyMacros(currentLine?.text || '', userName, characterName);
+  const displaySpeaker = applyMacros(playerFacingSpeaker, userName, characterName, dialogueMacros);
+  const displayText = applyMacros(currentLine?.text || '', userName, characterName, dialogueMacros);
 
   const { displayedText, isComplete, skip } = useTypewriter(displayText, typingSpeed, true);
 
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committedKnowledgeRef = useRef(new Set<string>());
   const [minimumHoldReady, setMinimumHoldReady] = useState(true);
+  const [identityPromptOpen, setIdentityPromptOpen] = useState(false);
   const [advanceHintDone, setAdvanceHintDone] = useState(
     () => window.localStorage.getItem('farewell.advance-hint.done') === 'true',
+  );
+  const requiresIdentityConfirmation = Boolean(
+    currentLine?.playerIdentityPrompt && !settings?.playerIdentityConfirmed,
   );
 
   useEffect(() => {
@@ -79,11 +93,11 @@ export function DialogueBox() {
 
   /* ── 自动模式推进 ── */
   useEffect(() => {
-    if (autoMode && isComplete && minimumHoldReady && currentLine && !isLastLine) {
+    if (autoMode && isComplete && minimumHoldReady && currentLine && !isLastLine && !requiresIdentityConfirmation) {
       autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
     }
     return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
-  }, [autoMode, isComplete, minimumHoldReady, currentLineIndex, currentScene, autoIntervalMs]);
+  }, [autoMode, isComplete, minimumHoldReady, currentLineIndex, currentScene, autoIntervalMs, requiresIdentityConfirmation]);
 
   /* ── 场景完成检测 ── */
   useEffect(() => {
@@ -102,10 +116,14 @@ export function DialogueBox() {
     if (!currentScene) return;
     if (!isComplete) { skip(); return; }
     if (!minimumHoldReady) return;
+    if (requiresIdentityConfirmation) {
+      setIdentityPromptOpen(true);
+      return;
+    }
     if (currentLineIndex < currentScene.lines.length - 1) {
       setCurrentLineIndex(currentLineIndex + 1);
     }
-  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, skip, setCurrentLineIndex]);
+  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, requiresIdentityConfirmation, skip, setCurrentLineIndex]);
 
   const handleStartOrAdvance = useCallback(() => {
     if (!advanceHintDone) {
@@ -129,6 +147,16 @@ export function DialogueBox() {
   /* ── 快进：跳到最后一行，途中台词的知识事件照常提交 ── */
   const handleFastForward = useCallback(() => {
     if (!currentScene) return;
+    if (!settings?.playerIdentityConfirmed) {
+      const identityLineIndex = currentScene.lines.findIndex((line, index) => (
+        index >= currentLineIndex && line.playerIdentityPrompt
+      ));
+      if (identityLineIndex >= 0) {
+        if (identityLineIndex === currentLineIndex && isComplete) setIdentityPromptOpen(true);
+        else setCurrentLineIndex(identityLineIndex);
+        return;
+      }
+    }
     if (!minimumHoldReady) {
       if (!isComplete) skip();
       return;
@@ -143,7 +171,7 @@ export function DialogueBox() {
     } else if (!isComplete) {
       skip();
     }
-  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, skip, setCurrentLineIndex]);
+  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, settings?.playerIdentityConfirmed, skip, setCurrentLineIndex]);
 
   /* ── 重头回看：回到第一句，恢复首帧状态 ── */
   const handleRestart = useCallback(() => {
@@ -195,7 +223,7 @@ export function DialogueBox() {
         || ui.showTitle || ui.showPromptInspector || ui.showOrchestrationLog) return true;
       if (game.actionPanel.visible || game.endingPanel.visible) return true;
       // SaveModal 状态在组件内部，只能从 DOM 判断
-      return !!document.querySelector('.save-modal-shell');
+      return !!document.querySelector('.save-modal-shell, .player-identity-prompt');
     }
     function onKey(e: KeyboardEvent) {
       if (e.code === 'Space' || e.code === 'Enter') {
@@ -248,6 +276,7 @@ export function DialogueBox() {
   ) : undefined;
 
   return (
+    <>
     <PixelPanel
       complete={sceneComplete}
       topLeft={speakerTag}
@@ -320,5 +349,19 @@ export function DialogueBox() {
         </span>
       )}
     </PixelPanel>
+    {identityPromptOpen && requiresIdentityConfirmation && (
+      <div className="player-identity-prompt">
+        <PlayerIdentityPrompt
+        open
+        onConfirmed={() => {
+          setIdentityPromptOpen(false);
+          if (currentScene && currentLineIndex < currentScene.lines.length - 1) {
+            setCurrentLineIndex(currentLineIndex + 1);
+          }
+        }}
+        />
+      </div>
+    )}
+    </>
   );
 }

@@ -29,6 +29,8 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 13. 陈慧慧的 angry 是一次受控人物揭示，不是常规情绪：只有本回合同时申请 insight:chen-huihui-hypoglycemia 时才可安排。beats 必须按“愤怒动作完整播放 → 她打开或咬下手中物品 → 明说低血糖和大号巧克力 → 她亲口吐槽‘我一个收银员拿文件夹做什么？’ → 提交认知”的顺序设计；否则只能使用 calm/happy/sad/horror。
 14. 玩家尚未以 confirmation 级掌握 a-murder-staged-fall 前，周德明绝对不得使用 insane，也不得安排等价的疯癫表演；质问升级最多使用 angry。只有确认他是凶手之后才可出现 insane。
 15. saturationPivot 存在时，这是程序选定的强制剧情转场：先让玩家对 blockedActorId 的追查按原意真实发生并得到回应，再让 interveningNpcId 自然介入，以 dialogue 揭示 factId；只可呈现 revealOptions 已授权的原文含义，不得在正文说出 redirectedActorId 这个内部归属、也不得增加授权文本未写明的身份或因果。该线索的状态压力由程序归入 redirectedActorId，绝不能继续增加 blockedActorId 的嫌疑。不得用单纯拒答、离场或环境阻碍代替该转场。
+16. sceneContract 存在时是程序已经完成语义解析和概率抽样后的确定性场景契约。beats 必须按顺序落实 requiredEnRouteNpcIds 的 street 途中遭遇，再抵达 destinationLocationId，并让 requiredDestinationNpcIds 实际参与剧情；forbiddenNpcIds 不得出场。requiredKnowledgeEvents 必须纳入计划，forbiddenKnowledgeEventIds 不得申请。不得把“角色可用”误当成“角色可以省略”；职业泛称只有在 sceneContract.directive 明确规定的初见阶段可作为固定内部角色的玩家可见称呼，绝不能据此生成临时 NPC。
+17. npcPlayerKnowledge 是每个在场 NPC 对玩家姓名的独立认知边界。knowsPlayerName=false 的角色绝不能说出、猜中或用姓名称呼玩家；为 true 时，只能在自然需要称呼时使用 allowedAddress，不得擅自换成全名、昵称或其他亲疏程度。该表不授予任何案件知识。
 
 输出结构：
 {
@@ -62,7 +64,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 3. 不得新增凶手、动机、证据、死因、时间线节点或 NPC 知情内容。
 3a. “不得新增证据”包括不得擅自补写任何精确时间、电话号码、短信删除、行程修改、脚印、擦痕、撞击痕、血迹形状/位置、检验结论或角色亲口供述；除非这些细节逐字存在于 authorizedFacts.text 或 playerKnownFacts.text。导演 beat 中出现的未授权具体化也不能当作事实使用。
 4. 角色称呼、地点名称与可到达范围必须服从 WriterPacket.playerPresentation；不得把内部 ID 写给玩家。
-5. 当 authorizedKnowledgeEvents 引入新人物时，必须按顺序写：角色第一次说话时仍使用其内部可映射说话者（播放器会显示“？？？”）；随后用旁白从玩家视角明确说明当前可知称呼；紧接该介绍句下一行写“认知|eventId”。事件行之前不得提前使用新称呼。
+5. 当 authorizedKnowledgeEvents 引入新人物时，必须按顺序写：角色第一次说话时使用 sceneContract.directive 指定的职业称呼；若场景契约未指定，才使用内部可映射说话者（播放器会显示“？？？”）。随后用旁白从玩家视角明确说明当前可知称呼，紧接该介绍句下一行写“认知|eventId”；事件行之前不得提前使用新称呼，事件行之后必须改用已知姓名。
 6. 地点、身份、职业、行为理解或人物关系更新，都必须在玩家实际看到/听到符合对应 evidenceStandard 的具体依据后，紧接证据句写“认知|eventId”。只能写 authorizedKnowledgeEvents 中的事件 ID；不得先写结论再把结论自身当作 evidence。
 7. 为兼容当前播放器，输出一句 <sum>；<vars> 必须固定为 {}。你不承担数值与存档写入。
 8. 必须逐条遵守 WriterPacket.characterPerformances，把导演节拍写成符合角色的动作、反应、措辞与情绪升级。
@@ -75,6 +77,8 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 15. playerKnownFacts 未含 a-murder-staged-fall 的 confirmation 时，周德明只能用 calm/happy/angry/sad/horror，绝对不得输出 insane；确认后也只能在导演计划明确安排时使用。
 15a. stance=lies-about 的角色即使面对 confirmation 也不得坦白、说漏嘴、互相指认、默认承认或用沉默充当答案；只能明确否认、质疑证据、普通拒答，或不发言。旁白也不得把其反应解释为承认。
 16. WriterPacket.saturationPivot 存在时，正文必须先演出玩家对 blockedActorId 的原调查，随后把 interveningNpcId 的介入写成独立可见事件，并由其讲出 authorizedFacts 中 factId 对应的内容。只写授权事实本身，不得把 redirectedActorId 这个内部归属直接写给玩家，也不得补充授权文本未写明的身份或因果；不得把线索继续解释成 blockedActorId 的新嫌疑。
+17. WriterPacket.sceneContract 存在时必须逐项落实：先写 requiredEnRouteNpcIds 的 street 途中遭遇，再切换到 destinationBackground，让 requiredDestinationNpcIds 本人说话并承接剧情；forbiddenNpcIds 不得出现。必须按 characterPerformances 演绎对应内部角色。职业称呼只有在 sceneContract.directive 明确规定的初见阶段可用，并且必须完成其指定的旁白认知与改名顺序；否则不能只写“店员”“护士”“老师”等泛称后套一张立绘。
+18. WriterPacket.npcPlayerKnowledge 逐角色约束其是否知道玩家姓名。knowsPlayerName=false 时，该角色不得说出玩家姓名或姓氏；为 true 时，自然需要称呼时只能使用 allowedAddress。不要为了展示功能而每句重复称呼，也不要让旁白把内部认知表直接解释给玩家。
 
 输出协议：
 <maintext>场景、音乐、对话、物品、特效与获准的“认知|eventId”指令</maintext>

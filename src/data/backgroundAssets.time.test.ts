@@ -15,6 +15,7 @@ describe('timed background resolution', () => {
   it('uses night at 18:31 and through midnight', () => {
     expect(resolveBackgroundForTime('bedroom1-day', new Date(2024, 8, 9, 18, 31))).toBe('bedroom1-night');
     expect(resolveBackgroundForTime('home', new Date(2024, 8, 10, 0, 0))).toBe('home-night');
+    expect(resolveBackgroundForTime('street', new Date(2024, 8, 9, 20, 0))).toBe('street-night');
   });
 
   it('keeps scenes without timed variants unchanged', () => {

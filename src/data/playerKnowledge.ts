@@ -180,7 +180,7 @@ const discoveryRules: Array<{
   requires?: PlayerKnowledgeEvent[];
   locations?: string[];
 }> = [
-  { eventId: 'meet:chen-huihui', kind: 'introduction', subjectId: 'chen-huihui', meaning: '确认便利店店员名叫陈慧慧；只登记姓名和公开工作，不推断性格。', evidenceStandard: '本人自我介绍、工牌、排班表或可靠当面介绍。', locations: ['supermarket'] },
+  { eventId: 'meet:chen-huihui', kind: 'introduction', subjectId: 'chen-huihui', meaning: '玩家认出附近便利店店员陈慧慧，并回想起她平时看起来有些奇怪、总是紧张兮兮且笑得不自然；登记姓名、公开工作与这层既有印象。', evidenceStandard: '陈慧慧必须先以“店员”身份实际说话，随后旁白明确写出玩家认得她是附近便利店的陈慧慧，并概括既有的紧张怪异印象。', locations: ['supermarket'] },
   { eventId: 'insight:chen-huihui-social-strain', kind: 'behavior', subjectId: 'chen-huihui', meaning: '玩家认识到陈慧慧努力维持热情时会紧张，待人方式有些笨拙。', evidenceStandard: '正文必须呈现一次足够明确的失态，或明确概括此前至少两次一致的互动表现；不能仅凭外貌和第一印象。', requires: ['meet:chen-huihui'], locations: ['supermarket'] },
   { eventId: 'insight:chen-huihui-hypoglycemia', kind: 'personal-fact', subjectId: 'chen-huihui', meaning: '确认陈慧慧有低血糖；她总拿在手里的“文件夹”其实是大号巧克力。', evidenceStandard: '本事件只可绑定陈慧慧极少出现的愤怒演出：愤怒动作完整播放后，她必须当场打开或咬下手中物品、明确说明低血糖与大号巧克力，并亲口吐槽“我一个收银员拿文件夹做什么？”随后才能提交认知。', requires: ['meet:chen-huihui'], locations: ['supermarket'] },
   { eventId: 'meet:liu-renguang', kind: 'introduction', subjectId: 'liu-renguang', meaning: '确认刘仁光是文穗学校的体育老师；只登记公开身份。', evidenceStandard: '本人说明、教职工信息、课程记录或校方可靠介绍。', locations: ['school'] },
@@ -232,6 +232,22 @@ export function normalizeKnowledgeEvents(value: unknown, unlockedClues: unknown 
 
 export function addKnowledgeEvent(value: unknown, event: PlayerKnowledgeEvent): PlayerKnowledgeEvent[] {
   return normalizeKnowledgeEvents([...(Array.isArray(value) ? value : []), event]);
+}
+
+/** 只落盘写手正文实际提交、并且导演已授权的玩家认知事件。 */
+export function addPresentedAuthorizedKnowledgeEvents(
+  value: unknown,
+  presentedEventIds: readonly string[],
+  authorizedEventIds: readonly string[],
+): PlayerKnowledgeEvent[] {
+  let events = normalizeKnowledgeEvents(value);
+  const authorized = new Set(authorizedEventIds);
+  for (const eventId of presentedEventIds) {
+    if (authorized.has(eventId) && knownEventIds.has(eventId)) {
+      events = addKnowledgeEvent(events, eventId as PlayerKnowledgeEvent);
+    }
+  }
+  return events;
 }
 
 export function getLocationPresentation(
@@ -309,10 +325,11 @@ export function getPlayerEntities(variables: Record<string, unknown>): PlayerEnt
       ? '社区便利店的店员。你亲眼确认她有低血糖；她总拿在手里、看起来像文件夹的东西，其实是一块随时用来补充糖分的大号巧克力。'
       : events.has('insight:chen-huihui-social-strain')
         ? '社区便利店的店员。通过实际互动，你发现她努力维持热情时容易紧张，固定的笑容和措辞常显得笨拙。'
-      : '社区便利店的店员。你目前只确认了她的姓名和公开工作，尚不足以判断她私下如何待人。',
+      : '附近社区便利店的店员。你认得她叫陈慧慧；她平时看起来有些奇怪，总是紧张兮兮，努力摆出的笑容也很不自然。',
     portrait: 'chen-huihui-normal.png',
     facts: [
       '在社区便利店工作',
+      '平时看起来有些奇怪、紧张兮兮，笑容不太自然',
       ...(events.has('insight:chen-huihui-social-strain') ? ['努力维持热情时容易紧张', '待人方式有些笨拙'] : []),
       ...(events.has('insight:chen-huihui-hypoglycemia') ? ['有低血糖', '手中的“文件夹”其实是大号巧克力'] : []),
     ],

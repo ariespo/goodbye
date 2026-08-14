@@ -47,6 +47,19 @@ describe('character performance profiles', () => {
     expect(serialized).not.toContain('邪教');
   });
 
+  it('keeps Huihui tense, sweaty, awkwardly friendly, and unsettling without making her malicious', () => {
+    const huihui = CHARACTER_PERFORMANCE_PROFILES.find(profile => profile.id === 'chen-huihui');
+    const serialized = JSON.stringify(huihui);
+    expect(serialized).toContain('紧张');
+    expect(serialized).toContain('不自然的笑容');
+    expect(serialized).toContain('冒汗');
+    expect(serialized).toContain('阴湿感');
+    expect(serialized).toContain('结巴');
+    expect(serialized).toContain('吃、吃吃……');
+    expect(serialized).toContain('自认为这是友好');
+    expect(serialized).toContain('不是超自然气息，也不是犯罪暗示');
+  });
+
   it('only projects known, active, or discoverable characters', () => {
     const home = buildPlayerKnowledgeBrief({ location: 'home', knowledgeEvents: ['meet:touko'] });
     const ids = projectCharacterPerformances(home, []).map(profile => profile.id);

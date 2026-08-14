@@ -10,6 +10,7 @@ import {
   type TruthContext,
 } from './types';
 import { projectCharacterPerformances } from '../../data/characterPerformance';
+import { buildNpcPlayerKnowledgeBrief } from '../../data/npcPlayerKnowledge';
 
 function budgetFor(context: TruthContext): RevealBudget {
   if (context.lockedRoute) {
@@ -237,5 +238,11 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
     continuityWarnings,
     playerPresentation,
     characterPerformances: projectCharacterPerformances(playerPresentation, context.activeNpcIds),
+    npcPlayerKnowledge: buildNpcPlayerKnowledgeBrief(
+      context.activeNpcIds,
+      context.playerIdentity,
+      context.playerIdentityVariables,
+    ),
+    sceneContract: context.sceneContract,
   };
 }
