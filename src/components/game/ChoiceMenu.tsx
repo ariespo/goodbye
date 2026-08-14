@@ -4,6 +4,7 @@ import { useGameLoop } from '../../hooks/useGameLoop';
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
 import { getCycleMetaOptions, handleCycleMetaOption } from '../../utils/cycleLoop';
+import { shouldShowChoiceMenu } from './choiceMenuVisibility';
 
 const TEXT_MAIN = '#e2ded6';
 const TEXT_DIM = '#8a8580';
@@ -14,6 +15,7 @@ export function ChoiceMenu() {
   const parsedContent = useGameStore(state => state.api.parsedContent);
   const isStreaming = useGameStore(state => state.api.isStreaming);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
+  const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const endingVisible = useGameStore(state => state.game.endingPanel.visible);
   const variables = useGameStore(state => state.tavern.variables);
   const endingsSeen = useGameStore(state => state.game.endingsSeen);
@@ -24,7 +26,12 @@ export function ChoiceMenu() {
     () => getCycleMetaOptions(variables, endingsSeen).filter(option => !options.includes(option)),
     [variables, endingsSeen, options],
   );
-  if (endingVisible || isStreaming || (options.length === 0 && metaOptions.length === 0)) return null;
+  if (!shouldShowChoiceMenu({
+    endingVisible,
+    isStreaming,
+    sceneComplete,
+    hasOptions: options.length > 0 || metaOptions.length > 0,
+  })) return null;
 
   return (
     <div
