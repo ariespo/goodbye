@@ -24,6 +24,37 @@ const DEFAULT_ALLOWED_TAGS = new Set([
   'observe', 'investigate', 'action', 'hint',
 ]);
 
+export interface OutputRepairResult {
+  text: string;
+  repairedTags: string[];
+}
+
+/**
+ * 修复边界可由后续必填标签唯一确定的轻微 XML 疏漏。
+ * 仅当 option 与 sum 均完整存在时，才允许在首个 option 前补 maintext 闭合；
+ * 真正被截断的回复仍会进入严格失败恢复流程。
+ */
+export function repairRecoverableOutput(rawText: string): OutputRepairResult {
+  const mainOpenMatches = rawText.match(/<maintext(?:\s[^>]*)?>/gi) ?? [];
+  const mainCloseMatches = rawText.match(/<\/maintext\s*>/gi) ?? [];
+  if (mainOpenMatches.length !== 1 || mainCloseMatches.length !== 0) {
+    return { text: rawText, repairedTags: [] };
+  }
+
+  const mainOpenIndex = rawText.search(/<maintext(?:\s[^>]*)?>/i);
+  const optionIndex = rawText.search(/<option(?:\s[^>]*)?>/i);
+  const hasClosedOption = /<option(?:\s[^>]*)?>[\s\S]*?<\/option\s*>/i.test(rawText);
+  const hasClosedSummary = /<sum(?:\s[^>]*)?>[\s\S]*?<\/sum\s*>/i.test(rawText);
+  if (optionIndex <= mainOpenIndex || !hasClosedOption || !hasClosedSummary) {
+    return { text: rawText, repairedTags: [] };
+  }
+
+  return {
+    text: `${rawText.slice(0, optionIndex).trimEnd()}\n</maintext>\n${rawText.slice(optionIndex)}`,
+    repairedTags: ['maintext'],
+  };
+}
+
 export function createOutputProtocol(options: ValidationOptions = {}) {
   const {
     requiredTags = ['maintext', 'option', 'sum'],

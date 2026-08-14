@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createOutputProtocol, formatValidationErrors } from './output-protocol';
+import { createOutputProtocol, formatValidationErrors, repairRecoverableOutput } from './output-protocol';
 
 describe('output-protocol', () => {
   const protocol = createOutputProtocol({
@@ -68,6 +68,19 @@ B</option>
 对话|少女|calm|你好。`;
     const errors = protocol.validate(raw, baseParsed);
     expect(errors.some(e => e.code === 'UNCLOSED_TAG' || e.code === 'MISMATCHED_TAG')).toBe(true);
+  });
+
+  it('repairs a missing maintext close only when complete option and sum tags prove the boundary', () => {
+    const malformed = `<maintext>\n场景|room.jpg\n对话|少女|calm|你好。\n<option>A\nB</option>\n<sum>完成</sum>`;
+    const repaired = repairRecoverableOutput(malformed);
+    expect(repaired.repairedTags).toEqual(['maintext']);
+    expect(repaired.text).toContain('对话|少女|calm|你好。\n</maintext>\n<option>');
+    expect(protocol.validate(repaired.text, baseParsed)).toEqual([]);
+  });
+
+  it('does not repair a genuinely truncated response', () => {
+    const truncated = '<maintext>\n场景|room.jpg\n对话|少女|calm|你好。';
+    expect(repairRecoverableOutput(truncated)).toEqual({ text: truncated, repairedTags: [] });
   });
 
   it('accepts 认知/动作 maintext lines', () => {

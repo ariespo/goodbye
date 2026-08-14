@@ -7,7 +7,11 @@ import { maintextToScene, mergeParsedIntoScene } from '../engine/scene-parser';
 import { translateForDirector } from '../engine/variable-thresholds';
 import { sanitizeVarsPatch } from '../sillytavern/vars-validator';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
-import { createOutputProtocol, formatValidationErrors } from '../sillytavern/output-protocol';
+import {
+  createOutputProtocol,
+  formatValidationErrors,
+  repairRecoverableOutput,
+} from '../sillytavern/output-protocol';
 import type { ChatMessage } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
 import { appendResourcePrompt } from '../utils/resourcePrompt';
@@ -755,6 +759,15 @@ export function useGameLoop() {
           onComplete: async () => {
             actions.setStreaming(false);
             actions.setIsWaitingForAI(false);
+
+            const repairedOutput = repairRecoverableOutput(fullText);
+            if (repairedOutput.repairedTags.length > 0) {
+              fullText = repairedOutput.text;
+              parseStateRef.current = parseChunk(createParseState(), fullText, { strict: true });
+              actions.setStreamBuffer(fullText);
+              actions.setParsedContent(parseStateRef.current.parsed);
+              console.warn('[output-protocol] 已安全补全标签:', repairedOutput.repairedTags);
+            }
 
             // 严格校验 LLM 输出协议
             const validationErrors = outputProtocol.validate(fullText, parseStateRef.current.parsed);
