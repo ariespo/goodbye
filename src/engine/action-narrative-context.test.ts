@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { actionNarrativeContextError, resolveActionNarrativeContext } from './action-narrative-context';
+import type { Scene } from '../sillytavern/types';
+import {
+  actionNarrativeContextError,
+  applyActionNarrativeKnowledgeFallback,
+  resolveActionNarrativeContext,
+} from './action-narrative-context';
 
 const morning = new Date('2025-09-09T08:00:00');
 
@@ -35,6 +40,26 @@ describe('action narrative context semantic planning', () => {
         { background: 'supermarket-day', speaker: '陈慧慧', character: 'chen-huihui-normal.png', text: '今、今天想找什么？', emotion: 'calm' },
       ],
     })).toBeNull();
+  });
+
+  it('recovers Huihui archive knowledge when the narration is complete but the LLM omits the command', () => {
+    const context = resolveActionNarrativeContext(
+      '去便利店找陈慧慧问话',
+      morning,
+      10,
+      { currentLocationId: 'home', enRouteEncounterRoll: 1 },
+    );
+    const scene: Pick<Scene, 'lines'> = {
+      lines: [
+        { background: 'supermarket-day', speaker: '店员', character: 'chen-huihui-normal.png', text: '欢、欢迎光临……吃、吃吃。', emotion: 'calm' as const },
+        { background: 'supermarket-day', speaker: '旁白', text: '这是附近便利店的店员陈慧慧。她总是紧张兮兮的，笑得很不自然，看起来有些奇怪。', emotion: 'calm' as const },
+        { background: 'supermarket-day', speaker: '陈慧慧', character: 'chen-huihui-normal.png', text: '今、今天想找什么？', emotion: 'calm' as const },
+      ],
+    };
+
+    const recovered = applyActionNarrativeKnowledgeFallback(context, scene);
+    expect(recovered.lines[1].knowledgeEvents).toEqual(['meet:chen-huihui']);
+    expect(actionNarrativeContextError(context, scene)).toBeNull();
   });
 
   it('uses Huihui directly after her archive has been unlocked', () => {

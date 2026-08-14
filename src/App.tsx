@@ -23,6 +23,7 @@ import { createDefaultVariables } from './sillytavern/vars-merger';
 import './styles/animations.css';
 import './styles/themes.css';
 import { applyFontFamily } from './utils/fonts';
+import { recoverNarrativeKnowledge } from './utils/knowledgeRecovery';
 
 const CharacterPoseLab = lazy(() => import('./components/dev/CharacterPoseLab')
   .then(module => ({ default: module.CharacterPoseLab })));
@@ -82,6 +83,15 @@ function App() {
         }
 
         actions.setLorebooks(lorebooks);
+
+        // 旧版本可能已在正文完成确定性人物揭示，却因漏掉机器指令没有写入档案。
+        // 加载时只依据完整的既有演出补回该事件，不从单独提及或立绘猜测身份。
+        for (let index = 0; index < chats.length; index += 1) {
+          const recovered = recoverNarrativeKnowledge(chats[index]);
+          if (recovered === chats[index]) continue;
+          chats[index] = recovered;
+          await saveChat(recovered);
+        }
 
         // 如果没有聊天记录，创建默认会话 + 注入开局正文
         // 但不设置 currentScene，等用户在 TitleScreen 点击"开始游戏"后再进入

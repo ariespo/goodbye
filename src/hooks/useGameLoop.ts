@@ -61,6 +61,7 @@ import { captureTurnState, resolveTurnRollback } from '../utils/turnStateSnapsho
 import { deriveAuthorizedFactProgress } from '../agents/mystery/knowledge-progression';
 import { evaluatePlayerIntent } from '../engine/player-intent-policy';
 import {
+  applyActionNarrativeKnowledgeFallback,
   actionNarrativeContextError,
   resolveActionNarrativeContext,
   type ActionNarrativeContext,
@@ -123,8 +124,23 @@ function mergeAuthorizedKnowledge(
   variables: Record<string, any>,
   prepared: PreparedMysteryTurn | null,
   presentedKnowledgeEventIds: readonly string[] = [],
+  additionalAuthorizedEventIds: readonly string[] = [],
 ): Record<string, any> {
-  if (!prepared) return variables;
+  const authorizedKnowledgeEventIds = [
+    ...(prepared?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? []),
+    ...additionalAuthorizedEventIds,
+  ];
+  if (!prepared && authorizedKnowledgeEventIds.length === 0) return variables;
+  if (!prepared) {
+    return {
+      ...variables,
+      knowledgeEvents: addPresentedAuthorizedKnowledgeEvents(
+        normalizeKnowledgeEvents(variables.knowledgeEvents, variables.unlockedClues),
+        presentedKnowledgeEventIds,
+        authorizedKnowledgeEventIds,
+      ),
+    };
+  }
   const knowledge = readPlayerKnowledge(variables, Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []);
   const unlockedClues = new Set<string>(Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []);
   for (const fact of prepared.writerPacket.authorizedFacts) {
@@ -139,7 +155,7 @@ function mergeAuthorizedKnowledge(
   const knowledgeEvents = addPresentedAuthorizedKnowledgeEvents(
     normalizeKnowledgeEvents(variables.knowledgeEvents, [...unlockedClues]),
     presentedKnowledgeEventIds,
-    prepared.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId),
+    authorizedKnowledgeEventIds,
   );
   const factProgress = deriveAuthorizedFactProgress(variables, knowledge);
   return {
@@ -362,6 +378,17 @@ export function useGameLoop() {
       actions.setAbortController(abortController);
 
       let preparedTurn: PreparedMysteryTurn | null = null;
+      const getAuthorizedKnowledgeEventIds = () => [...new Set([
+        ...(preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? []),
+        ...(actionNarrativeContext?.sceneContract.requiredKnowledgeEvents.map(event => event.eventId) ?? []),
+      ])];
+      const parseNarrativeScene = (maintext: string) => applyActionNarrativeKnowledgeFallback(
+        actionNarrativeContext,
+        maintextToScene(maintext, {
+          authorizedKnowledgeEvents: getAuthorizedKnowledgeEventIds(),
+          variables: narrativeVariables,
+        }),
+      );
       let requestMessages = promptMessages;
       if (agentMode !== 'legacy') {
         const knownClueIds = (Array.isArray(game.endingCheckContext.unlockedClues)
@@ -505,15 +532,13 @@ export function useGameLoop() {
         const llmCostRaw = Number(reportedTimeCost);
         const llmCost = Number.isFinite(llmCostRaw) && llmCostRaw > 0 ? clampTimeCost(llmCostRaw) : null;
         const presentedKnowledgeEventIds = parsed.maintext
-          ? maintextToScene(parsed.maintext, {
-              authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
-              variables: narrativeVariables,
-            }).lines.flatMap(line => line.knowledgeEvents ?? [])
+          ? parseNarrativeScene(parsed.maintext).lines.flatMap(line => line.knowledgeEvents ?? [])
           : [];
         const authorizedVariables = mergeAuthorizedKnowledge(
           tavern.variables,
           preparedTurn,
           presentedKnowledgeEventIds,
+          actionNarrativeContext?.sceneContract.requiredKnowledgeEvents.map(event => event.eventId) ?? [],
         );
         if (actionNarrativeContext) {
           variablePatch.location = actionNarrativeContext.locationId;
@@ -723,10 +748,7 @@ export function useGameLoop() {
             actions.setParsedContent(parseStateRef.current.parsed);
 
             if (parseStateRef.current.parsed.maintext) {
-              const scene = maintextToScene(parseStateRef.current.parsed.maintext, {
-                authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
-                variables: narrativeVariables,
-              });
+              const scene = parseNarrativeScene(parseStateRef.current.parsed.maintext);
               actions.setCurrentScene(mergeParsedIntoScene(prevScene, scene, parseStateRef.current.parsed));
             }
           },
@@ -741,10 +763,7 @@ export function useGameLoop() {
               validationErrors.push(...streamErrors.map(msg => ({ code: 'STREAM_PARSE_ERROR', message: msg })));
             }
             if (parseStateRef.current.parsed.maintext) {
-              const completedScene = maintextToScene(parseStateRef.current.parsed.maintext, {
-                authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
-                variables: narrativeVariables,
-              });
+              const completedScene = parseNarrativeScene(parseStateRef.current.parsed.maintext);
               if (actionNarrativeContext) {
                 const contextError = actionNarrativeContextError(actionNarrativeContext, completedScene);
                 if (contextError) {

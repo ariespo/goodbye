@@ -222,11 +222,63 @@ ${identityFlow}
   };
 }
 
+function findHuihuiRecognitionNarrationIndex(
+  context: ActionNarrativeContext,
+  scene: Pick<Scene, 'lines'>,
+): number {
+  if (context.presentationMode !== 'huihui-first') return -1;
+  const destinationBackground = getCanonicalBackgroundId(context.background);
+  const destinationIndex = scene.lines.findIndex(line => (
+    !!line.background && getCanonicalBackgroundId(line.background) === destinationBackground
+  ));
+  if (destinationIndex < 0) return -1;
+  const clerkIndex = scene.lines.findIndex((line, index) => (
+    index >= destinationIndex && /^(?:店员|便利店员)$/.test(line.speaker.trim())
+  ));
+  if (clerkIndex < 0) return -1;
+  const introIndex = scene.lines.findIndex((line, index) => (
+    index > clerkIndex
+    && /^(?:旁白|narration)$/i.test(line.speaker.trim())
+    && /陈慧慧/.test(line.text)
+    && /(?:附近|社区).{0,8}便利店|便利店.{0,8}店员/.test(line.text)
+    && /奇怪|紧张|不自然|僵硬|汗/.test(line.text)
+  ));
+  if (introIndex < 0) return -1;
+  return scene.lines.slice(introIndex + 1).some(line => /^陈慧慧$/.test(line.speaker.trim()))
+    ? introIndex
+    : -1;
+}
+
+/**
+ * 场景契约本身已经确定陈慧慧初见的证据与结果。Writer 偶尔会完整写出证据，
+ * 却漏掉机器用的“认知”指令；此时从已经发生的完整演出补回事件，避免正文与档案脱节。
+ */
+export function applyActionNarrativeKnowledgeFallback<T extends Pick<Scene, 'lines'>>(
+  context: ActionNarrativeContext | null,
+  scene: T,
+): T {
+  if (!context) return scene;
+  const introIndex = findHuihuiRecognitionNarrationIndex(context, scene);
+  if (introIndex < 0) return scene;
+  const introLine = scene.lines[introIndex];
+  if (introLine.knowledgeEvents?.includes('meet:chen-huihui')) return scene;
+  return {
+    ...scene,
+    lines: scene.lines.map((line, index) => index === introIndex
+      ? {
+          ...line,
+          knowledgeEvents: [...new Set([...(line.knowledgeEvents ?? []), 'meet:chen-huihui'])],
+        }
+      : line),
+  };
+}
+
 export function actionNarrativeContextError(
   context: ActionNarrativeContext | null,
   scene: Pick<Scene, 'lines'>,
 ): string | null {
   if (!context) return null;
+  scene = applyActionNarrativeKnowledgeFallback(context, scene);
   const speakers = scene.lines.map(line => line.speaker.trim());
   const destinationBackground = getCanonicalBackgroundId(context.background);
   const destinationIndex = scene.lines.findIndex(line => (
@@ -270,14 +322,7 @@ export function actionNarrativeContextError(
   if (context.presentationMode === 'huihui-first') {
     const clerkIndex = scene.lines.findIndex(line => /^(?:店员|便利店员)$/.test(line.speaker.trim()));
     if (clerkIndex < destinationIndex) return '陈慧慧初见必须先以“店员”称呼实际说话，不能一登场就提前实名。';
-    const introIndex = scene.lines.findIndex((line, index) => (
-      index > clerkIndex
-      && /^(?:旁白|narration)$/i.test(line.speaker.trim())
-      && /陈慧慧/.test(line.text)
-      && /(?:附近|社区).{0,8}便利店|便利店.{0,8}店员/.test(line.text)
-      && /奇怪|紧张|不自然|僵硬|汗/.test(line.text)
-      && line.knowledgeEvents?.includes('meet:chen-huihui')
-    ));
+    const introIndex = findHuihuiRecognitionNarrationIndex(context, scene);
     if (introIndex < 0) return '“店员”说话后，必须由玩家视角旁白认出陈慧慧、概括她的紧张怪异印象，并紧接提交 meet:chen-huihui。';
     if (!scene.lines.slice(introIndex + 1).some(line => /^陈慧慧$/.test(line.speaker.trim()))) {
       return '提交 meet:chen-huihui 后，后续对话的显示称呼必须从“店员”更新为“陈慧慧”。';
