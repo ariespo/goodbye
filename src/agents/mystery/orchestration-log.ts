@@ -1,7 +1,12 @@
 import type { DirectorPlan, FactReview } from './types';
 
 export interface OrchestrationStageTiming {
-  stage: 'director' | 'hard-review' | 'director-repair' | 'hard-review-retry' | 'semantic-review' | 'pacing-review';
+  stage: 'director' | 'hard-review' | 'director-repair' | 'hard-review-retry'
+    | 'director-repair-final' | 'hard-review-final'
+    | 'semantic-review' | 'pacing-review' | 'semantic-repair'
+    | 'hard-review-after-semantic-repair' | 'semantic-review-retry' | 'pacing-review-retry'
+    | 'semantic-repair-final' | 'hard-review-after-semantic-final'
+    | 'semantic-review-final' | 'pacing-review-final';
   durationMs: number;
 }
 

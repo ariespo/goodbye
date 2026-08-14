@@ -1,4 +1,6 @@
 import { getItemByReference } from '../data/itemAssets';
+import { applyCharacterEmotionPolicies } from './character-emotion-policy';
+import { CHEN_HUIHUI_CHOCOLATE_EVENT, isZhouDemingConfirmedKiller } from './character-emotion-policy';
 import type { Scene, SceneLine, Mood } from '../sillytavern/types';
 
 /**
@@ -107,6 +109,7 @@ function extractXmlTags(text: string): {
 
 export interface SceneParseOptions {
   authorizedKnowledgeEvents?: string[];
+  variables?: Record<string, unknown>;
 }
 
 export function maintextToScene(maintext: string, options: SceneParseOptions = {}): Scene {
@@ -167,7 +170,10 @@ export function maintextToScene(maintext: string, options: SceneParseOptions = {
 
     if (head === '对话' || head === 'dialog' || head === 'dialogue') {
       const speaker = fields[1] || '旁白';
-      const emotion = normalizeEmotion(fields[2]);
+      const requestedEmotion = normalizeEmotion(fields[2]);
+      const emotion = /^(林静|侦探B|detective-b)$/i.test(speaker.trim())
+        ? 'calm'
+        : requestedEmotion;
       const itemCandidate = fields.length >= 5 ? fields[fields.length - 1]?.trim() : '';
       const item = itemCandidate && getItemByReference(itemCandidate) ? itemCandidate : '';
       const textFields = item ? fields.slice(3, -1) : fields.slice(3);
@@ -205,17 +211,25 @@ export function maintextToScene(maintext: string, options: SceneParseOptions = {
     pendingAnimation = undefined;
   }
 
-  return {
+  const scene: Scene = {
     id: crypto.randomUUID(),
     lines,
     background: lines[0]?.background,
     bgm: lines[0]?.bgm,
     character: lines[0]?.character,
     mood: lines[0]?.emotion,
+    ...(options.variables ? {
+      emotionPolicyContext: {
+        huihuiChocolateKnownAtSceneStart: Array.isArray(options.variables.knowledgeEvents)
+          && options.variables.knowledgeEvents.includes(CHEN_HUIHUI_CHOCOLATE_EVENT),
+        zhouKillerConfirmedAtSceneStart: isZhouDemingConfirmedKiller(options.variables),
+      },
+    } : {}),
     observe,
     investigateItems,
     actionItems,
   };
+  return options.variables ? applyCharacterEmotionPolicies(scene, options.variables) : scene;
 }
 
 export function mergeParsedIntoScene(
@@ -273,11 +287,12 @@ const SPEAKER_SPRITE_MAP: Record<string, string> = {
 const EMOTION_SPRITES: Mood[] = ['angry', 'happy', 'horror', 'insane', 'sad'];
 
 const SPRITE_EMOTIONS_BY_BASE: Record<string, Mood[]> = {
+  'chen-huihui': ['angry', 'happy', 'sad'],
   fumi: EMOTION_SPRITES,
   touko: EMOTION_SPRITES,
   'old-man': ['angry', 'happy', 'insane', 'sad'],
   'detective-a': ['sad'],
-  'detective-b': ['angry'],
+  'detective-b': [],
 };
 
 /** 角色名 + 情绪 → 立绘文件名(无情绪立绘则回退到默认) */

@@ -13,6 +13,12 @@ const OLD_MAN_HAPPY_ANIMATION_ASSET_REVISION = '20260809-happy-alpha-clean-v1';
 const OLD_MAN_ANGRY_ANIMATION_ASSET_REVISION = '20260809-angry-alpha-clean-v1';
 const OLD_MAN_SAD_ANIMATION_ASSET_REVISION = '20260809-sad-alpha-clean-v1';
 const OLD_MAN_INSANE_ANIMATION_ASSET_REVISION = '20260810-insane-alpha-clean-v2';
+const CHEN_HUIHUI_CALM_ANIMATION_ASSET_REVISION = '20260814-calm-alpha-clean-v2';
+const CHEN_HUIHUI_HAPPY_ANIMATION_ASSET_REVISION = '20260814-happy-alpha-clean-v1';
+const CHEN_HUIHUI_ANGRY_ANIMATION_ASSET_REVISION = '20260814-angry-alpha-clean-v1';
+const CHEN_HUIHUI_SAD_ANIMATION_ASSET_REVISION = '20260814-sad-alpha-clean-v1';
+const LIN_JING_CALM_ANIMATION_ASSET_REVISION = '20260814-calm-alpha-clean-v1';
+const ZHAO_GANG_CALM_ANIMATION_ASSET_REVISION = '20260814-calm-alpha-clean-v1';
 const toukoAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${TOUKO_ANIMATION_ASSET_REVISION}`);
 const toukoEmotionAnimationAsset = (path: string) =>
@@ -31,6 +37,18 @@ const oldManSadAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${OLD_MAN_SAD_ANIMATION_ASSET_REVISION}`);
 const oldManInsaneAnimationAsset = (path: string) =>
   assetUrl(`${path}?v=${OLD_MAN_INSANE_ANIMATION_ASSET_REVISION}`);
+const chenHuihuiCalmAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${CHEN_HUIHUI_CALM_ANIMATION_ASSET_REVISION}`);
+const chenHuihuiHappyAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${CHEN_HUIHUI_HAPPY_ANIMATION_ASSET_REVISION}`);
+const chenHuihuiAngryAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${CHEN_HUIHUI_ANGRY_ANIMATION_ASSET_REVISION}`);
+const chenHuihuiSadAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${CHEN_HUIHUI_SAD_ANIMATION_ASSET_REVISION}`);
+const linJingCalmAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${LIN_JING_CALM_ANIMATION_ASSET_REVISION}`);
+const zhaoGangCalmAnimationAsset = (path: string) =>
+  assetUrl(`${path}?v=${ZHAO_GANG_CALM_ANIMATION_ASSET_REVISION}`);
 const toukoMattedBlinkFrames = Array.from({ length: 9 }, (_, index) =>
   toukoAnimationAsset(
     `assets/characters/concepts/touko-blink-frames-user-v3-cleaned/matte_${String(index + 1).padStart(5, '0')}.png`,
@@ -41,6 +59,182 @@ const fumiMattedBlinkFrames = Array.from({ length: 9 }, (_, index) =>
     `assets/characters/concepts/fumi-blink-frames-user-v4-cleaned/matte_${String(index + 1).padStart(5, '0')}.png`,
   ),
 );
+
+export const CHEN_HUIHUI_CALM_TALK_FRAMES = Array.from({ length: 25 }, (_, index) =>
+  chenHuihuiCalmAnimationAsset(
+    `assets/characters/animated/chen-huihui/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const CHEN_HUIHUI_CALM_TALK_CLIP: CharacterAnimationClip = {
+  src: CHEN_HUIHUI_CALM_TALK_FRAMES[0],
+  sources: CHEN_HUIHUI_CALM_TALK_FRAMES,
+  frames: CHEN_HUIHUI_CALM_TALK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_CALM_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: CHEN_HUIHUI_CALM_TALK_FRAMES.length - 1,
+};
+
+export const CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES = Array.from({ length: 9 }, (_, index) =>
+  chenHuihuiCalmAnimationAsset(
+    `assets/characters/animated/chen-huihui/tail-blink-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const CHEN_HUIHUI_CALM_TAIL_BLINK: CharacterBlinkClip = {
+  src: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0],
+  sources: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES,
+  frames: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES.length }, () => 55),
+};
+
+// The profile rests on the supplied neutral first frame and only plays blink frames.
+export const CHEN_HUIHUI_CALM_PROFILE_CLIP: CharacterAnimationClip = {
+  src: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0],
+  sources: [CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0]],
+  frames: 1,
+  frameMs: [1],
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: 0,
+};
+
+export const CHEN_HUIHUI_HAPPY_TALK_FRAMES = Array.from({ length: 14 }, (_, index) =>
+  chenHuihuiHappyAnimationAsset(
+    `assets/characters/animated/chen-huihui/talk-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const CHEN_HUIHUI_HAPPY_TALK_CLIP: CharacterAnimationClip = {
+  src: CHEN_HUIHUI_HAPPY_TALK_FRAMES[0],
+  sources: CHEN_HUIHUI_HAPPY_TALK_FRAMES,
+  frames: CHEN_HUIHUI_HAPPY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_HAPPY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: CHEN_HUIHUI_HAPPY_TALK_FRAMES.length - 1,
+};
+
+export const CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES = CHEN_HUIHUI_HAPPY_TALK_FRAMES;
+
+export const CHEN_HUIHUI_HAPPY_TAIL_BLINK: CharacterBlinkClip = {
+  src: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES[0],
+  sources: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES,
+  frames: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const CHEN_HUIHUI_ANGRY_TALK_FRAMES = Array.from({ length: 25 }, (_, index) =>
+  chenHuihuiAngryAnimationAsset(
+    `assets/characters/animated/chen-huihui/talk-angry-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const CHEN_HUIHUI_ANGRY_TALK_CLIP: CharacterAnimationClip = {
+  src: CHEN_HUIHUI_ANGRY_TALK_FRAMES[0],
+  sources: CHEN_HUIHUI_ANGRY_TALK_FRAMES,
+  frames: CHEN_HUIHUI_ANGRY_TALK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_ANGRY_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: CHEN_HUIHUI_ANGRY_TALK_FRAMES.length - 1,
+};
+
+// The supplied angry sheet is also the approved post-action blink/idle cycle.
+export const CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES = CHEN_HUIHUI_ANGRY_TALK_FRAMES;
+
+export const CHEN_HUIHUI_ANGRY_TAIL_BLINK: CharacterBlinkClip = {
+  src: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES[0],
+  sources: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES,
+  frames: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const CHEN_HUIHUI_SAD_TALK_FRAMES = Array.from({ length: 25 }, (_, index) =>
+  chenHuihuiSadAnimationAsset(
+    `assets/characters/animated/chen-huihui/talk-sad-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const CHEN_HUIHUI_SAD_TALK_CLIP: CharacterAnimationClip = {
+  src: CHEN_HUIHUI_SAD_TALK_FRAMES[0],
+  sources: CHEN_HUIHUI_SAD_TALK_FRAMES,
+  frames: CHEN_HUIHUI_SAD_TALK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_SAD_TALK_FRAMES.length }, () => 42),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: CHEN_HUIHUI_SAD_TALK_FRAMES.length - 1,
+};
+
+// The supplied sad sheet includes its own closed-eye passage and is reused as
+// the post-action blink cycle, matching Huihui's happy and angry emotions.
+export const CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES = CHEN_HUIHUI_SAD_TALK_FRAMES;
+
+export const CHEN_HUIHUI_SAD_TAIL_BLINK: CharacterBlinkClip = {
+  src: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES[0],
+  sources: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES,
+  frames: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES.length }, () => 42),
+};
+
+export const LIN_JING_CALM_TALK_FRAMES = Array.from({ length: 5 }, (_, index) =>
+  linJingCalmAnimationAsset(
+    `assets/characters/animated/detective-b/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const LIN_JING_CALM_TALK_CLIP: CharacterAnimationClip = {
+  src: LIN_JING_CALM_TALK_FRAMES[0],
+  sources: LIN_JING_CALM_TALK_FRAMES,
+  frames: LIN_JING_CALM_TALK_FRAMES.length,
+  frameMs: Array.from({ length: LIN_JING_CALM_TALK_FRAMES.length }, () => 55),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: LIN_JING_CALM_TALK_FRAMES.length - 1,
+};
+
+// Lin Jing only has a calm performance. The supplied five-frame sequence is
+// reused verbatim for her post-action blink and character profile animation.
+export const LIN_JING_CALM_TAIL_BLINK_FRAMES = LIN_JING_CALM_TALK_FRAMES;
+
+export const LIN_JING_CALM_TAIL_BLINK: CharacterBlinkClip = {
+  src: LIN_JING_CALM_TAIL_BLINK_FRAMES[0],
+  sources: LIN_JING_CALM_TAIL_BLINK_FRAMES,
+  frames: LIN_JING_CALM_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: LIN_JING_CALM_TAIL_BLINK_FRAMES.length }, () => 55),
+};
+
+export const LIN_JING_CALM_PROFILE_CLIP = LIN_JING_CALM_TALK_CLIP;
+
+export const ZHAO_GANG_CALM_TALK_FRAMES = Array.from({ length: 9 }, (_, index) =>
+  zhaoGangCalmAnimationAsset(
+    `assets/characters/animated/detective-a/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+  ),
+);
+
+export const ZHAO_GANG_CALM_TALK_CLIP: CharacterAnimationClip = {
+  src: ZHAO_GANG_CALM_TALK_FRAMES[0],
+  sources: ZHAO_GANG_CALM_TALK_FRAMES,
+  frames: ZHAO_GANG_CALM_TALK_FRAMES.length,
+  frameMs: Array.from({ length: ZHAO_GANG_CALM_TALK_FRAMES.length }, () => 55),
+  loop: false,
+  holdLastFrame: true,
+  reducedMotionFrame: ZHAO_GANG_CALM_TALK_FRAMES.length - 1,
+};
+
+// Zhao Gang's supplied calm sequence includes its own blink and is reused in
+// both the post-action idle cycle and the character profile.
+export const ZHAO_GANG_CALM_TAIL_BLINK_FRAMES = ZHAO_GANG_CALM_TALK_FRAMES;
+
+export const ZHAO_GANG_CALM_TAIL_BLINK: CharacterBlinkClip = {
+  src: ZHAO_GANG_CALM_TAIL_BLINK_FRAMES[0],
+  sources: ZHAO_GANG_CALM_TAIL_BLINK_FRAMES,
+  frames: ZHAO_GANG_CALM_TAIL_BLINK_FRAMES.length,
+  frameMs: Array.from({ length: ZHAO_GANG_CALM_TAIL_BLINK_FRAMES.length }, () => 55),
+};
+
+export const ZHAO_GANG_CALM_PROFILE_CLIP = ZHAO_GANG_CALM_TALK_CLIP;
 
 export const OLD_MAN_CALM_TALK_FRAMES = Array.from({ length: 8 }, (_, index) =>
   oldManCalmAnimationAsset(

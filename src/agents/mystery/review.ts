@@ -8,9 +8,94 @@ import type {
   WriterPacket,
 } from './types';
 
+function impliesConfession(description: string): boolean {
+  if (/没有否认|不再(?:否认|反驳)|低头沉默|默认(?:承认)?/.test(description)) return true;
+  const withoutExplicitDenials = description
+    .replace(/(?:始终|仍然|仍|明确|坚决|一直)?不承认/g, '')
+    .replace(/(?:两人|双方|他们|她|他)?(?:均|都)?未(?:曾|亲口)?承认/g, '')
+    .replace(/拒绝承认/g, '')
+    .replace(/否认/g, '')
+    .replace(/要求.{0,16}承认/g, '');
+  return /承认|坦白|招供|供述|说漏嘴|脱口而出|讲出.*经过|交代.*经过/.test(withoutExplicitDenials);
+}
+
+export function removeConfessionBySilence(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
+  const lyingNpcIds = new Set(brief.npcKnowledge
+    .filter(entry => entry.facts.some(fact => fact.stance === 'lies-about'))
+    .map(entry => entry.npcId));
+  const authorizedConfirmations = plan.revelations
+    .filter(revelation => revelation.level === 'confirmation')
+    .map(revelation => {
+      const fact = brief.usableFacts.find(item => item.id === revelation.factId);
+      return fact?.revealOptions.find(option => option.level === 'confirmation')?.text;
+    })
+    .filter((text): text is string => !!text);
+  const beats = plan.beats.flatMap(beat => {
+    const implicated = beat.speakerIds?.some(id => lyingNpcIds.has(id)) && impliesConfession(beat.description);
+    if (!implicated) return [beat];
+    const carriesConfirmation = /确认|证据|指出|真相|完整行动|误杀|掩盖|移尸|伪装|凶手|杀害/.test(`${beat.purpose} ${beat.description}`);
+    if (!carriesConfirmation || authorizedConfirmations.length === 0) return [];
+    return [{
+      ...beat,
+      purpose: '由玩家以外部证据独立确认获准事实',
+      description: `玩家只依据本回合已获准证据独立闭合结论：${authorizedConfirmations.join('；')}。在场嫌疑人不发言，也不描写其沉默、表情、动作或其他可被解释为承认的反应。`,
+      speakerIds: [],
+    }];
+  });
+  return { ...plan, beats };
+}
+
+export function ensureSaturationPivotOrder(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
+  const pivot = brief.saturationPivot;
+  if (!pivot) return plan;
+  const interventionIndex = plan.beats.findIndex(beat => beat.speakerIds?.includes(pivot.interveningNpcId));
+  const hasOriginalFirst = plan.beats.slice(0, Math.max(0, interventionIndex)).some(beat => (
+    pivot.blockedActorId === 'self'
+      ? /自己|记忆|行动|复核/.test(`${beat.purpose} ${beat.description}`)
+      : beat.speakerIds?.includes(pivot.blockedActorId)
+  ));
+  if (hasOriginalFirst) return plan;
+  return {
+    ...plan,
+    beats: [{
+      id: 'saturation-original-action',
+      purpose: `先完整响应玩家对 ${pivot.blockedActorId} 的原调查`,
+      description: pivot.blockedActorId === 'self'
+        ? '玩家先按原意复核自己的记忆与行动；本段只落实调查行为，不获得新事实，也不增加原目标嫌疑。'
+        : `玩家先按原意联系并调查 ${pivot.blockedActorId}；该角色只按公开身份和本回合获准知识作普通回应，不提供新事实，也不增加原目标嫌疑。`,
+      locationId: pivot.currentLocationId,
+      speakerIds: pivot.blockedActorId === 'self' ? [] : [pivot.blockedActorId],
+    }, ...plan.beats],
+  };
+}
+
 export function reviewDirectorPlan(plan: DirectorPlan, brief: MysteryBrief): FactReview {
   const violations: FactReviewViolation[] = [];
   const seen = new Set<string>();
+
+  if (brief.saturationPivot) {
+    const pivot = brief.saturationPivot;
+    const revelation = plan.revelations.find(item => item.factId === pivot.factId);
+    if (!revelation) {
+      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `目标嫌疑已达当日上限；必须让 ${pivot.interveningNpcId} 介入并揭示 ${pivot.factId}，把新压力转向 ${pivot.redirectedActorId}。` });
+    } else if (revelation.delivery !== 'dialogue' || revelation.speakerId !== pivot.interveningNpcId) {
+      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `调查饱和转场的 ${pivot.factId} 必须由 ${pivot.interveningNpcId} 以 dialogue 揭示。` });
+    }
+    const interventionIndex = (plan.beats ?? []).findIndex(beat => beat.speakerIds?.includes(pivot.interveningNpcId));
+    const originalInvestigationIndex = (plan.beats ?? []).findIndex(beat => {
+      const text = `${beat.purpose} ${beat.description}`;
+      return pivot.blockedActorId === 'self'
+        ? /玩家|自身|自己|记忆|行动/.test(text)
+        : !!beat.speakerIds?.includes(pivot.blockedActorId) || text.includes(pivot.blockedActorId);
+    });
+    if (originalInvestigationIndex < 0 || interventionIndex <= originalInvestigationIndex) {
+      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `beats 必须先响应对 ${pivot.blockedActorId} 的原调查，再让 ${pivot.interveningNpcId} 自然介入。` });
+    }
+    const misplacedBeat = (plan.beats ?? []).find(beat => beat.locationId && beat.locationId !== pivot.currentLocationId);
+    if (misplacedBeat) {
+      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `调查饱和转场必须发生在当前场景 ${pivot.currentLocationId}，不得擅自切换到 ${misplacedBeat.locationId}。` });
+    }
+  }
 
   for (const revelation of plan.revelations) {
     const key = `${revelation.factId}:${revelation.level}`;
@@ -64,13 +149,21 @@ export function reviewDirectorPlan(plan: DirectorPlan, brief: MysteryBrief): Fac
   }
 
   const proposedKnowledgeEvents = plan.knowledgeEvents ?? [];
-  if (proposedKnowledgeEvents.length > 1) {
+  const proposedDiscoveries = proposedKnowledgeEvents.map(proposal => brief.playerPresentation.allowedDiscoveries
+    .find(candidate => candidate.eventId === proposal.eventId));
+  const canPairPublicIdentity = proposedKnowledgeEvents.length === 2
+    && proposedDiscoveries.every(Boolean)
+    && proposedDiscoveries[0]?.subjectId === proposedDiscoveries[1]?.subjectId
+    && proposedDiscoveries.every(discovery => discovery?.kind === 'identity' || discovery?.kind === 'public-fact');
+  if (proposedKnowledgeEvents.length > 1 && !canPairPublicIdentity) {
     violations.push({
       code: 'player-knowledge-violation',
-      message: '单回合最多新增一个人物或地点认知事件。',
+      message: '单回合最多新增一个认知事件；唯一例外是同一人物的“姓名确认+公开职业确认”可由同一组可靠依据同时更新。',
     });
   }
   for (const proposal of proposedKnowledgeEvents) {
+    const discovery = brief.playerPresentation.allowedDiscoveries
+      .find(candidate => candidate.eventId === proposal.eventId);
     if (!isAllowedKnowledgeDiscovery(brief.playerPresentation, proposal.eventId)) {
       violations.push({
         code: 'player-knowledge-violation',
@@ -83,6 +176,78 @@ export function reviewDirectorPlan(plan: DirectorPlan, brief: MysteryBrief): Fac
         message: `认知事件 ${proposal.eventId} 缺少玩家实际看到或听到的依据。`,
       });
     }
+    if (discovery && proposal.evidence.trim().length < 12) {
+      violations.push({
+        code: 'player-knowledge-violation',
+        message: `认知事件 ${proposal.eventId} 的依据过于笼统；必须具体说明如何满足：${discovery.evidenceStandard}`,
+      });
+    }
+  }
+
+  const beatText = (plan.beats ?? []).map(beat =>
+    `${Array.isArray(beat.speakerIds) ? beat.speakerIds.join(' ') : ''} ${beat.description ?? ''}`,
+  );
+  for (const npc of brief.npcKnowledge.filter(entry => entry.facts.some(fact => fact.stance === 'lies-about'))) {
+    const confessionBeat = (plan.beats ?? []).find(beat => {
+      if (!beat.speakerIds?.includes(npc.npcId)) return false;
+      return impliesConfession(beat.description);
+    });
+    if (confessionBeat) {
+      violations.push({
+        code: 'character-performance-violation',
+        message: `${npc.npcId} 的 stance=lies-about；即使事实已确认，也不得安排自白、说漏嘴或默认承认。`,
+      });
+    }
+  }
+  const huihuiAngryIndex = beatText.findIndex(text => /chen-huihui|陈慧慧|慧慧/.test(text) && /angry|愤怒|生气|发火/.test(text));
+  const huihuiRevealIndex = beatText.findIndex(text => /低血糖/.test(text) && /巧克力/.test(text) && /收银员/.test(text) && /文件夹/.test(text));
+  const huihuiKnowledge = proposedKnowledgeEvents.find(item => item.eventId === 'insight:chen-huihui-hypoglycemia');
+  if (huihuiAngryIndex >= 0 && !huihuiKnowledge) {
+    violations.push({
+      code: 'character-performance-violation',
+      message: '陈慧慧的愤怒只能与 insight:chen-huihui-hypoglycemia 人物揭示绑定，不能作为普通情绪使用。',
+    });
+  }
+  if (huihuiKnowledge) {
+    const evidence = huihuiKnowledge.evidence ?? '';
+    if (huihuiAngryIndex < 0 || huihuiRevealIndex <= huihuiAngryIndex
+      || !/低血糖/.test(evidence) || !/巧克力/.test(evidence)
+      || !/收银员/.test(evidence) || !/文件夹/.test(evidence)) {
+      violations.push({
+        code: 'player-knowledge-violation',
+        message: '慧慧低血糖认知必须按“愤怒动作后揭示低血糖与大号巧克力，并由她吐槽收银员为何拿文件夹”的顺序给出完整证据。',
+      });
+    }
+  }
+
+  const oldManInsanePlanned = beatText.some(text =>
+    /old-man|周德明|周大爷|老头/.test(text) && /insane|疯狂|疯癫|癫狂|狂笑/.test(text),
+  );
+  const oldManKillerPreviouslyConfirmed = brief.playerKnownFacts.some(fact =>
+    fact.level === 'confirmation'
+      && (fact.id === 'a-murder-staged-fall' || /周德明.*推下.*文穗|周德明.*伪装成.*坠亡/.test(fact.text)),
+  );
+  const oldManInsaneIndex = beatText.findIndex(text =>
+    /old-man|周德明|周大爷|老头/.test(text) && /insane|疯狂|疯癫|癫狂|狂笑/.test(text),
+  );
+  const schedulesOldManConfirmation = plan.revelations.some(revelation => {
+    if (revelation.level !== 'confirmation') return false;
+    const fact = brief.usableFacts.find(candidate => candidate.id === revelation.factId);
+    return fact?.revealOptions.some(option =>
+      option.level === 'confirmation' && /周德明.*推下.*文穗|周德明.*伪装成.*坠亡/.test(option.text),
+    );
+  });
+  const confirmationBeatBeforeInsane = beatText
+    .slice(0, Math.max(0, oldManInsaneIndex))
+    .some(text => /确认|证实|凶手|推下|杀害/.test(text) && /周德明|周大爷|老头/.test(text));
+  const oldManConfirmedBeforeInsane = oldManKillerPreviouslyConfirmed
+    || (schedulesOldManConfirmation && confirmationBeatBeforeInsane);
+  if (oldManInsanePlanned && !oldManConfirmedBeforeInsane) {
+    violations.push({
+      code: 'character-performance-violation',
+      factId: 'a-murder-staged-fall',
+      message: '玩家确认周德明是凶手前，禁止安排其 insane 或等价疯癫表演。',
+    });
   }
 
   for (const intent of plan.scenePlan?.investigateIntents ?? []) {
@@ -135,5 +300,7 @@ export function buildWriterPacket(plan: DirectorPlan, brief: MysteryBrief): Writ
       'authorizedKnowledgeEvents 中的新人或新地点只能在 evidence 所描述的玩家可见事件发生后，才可使用新称呼或地址。',
     ],
     playerPresentation: brief.playerPresentation,
+    characterPerformances: brief.characterPerformances,
+    saturationPivot: brief.saturationPivot,
   };
 }

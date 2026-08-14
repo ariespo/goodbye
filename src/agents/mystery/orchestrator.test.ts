@@ -192,6 +192,133 @@ describe('mystery orchestrator', () => {
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  it('repairs a semantically rejected plan and re-runs every safety gate', async () => {
+    const semanticRejected = JSON.stringify({
+      approved: false,
+      violations: [{ code: 'npc-knowledge-violation', message: 'NPC 越权透露事实' }],
+      corrections: ['删除越权台词'],
+    });
+    const repaired = { ...validPlan, beats: [{ id: 'safe', purpose: '观察', description: '只观察衣柜' }] };
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(semanticRejected)
+      .mockResolvedValueOnce(approvedFactReview)
+      .mockResolvedValueOnce(JSON.stringify(repaired))
+      .mockResolvedValueOnce(approvedFactReview)
+      .mockResolvedValueOnce(approvedFactReview);
+
+    const result = await prepareMysteryTurn({
+      mode: 'standard',
+      api: { baseUrl: 'test', apiKey: 'test', model: 'test' },
+      preset: null,
+      truthContext,
+      turnContext: { playerInput: '观察' },
+      presentationContext: {},
+      complete,
+    });
+
+    expect(result.directorAttempts).toBe(2);
+    expect(result.directorPlan.beats[0]?.id).toBe('safe');
+    expect(result.hardReview.approved).toBe(true);
+    expect(result.semanticReview?.approved).toBe(true);
+    expect(result.pacingReview?.approved).toBe(true);
+    expect(complete).toHaveBeenCalledTimes(6);
+  });
+
+  it('ignores critic claims that case revelations require player knowledge events', async () => {
+    const falsePositive = JSON.stringify({
+      approved: false,
+      violations: [{
+        code: 'knowledge_event_missing',
+        factId: 'F001',
+        message: 'F001 revelation 未申请 knowledgeEvent，且不在 allowedDiscoveries。',
+      }],
+      corrections: ['为 F001 revelation 新增 knowledgeEvent。'],
+    });
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(falsePositive)
+      .mockResolvedValueOnce(approvedFactReview);
+
+    const result = await prepareMysteryTurn({
+      mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext,
+      turnContext: { playerInput: '检查房间', cycleCount: 1 },
+      presentationContext: { location: 'home' },
+      complete,
+    });
+
+    expect(result.semanticReview?.approved).toBe(true);
+    expect(result.directorAttempts).toBe(1);
+    expect(complete).toHaveBeenCalledTimes(3);
+  });
+
+  it('treats lies-about as permission rather than mandatory active lying', async () => {
+    const falsePositive = JSON.stringify({
+      approved: false,
+      violations: [{
+        code: 'npc-knowledge-boundary',
+        factId: 'F007',
+        message: 'old-man stance 为 lies-about，但未体现其主动撒谎。',
+      }],
+      corrections: [],
+    });
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(falsePositive)
+      .mockResolvedValueOnce(approvedFactReview);
+
+    const result = await prepareMysteryTurn({
+      mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext, turnContext: { playerInput: '质问', cycleCount: 2 },
+      presentationContext: { location: 'home' }, complete,
+    });
+
+    expect(result.semanticReview?.approved).toBe(true);
+    expect(result.directorAttempts).toBe(1);
+  });
+
+  it('ignores critic entries that explicitly say they are not violations', async () => {
+    const falsePositive = JSON.stringify({
+      approved: false,
+      violations: [{ code: 'red_herring_misuse', factId: 'F006', message: '计划未使用 F006，不构成违规。' }],
+      corrections: [],
+    });
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(falsePositive)
+      .mockResolvedValueOnce(approvedFactReview);
+    const result = await prepareMysteryTurn({
+      mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext, turnContext: { playerInput: '检查', cycleCount: 2 },
+      presentationContext: { location: 'home' }, complete,
+    });
+    expect(result.semanticReview?.approved).toBe(true);
+    expect(result.directorAttempts).toBe(1);
+  });
+
+  it('does not require optional insane performance after confirmation', async () => {
+    const falsePositive = JSON.stringify({
+      approved: false,
+      violations: [{
+        code: 'character_performance_violation', factId: 'F009',
+        message: '计划已 confirmation，但未体现confirmation后的空洞专注。',
+      }],
+      corrections: [],
+    });
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(falsePositive)
+      .mockResolvedValueOnce(approvedFactReview);
+    const result = await prepareMysteryTurn({
+      mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext, turnContext: { playerInput: '确认', cycleCount: 5 },
+      presentationContext: { location: 'home' }, complete,
+    });
+    expect(result.semanticReview?.approved).toBe(true);
+    expect(result.directorAttempts).toBe(1);
+  });
+
   it('falls back when a proxy wraps response_format rejection as successful text', async () => {
     const proxyError = 'Proxy error (HTTP 400): This response_format type is unavailable now';
     const complete = vi.fn()

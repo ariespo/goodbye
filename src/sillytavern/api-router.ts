@@ -126,6 +126,18 @@ export interface ApiConfig {
   model: string;
 }
 
+function isDeepSeekV4(config: ApiConfig): boolean {
+  return /api\.deepseek\.com/i.test(config.baseUrl)
+    && /^deepseek-v4-(?:flash|pro)$/i.test(config.model);
+}
+
+function applyProviderCompatibility(body: Record<string, any>, config: ApiConfig): void {
+  // DeepSeek V4 defaults to thinking mode. These calls require strict
+  // machine-readable output, so hidden reasoning must not consume the output
+  // budget before the final answer begins.
+  if (isDeepSeekV4(config)) body.thinking = { type: 'disabled' };
+}
+
 export interface ChatCompletionMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -295,6 +307,7 @@ export async function streamChatCompletion(
     messages,
     stream: true,
   };
+  applyProviderCompatibility(body, config);
 
   if (preset) {
     if (preset.settings.temp_openai !== undefined) body.temperature = preset.settings.temp_openai;
@@ -326,14 +339,6 @@ export async function streamChatCompletion(
       const decoder = new TextDecoder();
       let buffer = '';
       let contentEmitted = false;
-      let reasoningFallback = '';
-
-      const emitReasoningFallback = () => {
-        if (contentEmitted || !reasoningFallback.trim()) return;
-        onFirstToken();
-        callbacks.onToken(reasoningFallback);
-        contentEmitted = true;
-      };
 
       try {
         while (true) {
@@ -348,7 +353,9 @@ export async function streamChatCompletion(
           for (const line of lines) {
             if (line.trim() === '') continue;
             if (line.trim() === 'data: [DONE]') {
-              emitReasoningFallback();
+              if (!contentEmitted) {
+                throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
+              }
               callbacks.onComplete();
               return;
             }
@@ -362,9 +369,7 @@ export async function streamChatCompletion(
                   onFirstToken();
                   callbacks.onToken(token);
                 }
-                if (typeof delta?.reasoning_content === 'string') {
-                  reasoningFallback += delta.reasoning_content;
-                }
+                // reasoning_content is private analysis, never playable prose.
               } catch {
                 // Ignore malformed JSON
               }
@@ -375,7 +380,9 @@ export async function streamChatCompletion(
         reader.releaseLock();
       }
 
-      emitReasoningFallback();
+      if (!contentEmitted) {
+        throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
+      }
       callbacks.onComplete();
     } finally {
       timeout.dispose();
@@ -429,6 +436,7 @@ export async function callSecondaryApi(
     model: config.model || preset?.settings.openai_model,
     messages,
   };
+  applyProviderCompatibility(body, config);
 
   if (preset) {
     if (preset.settings.temp_openai !== undefined) body.temperature = preset.settings.temp_openai;
@@ -452,7 +460,7 @@ export async function callSecondaryApi(
       const message = data.choices?.[0]?.message;
       const content = typeof message?.content === 'string' ? message.content : '';
       if (content.trim()) return content;
-      return typeof message?.reasoning_content === 'string' ? message.reasoning_content : '';
+      throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
     } finally {
       timeout.dispose();
     }

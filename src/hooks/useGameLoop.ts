@@ -11,6 +11,7 @@ import { createOutputProtocol, formatValidationErrors } from '../sillytavern/out
 import type { ChatMessage } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
 import { appendResourcePrompt } from '../utils/resourcePrompt';
+import { appendCharacterPerformancePrompt } from '../data/characterPerformance';
 import { parseTimeCost, clampTimeCost } from '../engine/game-clock';
 import { buildScheduledDirectives } from '../engine/scheduled-events';
 import { settleGameTransaction, type GameResourceCosts } from '../engine/game-transaction';
@@ -22,6 +23,7 @@ import {
   MYSTERY_TRUTH_GRAPH,
   MysteryPipelineBlockedError,
   prepareMysteryTurn,
+  reviewNarrativeAgainstWriterPacket,
   REVEAL_LEVELS,
   startPreplan,
   type AgentNarrativeMode,
@@ -261,9 +263,18 @@ export function useGameLoop() {
       const intentPolicy = evaluatePlayerIntent(userInput, tavern.variables);
       const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
       const historyMessages = excludeCurrentInputFromHistory(messages, userInput);
-      const promptUserInput = appendResourcePrompt(userInput, game.currentState.background, tavern.variables)
+      const agentMode: AgentNarrativeMode = opts?.forceLegacy ? 'legacy' : (settings.agentNarrativeMode ?? 'standard');
+      const mysteryLocation = resolveMysteryLocation(game.currentState.background);
+      const basePromptUserInput = appendResourcePrompt(userInput, game.currentState.background, tavern.variables)
         + `\n\n[玩家意图裁决] ${intentPolicy.directorDirective}`
         + (scheduledDirectives.length ? '\n\n' + scheduledDirectives.map(l => `[系统指令] ${l}`).join('\n') : '');
+      const promptUserInput = agentMode === 'legacy'
+        ? appendCharacterPerformancePrompt(
+            basePromptUserInput,
+            buildPlayerKnowledgeBrief({ ...tavern.variables, location: mysteryLocation }),
+            npcIdsByLocation[mysteryLocation] ?? [],
+          )
+        : basePromptUserInput;
       const { messages: promptMessages } = assemblePrompt({
         userInput: promptUserInput,
         history: historyMessages,
@@ -281,12 +292,10 @@ export function useGameLoop() {
 
       let preparedTurn: PreparedMysteryTurn | null = null;
       let requestMessages = promptMessages;
-      const agentMode: AgentNarrativeMode = opts?.forceLegacy ? 'legacy' : (settings.agentNarrativeMode ?? 'standard');
       if (agentMode !== 'legacy') {
         const knownClueIds = (Array.isArray(game.endingCheckContext.unlockedClues)
           ? game.endingCheckContext.unlockedClues
           : []).filter(id => mysteryFactIds.has(id));
-        const mysteryLocation = resolveMysteryLocation(game.currentState.background);
         const playerPresentation = buildPlayerKnowledgeBrief({ ...tavern.variables, location: mysteryLocation });
         const truthContext: TruthContext = {
           cycleCount: Number(tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
@@ -618,6 +627,7 @@ export function useGameLoop() {
             if (parseStateRef.current.parsed.maintext) {
               const scene = maintextToScene(parseStateRef.current.parsed.maintext, {
                 authorizedKnowledgeEvents: preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? [],
+                variables: tavern.variables,
               });
               actions.setCurrentScene(mergeParsedIntoScene(prevScene, scene, parseStateRef.current.parsed));
             }
@@ -645,6 +655,22 @@ export function useGameLoop() {
 
             if (preparedTurn) {
               try {
+                const narrativeReview = await reviewNarrativeAgainstWriterPacket({
+                  api: resolveAnalysisApi(settings),
+                  preset: activePreset,
+                  packet: preparedTurn.writerPacket,
+                  narrative: parseStateRef.current.parsed.maintext || fullText,
+                  abortSignal: abortController.signal,
+                });
+                if (!narrativeReview.approved) {
+                  const detail = narrativeReview.violations.map(item => item.message).join('\n');
+                  actions.setTurnRecovery({
+                    phase: 'failed_stream',
+                    userInput,
+                    errorMessage: `正文越过事实或角色边界，已阻止写入存档：\n${detail}`,
+                  });
+                  return;
+                }
                 const stateResult = await runStateAgent({
                   api: resolveAnalysisApi(settings),
                   preset: activePreset,
@@ -653,6 +679,13 @@ export function useGameLoop() {
                   playerInput: userInput,
                   narrative: parseStateRef.current.parsed.maintext || fullText,
                   deterministicCosts: resolvePendingCosts() ?? undefined,
+                  saturationPivot: preparedTurn.brief.saturationPivot
+                    ? {
+                        blockedActorId: preparedTurn.brief.saturationPivot.blockedActorId,
+                        redirectedActorId: preparedTurn.brief.saturationPivot.redirectedActorId,
+                        requiredSuspicionGain: preparedTurn.brief.saturationPivot.requiredSuspicionGain,
+                      }
+                    : undefined,
                   abortSignal: abortController.signal,
                 });
                 if (stateResult.summary) {

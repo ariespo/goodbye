@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import {
+  CHEN_HUIHUI_CALM_PROFILE_CLIP,
+  CHEN_HUIHUI_CALM_TAIL_BLINK,
   FUMI_ANIMATION_CLIPS,
   FUMI_TAIL_BLINKS,
+  LIN_JING_CALM_PROFILE_CLIP,
+  LIN_JING_CALM_TAIL_BLINK,
   OLD_MAN_CALM_TAIL_BLINK,
   OLD_MAN_CALM_TALK_CLIP,
   TOUKO_ANIMATION_CLIPS,
   TOUKO_TAIL_BLINKS,
+  ZHAO_GANG_CALM_PROFILE_CLIP,
+  ZHAO_GANG_CALM_TAIL_BLINK,
 } from '../../data/characterAnimations';
 import { getPlayerEntities } from '../../data/playerKnowledge';
 import { useGameStore } from '../../stores/gameStore';
@@ -19,6 +25,14 @@ const TEXT_MAIN = '#e8e4dc';
 const TEXT_DIM = '#aaa59e';
 const BLUE = '#86a8f2';
 const GOLD = '#d4a853';
+
+const CHARACTER_STAGE_LABELS = {
+  observed: '仅有印象',
+  identified: '姓名已确认',
+  'public-known': '公开资料已确认',
+  familiar: '逐渐熟悉',
+  understood: '深入了解',
+} as const;
 
 export function CharacterProfileModal() {
   const showCharacters = useGameStore(state => state.ui.showCharacters);
@@ -43,7 +57,10 @@ export function CharacterProfileModal() {
   const isToukoProfile = selected?.id === 'touko' && /^touko-(normal|calm)\.png$/i.test(selectedPortrait);
   const isFumiProfile = selected?.id === 'fumi' && /^fumi-(normal|calm)\.png$/i.test(selectedPortrait);
   const isOldManProfile = selected?.id === 'old-man' && /^old-man-(normal|calm)\.png$/i.test(selectedPortrait);
-  const usesAnimatedProfile = isToukoProfile || isFumiProfile || isOldManProfile;
+  const isChenHuihuiProfile = selected?.id === 'chen-huihui' && /^chen-huihui-(normal|calm)\.png$/i.test(selectedPortrait);
+  const isLinJingProfile = selected?.id === 'detective-b' && /^detective-b-normal-v7\.png$/i.test(selectedPortrait);
+  const isZhaoGangProfile = selected?.id === 'detective-a' && /^detective-a-normal-v8\.png$/i.test(selectedPortrait);
+  const usesAnimatedProfile = isToukoProfile || isFumiProfile || isOldManProfile || isChenHuihuiProfile || isLinJingProfile || isZhaoGangProfile;
 
   return (
     <div
@@ -90,7 +107,7 @@ export function CharacterProfileModal() {
                   <span className="min-w-0">
                     <strong className="block truncate font-serif-cn text-[16px]">{character.displayName}</strong>
                     <small className="mt-1 block truncate text-[11px]" style={{ color: active ? '#aebfe8' : '#777b82' }}>
-                      {character.stage === 'observed' ? '身份未确认' : character.stage === 'identified' ? '身份已确认' : '已经认识'}
+                      {CHARACTER_STAGE_LABELS[character.stage]}
                     </small>
                   </span>
                 </button>
@@ -117,14 +134,26 @@ export function CharacterProfileModal() {
               {usesAnimatedProfile && (
                 <CharacterAnimationPlayer
                   key={selected.id}
-                  clip={isFumiProfile
-                    ? FUMI_ANIMATION_CLIPS.idle
+                  clip={isChenHuihuiProfile
+                    ? CHEN_HUIHUI_CALM_PROFILE_CLIP
+                    : isLinJingProfile
+                      ? LIN_JING_CALM_PROFILE_CLIP
+                    : isZhaoGangProfile
+                      ? ZHAO_GANG_CALM_PROFILE_CLIP
+                    : isFumiProfile
+                      ? FUMI_ANIMATION_CLIPS.idle
                     : isToukoProfile
                       ? TOUKO_ANIMATION_CLIPS.idle
                       : OLD_MAN_CALM_TALK_CLIP}
                   fallbackSrc={selectedPortraitSrc}
-                  tailBlink={isFumiProfile
-                    ? FUMI_TAIL_BLINKS.idle
+                  tailBlink={isChenHuihuiProfile
+                    ? CHEN_HUIHUI_CALM_TAIL_BLINK
+                    : isLinJingProfile
+                      ? LIN_JING_CALM_TAIL_BLINK
+                    : isZhaoGangProfile
+                      ? ZHAO_GANG_CALM_TAIL_BLINK
+                    : isFumiProfile
+                      ? FUMI_TAIL_BLINKS.idle
                     : isToukoProfile
                       ? TOUKO_TAIL_BLINKS.idle
                       : OLD_MAN_CALM_TAIL_BLINK}
@@ -141,7 +170,9 @@ export function CharacterProfileModal() {
             </div>
 
             <div className="character-profile-copy relative z-10 ml-[38%] flex h-full flex-col justify-center px-10 py-16">
-              <div className="mb-3 font-mono text-[11px] tracking-[0.22em]" style={{ color: BLUE }}>CHARACTER FILE</div>
+              <div className="mb-3 font-mono text-[11px] tracking-[0.22em]" style={{ color: BLUE }}>
+                CHARACTER FILE · {CHARACTER_STAGE_LABELS[selected.stage]}
+              </div>
               <h2 className="font-serif-cn text-[38px] tracking-[0.12em]" style={{ color: TEXT_MAIN }}>{selected.displayName}</h2>
               <div className="mt-2 text-[14px] tracking-[0.08em]" style={{ color: GOLD }}>{selected.subtitle}</div>
               <div className="my-6 h-[2px] w-20 bg-[#526a9b]" />

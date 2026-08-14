@@ -6,7 +6,7 @@ import {
   type ResponseFormat,
 } from '../../sillytavern/api-router';
 import { sanitizeVarsPatch, type SanitizeResult } from '../../sillytavern/vars-validator';
-import { setVariablePath } from '../../sillytavern/vars-merger';
+import { getVariablePath, setVariablePath } from '../../sillytavern/vars-merger';
 import { completeStructured, extractJson } from '../mystery/structured';
 import { LOOP_PACING_CONTRACT } from '../mystery/loop-contract';
 
@@ -38,6 +38,11 @@ export interface RunStateAgentOptions {
     stamina?: number;
     sanity?: number;
   };
+  saturationPivot?: {
+    blockedActorId: string;
+    redirectedActorId: string;
+    requiredSuspicionGain: number;
+  };
   abortSignal?: AbortSignal;
 }
 
@@ -67,6 +72,7 @@ const STATE_AGENT_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
   knowledgeEvents、mysteryKnowledge、unlockedClues、deathNews、tripProgress、cultClues、
   worldGlitchClues、fakeEvidence、letterFragments、lockedRoute、overlay、finalChoice。
 - 数值写变化后的绝对值；数组只增不减；路线指认、解释层和最终选择只由玩家界面与游戏程序写入。
+- 如果请求中有 saturationPivot，且正文确实落地该转场：绝对禁止增加 blockedActorId 的嫌疑；必须把 redirectedActorId 的嫌疑在当前值基础上增加 requiredSuspicionGain。该增量来自程序已审查的线索归属，不得转给其他角色。
 - 路线碎片、假死证据、隐藏层线索和行程进度由事实门在正文生成后另行结算，不要写入。
 - 不要使用 Markdown 代码块。`;
 
@@ -116,6 +122,7 @@ export function validateStateAgentResponse(
   response: StateAgentResponse,
   currentVariables: Record<string, any>,
   evidenceText: string,
+  saturationPivot?: RunStateAgentOptions['saturationPivot'],
 ): ValidatedStateAgentResult {
   const rejected: SanitizeResult['rejected'] = [];
   const normalizedSource = normalizeQuote(evidenceText);
@@ -151,6 +158,18 @@ export function validateStateAgentResponse(
   }
 
   const sanitized = sanitizeVarsPatch(evidencedPatch, currentVariables);
+  if (saturationPivot) {
+    const blockedPath = `suspicion.${saturationPivot.blockedActorId}`;
+    const redirectedPath = `suspicion.${saturationPivot.redirectedActorId}`;
+    // 线索归属由事实门和硬审查确定，不再信任模型自行挑选状态目标。
+    delete sanitized.vars[blockedPath];
+    const current = Number(getVariablePath(currentVariables, redirectedPath) ?? 0);
+    const deterministic = sanitizeVarsPatch({
+      suspicion: { [saturationPivot.redirectedActorId]: current + saturationPivot.requiredSuspicionGain },
+    }, currentVariables);
+    sanitized.vars[redirectedPath] = deterministic.vars[redirectedPath];
+    sanitized.clamped.push(...deterministic.clamped);
+  }
   return {
     summary: typeof response.summary === 'string' && response.summary.trim()
       ? response.summary.trim()
@@ -191,6 +210,7 @@ export async function runStateAgent(options: RunStateAgentOptions): Promise<Vali
         deterministicCostsHandledByEngine: options.deterministicCosts ?? {},
         playerInput: options.playerInput,
         narrative: options.narrative,
+        saturationPivot: options.saturationPivot ?? null,
       }, null, 2),
     },
   ];
@@ -223,5 +243,6 @@ export async function runStateAgent(options: RunStateAgentOptions): Promise<Vali
     response,
     options.currentVariables,
     `${options.playerInput}\n${options.narrative}`,
+    options.saturationPivot,
   );
 }

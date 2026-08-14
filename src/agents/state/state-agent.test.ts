@@ -85,4 +85,21 @@ describe('validateStateAgentResponse', () => {
     expect(result.vars.lockedRoute).toBeUndefined();
     expect(result.clamped[0].to).toBe(15);
   });
+
+  it('调查饱和转场由程序固定提升其他角色并禁止原目标继续增长', () => {
+    const variables = createDefaultVariables();
+    variables.suspicion['old-man'] = 15;
+    const result = validateStateAgentResponse({
+      patch: { suspicion: { 'old-man': 30, self: 30 } },
+      evidence: [
+        { path: 'suspicion.old-man', quote: '继续质问老人' },
+        { path: 'suspicion.self', quote: '门卫确认电话来自男性' },
+      ],
+    }, variables, '你继续质问老人。随后门卫确认电话来自男性。', {
+      blockedActorId: 'old-man', redirectedActorId: 'self', requiredSuspicionGain: 5,
+    });
+
+    expect(result.vars['suspicion.old-man']).toBeUndefined();
+    expect(result.vars['suspicion.self']).toBe(15);
+  });
 });

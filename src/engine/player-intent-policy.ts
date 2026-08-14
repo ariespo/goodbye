@@ -53,7 +53,7 @@ export function evaluatePlayerIntent(input: string, variables: Record<string, an
       return {
         mode: 'divert', targetedActorId, suspicionRemaining: 0, sanityPenalty: 0,
         reason: '该角色在本次完整一天中的嫌疑增长预算已用尽。',
-        directorDirective: `玩家确实尝试继续调查 ${targetedActorId}，不可取消或假装没有行动；但本轮不得再增加该角色嫌疑，也不得重复制造指向该角色的新证据。用可信的阻碍、对方不在场、第三者打断、环境事件或非该目标的新线索承接，并让玩家仍然获得可感知的行动后果。`,
+        directorDirective: `玩家确实尝试继续调查 ${targetedActorId}，不可取消、跳过或假装没有行动；先按玩家意图让该角色作出符合身份的真实回应，但本轮不得再增加该角色嫌疑，也不得重复制造指向该角色的新证据。随后必须执行 MysteryBrief.saturationPivot：由指定的其他角色自然介入并带来归属于另一调查对象的新线索，提高该对象的揭露度/嫌疑度。单纯拒答、离场、受阻或无结果不算完成。`,
       };
     }
     return {

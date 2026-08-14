@@ -10,7 +10,7 @@ import { setSfxVolume } from '../../utils/sfx';
 
 const PRESET_PROVIDERS = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  { name: 'DeepSeek Flash', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash' },
   { name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
   { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-latest' },
 ];

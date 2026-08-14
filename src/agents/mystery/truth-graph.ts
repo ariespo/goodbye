@@ -49,6 +49,21 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
       availability: { minCycle: 2, locations: ['school'] },
     },
     {
+      id: 'shared-nurse-school-inquiry',
+      route: 'shared',
+      kind: 'evidence',
+      canonicalTruth: '文穗离开校门后不久，一名挂着社区医院临时工牌的陌生女人来问她是否进校；来人是林静。',
+      characters: ['fumi', 'detective-b', 'school-guard'],
+      locations: ['school'],
+      revelations: {
+        atmosphere: '门卫想起，文穗离开后不久还有一个陌生人来问过她。',
+        hint: '文穗离开校门后不久，一名挂着社区医院临时工牌的陌生女人来问她是否进校。',
+        clue: '门卫与来访登记共同确认，询问文穗行踪的陌生女人是林静。',
+      },
+      availability: { minCycle: 2, locations: ['school'] },
+      suspicionTargets: ['detective-b'],
+    },
+    {
       id: 'shared-water-tower-secret',
       route: 'shared',
       kind: 'evidence',
@@ -76,6 +91,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         clue: '晨练者的证词可确认赵刚曾沿山路尾随文穗。',
       },
       availability: { minCycle: 2, locations: ['mountain-trail'] },
+      suspicionTargets: ['detective-a'],
     },
     {
       id: 'red-herring-part-time-job',
@@ -88,6 +104,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         hint: '她带走围裙，也许是瞒着你去做一份临时工作。',
       },
       availability: { minCycle: 1 },
+      suspicionTargets: ['clerk'],
     },
     {
       id: 'a-sacrifice-list',
@@ -109,6 +126,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         maxRevealBeforeRouteLock: 'clue',
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['old-man'],
     },
     {
       id: 'a-lured-inside',
@@ -126,9 +144,11 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         minCycle: 4,
         locations: ['old-man-building'],
         requiredClueIds: ['a-sacrifice-list'],
+        minSuspicion: { actorId: 'old-man', minimum: 26 },
         maxRevealBeforeRouteLock: 'clue',
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['old-man'],
     },
     {
       id: 'a-murder-staged-fall',
@@ -148,9 +168,10 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         locations: ['old-man-building'],
         requiredClueIds: ['a-sacrifice-list', 'a-lured-inside'],
         minSuspicion: { actorId: 'old-man', minimum: 50 },
-        requiresRouteLock: true,
+        maxRevealBeforeRouteLock: 'clue',
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['old-man'],
     },
     {
       id: 'b-water-tower-blood',
@@ -170,6 +191,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         minSuspicion: { actorId: 'detective-a', minimum: 26 },
         maxRevealBeforeRouteLock: 'clue',
       },
+      suspicionTargets: ['detective-a'],
     },
     {
       id: 'b-detective-coverup',
@@ -187,9 +209,11 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         minCycle: 4,
         locations: ['detective-inn', 'observation-deck', 'water-tower'],
         requiredClueIds: ['b-water-tower-blood'],
+        minAnySuspicion: { actorIds: ['detective-a', 'detective-b'], minimum: 50 },
         maxRevealBeforeRouteLock: 'clue',
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['detective-a', 'detective-b'],
     },
     {
       id: 'b-accidental-killing',
@@ -206,10 +230,11 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
       availability: {
         minCycle: 5,
         requiredClueIds: ['b-water-tower-blood', 'b-detective-coverup'],
-        minSuspicion: { actorId: 'detective-a', minimum: 50 },
-        requiresRouteLock: true,
+        minAnySuspicion: { actorIds: ['detective-a', 'detective-b'], minimum: 50 },
+        maxRevealBeforeRouteLock: 'clue',
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['detective-a'],
     },
     {
       id: 'c-player-made-leave-call',
@@ -232,6 +257,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         maxRevealBeforeRouteLock: 'clue',
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['self'],
     },
     {
       id: 'c-loop-is-reenactment',
@@ -253,6 +279,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         maxRevealBeforeRouteLock: 'clue',
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['self'],
     },
     {
       id: 'c-player-killed-fumi',
@@ -275,6 +302,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
         requiresRouteLock: true,
         maxRevealAfterRouteLock: 'confirmation',
       },
+      suspicionTargets: ['self'],
     },
     {
       id: 'none-letter-bedroom',
@@ -692,14 +720,18 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
   npcKnowledge: [
     { npcId: 'school-guard', factId: 'shared-school-absence', maxRevealLevel: 'clue', stance: 'knows' },
     { npcId: 'school-guard', factId: 'shared-male-leave-call', maxRevealLevel: 'clue', stance: 'knows' },
+    { npcId: 'school-guard', factId: 'shared-nurse-school-inquiry', maxRevealLevel: 'clue', stance: 'knows' },
     { npcId: 'morning-witness', factId: 'shared-detective-tail', maxRevealLevel: 'hint', stance: 'knows' },
     { npcId: 'touko', factId: 'shared-water-tower-secret', maxRevealLevel: 'hint', stance: 'suspects' },
     { npcId: 'old-man', factId: 'a-sacrifice-list', maxRevealLevel: 'confirmation', stance: 'lies-about' },
     { npcId: 'old-man', factId: 'a-lured-inside', maxRevealLevel: 'confirmation', stance: 'lies-about' },
+    { npcId: 'old-man', factId: 'a-murder-staged-fall', maxRevealLevel: 'confirmation', stance: 'lies-about' },
     { npcId: 'detective-a', factId: 'shared-detective-tail', maxRevealLevel: 'confirmation', stance: 'lies-about' },
     { npcId: 'detective-a', factId: 'b-water-tower-blood', maxRevealLevel: 'confirmation', stance: 'lies-about' },
+    { npcId: 'detective-a', factId: 'b-detective-coverup', maxRevealLevel: 'confirmation', stance: 'lies-about' },
     { npcId: 'detective-a', factId: 'b-accidental-killing', maxRevealLevel: 'confirmation', stance: 'lies-about' },
     { npcId: 'detective-b', factId: 'b-detective-coverup', maxRevealLevel: 'confirmation', stance: 'lies-about' },
+    { npcId: 'detective-b', factId: 'b-accidental-killing', maxRevealLevel: 'confirmation', stance: 'lies-about' },
     { npcId: 'touko', factId: 'fake-touko-request', maxRevealLevel: 'clue', stance: 'knows' },
     { npcId: 'old-man', factId: 'cult-old-man-remembers-loop', maxRevealLevel: 'clue', stance: 'lies-about' },
   ],

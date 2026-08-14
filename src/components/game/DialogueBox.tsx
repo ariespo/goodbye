@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { playSfx } from '../../utils/sfx';
 import { useTypewriter } from '../../hooks/useTypewriter';
@@ -17,17 +17,22 @@ import {
   DIALOGUE_ACCENT as ACCENT,
 } from './DialogueBoxParts';
 import { applyMacros, emotionLabel, emotionTextClass, emotionTextStyle } from './dialogueText';
+import { applyCharacterEmotionPolicies } from '../../engine/character-emotion-policy';
 
 /* ── 像素风对话框 ── */
 
 export function DialogueBox() {
-  const currentScene = useGameStore(state => state.game.currentScene);
+  const storedScene = useGameStore(state => state.game.currentScene);
   const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
   const autoMode = useGameStore(state => state.game.autoMode);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const settings = useGameStore(state => state.tavern.settings);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const variables = useGameStore(state => state.tavern.variables);
+  const currentScene = useMemo(
+    () => storedScene ? applyCharacterEmotionPolicies(storedScene, variables) : null,
+    [storedScene, variables],
+  );
 
   const setCurrentLineIndex = useGameStore(state => state.actions.setCurrentLineIndex);
   const setCurrentState = useGameStore(state => state.actions.setCurrentState);
@@ -56,17 +61,29 @@ export function DialogueBox() {
 
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committedKnowledgeRef = useRef(new Set<string>());
+  const [minimumHoldReady, setMinimumHoldReady] = useState(true);
   const [advanceHintDone, setAdvanceHintDone] = useState(
     () => window.localStorage.getItem('farewell.advance-hint.done') === 'true',
   );
 
+  useEffect(() => {
+    const minimumDisplayMs = currentLine?.minimumDisplayMs ?? 0;
+    if (minimumDisplayMs <= 0) {
+      setMinimumHoldReady(true);
+      return;
+    }
+    setMinimumHoldReady(false);
+    const timer = window.setTimeout(() => setMinimumHoldReady(true), minimumDisplayMs);
+    return () => window.clearTimeout(timer);
+  }, [currentLine?.minimumDisplayMs, currentLineIndex, currentScene?.id]);
+
   /* ── 自动模式推进 ── */
   useEffect(() => {
-    if (autoMode && isComplete && currentLine && !isLastLine) {
+    if (autoMode && isComplete && minimumHoldReady && currentLine && !isLastLine) {
       autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
     }
     return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
-  }, [autoMode, isComplete, currentLineIndex, currentScene, autoIntervalMs]);
+  }, [autoMode, isComplete, minimumHoldReady, currentLineIndex, currentScene, autoIntervalMs]);
 
   /* ── 场景完成检测 ── */
   useEffect(() => {
@@ -84,10 +101,11 @@ export function DialogueBox() {
   const handleAdvance = useCallback(() => {
     if (!currentScene) return;
     if (!isComplete) { skip(); return; }
+    if (!minimumHoldReady) return;
     if (currentLineIndex < currentScene.lines.length - 1) {
       setCurrentLineIndex(currentLineIndex + 1);
     }
-  }, [currentScene, currentLineIndex, isComplete, skip, setCurrentLineIndex]);
+  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, skip, setCurrentLineIndex]);
 
   const handleStartOrAdvance = useCallback(() => {
     if (!advanceHintDone) {
@@ -111,6 +129,10 @@ export function DialogueBox() {
   /* ── 快进：跳到最后一行，途中台词的知识事件照常提交 ── */
   const handleFastForward = useCallback(() => {
     if (!currentScene) return;
+    if (!minimumHoldReady) {
+      if (!isComplete) skip();
+      return;
+    }
     if (currentLineIndex < currentScene.lines.length - 1) {
       currentScene.lines.slice(currentLineIndex, -1).forEach((line, offset) => {
         if (line.knowledgeEvents?.length) {
@@ -121,7 +143,7 @@ export function DialogueBox() {
     } else if (!isComplete) {
       skip();
     }
-  }, [currentScene, currentLineIndex, isComplete, skip, setCurrentLineIndex]);
+  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, skip, setCurrentLineIndex]);
 
   /* ── 重头回看：回到第一句，恢复首帧状态 ── */
   const handleRestart = useCallback(() => {

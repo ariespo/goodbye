@@ -9,6 +9,7 @@ import {
   type RevealLevel,
   type TruthContext,
 } from './types';
+import { projectCharacterPerformances } from '../../data/characterPerformance';
 
 function budgetFor(context: TruthContext): RevealBudget {
   if (context.lockedRoute) {
@@ -98,6 +99,13 @@ function unavailableReason(fact: MysteryFact, context: TruthContext): string | n
     && (context.suspicion[availability.minSuspicion.actorId] ?? 0) < availability.minSuspicion.minimum
   ) {
     return `对 ${availability.minSuspicion.actorId} 的怀疑度不足。`;
+  }
+  const anySuspicion = availability.minAnySuspicion;
+  if (
+    anySuspicion
+    && !anySuspicion.actorIds.some(actorId => (context.suspicion[actorId] ?? 0) >= anySuspicion.minimum)
+  ) {
+    return `相关角色中至少一人的怀疑度需要达到 ${anySuspicion.minimum}。`;
   }
   if (
     availability.minAffinity
@@ -197,12 +205,22 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
     }
   }
 
+  // NPC 的本轮经历必须服从当前事实门槛；即使旧存档残留了玩家知识，
+  // 也不能绕过怀疑度、路线、地点或轮回条件把隐藏现实重新塞给角色。
+  const availableFactIds = new Set(usableFacts.map(fact => fact.id));
   const npcKnowledge = context.activeNpcIds.map((npcId) => ({
     npcId,
     facts: graph.npcKnowledge
-      .filter((entry) => entry.npcId === npcId)
+      .filter((entry) => entry.npcId === npcId && availableFactIds.has(entry.factId))
       .map(({ factId, maxRevealLevel, stance }) => ({ factId, maxRevealLevel, stance })),
   }));
+
+  const playerPresentation = context.playerPresentation ?? {
+    locations: [],
+    entities: [],
+    namingRules: ['不得擅自补充玩家尚未获得的人物身份、地点名称或地址。'],
+    allowedDiscoveries: [],
+  };
 
   return {
     graphVersion: graph.version,
@@ -217,11 +235,7 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
     forbiddenReveals,
     revealBudget,
     continuityWarnings,
-    playerPresentation: context.playerPresentation ?? {
-      locations: [],
-      entities: [],
-      namingRules: ['不得擅自补充玩家尚未获得的人物身份、地点名称或地址。'],
-      allowedDiscoveries: [],
-    },
+    playerPresentation,
+    characterPerformances: projectCharacterPerformances(playerPresentation, context.activeNpcIds),
   };
 }

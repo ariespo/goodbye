@@ -27,6 +27,10 @@ export interface MysteryFactAvailability {
   requiredClueIds?: string[];
   requiredAnyClueIds?: string[];
   minSuspicion?: SuspicionRequirement;
+  minAnySuspicion?: {
+    actorIds: string[];
+    minimum: number;
+  };
   minAffinity?: SuspicionRequirement;
   minTripProgress?: number;
   requiredKnownFactSet?: {
@@ -50,6 +54,8 @@ export interface MysteryFact {
   locations: string[];
   revelations: Partial<Record<RevealLevel, string>>;
   availability: MysteryFactAvailability;
+  /** 该事实实际会提高哪些调查对象的嫌疑；缺省表示只补充案情、不指向人物。 */
+  suspicionTargets?: string[];
 }
 
 export interface NpcFactKnowledge {
@@ -139,6 +145,9 @@ export interface MysteryBrief {
   revealBudget: RevealBudget;
   continuityWarnings: string[];
   playerPresentation: PlayerKnowledgeBrief;
+  characterPerformances: CharacterPerformanceProfile[];
+  /** 当玩家继续追查已达当日上限的角色时，由引擎选定并强制审查的异角色转场。 */
+  saturationPivot?: SaturationPivotBrief;
 }
 
 export interface DirectorRevelation {
@@ -196,6 +205,8 @@ export type FactReviewViolationCode =
   | 'reveal-budget-exceeded'
   | 'duplicate-revelation'
   | 'npc-knowledge-violation'
+  | 'saturation-pivot-violation'
+  | 'character-performance-violation'
   | 'player-knowledge-violation';
 
 export interface FactReviewViolation {
@@ -225,5 +236,18 @@ export interface WriterPacket {
   authorizedKnowledgeEvents: Array<{ eventId: string; evidence: string }>;
   forbiddenInstructions: string[];
   playerPresentation: PlayerKnowledgeBrief;
+  characterPerformances: CharacterPerformanceProfile[];
+  saturationPivot?: SaturationPivotBrief;
+}
+
+export interface SaturationPivotBrief {
+  blockedActorId: string;
+  redirectedActorId: string;
+  factId: string;
+  interveningNpcId: string;
+  currentLocationId: string;
+  requiredSuspicionGain: number;
+  directive: string;
 }
 import type { PlayerKnowledgeBrief } from '../../data/playerKnowledge';
+import type { CharacterPerformanceProfile } from '../../data/characterPerformance';

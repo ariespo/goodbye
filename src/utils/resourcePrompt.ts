@@ -31,7 +31,11 @@ const DISCOVERY_ENTITY: Record<string, { entityId: string; name: string; subtitl
   'meet:chen-huihui': { entityId: 'chen-huihui', name: '陈慧慧', subtitle: '社区便利店的店员' },
   'meet:liu-renguang': { entityId: 'liu-renguang', name: '刘仁光', subtitle: '文穗中学的体育老师' },
   'observe:shaved-man': { entityId: 'detective-a', name: '寸头男人', subtitle: '身份不明的陌生男人' },
+  'identify:zhao-gang-name': { entityId: 'detective-a', name: '寸头男人', subtitle: '本回合可通过可靠依据确认姓名的陌生男人' },
+  'learn:zhao-gang-job': { entityId: 'detective-a', name: '寸头男人', subtitle: '本回合可通过可靠依据确认职业的陌生男人' },
   'observe:unknown-woman': { entityId: 'detective-b', name: '陌生女人', subtitle: '身份不明的女性' },
+  'identify:lin-jing-name': { entityId: 'detective-b', name: '陌生女人', subtitle: '本回合可通过可靠依据确认姓名的陌生女人' },
+  'learn:lin-jing-job': { entityId: 'detective-b', name: '陌生女人', subtitle: '本回合可通过可靠依据确认职业的陌生女人' },
 };
 
 function spriteEntityId(spriteId: string): string | null {
@@ -98,7 +102,7 @@ function buildCharacterLines(variables: Record<string, unknown>): string {
     if (!entityId) continue;
     const entity = entities.get(entityId);
     if (!entity) continue;
-    const revealed = entity.stage === 'introduced' || entity.stage === 'identified';
+    const revealed = entity.stage !== 'observed';
     const description = revealed ? sprite.description : `${entity.subtitle}。玩家未确认其身份，只能以“${entity.displayName}”称呼。`;
     lines.push(`- ${sprite.id}: ${entity.displayName} (${sprite.file}) - ${description}`);
   }

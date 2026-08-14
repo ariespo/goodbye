@@ -79,7 +79,8 @@ describe('emotion sprite mapping', () => {
     expect(detectiveA.lines[0].character).toBe('detective-a-sad.png');
 
     const detectiveB = maintextToScene('对话|林静|angry|闭嘴。');
-    expect(detectiveB.lines[0].character).toBe('detective-b-angry.png');
+    expect(detectiveB.lines[0].character).toBe('detective-b-normal.png');
+    expect(detectiveB.lines[0].emotion).toBe('calm');
   });
 
   it('maps the clerk and teacher to their default portraits', () => {
@@ -88,6 +89,21 @@ describe('emotion sprite mapping', () => {
 
     const teacher = maintextToScene('dialogue|liu-renguang|calm|先去热身。');
     expect(teacher.lines[0].character).toBe('liu-renguang-normal.png');
+  });
+
+  it('maps Chen Huihui happy dialogue to the installed emotion sprite', () => {
+    const scene = maintextToScene('dialogue|chen-huihui|happy|今天也要打起精神。');
+    expect(scene.lines[0].character).toBe('chen-huihui-happy.png');
+  });
+
+  it('maps Chen Huihui angry dialogue to the installed emotion sprite', () => {
+    const scene = maintextToScene('dialogue|chen-huihui|angry|别再说了。');
+    expect(scene.lines[0].character).toBe('chen-huihui-angry.png');
+  });
+
+  it('maps Chen Huihui sad dialogue to the installed emotion sprite', () => {
+    const scene = maintextToScene('dialogue|chen-huihui|sad|我只是有点累。');
+    expect(scene.lines[0].character).toBe('chen-huihui-sad.png');
   });
 
   it('maps fixed special sprites', () => {

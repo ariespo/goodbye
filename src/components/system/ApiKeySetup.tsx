@@ -6,7 +6,7 @@ import { GameIcon } from '../ui/GameIcon';
 
 const PRESET_PROVIDERS = [
   { name: 'OpenAI', short: 'OA', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  { name: 'DeepSeek', short: 'DS', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  { name: 'DeepSeek Flash', short: 'DS', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash' },
   { name: '智谱 GLM', short: 'GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
   { name: 'Anthropic 兼容', short: 'ANT', baseUrl: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-latest' },
 ];

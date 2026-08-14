@@ -21,7 +21,7 @@ export function characterCanvasSize(character: string): { width: number; height:
   const sprite = resolveCharacterSprite(character);
   if (sprite.startsWith('fumi-') || sprite.startsWith('touko-')) return { width: 430, height: 606 };
   if (sprite.startsWith('detective-a-') || sprite.startsWith('detective-b-')) return { width: 430, height: 606 };
-  if (sprite === 'chen-huihui-normal.png') return { width: 341, height: 606 };
+  if (/^chen-huihui-(normal|calm|angry|happy|sad)\.png$/i.test(sprite)) return { width: 430, height: 606 };
   if (sprite === 'liu-renguang-normal.png') return { width: 404, height: 606 };
   return { width: 412, height: 606 };
 }

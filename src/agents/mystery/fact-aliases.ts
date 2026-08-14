@@ -69,6 +69,9 @@ export function buildAliasedMysteryBrief(
     continuityWarnings: brief.continuityWarnings.length > 0
       ? [`检测到 ${brief.continuityWarnings.length} 条旧存档事实引用异常；不得据此补写事实。`]
       : [],
+    saturationPivot: brief.saturationPivot
+      ? { ...brief.saturationPivot, factId: aliasFactId(table, brief.saturationPivot.factId) }
+      : undefined,
   };
 }
 

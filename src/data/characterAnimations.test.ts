@@ -3,6 +3,23 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  CHEN_HUIHUI_ANGRY_TALK_CLIP,
+  CHEN_HUIHUI_ANGRY_TALK_FRAMES,
+  CHEN_HUIHUI_ANGRY_TAIL_BLINK,
+  CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES,
+  CHEN_HUIHUI_CALM_TALK_CLIP,
+  CHEN_HUIHUI_CALM_TALK_FRAMES,
+  CHEN_HUIHUI_CALM_PROFILE_CLIP,
+  CHEN_HUIHUI_CALM_TAIL_BLINK,
+  CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES,
+  CHEN_HUIHUI_HAPPY_TALK_CLIP,
+  CHEN_HUIHUI_HAPPY_TALK_FRAMES,
+  CHEN_HUIHUI_HAPPY_TAIL_BLINK,
+  CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES,
+  CHEN_HUIHUI_SAD_TALK_CLIP,
+  CHEN_HUIHUI_SAD_TALK_FRAMES,
+  CHEN_HUIHUI_SAD_TAIL_BLINK,
+  CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES,
   FUMI_ANGRY_TALK_CLIP,
   FUMI_ANGRY_TALK_FRAMES,
   FUMI_ANGRY_TAIL_BLINK,
@@ -12,6 +29,11 @@ import {
   FUMI_SAD_TALK_CLIP,
   FUMI_SAD_TALK_FRAMES,
   FUMI_SAD_TAIL_BLINK,
+  LIN_JING_CALM_PROFILE_CLIP,
+  LIN_JING_CALM_TALK_CLIP,
+  LIN_JING_CALM_TALK_FRAMES,
+  LIN_JING_CALM_TAIL_BLINK,
+  LIN_JING_CALM_TAIL_BLINK_FRAMES,
   OLD_MAN_ANGRY_TALK_CLIP,
   OLD_MAN_ANGRY_TALK_FRAMES,
   OLD_MAN_ANGRY_TAIL_BLINK,
@@ -48,6 +70,11 @@ import {
   TOUKO_SAD_TALK_FRAMES,
   TOUKO_SAD_TAIL_BLINK,
   TOUKO_SAD_TAIL_BLINK_FRAMES,
+  ZHAO_GANG_CALM_PROFILE_CLIP,
+  ZHAO_GANG_CALM_TALK_CLIP,
+  ZHAO_GANG_CALM_TALK_FRAMES,
+  ZHAO_GANG_CALM_TAIL_BLINK,
+  ZHAO_GANG_CALM_TAIL_BLINK_FRAMES,
 } from './characterAnimations';
 
 function pngSize(file: string): { width: number; height: number } {
@@ -57,6 +84,229 @@ function pngSize(file: string): { width: number; height: number } {
     height: bytes.readUInt32BE(20),
   };
 }
+
+describe('Chen Huihui calm/default animation', () => {
+  const framePaths = Array.from({ length: 25 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/chen-huihui/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+  const blinkPaths = Array.from({ length: 9 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/chen-huihui/tail-blink-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 25 }, () => ({ width: 430, height: 606 })),
+    );
+    expect(blinkPaths.map(pngSize)).toEqual(
+      Array.from({ length: 9 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the final calm pose, and uses the supplied blink clip', () => {
+    expect(CHEN_HUIHUI_CALM_TALK_FRAMES).toHaveLength(25);
+    expect(CHEN_HUIHUI_CALM_TALK_CLIP).toMatchObject({
+      src: CHEN_HUIHUI_CALM_TALK_FRAMES[0],
+      sources: CHEN_HUIHUI_CALM_TALK_FRAMES,
+      frames: 25,
+      frameMs: Array.from({ length: 25 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 24,
+    });
+    expect(CHEN_HUIHUI_CALM_TAIL_BLINK).toMatchObject({
+      src: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0],
+      sources: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES,
+      frames: 9,
+      frameMs: Array.from({ length: 9 }, () => 55),
+    });
+  });
+
+  it('uses the blink resting frame directly in the character profile', () => {
+    expect(CHEN_HUIHUI_CALM_PROFILE_CLIP).toMatchObject({
+      src: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0],
+      sources: [CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0]],
+      frames: 1,
+      frameMs: [1],
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 0,
+    });
+  });
+});
+
+describe('Lin Jing calm/default animation', () => {
+  const framePaths = Array.from({ length: 5 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/detective-b/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs all five supplied frames on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 5 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('reuses the calm sequence for scene blink and character profile animation', () => {
+    expect(LIN_JING_CALM_TALK_CLIP).toMatchObject({
+      src: LIN_JING_CALM_TALK_FRAMES[0],
+      sources: LIN_JING_CALM_TALK_FRAMES,
+      frames: 5,
+      frameMs: Array.from({ length: 5 }, () => 55),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 4,
+    });
+    expect(LIN_JING_CALM_TAIL_BLINK_FRAMES).toBe(LIN_JING_CALM_TALK_FRAMES);
+    expect(LIN_JING_CALM_TAIL_BLINK).toMatchObject({
+      sources: LIN_JING_CALM_TALK_FRAMES,
+      frames: 5,
+      frameMs: Array.from({ length: 5 }, () => 55),
+    });
+    expect(LIN_JING_CALM_PROFILE_CLIP).toBe(LIN_JING_CALM_TALK_CLIP);
+  });
+});
+
+describe('Zhao Gang calm/default animation', () => {
+  const framePaths = Array.from({ length: 9 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/detective-a/talk-calm-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs all nine supplied frames on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 9 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('reuses the calm sequence for scene blink and character profile animation', () => {
+    expect(ZHAO_GANG_CALM_TALK_CLIP).toMatchObject({
+      src: ZHAO_GANG_CALM_TALK_FRAMES[0],
+      sources: ZHAO_GANG_CALM_TALK_FRAMES,
+      frames: 9,
+      frameMs: Array.from({ length: 9 }, () => 55),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 8,
+    });
+    expect(ZHAO_GANG_CALM_TAIL_BLINK_FRAMES).toBe(ZHAO_GANG_CALM_TALK_FRAMES);
+    expect(ZHAO_GANG_CALM_TAIL_BLINK).toMatchObject({
+      sources: ZHAO_GANG_CALM_TALK_FRAMES,
+      frames: 9,
+      frameMs: Array.from({ length: 9 }, () => 55),
+    });
+    expect(ZHAO_GANG_CALM_PROFILE_CLIP).toBe(ZHAO_GANG_CALM_TALK_CLIP);
+  });
+});
+
+describe('Chen Huihui happy animation', () => {
+  const framePaths = Array.from({ length: 14 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/chen-huihui/talk-happy-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 14 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the final frame, and reuses the sequence for blinking', () => {
+    expect(CHEN_HUIHUI_HAPPY_TALK_CLIP).toMatchObject({
+      src: CHEN_HUIHUI_HAPPY_TALK_FRAMES[0],
+      sources: CHEN_HUIHUI_HAPPY_TALK_FRAMES,
+      frames: 14,
+      frameMs: Array.from({ length: 14 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 13,
+    });
+    expect(CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES).toBe(CHEN_HUIHUI_HAPPY_TALK_FRAMES);
+    expect(CHEN_HUIHUI_HAPPY_TAIL_BLINK).toMatchObject({
+      src: CHEN_HUIHUI_HAPPY_TALK_FRAMES[0],
+      sources: CHEN_HUIHUI_HAPPY_TALK_FRAMES,
+      frames: 14,
+      frameMs: Array.from({ length: 14 }, () => 42),
+    });
+  });
+});
+
+describe('Chen Huihui angry animation', () => {
+  const framePaths = Array.from({ length: 25 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/chen-huihui/talk-angry-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 25 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the final frame, and reuses the sequence for blinking', () => {
+    expect(CHEN_HUIHUI_ANGRY_TALK_CLIP).toMatchObject({
+      src: CHEN_HUIHUI_ANGRY_TALK_FRAMES[0],
+      sources: CHEN_HUIHUI_ANGRY_TALK_FRAMES,
+      frames: 25,
+      frameMs: Array.from({ length: 25 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 24,
+    });
+    expect(CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES).toBe(CHEN_HUIHUI_ANGRY_TALK_FRAMES);
+    expect(CHEN_HUIHUI_ANGRY_TAIL_BLINK).toMatchObject({
+      sources: CHEN_HUIHUI_ANGRY_TALK_FRAMES,
+      frames: 25,
+      frameMs: Array.from({ length: 25 }, () => 42),
+    });
+  });
+});
+
+describe('Chen Huihui sad animation', () => {
+  const framePaths = Array.from({ length: 25 }, (_, index) =>
+    resolve(
+      process.cwd(),
+      `public/assets/characters/animated/chen-huihui/talk-sad-cleaned/${String(index).padStart(2, '0')}.png`,
+    ),
+  );
+
+  it('installs every supplied frame on the standard character canvas', () => {
+    expect(framePaths.map(pngSize)).toEqual(
+      Array.from({ length: 25 }, () => ({ width: 430, height: 606 })),
+    );
+  });
+
+  it('plays once, holds the final frame, and reuses the sequence for blinking', () => {
+    expect(CHEN_HUIHUI_SAD_TALK_CLIP).toMatchObject({
+      src: CHEN_HUIHUI_SAD_TALK_FRAMES[0],
+      sources: CHEN_HUIHUI_SAD_TALK_FRAMES,
+      frames: 25,
+      frameMs: Array.from({ length: 25 }, () => 42),
+      loop: false,
+      holdLastFrame: true,
+      reducedMotionFrame: 24,
+    });
+    expect(CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES).toBe(CHEN_HUIHUI_SAD_TALK_FRAMES);
+    expect(CHEN_HUIHUI_SAD_TAIL_BLINK).toMatchObject({
+      sources: CHEN_HUIHUI_SAD_TALK_FRAMES,
+      frames: 25,
+      frameMs: Array.from({ length: 25 }, () => 42),
+    });
+  });
+});
 
 describe('Zhou Deming calm/default animation', () => {
   const framePaths = Array.from({ length: 8 }, (_, index) =>

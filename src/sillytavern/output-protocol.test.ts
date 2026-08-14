@@ -85,6 +85,35 @@ B</option>
     expect(errors.some(e => e.code === 'MAINTEXT_INVALID_LINES')).toBe(true);
   });
 
+  it('accepts every English directive alias supported by the scene parser', () => {
+    const raw = `<maintext>
+scene|home
+bgm|rain
+music|rain
+effect|lightning-flash
+animation|touko|idle
+dialog|旁白|calm|第一行。
+dialogue|灯织|calm|第二行。
+knowledge|touko-name
+</maintext>
+<option>继续</option>
+<option>离开</option>
+<sum>测试</sum>
+<vars>{}</vars>`;
+    const parsed = {
+      thinking: '',
+      maintext: raw.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1].trim() ?? '',
+      options: ['继续', '离开'],
+      summary: '测试',
+      vars: {},
+      observe: '',
+      investigateItems: [],
+      actionItems: [],
+    };
+
+    expect(createOutputProtocol().validate(raw, parsed)).toEqual([]);
+  });
+
   it('formats errors', () => {
     const errors = [{ code: 'X', message: 'bad', tag: 'maintext' }];
     expect(formatValidationErrors(errors)).toContain('bad');

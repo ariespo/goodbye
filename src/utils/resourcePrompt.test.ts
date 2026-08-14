@@ -50,6 +50,15 @@ describe('appendResourcePrompt(按玩家知识过滤)', () => {
     expect(prompt).toContain('赵刚');
   });
 
+  it('职业先于姓名确认时仍使用外貌称呼', () => {
+    const prompt = appendResourcePrompt('测试', 'street', {
+      knowledgeEvents: ['observe:shaved-man', 'learn:zhao-gang-job'],
+    });
+    expect(prompt).toContain('寸头男人');
+    expect(prompt).toContain('货车司机');
+    expect(prompt).not.toContain('赵刚');
+  });
+
   it('解锁水塔路线后暴露水塔地点与背景', () => {
     const prompt = appendResourcePrompt('测试', 'home-day', {
       knowledgeEvents: ['find:water-tower-fragment', 'locate:water-tower-route'],

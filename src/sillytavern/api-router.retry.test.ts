@@ -58,10 +58,10 @@ afterEach(() => {
 });
 
 describe('reasoning_content compatibility', () => {
-  it('uses reasoning_content for a non-stream response only when content is empty', async () => {
+  it('rejects a non-stream response that contains only private reasoning', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reasoningJsonResponse('fallback')));
-    const result = await callSecondaryApi(config, [{ role: 'user', content: 'hi' }], null);
-    expect(result).toBe('fallback');
+    await expect(callSecondaryApi(config, [{ role: 'user', content: 'hi' }], null))
+      .rejects.toThrow('模型未返回最终正文');
   });
 
   it('prefers content when both response fields are present', async () => {
@@ -70,18 +70,30 @@ describe('reasoning_content compatibility', () => {
     expect(result).toBe('answer');
   });
 
-  it('buffers reasoning_content and emits it once when stream content stays empty', async () => {
+  it('rejects a stream that contains only private reasoning', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseDeltaResponse([
       { reasoning_content: 'fallback ' },
       { reasoning_content: 'answer' },
     ])));
     const tokens: string[] = [];
-    await streamChatCompletion(config, [{ role: 'user', content: 'hi' }], null, {
+    await expect(streamChatCompletion(config, [{ role: 'user', content: 'hi' }], null, {
       onToken: token => tokens.push(token),
       onComplete: vi.fn(),
       onError: vi.fn(),
-    });
-    expect(tokens).toEqual(['fallback answer']);
+    })).rejects.toThrow('模型未返回最终正文');
+    expect(tokens).toEqual([]);
+  });
+
+  it('disables thinking mode for DeepSeek V4 machine-readable calls', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse('answer'));
+    vi.stubGlobal('fetch', fetchMock);
+    await callSecondaryApi(
+      { baseUrl: 'https://api.deepseek.com/v1', apiKey: 'sk-test', model: 'deepseek-v4-flash' },
+      [{ role: 'user', content: 'hi' }],
+      null,
+    );
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({ thinking: { type: 'disabled' } });
   });
 
   it('discards buffered reasoning_content when stream content is present', async () => {

@@ -424,6 +424,11 @@ export interface Scene {
   character?: string;
   bgm?: string;
   mood?: Mood;
+  /** 生成该场景时已经成立的情绪权限；防止回合结算倒灌到较早台词。 */
+  emotionPolicyContext?: {
+    huihuiChocolateKnownAtSceneStart: boolean;
+    zhouKillerConfirmedAtSceneStart: boolean;
+  };
   /** 观察内容（五感描述+想法+疑点） */
   observe?: string;
   /** 可调查对象列表 */
@@ -467,6 +472,8 @@ export interface SceneLine {
   text: string;
   /** 该行播放完成后提交的玩家认知事件（必须由导演授权） */
   knowledgeEvents?: string[];
+  /** 剧情要求该行的角色动作完整播放时，推进前至少停留的毫秒数。 */
+  minimumDisplayMs?: number;
 }
 
 export interface StorylineData {

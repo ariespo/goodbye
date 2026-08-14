@@ -164,7 +164,19 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
       const lines = parsed.maintext.split('\n').filter(l => l.trim());
       const invalidLines = lines.filter(line => {
         const type = line.split('|')[0]?.trim();
-        return !['场景', '音乐', '对话', '镜头', '效果', '动作', '认知'].includes(type);
+        // Keep validation in lockstep with scene-parser.ts. OpenAI-compatible
+        // models sometimes follow the documented English aliases even when
+        // the surrounding prompt is Chinese; the parser already accepts
+        // these forms, so rejecting them here creates a false recovery state.
+        return ![
+          '场景', 'scene',
+          '音乐', 'bgm', 'music',
+          '对话', 'dialog', 'dialogue',
+          '镜头',
+          '效果', 'effect',
+          '动作', 'animation',
+          '认知', 'knowledge',
+        ].includes(type.toLowerCase());
       });
       if (invalidLines.length > 0) {
         errors.push({

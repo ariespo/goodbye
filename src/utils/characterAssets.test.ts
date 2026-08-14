@@ -35,3 +35,12 @@ describe('detective default portrait alignment', () => {
     },
   );
 });
+
+describe('Chen Huihui calm portrait alignment', () => {
+  it('uses the shared 430x606 animation canvas for calm/default ids', () => {
+    expect(characterCanvasSize('chen-huihui-normal.png')).toEqual({ width: 430, height: 606 });
+    expect(characterCanvasSize('chen-huihui-calm.png')).toEqual({ width: 430, height: 606 });
+    expect(characterCanvasSize('chen-huihui-happy.png')).toEqual({ width: 430, height: 606 });
+    expect(characterCanvasSize('chen-huihui-sad.png')).toEqual({ width: 430, height: 606 });
+  });
+});
