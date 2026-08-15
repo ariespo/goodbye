@@ -10,6 +10,17 @@ import {
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 
+const STYLE_VIOLATION_CODES = new Set([
+  'repeated-prose',
+  'repeated-imagery',
+  'style-template-repetition',
+]);
+
+export function isStyleOnlyNarrativeReview(review: FactReview): boolean {
+  return review.violations.length > 0
+    && review.violations.every(item => STYLE_VIOLATION_CODES.has(item.code));
+}
+
 const UNAUTHORIZED_CASE_HISTORY = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|今天早上|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买了|付钱|付款|离开(?:了)?|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了))|(?:今早|今天早上|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2})[^。！？\n]{0,80}(?:文穗|女孩|她)/;
 const HISTORICAL_HABIT = /(?:以前|平时|经常|总是|每次|向来)[^。！？\n]{0,80}(?:来|一起|同行|买|照顾|打招呼|见)/;
 

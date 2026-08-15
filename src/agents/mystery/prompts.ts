@@ -1,4 +1,4 @@
-import type { DirectorPlan, MysteryBrief, WriterPacket } from './types';
+import type { DirectorPlan, FactReview, MysteryBrief, WriterPacket } from './types';
 import { LOOP_PACING_CONTRACT } from './loop-contract';
 
 export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
@@ -192,10 +192,31 @@ ${narrative}`;
 export function buildNarrativeRepairPrompt(
   packet: WriterPacket,
   rejectedNarrative: string,
-  review: unknown,
+  review: FactReview,
 ): string {
-  return `上一版可播放场景未通过正文审查。请从头重写完整场景，并只输出项目规定标签。
-必须逐条落实 corrections；若问题涉及事实，删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写；若问题涉及文风，必须更换重复句、意象、动作模板和段落组织，同时保留原计划的事实与剧情功能。
+  const styleCodes = new Set(['repeated-prose', 'repeated-imagery', 'style-template-repetition']);
+  const styleOnly = review.violations.length > 0
+    && review.violations.every(item => styleCodes.has(item.code));
+
+  if (styleOnly) {
+    return `上一版可播放场景只有语言重复问题。请做局部文笔润色，并输出一份标签完整、可直接替换原文的全文。
+剧情构思已经锁定：不得改变事件顺序、场景与背景、出场人物、说话人、情绪、人物行动、事实揭示、证据含义、人物意图、知识事件及其证据顺序、道具指令、变量、时间消耗、摘要、选项和场景/调查/行动列表。
+只修改 violations 与 corrections 指出的重复语句、重复意象、重复动作或段落模板；未被指出的内容尽量逐句保留。允许为衔接做最小幅度的相邻措辞调整，但不得从头另写剧情、删减剧情节点或增加新事件。
+改写时换用具体且符合当前人物和场景的表达，不要只是替换同义词，也不要把原来的重复意象改成另一套贯穿全文的新模板。
+不得新增 WriterPacket 未授权的事实；不得省略任何闭合标签。只输出项目规定标签，不要解释修改过程。
+
+[WriterPacket]
+${jsonBlock(packet)}
+
+[RejectedNarrative]
+${rejectedNarrative}
+
+[StyleReview]
+${jsonBlock(review)}`;
+  }
+
+  return `上一版可播放场景未通过事实或角色审查。请在保留原剧情构思的前提下做最小范围修复，并只输出项目规定标签。
+必须逐条落实 corrections；删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
 stance=lies-about 的角色只能明确否认、质疑证据或普通拒答；不得用台词、沉默、眼神、动作或旁白形成半自白。
 不得改变 WriterPacket、不得新增事实、不得省略闭合标签。
 

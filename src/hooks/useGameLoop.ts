@@ -36,6 +36,7 @@ import {
   MYSTERY_TRUTH_GRAPH,
   MysteryPipelineBlockedError,
   prepareMysteryTurn,
+  isStyleOnlyNarrativeReview,
   repairNarrativeAgainstWriterPacket,
   recentAcceptedNarratives,
   reviewNarrativeAgainstWriterPacket,
@@ -902,53 +903,85 @@ export function useGameLoop() {
                   ]);
                   const narrativeReview = combineNarrativeReviews([factReview, styleReview]);
                   if (!narrativeReview.approved) {
-                    const repairedNarrative = await repairNarrativeAgainstWriterPacket({
-                      api: resolveAnalysisApi(settings),
-                      preset: activePreset,
-                      packet: preparedTurn.writerPacket,
-                      rejectedNarrative: fullText,
-                      review: narrativeReview,
-                      formatPrompt: settings.formatPromptTemplate,
-                      abortSignal: abortController.signal,
-                    });
-                    const repairedOutput = repairRecoverableOutput(repairedNarrative);
-                    fullText = repairedOutput.text;
-                    parseStateRef.current = parseChunk(createParseState(), fullText, { strict: true });
-
-                    const repairValidationErrors = outputProtocol.validate(fullText, parseStateRef.current.parsed);
-                    if (parseStateRef.current.errors.length > 0) {
-                      repairValidationErrors.push(...parseStateRef.current.errors.map(message => ({
-                        code: 'STREAM_PARSE_ERROR',
-                        message,
-                      })));
-                    }
-
-                    completedScene = parseStateRef.current.parsed.maintext
-                      ? parseNarrativeScene(parseStateRef.current.parsed.maintext)
-                      : null;
-                    if (completedScene && actionNarrativeContext) {
-                      const contextError = actionNarrativeContextError(actionNarrativeContext, completedScene);
-                      if (contextError) {
-                        repairValidationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
-                      }
-                    }
-                    if (completedScene) {
-                      const playerAddressError = npcPlayerKnowledgeError(
-                        completedScene.lines,
-                        playerIdentity,
-                        npcPlayerKnowledge,
+                    const validateRepairCandidate = (rawNarrative: string) => {
+                      const candidateText = repairRecoverableOutput(rawNarrative).text;
+                      const candidateParseState = parseChunk(createParseState(), candidateText, { strict: true });
+                      const candidateValidationErrors = outputProtocol.validate(
+                        candidateText,
+                        candidateParseState.parsed,
                       );
-                      if (playerAddressError) {
-                        repairValidationErrors.push({
-                          code: 'NPC_PLAYER_KNOWLEDGE_MISMATCH',
-                          message: playerAddressError,
-                        });
+                      if (candidateParseState.errors.length > 0) {
+                        candidateValidationErrors.push(...candidateParseState.errors.map(message => ({
+                          code: 'STREAM_PARSE_ERROR',
+                          message,
+                        })));
                       }
-                    }
 
-                    if (repairValidationErrors.length > 0 || !completedScene) {
-                      const detail = repairValidationErrors.length > 0
-                        ? formatValidationErrors(repairValidationErrors)
+                      const candidateScene = candidateParseState.parsed.maintext
+                        ? parseNarrativeScene(candidateParseState.parsed.maintext)
+                        : null;
+                      if (candidateScene && actionNarrativeContext) {
+                        const contextError = actionNarrativeContextError(actionNarrativeContext, candidateScene);
+                        if (contextError) {
+                          candidateValidationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
+                        }
+                      }
+                      if (candidateScene) {
+                        const playerAddressError = npcPlayerKnowledgeError(
+                          candidateScene.lines,
+                          playerIdentity,
+                          npcPlayerKnowledge,
+                        );
+                        if (playerAddressError) {
+                          candidateValidationErrors.push({
+                            code: 'NPC_PLAYER_KNOWLEDGE_MISMATCH',
+                            message: playerAddressError,
+                          });
+                        }
+                      }
+
+                      return {
+                        text: candidateText,
+                        parseState: candidateParseState,
+                        scene: candidateScene,
+                        validationErrors: candidateValidationErrors,
+                      };
+                    };
+                    const reviewRepairCandidate = async (candidateNarrative: string) => {
+                      const [candidateFactReview, candidateStyleReview] = await Promise.all([
+                        reviewNarrativeAgainstWriterPacket({
+                          api: resolveAnalysisApi(settings),
+                          preset: activePreset,
+                          packet: preparedTurn.writerPacket,
+                          narrative: candidateNarrative,
+                          abortSignal: abortController.signal,
+                        }),
+                        reviewNarrativeStyle({
+                          api: resolveAnalysisApi(settings),
+                          preset: activePreset,
+                          narrative: candidateNarrative,
+                          recentNarratives,
+                          exemptTexts: styleExemptTexts,
+                          abortSignal: abortController.signal,
+                        }),
+                      ]);
+                      return combineNarrativeReviews([candidateFactReview, candidateStyleReview]);
+                    };
+                    const requestRepair = (rejectedNarrative: string, review: FactReview) =>
+                      repairNarrativeAgainstWriterPacket({
+                        api: resolveAnalysisApi(settings),
+                        preset: activePreset,
+                        packet: preparedTurn.writerPacket,
+                        rejectedNarrative,
+                        review,
+                        formatPrompt: settings.formatPromptTemplate,
+                        abortSignal: abortController.signal,
+                      });
+
+                    let repairCandidate = validateRepairCandidate(await requestRepair(fullText, narrativeReview));
+                    if (repairCandidate.validationErrors.length > 0 || !repairCandidate.scene) {
+                      const detail = repairCandidate.validationErrors.length > 0
+                        ? formatValidationErrors(repairCandidate.validationErrors)
                         : 'AI 正文没有生成可播放场景。';
                       actions.setStreaming(false);
                       actions.setIsWaitingForAI(false);
@@ -960,25 +993,39 @@ export function useGameLoop() {
                       return;
                     }
 
-                    const repairedMaintext = parseStateRef.current.parsed.maintext || fullText;
-                    const [repairedFactReview, repairedStyleReview] = await Promise.all([
-                      reviewNarrativeAgainstWriterPacket({
-                        api: resolveAnalysisApi(settings),
-                        preset: activePreset,
-                        packet: preparedTurn.writerPacket,
-                        narrative: repairedMaintext,
-                        abortSignal: abortController.signal,
-                      }),
-                      reviewNarrativeStyle({
-                        api: resolveAnalysisApi(settings),
-                        preset: activePreset,
-                        narrative: repairedMaintext,
-                        recentNarratives,
-                        exemptTexts: styleExemptTexts,
-                        abortSignal: abortController.signal,
-                      }),
-                    ]);
-                    const repairedReview = combineNarrativeReviews([repairedFactReview, repairedStyleReview]);
+                    fullText = repairCandidate.text;
+                    parseStateRef.current = repairCandidate.parseState;
+                    completedScene = repairCandidate.scene;
+                    let repairedReview = await reviewRepairCandidate(
+                      repairCandidate.parseState.parsed.maintext || repairCandidate.text,
+                    );
+
+                    // 文风问题只改措辞，不应因此推翻整段剧情。第一次局部改写仍有残留时，
+                    // 再给一次同样受限的句级润色机会；事实或角色问题仍坚持一次修复后阻断。
+                    if (!repairedReview.approved && isStyleOnlyNarrativeReview(repairedReview)) {
+                      repairCandidate = validateRepairCandidate(await requestRepair(fullText, repairedReview));
+                      if (repairCandidate.validationErrors.length > 0 || !repairCandidate.scene) {
+                        const detail = repairCandidate.validationErrors.length > 0
+                          ? formatValidationErrors(repairCandidate.validationErrors)
+                          : 'AI 正文没有生成可播放场景。';
+                        actions.setStreaming(false);
+                        actions.setIsWaitingForAI(false);
+                        actions.setTurnRecovery({
+                          phase: 'failed_stream',
+                          userInput,
+                          errorMessage: `正文局部润色后格式不合法，未播放也未写入存档：\n${detail}`,
+                        });
+                        return;
+                      }
+
+                      fullText = repairCandidate.text;
+                      parseStateRef.current = repairCandidate.parseState;
+                      completedScene = repairCandidate.scene;
+                      repairedReview = await reviewRepairCandidate(
+                        repairCandidate.parseState.parsed.maintext || repairCandidate.text,
+                      );
+                    }
+
                     if (!repairedReview.approved) {
                       const detail = repairedReview.violations.map(item => item.message).join('\n');
                       actions.setStreaming(false);
@@ -986,7 +1033,7 @@ export function useGameLoop() {
                       actions.setTurnRecovery({
                         phase: 'failed_stream',
                         userInput,
-                        errorMessage: `正文自动修复后仍存在事实、角色或文风问题，已阻止写入存档：\n${detail}`,
+                        errorMessage: `正文局部修复后仍存在事实、角色或文风问题，已阻止写入存档：\n${detail}`,
                       });
                       return;
                     }
