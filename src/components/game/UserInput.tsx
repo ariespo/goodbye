@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { GameIcon } from '../ui/GameIcon';
+import { getCycleMetaOptions } from '../../utils/cycleLoop';
 
 const PANEL_BG = 'rgba(12, 12, 16, 0.88)';
 const BORDER = '#3a3a42';
@@ -10,7 +11,7 @@ const TEXT_MAIN = '#d8d4cc';
 const TEXT_DIM = '#6a6560';
 const ACCENT = '#6b8fc4';
 
-export function UserInput() {
+export function UserInput({ embedded = false }: { embedded?: boolean }) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
@@ -19,10 +20,21 @@ export function UserInput() {
   const currentScene = useGameStore(state => state.game.currentScene);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const endingVisible = useGameStore(state => state.game.endingPanel.visible);
+  const variables = useGameStore(state => state.tavern.variables);
+  const endingsSeen = useGameStore(state => state.game.endingsSeen);
   const { sendMessage } = useGameLoop();
 
   const hasOptions = parsedContent.options.length > 0;
-  const showInput = !endingVisible && !hasOptions && !isStreaming && currentScene && sceneComplete;
+  const hasMetaOptions = useMemo(
+    () => getCycleMetaOptions(variables, endingsSeen).some(option => !parsedContent.options.includes(option)),
+    [variables, endingsSeen, parsedContent.options],
+  );
+  const hasChoiceMenu = hasOptions || hasMetaOptions;
+  const showInput = !endingVisible
+    && !isStreaming
+    && !!currentScene
+    && sceneComplete
+    && (embedded ? hasChoiceMenu : !hasChoiceMenu);
 
   const handleSubmit = () => {
     if (!input.trim() || isWaitingForAI) return;
@@ -35,15 +47,17 @@ export function UserInput() {
   };
 
   useEffect(() => {
-    if (showInput && inputRef.current) inputRef.current.focus();
-  }, [showInput]);
+    if (showInput && !embedded && inputRef.current) inputRef.current.focus();
+  }, [embedded, showInput]);
 
   if (!showInput) return null;
 
   return (
     <div
-      className="user-input absolute bottom-[1.5%] left-1/2 -translate-x-1/2 flex gap-2 z-30"
-      style={{ width: 'min(85vw, 940px)' }}
+      className={embedded
+        ? 'choice-free-input relative mt-2 flex gap-2'
+        : 'user-input absolute bottom-[1.5%] left-1/2 z-30 flex -translate-x-1/2 gap-2'}
+      style={{ width: embedded ? '100%' : 'min(85vw, 940px)' }}
     >
       {/* 输入框 */}
       <div className="user-input-field flex-1 relative"
