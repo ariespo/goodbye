@@ -52,35 +52,22 @@ describe('opening storyline parse', () => {
     });
   });
 
-  it('shows Fumi as a memory before Touko and exercises the opening animations', () => {
+  it('keeps Fumi physically absent while recalling her ordinary morning voice', () => {
     const scene = parseOpeningStoryline();
-    const fumiFirstLine = scene.lines.findIndex((line) => line.character === 'fumi-normal.png');
-    const imaginedFumiLines = scene.lines.filter((line) => line.speaker === '文穗');
-    const toukoFirstLine = scene.lines.findIndex((line) => line.speaker === 'touko');
-    const animationIds = scene.lines
-      .map((line) => line.animation)
-      .filter((animation): animation is string => Boolean(animation));
+    const fumiLines = scene.lines.filter((line) => line.speaker === '文穗');
+    const rememberedVoice = scene.lines.find((line) => line.text.includes('牛奶要趁热喝'));
 
-    expect(fumiFirstLine).toBeGreaterThan(-1);
-    expect(fumiFirstLine).toBeLessThan(toukoFirstLine);
-    expect(animationIds).toContain('idle');
-    expect(imaginedFumiLines.map((line) => line.emotion)).toEqual([
-      'happy',
-      'angry',
-      'calm',
-      'sad',
-      'insane',
-    ]);
-    expect(imaginedFumiLines.at(-1)?.character).toBe('fumi-insane.png');
-    expect(scene.lines.some((line) => line.text.includes('桌边没有人'))).toBe(true);
+    expect(fumiLines).toEqual([]);
+    expect(scene.lines.some((line) => line.character?.startsWith('fumi-'))).toBe(false);
+    expect(rememberedVoice).toMatchObject({ speaker: '旁白', emotion: 'calm' });
+    expect(scene.lines.some((line) => line.text.includes('那里没有人'))).toBe(true);
   });
 
-  it('exercises Touko happy and angry emotion animations in the opening', () => {
+  it('keeps Touko restrained instead of cycling through showcase emotions', () => {
     const toukoLines = parseOpeningStoryline().lines.filter((line) => line.speaker === 'touko');
-    const happyLine = toukoLines.find((line) => line.emotion === 'happy');
-    const angryLine = toukoLines.find((line) => line.emotion === 'angry');
 
-    expect(happyLine?.character).toBe('touko-happy.png');
-    expect(angryLine?.character).toBe('touko-angry.png');
+    expect(toukoLines.map((line) => line.emotion)).toEqual(['calm', 'calm', 'sad', 'calm']);
+    expect(toukoLines.some((line) => ['happy', 'angry', 'insane'].includes(line.emotion))).toBe(false);
+    expect(toukoLines.find((line) => line.emotion === 'sad')?.text).toContain('没有回我的消息');
   });
 });
