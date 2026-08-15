@@ -5,14 +5,21 @@ export type AgentCompletion = (
   options?: SecondaryApiOptions,
 ) => Promise<string>;
 
-/** 记录各服务端是否支持 response_format，避免每次调用都撞一次 400 */
-const responseFormatSupportCache = new Map<string, boolean>();
+export type StructuredOutputMode = 'json_schema' | 'json_object' | 'text';
+
+/** 记录各服务端可用的最高结构化输出能力，避免每次调用都重复撞 400。 */
+const responseFormatSupportCache = new Map<string, StructuredOutputMode>();
 
 export function resetResponseFormatSupportCache(): void {
   responseFormatSupportCache.clear();
 }
 
 export function getResponseFormatSupport(key: string): boolean | undefined {
+  const mode = responseFormatSupportCache.get(key);
+  return mode === undefined ? undefined : mode !== 'text';
+}
+
+export function getStructuredOutputMode(key: string): StructuredOutputMode | undefined {
   return responseFormatSupportCache.get(key);
 }
 
@@ -32,24 +39,40 @@ function isResponseFormatUnsupportedText(text: string): boolean {
   return /(unavailable|unsupported|not supported|invalid_request_error|HTTP\s*(400|404|422))/i.test(text);
 }
 
-/** 优先带 response_format 调用；服务端不支持时降级为纯文本并缓存该结论。 */
+/** 优先使用 JSON Schema；不支持时依次降级为 JSON Object 与纯文本。 */
 export async function completeStructured(
   complete: AgentCompletion,
-  apiKey: string,
+  supportKey: string,
   messages: ChatCompletionMessage[],
   options: SecondaryApiOptions,
   responseFormat: ResponseFormat,
 ): Promise<string> {
-  if (responseFormatSupportCache.get(apiKey) !== false) {
+  const cachedMode = responseFormatSupportCache.get(supportKey);
+  if (cachedMode === undefined || cachedMode === 'json_schema') {
     try {
       const result = await complete(messages, { ...options, responseFormat });
-      if (!isResponseFormatUnsupportedText(result)) return result;
-      responseFormatSupportCache.set(apiKey, false);
+      if (!isResponseFormatUnsupportedText(result)) {
+        responseFormatSupportCache.set(supportKey, 'json_schema');
+        return result;
+      }
+      responseFormatSupportCache.set(supportKey, 'json_object');
     } catch (error) {
       if (!isResponseFormatUnsupportedError(error)) throw error;
-      responseFormatSupportCache.set(apiKey, false);
+      responseFormatSupportCache.set(supportKey, 'json_object');
     }
   }
+
+  if (responseFormatSupportCache.get(supportKey) === 'json_object') {
+    try {
+      const result = await complete(messages, { ...options, responseFormat: { type: 'json_object' } });
+      if (!isResponseFormatUnsupportedText(result)) return result;
+      responseFormatSupportCache.set(supportKey, 'text');
+    } catch (error) {
+      if (!isResponseFormatUnsupportedError(error)) throw error;
+      responseFormatSupportCache.set(supportKey, 'text');
+    }
+  }
+
   return complete(messages, options);
 }
 

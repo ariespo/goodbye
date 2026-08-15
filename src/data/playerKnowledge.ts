@@ -426,6 +426,12 @@ export function resolvePlayerFacingSpeaker(
   if (speaker === '旁白') return speaker;
   const entityId = entityIdFromSpeaker(speaker, character);
   if (!entityId) return speaker;
+  const events = new Set(normalizeKnowledgeEvents(variables.knowledgeEvents, variables.unlockedClues));
+  if (entityId === 'chen-huihui' && !events.has('meet:chen-huihui')) return '店员';
+  if (entityId === 'detective-b' && !events.has('identify:lin-jing-name')
+    && variables.location === 'community-hospital') return '新来的护士';
+  if (entityId === 'detective-a' && !events.has('observe:shaved-man')
+    && variables.location === 'street') return '货车司机';
   return getPlayerEntities(variables).find(entity => entity.id === entityId)?.displayName ?? '？？？';
 }
 

@@ -30,6 +30,7 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 14. 玩家尚未以 confirmation 级掌握 a-murder-staged-fall 前，周德明绝对不得使用 insane，也不得安排等价的疯癫表演；质问升级最多使用 angry。只有确认他是凶手之后才可出现 insane。
 15. saturationPivot 存在时，这是程序选定的强制剧情转场：先让玩家对 blockedActorId 的追查按原意真实发生并得到回应，再让 interveningNpcId 自然介入，以 dialogue 揭示 factId；只可呈现 revealOptions 已授权的原文含义，不得在正文说出 redirectedActorId 这个内部归属、也不得增加授权文本未写明的身份或因果。该线索的状态压力由程序归入 redirectedActorId，绝不能继续增加 blockedActorId 的嫌疑。不得用单纯拒答、离场或环境阻碍代替该转场。
 16. sceneContract 存在时是程序已经完成语义解析和概率抽样后的确定性场景契约。beats 必须按顺序落实 requiredEnRouteNpcIds 的 street 途中遭遇，再抵达 destinationLocationId，并让 requiredDestinationNpcIds 实际参与剧情；forbiddenNpcIds 不得出场。requiredKnowledgeEvents 必须纳入计划，forbiddenKnowledgeEventIds 不得申请。不得把“角色可用”误当成“角色可以省略”；职业泛称只有在 sceneContract.directive 明确规定的初见阶段可作为固定内部角色的玩家可见称呼，绝不能据此生成临时 NPC。
+16a. 禁止凭空补写发生在本回合之前的角色行动、会面、来访、对话、计划或习惯。若 beat 必须引用既往事件，必须在 sourceMemoryIds 中逐字填写 TurnContext.memoryContext.selectedIds 里的真实 ID；没有来源就删除该往事，改写为当下可观察、可听见的内容。尤其禁止为了提供线索而编造“昨天说要去某地”“上次见过某人”“平时固定来买某物”等记录中不存在的经历。
 17. npcPlayerKnowledge 是每个在场 NPC 对玩家姓名的独立认知边界。knowsPlayerName=false 的角色绝不能说出、猜中或用姓名称呼玩家；为 true 时，只能在自然需要称呼时使用 allowedAddress，不得擅自换成全名、昵称或其他亲疏程度。该表不授予任何案件知识。
 
 输出结构：
@@ -95,6 +96,7 @@ export const FACT_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 
 检查项：事实是否可用、揭示层级、单回合预算、NPC 知情边界、其他路线泄露、把误导写成正典，以及 beats 是否明显违反 characterPerformances 的行动、反应、对话、情绪或禁演规则。
 对 knowledgeEvents 逐项核对 playerPresentation.allowedDiscoveries：计划中的 evidence 必须是可在正文中实际呈现的具体观察或可靠材料，并满足对应 evidenceStandard。姓名、职业、行为理解和人物关系不能互相代替；性格结论、怀疑或外貌印象不算其自身的证据。
+beats 若声称角色在昨天、上次、此前或平时做过、说过、来过、去过什么，必须具有 sourceMemoryIds，且 ID 必须来自 TurnContext 已选择的记忆；否则属于凭空创造过去事实，必须拒绝。当前现场即时发生的普通动作不受此限制。
 evidenceStandard 只属于 knowledgeEvents 的人物/地点认知事件，不适用于 revelations 中的案件事实。案件事实只按 revealOptions、playerKnownFacts、revealBudget 与交付权限审查。
 revelations 与 knowledgeEvents 必须分开复核：F001/F002 等案件事实是否可揭示，只看 usableFacts、revealBudget 与 npcKnowledge，不要求也不允许配套 knowledgeEvent。不得因为案件事实不在 allowedDiscoveries 而拒绝；allowedDiscoveries 只约束计划实际申请的 knowledgeEvents。
 playerKnownFacts 是玩家可在任意地点复核、出示和用于推理的既有证据；不得因为该事实当前不在 usableFacts 或 forbiddenReveals 写着“当前地点无法取得”而禁止玩家重述它。地点门只限制首次取得，不会让玩家遗忘已有 clue。

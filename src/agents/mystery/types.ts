@@ -180,6 +180,8 @@ export interface DirectorBeat {
   description: string;
   locationId?: string;
   speakerIds?: string[];
+  /** 只有叙述已发生的往事时才填写，且必须引用本回合上下文中真实存在的记忆 ID。 */
+  sourceMemoryIds?: string[];
 }
 
 export interface DirectorOptionIntent {
@@ -225,7 +227,8 @@ export type FactReviewViolationCode =
   | 'saturation-pivot-violation'
   | 'character-performance-violation'
   | 'player-knowledge-violation'
-  | 'scene-contract-violation';
+  | 'scene-contract-violation'
+  | 'ungrounded-past-claim';
 
 export interface FactReviewViolation {
   code: FactReviewViolationCode;

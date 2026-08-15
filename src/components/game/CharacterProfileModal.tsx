@@ -18,6 +18,7 @@ import { getPlayerEntities } from '../../data/playerKnowledge';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
 import { resolveCharacterSprite } from '../../utils/characterAssets';
+import { projectKnowledgeForPlayback } from '../../utils/knowledgePresentation';
 import { CharacterAnimationPlayer } from './CharacterAnimationPlayer';
 import { GameIcon } from '../ui/GameIcon';
 
@@ -37,8 +38,17 @@ const CHARACTER_STAGE_LABELS = {
 export function CharacterProfileModal() {
   const showCharacters = useGameStore(state => state.ui.showCharacters);
   const variables = useGameStore(state => state.tavern.variables);
+  const currentScene = useGameStore(state => state.game.currentScene);
+  const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
+  const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const toggleModal = useGameStore(state => state.actions.toggleModal);
-  const characters = useMemo(() => getPlayerEntities(variables), [variables]);
+  const presentationVariables = useMemo(() => projectKnowledgeForPlayback(
+    variables,
+    currentScene,
+    currentLineIndex,
+    sceneComplete,
+  ), [variables, currentScene, currentLineIndex, sceneComplete]);
+  const characters = useMemo(() => getPlayerEntities(presentationVariables), [presentationVariables]);
   const [selectedId, setSelectedId] = useState(characters[0]?.id ?? 'fumi');
 
   useEffect(() => {

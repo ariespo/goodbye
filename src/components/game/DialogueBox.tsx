@@ -20,6 +20,7 @@ import { applyMacros, emotionLabel, emotionTextClass, emotionTextStyle } from '.
 import { applyCharacterEmotionPolicies } from '../../engine/character-emotion-policy';
 import { PlayerIdentityPrompt } from './PlayerIdentityPrompt';
 import { resolveNpcPlayerKnowledge } from '../../data/npcPlayerKnowledge';
+import { projectKnowledgeForPlayback } from '../../utils/knowledgePresentation';
 
 /* ── 像素风对话框 ── */
 
@@ -48,6 +49,12 @@ export function DialogueBox() {
 
   const currentLine = currentScene?.lines[currentLineIndex];
   const isLastLine = currentLineIndex >= (currentScene?.lines.length ?? 0) - 1;
+  const presentationVariables = useMemo(() => projectKnowledgeForPlayback(
+    variables,
+    currentScene,
+    currentLineIndex,
+    sceneComplete,
+  ), [variables, currentScene, currentLineIndex, sceneComplete]);
 
   const userName = settings?.userName || '玩家';
   const characterName = settings?.characterName || '少女';
@@ -56,13 +63,13 @@ export function DialogueBox() {
     ? { name: userName, gender: settings.playerGender }
     : undefined;
   const dialogueMacros = playerIdentity ? {
-    'player.oldManAddress': resolveNpcPlayerKnowledge('old-man', playerIdentity, variables).allowedAddress,
-    'player.huihuiAddress': resolveNpcPlayerKnowledge('chen-huihui', playerIdentity, variables).allowedAddress,
+    'player.oldManAddress': resolveNpcPlayerKnowledge('old-man', playerIdentity, presentationVariables).allowedAddress,
+    'player.huihuiAddress': resolveNpcPlayerKnowledge('chen-huihui', playerIdentity, presentationVariables).allowedAddress,
   } : {};
   const playerFacingSpeaker = resolvePlayerFacingSpeaker(
     currentLine?.speaker || '',
     currentLine?.character,
-    variables,
+    presentationVariables,
   );
   const displaySpeaker = applyMacros(playerFacingSpeaker, userName, characterName, dialogueMacros);
   const displayText = applyMacros(currentLine?.text || '', userName, characterName, dialogueMacros);

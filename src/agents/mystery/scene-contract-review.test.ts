@@ -76,4 +76,23 @@ describe('deterministic narrative scene contract review', () => {
       { eventId: 'meet:chen-huihui', evidence: '玩家在旁白中认出陈慧慧。' },
     ]);
   });
+
+  it('rejects invented past dialogue unless the beat cites a selected memory', () => {
+    const repaired = enforceNarrativeSceneContract(plan(), brief());
+    repaired.beats[1] = {
+      ...repaired.beats[1]!,
+      description: '陈慧慧说，文穗昨天来过，还说今天要去某个地方。',
+    };
+    const rejected = reviewDirectorPlan(repaired, brief(), {
+      contextSelectionIds: ['episode:known-visit'],
+    });
+    expect(rejected.violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'ungrounded-past-claim' }),
+    ]));
+
+    repaired.beats[1]!.sourceMemoryIds = ['episode:known-visit'];
+    expect(reviewDirectorPlan(repaired, brief(), {
+      contextSelectionIds: ['episode:known-visit'],
+    }).approved).toBe(true);
+  });
 });

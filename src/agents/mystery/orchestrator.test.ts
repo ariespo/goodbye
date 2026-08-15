@@ -141,9 +141,9 @@ describe('mystery orchestrator', () => {
     expect(criticOptions?.responseFormat?.json_schema?.name).toBe('fact_review');
   });
 
-  it('falls back to plain text parsing when server rejects response_format', async () => {
+  it('falls back from json_schema to json_object and caches the working mode', async () => {
     const complete = vi.fn(async (_messages, callOptions) => {
-      if (callOptions?.responseFormat) {
+      if (callOptions?.responseFormat?.type === 'json_schema') {
         throw new Error('API error 400: response_format is not supported');
       }
       return _messages[0]?.content.includes('事实复核') || _messages[0]?.content.includes('节奏与玩家能动性')
@@ -161,9 +161,9 @@ describe('mystery orchestrator', () => {
     });
     expect(result.hardReview.approved).toBe(true);
     expect(complete).toHaveBeenCalledTimes(3);
-    expect(complete.mock.calls[1]?.[1]?.responseFormat).toBeUndefined();
+    expect(complete.mock.calls[1]?.[1]?.responseFormat).toEqual({ type: 'json_object' });
 
-    // 同一服务端的后续调用直接跳过 response_format，不再重复撞错
+    // 同一服务端的后续调用直接使用 json_object，不再重复撞 json_schema。
     complete.mockClear();
     await prepareMysteryTurn({
       mode: 'standard',
@@ -175,7 +175,23 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(complete).toHaveBeenCalledTimes(2);
-    expect(complete.mock.calls[0]?.[1]?.responseFormat).toBeUndefined();
+    expect(complete.mock.calls[0]?.[1]?.responseFormat).toEqual({ type: 'json_object' });
+  });
+
+  it('falls back to plain text only when both structured modes are unavailable', async () => {
+    const complete = vi.fn(async (_messages, callOptions) => {
+      if (callOptions?.responseFormat) {
+        throw new Error('API error 400: This response_format type is unavailable now');
+      }
+      return _messages[0]?.content.includes('事实复核') ? approvedFactReview : JSON.stringify(validPlan);
+    });
+    const result = await prepareMysteryTurn({
+      mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'no-structured' }, preset: null,
+      truthContext, turnContext: {}, presentationContext: {}, complete,
+    });
+    expect(result.hardReview.approved).toBe(true);
+    expect(complete.mock.calls.map(call => call[1]?.responseFormat?.type ?? 'text'))
+      .toEqual(['json_schema', 'json_object', 'text', 'text']);
   });
 
   it('does not swallow unrelated errors as fallback', async () => {
@@ -295,6 +311,28 @@ describe('mystery orchestrator', () => {
     expect(result.directorAttempts).toBe(1);
   });
 
+  it('drops a DeepSeek critic violation that concludes evidence is valid and no violation exists', async () => {
+    const falsePositive = JSON.stringify({
+      approved: false,
+      violations: [{
+        code: 'knowledge_event_evidence_mismatch',
+        factId: 'meet:chen-huihui',
+        message: '但旁白确实概括了紧张与不自然笑容，符合 evidenceStandard；计划中的 evidence 与 beats 一致，未发现违规。',
+      }],
+      corrections: ['删除一段无关的文穗行踪台词。'],
+    });
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
+      .mockResolvedValueOnce(falsePositive);
+    const result = await prepareMysteryTurn({
+      mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'deepseek-v4-flash' }, preset: null,
+      truthContext, turnContext: { playerInput: '检查' }, presentationContext: {}, complete,
+    });
+    expect(result.semanticReview).toEqual({ approved: true, violations: [], corrections: [] });
+    expect(result.directorAttempts).toBe(1);
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+
   it('does not require optional insane performance after confirmation', async () => {
     const falsePositive = JSON.stringify({
       approved: false,
@@ -335,7 +373,7 @@ describe('mystery orchestrator', () => {
     });
     expect(result.hardReview.approved).toBe(true);
     expect(complete).toHaveBeenCalledTimes(3);
-    expect(complete.mock.calls[1]?.[1]?.responseFormat).toBeUndefined();
+    expect(complete.mock.calls[1]?.[1]?.responseFormat).toEqual({ type: 'json_object' });
   });
 
   it('records an orchestration log entry with stage timings on success', async () => {

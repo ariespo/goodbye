@@ -1,9 +1,10 @@
 import { variablesToEndingContext } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
 import type { GameTransactionResult } from '../engine/game-transaction';
+import type { Scene } from '../sillytavern/types';
 
 /** 将纯事务结果一次性提交到 Zustand，避免变量、状态和触发器短暂失配。 */
-export function commitGameTransaction(result: GameTransactionResult): void {
+export function commitGameTransaction(result: GameTransactionResult, scene?: Scene): void {
   useGameStore.setState(state => ({
     tavern: {
       ...state.tavern,
@@ -26,6 +27,7 @@ export function commitGameTransaction(result: GameTransactionResult): void {
       pendingCycleReset: result.ending
         ? null
         : result.failure ?? state.game.pendingCycleReset,
+      ...(scene ? { currentScene: scene, currentLineIndex: 0, sceneComplete: false } : {}),
     },
   }));
 }

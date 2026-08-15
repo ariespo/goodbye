@@ -1,24 +1,34 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { getKnowledgeVisualUpdates, type KnowledgeVisualUpdate } from '../../data/playerKnowledge';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
 import { resolveCharacterSprite } from '../../utils/characterAssets';
+import { projectKnowledgeForPlayback } from '../../utils/knowledgePresentation';
 import { GameIcon } from '../ui/GameIcon';
 
 export function KnowledgeUpdateOverlay() {
   const variables = useGameStore(state => state.tavern.variables);
+  const currentScene = useGameStore(state => state.game.currentScene);
+  const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
+  const sceneComplete = useGameStore(state => state.game.sceneComplete);
   const toggleModal = useGameStore(state => state.actions.toggleModal);
-  const previousVariablesRef = useRef(variables);
+  const presentedVariables = useMemo(() => projectKnowledgeForPlayback(
+    variables,
+    currentScene,
+    currentLineIndex,
+    sceneComplete,
+  ), [variables, currentScene, currentLineIndex, sceneComplete]);
+  const previousVariablesRef = useRef(presentedVariables);
   const [queue, setQueue] = useState<KnowledgeVisualUpdate[]>([]);
   const active = queue[0] ?? null;
 
   useEffect(() => {
     const previous = previousVariablesRef.current;
-    previousVariablesRef.current = variables;
-    const updates = getKnowledgeVisualUpdates(previous, variables);
+    previousVariablesRef.current = presentedVariables;
+    const updates = getKnowledgeVisualUpdates(previous, presentedVariables);
     if (updates.length > 0) setQueue(current => [...current, ...updates]);
-  }, [variables]);
+  }, [presentedVariables]);
 
   useEffect(() => {
     if (!active) return;

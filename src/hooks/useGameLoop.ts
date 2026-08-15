@@ -641,7 +641,11 @@ export function useGameLoop() {
             return;
           }
         }
-        commitGameTransaction(transaction);
+        const committedScene = mergeParsedIntoScene(prevScene, {
+          ...acceptedScene,
+          knowledgeAlreadyCommitted: true,
+        }, parsed);
+        commitGameTransaction(transaction, committedScene);
 
         actions.addHistorySnapshot({
           turnIndex: game.history.length,
@@ -658,10 +662,6 @@ export function useGameLoop() {
         // The accepted scene only becomes visible after the transaction and
         // all knowledge/profile projections have been committed together.
         actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
-        actions.setCurrentScene(mergeParsedIntoScene(prevScene, {
-          ...acceptedScene,
-          knowledgeAlreadyCommitted: true,
-        }, parsed));
         actions.setStreaming(false);
         actions.setIsWaitingForAI(false);
 

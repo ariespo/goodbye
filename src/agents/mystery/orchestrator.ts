@@ -152,10 +152,12 @@ function sanitizeFactReview(
     return normalized.includes('lies-about')
       && (normalized.includes('未体现其主动撒谎') || normalized.includes('未体现主动撒谎'));
   };
-  const explicitlySaysNoViolation = (value: string) => value.includes('不构成违规');
+  const explicitlySaysNoViolation = (value: string) => (
+    /不构成违规|并非违规|无需修正|(?:未发现|没有发现|不存在|无)(?:任何|潜在)?违规/.test(value)
+  );
   const selfContradictoryApproval = (value: string) => (
-    /故不违规|故不构成违规|不违规|无违规|未发现违规|未泄露|符合(?:。|$)|符合.*(?:规则|预算|限制|授权)|授权成立/.test(value)
-    && !/(?:但|然而|不过|仍).*(?:违规|违反|不符合|超出)/.test(value)
+    /故不违规|未泄露|符合(?:。|$)|符合.*(?:规则|预算|限制|授权|evidenceStandard)|授权成立/.test(value)
+    && !/(?:但|然而|不过|仍)[^。！？]*(?:确属|构成|存在|仍有|违反|不符合|超出)/.test(value)
   );
   const falselyCountsFollowupIntentsAsReveals = (value: string) => (
     /重复揭示|压力累积|单回合预算精神/.test(value)
@@ -275,7 +277,10 @@ function sanitizeFactReview(
       && !falselyTreatsDailyRoleAsHiddenKnowledge(value)
       && !falselyDemandsMissingPivot(value);
   });
-  const corrections = review.corrections.filter(correction => !isFalseKnowledgeEventCoupling(correction));
+  const corrections = violations.length === 0 ? [] : review.corrections.filter(correction => (
+    !isFalseKnowledgeEventCoupling(correction)
+    && !explicitlySaysNoViolation(correction)
+  ));
   return { approved: violations.length === 0, violations, corrections };
 }
 
@@ -421,7 +426,7 @@ async function runMysteryPipeline(
   ));
   directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
   observe.setDirectorPlan(directorPlan);
-  let hardReview = await timeStage('hard-review', () => reviewDirectorPlan(directorPlan, brief));
+  let hardReview = await timeStage('hard-review', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
   observe.setHardReview(hardReview);
   if (!hardReview.approved) {
     directorAttempts += 1;
@@ -434,7 +439,7 @@ async function runMysteryPipeline(
     ], { temperature: 0.1, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT, parseDirectorPlan));
     directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
     observe.setDirectorPlan(directorPlan);
-    hardReview = await timeStage('hard-review-retry', () => reviewDirectorPlan(directorPlan, brief));
+    hardReview = await timeStage('hard-review-retry', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
     observe.setHardReview(hardReview);
   }
   if (!hardReview.approved && hardReview.violations.every(item => item.code === 'saturation-pivot-violation')) {
@@ -442,7 +447,7 @@ async function runMysteryPipeline(
     observe.setDirectorAttempts(directorAttempts);
     directorPlan = await timeStage('director-repair-final', () => ensureSaturationPivotOrder(directorPlan, brief));
     observe.setDirectorPlan(directorPlan);
-    hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief));
+    hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
     observe.setHardReview(hardReview);
   }
   if (!hardReview.approved && hardReview.violations.every(item => item.code === 'character-performance-violation')) {
@@ -450,7 +455,7 @@ async function runMysteryPipeline(
     observe.setDirectorAttempts(directorAttempts);
     directorPlan = await timeStage('director-repair-final', () => removeConfessionBySilence(directorPlan, brief));
     observe.setDirectorPlan(directorPlan);
-    hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief));
+    hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
     observe.setHardReview(hardReview);
   }
   if (!hardReview.approved && hardReview.violations.every(item => item.code === 'scene-contract-violation')) {
@@ -458,7 +463,7 @@ async function runMysteryPipeline(
     observe.setDirectorAttempts(directorAttempts);
     directorPlan = await timeStage('director-repair-final', () => enforceNarrativeSceneContract(directorPlan, brief));
     observe.setDirectorPlan(directorPlan);
-    hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief));
+    hardReview = await timeStage('hard-review-final', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
     observe.setHardReview(hardReview);
   }
   if (!hardReview.approved) {
@@ -466,11 +471,18 @@ async function runMysteryPipeline(
   }
 
   const intentMode = typeof intentPolicy?.mode === 'string' ? intentPolicy.mode : 'normal';
+  const requiredKnowledgeEventIds = new Set(
+    brief.sceneContract?.requiredKnowledgeEvents.map(item => item.eventId) ?? [],
+  );
+  const plannedKnowledgeEvents = directorPlan.knowledgeEvents ?? [];
+  const deterministicSceneKnowledgeOnly = directorPlan.revelations.length === 0
+    && plannedKnowledgeEvents.length > 0
+    && requiredKnowledgeEventIds.size === plannedKnowledgeEvents.length
+    && plannedKnowledgeEvents.every(item => requiredKnowledgeEventIds.has(item.eventId));
   const reviewPolicy = {
     semantic: options.mode === 'strict'
       || directorPlan.revelations.length > 0
-      || (directorPlan.knowledgeEvents?.length ?? 0) > 0
-      || (brief.sceneContract?.requiredKnowledgeEvents.length ?? 0) > 0,
+      || (plannedKnowledgeEvents.length > 0 && !deterministicSceneKnowledgeOnly),
     pacing: options.mode === 'strict'
       || options.truthContext.cycleCount >= 3
       || options.truthContext.lockedRoute !== null
@@ -528,7 +540,7 @@ async function runMysteryPipeline(
       directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
       directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
       observe.setDirectorPlan(directorPlan);
-      hardReview = await timeStage('hard-review-after-semantic-repair', () => reviewDirectorPlan(directorPlan, brief));
+      hardReview = await timeStage('hard-review-after-semantic-repair', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
       observe.setHardReview(hardReview);
       if (!hardReview.approved) {
         throw new MysteryPipelineBlockedError('语义修复后的导演计划未通过硬审查，本回合已停止。');
@@ -565,7 +577,7 @@ async function runMysteryPipeline(
         directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
         directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
         observe.setDirectorPlan(directorPlan);
-        hardReview = await timeStage('hard-review-after-semantic-final', () => reviewDirectorPlan(directorPlan, brief));
+        hardReview = await timeStage('hard-review-after-semantic-final', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
         observe.setHardReview(hardReview);
         if (!hardReview.approved) {
           throw new MysteryPipelineBlockedError('最终语义修复后的导演计划未通过硬审查，本回合已停止。');
@@ -597,7 +609,7 @@ async function runMysteryPipeline(
     }
   }
 
-  const writerPacket = buildWriterPacket(directorPlan, brief);
+  const writerPacket = buildWriterPacket(directorPlan, brief, options.turnContext);
   const writerSystem = options.formatPrompt
     ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
     : WRITER_SYSTEM_PROMPT;

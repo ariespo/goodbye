@@ -22,6 +22,7 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
           description: { type: 'string' },
           locationId: { type: 'string' },
           speakerIds: { type: 'array', items: { type: 'string' } },
+          sourceMemoryIds: { type: 'array', items: { type: 'string' } },
         },
       },
     },

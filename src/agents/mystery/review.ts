@@ -121,9 +121,41 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
   return { ...plan, beats, knowledgeEvents };
 }
 
-export function reviewDirectorPlan(plan: DirectorPlan, brief: MysteryBrief): FactReview {
+const UNGROUNDED_PAST_CLAIM = /(?:昨天|昨晚|前天|上次|此前|之前|早些时候|刚才|曾经|平时|一向|向来)[^。！？\n]{0,100}(?:说|提到|告诉|表示|来(?:过|了|买)?|去(?:过|了|往)?|见(?:过|到)?|听(?:过|说)?|买(?:过|了)?|拿(?:过|了)?|做(?:过|了)?|发生|准备|计划)/;
+
+function selectedMemoryIds(turnContext?: Record<string, unknown>): Set<string> {
+  const memoryContext = turnContext?.memoryContext;
+  const nestedIds = memoryContext && typeof memoryContext === 'object'
+    ? (memoryContext as { selectedIds?: unknown }).selectedIds
+    : undefined;
+  return new Set([
+    ...(Array.isArray(turnContext?.contextSelectionIds) ? turnContext.contextSelectionIds : []),
+    ...(Array.isArray(nestedIds) ? nestedIds : []),
+  ].filter((item): item is string => typeof item === 'string'));
+}
+
+export function reviewDirectorPlan(
+  plan: DirectorPlan,
+  brief: MysteryBrief,
+  turnContext?: Record<string, unknown>,
+): FactReview {
   const violations: FactReviewViolation[] = [];
   const seen = new Set<string>();
+  const allowedMemoryIds = selectedMemoryIds(turnContext);
+
+  for (const beat of plan.beats) {
+    if (!UNGROUNDED_PAST_CLAIM.test(`${beat.purpose} ${beat.description}`)) continue;
+    const sources = beat.sourceMemoryIds ?? [];
+    const invalidSources = sources.filter(id => !allowedMemoryIds.has(id));
+    if (sources.length === 0 || invalidSources.length > 0) {
+      violations.push({
+        code: 'ungrounded-past-claim',
+        message: sources.length === 0
+          ? `beat ${beat.id} 补写了本回合之前的行动或对话，却没有引用 sourceMemoryIds；请删除该往事或引用真实记忆。`
+          : `beat ${beat.id} 引用了未进入本回合上下文的记忆：${invalidSources.join('、')}。`,
+      });
+    }
+  }
 
   if (brief.sceneContract) {
     const contract = brief.sceneContract;
@@ -371,8 +403,12 @@ export function reviewDirectorPlan(plan: DirectorPlan, brief: MysteryBrief): Fac
   };
 }
 
-export function buildWriterPacket(plan: DirectorPlan, brief: MysteryBrief): WriterPacket {
-  const review = reviewDirectorPlan(plan, brief);
+export function buildWriterPacket(
+  plan: DirectorPlan,
+  brief: MysteryBrief,
+  turnContext?: Record<string, unknown>,
+): WriterPacket {
+  const review = reviewDirectorPlan(plan, brief, turnContext);
   if (!review.approved) {
     throw new Error(`导演计划未通过事实审查：${review.corrections.join('；')}`);
   }
