@@ -124,6 +124,29 @@ export class FarewellDatabase extends Dexie {
           };
         });
       });
+
+    // v8: move presets that still use the former defaults to the expanded
+    // narrative budget. Deliberately preserve any other player-chosen value.
+    this.version(8)
+      .stores({
+        settings: '++id',
+        presets: 'id, name, updatedAt',
+        lorebooks: 'id, name, updatedAt',
+        chats: 'id, name, updatedAt',
+        saves: 'id, name, createdAt',
+      })
+      .upgrade(async tx => {
+        await tx.table('presets').toCollection().modify((preset: ChatPreset) => {
+          if (preset.settings.openai_max_context === undefined
+            || preset.settings.openai_max_context === 8192) {
+            preset.settings.openai_max_context = 80000;
+          }
+          if (preset.settings.openai_max_tokens === undefined
+            || preset.settings.openai_max_tokens === 2048) {
+            preset.settings.openai_max_tokens = 4096;
+          }
+        });
+      });
   }
 }
 

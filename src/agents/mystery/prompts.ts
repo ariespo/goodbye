@@ -82,6 +82,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 16. WriterPacket.saturationPivot 存在时，正文必须先演出玩家对 blockedActorId 的原调查，随后把 interveningNpcId 的介入写成独立可见事件，并由其讲出 authorizedFacts 中 factId 对应的内容。只写授权事实本身，不得把 redirectedActorId 这个内部归属直接写给玩家，也不得补充授权文本未写明的身份或因果；不得把线索继续解释成 blockedActorId 的新嫌疑。
 17. WriterPacket.sceneContract 存在时必须逐项落实：先写 requiredEnRouteNpcIds 的 street 途中遭遇，再切换到 destinationBackground，让 requiredDestinationNpcIds 本人说话并承接剧情；forbiddenNpcIds 不得出现。必须按 characterPerformances 演绎对应内部角色。职业称呼只有在 sceneContract.directive 明确规定的初见阶段可用，并且必须完成其指定的旁白认知与改名顺序；否则不能只写“店员”“护士”“老师”等泛称后套一张立绘。
 18. WriterPacket.npcPlayerKnowledge 逐角色约束其是否知道玩家姓名。knowsPlayerName=false 时，该角色不得说出玩家姓名或姓氏；为 true 时，自然需要称呼时只能使用 allowedAddress。不要为了展示功能而每句重复称呼，也不要让旁白把内部认知表直接解释给玩家。
+19. PresentationContext.recentHistory 含近期已接受正文。不得复用其中的完整句子、段落开头、结尾句、比喻、感官意象或人物小动作模板。雨、灯光、潮湿等持续环境可以存在，但每回合必须承担新的叙事功能，不能只换同义词重复烘托。同一角色的固定口癖可自然保留，不能把整段反应照搬。
 
 输出协议：
 <maintext>场景、音乐、对话、物品、特效与获准的“认知|eventId”指令</maintext>
@@ -111,6 +112,20 @@ NpcKnowledge 的 stance 是允许的最大知情与应对边界，不是必须�
 只输出严格 JSON：
 {"approved":boolean,"violations":[{"code":"string","factId":"string?","message":"string"}],"corrections":["string"]}
 不得输出正文、隐藏真相或 Markdown。`;
+
+export const STYLE_CRITIC_SYSTEM_PROMPT = `你是《漫长的告别》的文风连续性审查 Agent。你只比较近期已接受正文与候选正文，不判断案件事实、不补写剧情、不要求新增信息。
+
+检查项：
+1. 是否逐字或近乎逐字重复了完整语句、连续短句、段落开头或结尾。
+2. 是否把同一意象换成近义词再次承担相同功能，例如连续用雨痕、冷白灯、汗珠、呼吸停顿表达同一种不安。
+3. 是否连续套用相同人物动作、对话节拍或“环境描写—停顿—异常细节”的段落模板。
+4. 重复是否没有推进人物、线索、关系或场景意义。
+
+允许：简短服务用语、姓名与地点、角色固定但不过量的口癖、必须逐字呈现的证据，以及有明确递进或反转意义的刻意回环。不要仅因同一场景仍在下雨或仍有灯光就拒绝；只有表达方式和叙事功能也重复时才算违规。
+
+只输出严格 JSON：
+{"approved":boolean,"violations":[{"code":"repeated-prose|repeated-imagery|style-template-repetition","message":"string"}],"corrections":["string"]}
+不得输出改写正文、事实评价、Markdown 或额外字段。`;
 
 export const PACING_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 
@@ -179,8 +194,8 @@ export function buildNarrativeRepairPrompt(
   rejectedNarrative: string,
   review: unknown,
 ): string {
-  return `上一版可播放场景未通过正文事实复核。请从头重写完整场景，并只输出项目规定标签。
-必须逐条落实 corrections；删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写。
+  return `上一版可播放场景未通过正文审查。请从头重写完整场景，并只输出项目规定标签。
+必须逐条落实 corrections；若问题涉及事实，删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写；若问题涉及文风，必须更换重复句、意象、动作模板和段落组织，同时保留原计划的事实与剧情功能。
 stance=lies-about 的角色只能明确否认、质疑证据或普通拒答；不得用台词、沉默、眼神、动作或旁白形成半自白。
 不得改变 WriterPacket、不得新增事实、不得省略闭合标签。
 
@@ -192,6 +207,19 @@ ${rejectedNarrative}
 
 [FactReview]
 ${jsonBlock(review)}`;
+}
+
+export function buildStyleCriticUserPrompt(
+  recentNarratives: string[],
+  narrative: string,
+): string {
+  return `请检查候选正文是否复用了近期正文的语句、意象或段落模板。只报告足以让玩家明显感到重复的问题。
+
+[近期已接受正文，从旧到新]
+${recentNarratives.map((item, index) => `--- 回合 ${index + 1} ---\n${item}`).join('\n\n') || '无'}
+
+[候选正文]
+${narrative}`;
 }
 
 export function buildWriterUserPrompt(

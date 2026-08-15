@@ -235,6 +235,9 @@ export type FactReviewViolationCode =
   | 'scene-contract-violation'
   | 'ungrounded-past-claim'
   | 'ungrounded-evidence-detail'
+  | 'repeated-prose'
+  | 'repeated-imagery'
+  | 'style-template-repetition'
   | 'unknown-background-fact'
   | 'soft-canon-violation';
 

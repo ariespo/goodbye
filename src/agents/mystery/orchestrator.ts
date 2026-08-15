@@ -67,6 +67,7 @@ export interface PreparedMysteryTurn {
     semantic: boolean;
     pacing: boolean;
     narrative: boolean;
+    style: boolean;
     state: boolean;
   };
 }
@@ -495,6 +496,7 @@ async function runMysteryPipeline(
       || directorPlan.beats.some(beat => (beat.sourceBackgroundFactIds?.length ?? 0) > 0)
       || (directorPlan.knowledgeEvents?.length ?? 0) > 0
       || (brief.sceneContract?.requiredKnowledgeEvents.length ?? 0) > 0,
+    style: true,
     state: options.mode === 'strict'
       || !!brief.saturationPivot
       || options.turnContext.requiresStateAgent === true,

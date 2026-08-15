@@ -11,6 +11,7 @@ export {
 } from './prompts';
 export { buildWriterPacket, reviewDirectorPlan } from './review';
 export { repairNarrativeAgainstWriterPacket, reviewNarrativeAgainstWriterPacket } from './narrative-review';
+export { recentAcceptedNarratives, reviewNarrativeStyle, reviewProseDeterministically } from './style-review';
 export {
   clearOrchestrationLog,
   getOrchestrationLog,

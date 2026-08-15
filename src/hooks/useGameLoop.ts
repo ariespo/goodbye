@@ -40,10 +40,13 @@ import {
   MysteryPipelineBlockedError,
   prepareMysteryTurn,
   repairNarrativeAgainstWriterPacket,
+  recentAcceptedNarratives,
   reviewNarrativeAgainstWriterPacket,
+  reviewNarrativeStyle,
   REVEAL_LEVELS,
   startPreplan,
   type AgentNarrativeMode,
+  type FactReview,
   type MysteryOverlayId,
   type MysteryRouteId,
   type PreparedMysteryTurn,
@@ -82,6 +85,15 @@ const outputProtocol = createOutputProtocol({
 });
 
 const mysteryFactIds = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => fact.id));
+
+function combineNarrativeReviews(reviews: FactReview[]): FactReview {
+  const violations = reviews.flatMap(review => review.violations);
+  return {
+    approved: violations.length === 0,
+    violations,
+    corrections: violations.length === 0 ? [] : reviews.flatMap(review => review.corrections),
+  };
+}
 const npcIdsByLocation: Record<string, string[]> = {
   supermarket: ['chen-huihui'],
   'community-hospital': ['detective-b'],
@@ -375,8 +387,8 @@ export function useGameLoop() {
         activeNpcIds,
         history: historyMessages,
         variables: narrativeVariables,
-        maxContext: Number(activePreset?.settings?.openai_max_context ?? 8192),
-        reservedOutput: Number(activePreset?.settings?.openai_max_tokens ?? 2048),
+        maxContext: Number(activePreset?.settings?.openai_max_context ?? 80000),
+        reservedOutput: Math.max(4096, Number(activePreset?.settings?.openai_max_tokens ?? 4096)),
         fixedPromptText: `${basePromptUserInput}\n${settings.formatPromptTemplate ?? ''}`,
       });
       const { messages: promptMessages } = assemblePrompt({
@@ -765,8 +777,8 @@ export function useGameLoop() {
             activeNpcIds: speculativeTruthContext.activeNpcIds,
             history: finalMessages,
             variables: mergedVariables,
-            maxContext: Number(activePreset?.settings?.openai_max_context ?? 8192),
-            reservedOutput: Number(activePreset?.settings?.openai_max_tokens ?? 2048),
+            maxContext: Number(activePreset?.settings?.openai_max_context ?? 80000),
+            reservedOutput: Math.max(4096, Number(activePreset?.settings?.openai_max_tokens ?? 4096)),
             fixedPromptText: `${speculativePrompt}\n${settings.formatPromptTemplate ?? ''}`,
           });
           const speculativeHistory = speculativeContextBundle.recentMessages.map(m => ({ role: m.role, content: m.content }));
@@ -898,15 +910,38 @@ export function useGameLoop() {
             }
 
             if (preparedTurn) {
-              if (preparedTurn.reviewPolicy.narrative) {
+              if (preparedTurn.reviewPolicy.narrative || preparedTurn.reviewPolicy.style) {
                 try {
-                  const narrativeReview = await reviewNarrativeAgainstWriterPacket({
-                    api: resolveAnalysisApi(settings),
-                    preset: activePreset,
-                    packet: preparedTurn.writerPacket,
-                    narrative: parseStateRef.current.parsed.maintext || fullText,
-                    abortSignal: abortController.signal,
-                  });
+                  const recentNarratives = recentAcceptedNarratives(messages);
+                  const narrative = parseStateRef.current.parsed.maintext || fullText;
+                  const styleExemptTexts = [
+                    ...preparedTurn.writerPacket.authorizedFacts.map(fact => fact.text),
+                    ...preparedTurn.writerPacket.playerKnownFacts.map(fact => fact.text),
+                    ...preparedTurn.writerPacket.authorizedKnowledgeEvents.map(event => event.evidence),
+                    ...preparedTurn.writerPacket.authorizedBackgroundFacts.map(fact => fact.text),
+                    ...preparedTurn.writerPacket.approvedBackgroundFactProposals.map(fact => fact.text),
+                  ];
+                  const approvedReview: FactReview = { approved: true, violations: [], corrections: [] };
+                  const [factReview, styleReview] = await Promise.all([
+                    preparedTurn.reviewPolicy.narrative
+                      ? reviewNarrativeAgainstWriterPacket({
+                          api: resolveAnalysisApi(settings),
+                          preset: activePreset,
+                          packet: preparedTurn.writerPacket,
+                          narrative,
+                          abortSignal: abortController.signal,
+                        })
+                      : Promise.resolve(approvedReview),
+                    reviewNarrativeStyle({
+                      api: resolveAnalysisApi(settings),
+                      preset: activePreset,
+                      narrative,
+                      recentNarratives,
+                      exemptTexts: styleExemptTexts,
+                      abortSignal: abortController.signal,
+                    }),
+                  ]);
+                  const narrativeReview = combineNarrativeReviews([factReview, styleReview]);
                   if (!narrativeReview.approved) {
                     const repairedNarrative = await repairNarrativeAgainstWriterPacket({
                       api: resolveAnalysisApi(settings),
@@ -966,13 +1001,25 @@ export function useGameLoop() {
                       return;
                     }
 
-                    const repairedReview = await reviewNarrativeAgainstWriterPacket({
-                      api: resolveAnalysisApi(settings),
-                      preset: activePreset,
-                      packet: preparedTurn.writerPacket,
-                      narrative: parseStateRef.current.parsed.maintext || fullText,
-                      abortSignal: abortController.signal,
-                    });
+                    const repairedMaintext = parseStateRef.current.parsed.maintext || fullText;
+                    const [repairedFactReview, repairedStyleReview] = await Promise.all([
+                      reviewNarrativeAgainstWriterPacket({
+                        api: resolveAnalysisApi(settings),
+                        preset: activePreset,
+                        packet: preparedTurn.writerPacket,
+                        narrative: repairedMaintext,
+                        abortSignal: abortController.signal,
+                      }),
+                      reviewNarrativeStyle({
+                        api: resolveAnalysisApi(settings),
+                        preset: activePreset,
+                        narrative: repairedMaintext,
+                        recentNarratives,
+                        exemptTexts: styleExemptTexts,
+                        abortSignal: abortController.signal,
+                      }),
+                    ]);
+                    const repairedReview = combineNarrativeReviews([repairedFactReview, repairedStyleReview]);
                     if (!repairedReview.approved) {
                       const detail = repairedReview.violations.map(item => item.message).join('\n');
                       actions.setStreaming(false);
@@ -980,7 +1027,7 @@ export function useGameLoop() {
                       actions.setTurnRecovery({
                         phase: 'failed_stream',
                         userInput,
-                        errorMessage: `正文自动修复后仍越过事实或角色边界，已阻止写入存档：\n${detail}`,
+                        errorMessage: `正文自动修复后仍存在事实、角色或文风问题，已阻止写入存档：\n${detail}`,
                       });
                       return;
                     }

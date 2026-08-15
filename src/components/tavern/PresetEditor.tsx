@@ -107,10 +107,10 @@ export function PresetEditor({ preset, onChange }: Props) {
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="最大上下文 (max_context)">
-                <input type="number" value={s.openai_max_context ?? 8192} onChange={e => patchSettings({ openai_max_context: Number(e.target.value) || 0 })} className={inputCls} />
+                <input type="number" value={s.openai_max_context ?? 80000} onChange={e => patchSettings({ openai_max_context: Number(e.target.value) || 0 })} className={inputCls} />
               </Field>
               <Field label="最大输出 (max_tokens)">
-                <input type="number" value={s.openai_max_tokens ?? 2048} onChange={e => patchSettings({ openai_max_tokens: Number(e.target.value) || 0 })} className={inputCls} />
+                <input type="number" value={s.openai_max_tokens ?? 4096} onChange={e => patchSettings({ openai_max_tokens: Number(e.target.value) || 0 })} className={inputCls} />
               </Field>
             </div>
             <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer">

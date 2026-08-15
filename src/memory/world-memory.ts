@@ -382,8 +382,8 @@ export function compileTurnContext(options: {
   )).slice(-20);
   const relevantBackgroundFacts = [...fixedBackgroundFacts, ...relevantSoftFacts];
 
-  const maxContext = options.maxContext ?? 8192;
-  const reservedOutput = options.reservedOutput ?? 2048;
+  const maxContext = options.maxContext ?? 80000;
+  const reservedOutput = options.reservedOutput ?? 4096;
   const reservedRepair = Math.max(512, Math.ceil(maxContext * 0.08));
   const estimatedFixed = estimateTokens(options.fixedPromptText ?? '');
   const selectedText = [
