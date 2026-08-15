@@ -10,7 +10,7 @@ import {
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 
-const UNAUTHORIZED_PAST_ACTION = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|早上|来过|来买|买了|买过|付钱|付款|赶时间|离开(?:了)?|走了|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了))|(?:今早|早上)[^。！？\n]{0,80}(?:文穗|女孩|她)/;
+const UNAUTHORIZED_PAST_ACTION = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|早上|来过|来买|买了|买过|付钱|付款|赶时间|离开(?:了)?|走了|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了)|(?:经常|总是|每次|以前|平时|这几天)[^。！？\n]{0,40}(?:来|一起|见))|(?:今早|早上)[^。！？\n]{0,80}(?:文穗|女孩|她)/;
 
 export function reviewNarrativeDeterministically(
   packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>,

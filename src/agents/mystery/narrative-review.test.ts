@@ -21,4 +21,15 @@ describe('deterministic final narrative review', () => {
       '店员|“欢、欢迎光临。”\n旁白|你认出这是附近便利店的店员陈慧慧。',
     )).toEqual([]);
   });
+
+  it('blocks invented habitual shared visits', () => {
+    const violations = reviewNarrativeDeterministically(
+      emptyAuthority,
+      '陈慧慧|“以前那个小姑娘，文穗，她不是经常跟你一起来吗？”',
+    );
+
+    expect(violations).toEqual([
+      expect.objectContaining({ code: 'ungrounded-past-claim' }),
+    ]);
+  });
 });
