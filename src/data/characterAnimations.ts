@@ -17,6 +17,8 @@ const CHEN_HUIHUI_CALM_ANIMATION_ASSET_REVISION = '20260814-calm-alpha-clean-v2'
 const CHEN_HUIHUI_HAPPY_ANIMATION_ASSET_REVISION = '20260814-happy-alpha-clean-v1';
 const CHEN_HUIHUI_ANGRY_ANIMATION_ASSET_REVISION = '20260814-angry-alpha-clean-v1';
 const CHEN_HUIHUI_SAD_ANIMATION_ASSET_REVISION = '20260814-sad-alpha-clean-v1';
+const CHEN_HUIHUI_PLAYBACK_RATE = 0.7;
+const chenHuihuiFrameMs = (baseFrameMs: number) => Math.round(baseFrameMs / CHEN_HUIHUI_PLAYBACK_RATE);
 const LIN_JING_CALM_ANIMATION_ASSET_REVISION = '20260814-calm-alpha-clean-v1';
 const ZHAO_GANG_CALM_ANIMATION_ASSET_REVISION = '20260814-calm-alpha-clean-v1';
 const toukoAnimationAsset = (path: string) =>
@@ -70,7 +72,7 @@ export const CHEN_HUIHUI_CALM_TALK_CLIP: CharacterAnimationClip = {
   src: CHEN_HUIHUI_CALM_TALK_FRAMES[0],
   sources: CHEN_HUIHUI_CALM_TALK_FRAMES,
   frames: CHEN_HUIHUI_CALM_TALK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_CALM_TALK_FRAMES.length }, () => 42),
+  frameMs: Array.from({ length: CHEN_HUIHUI_CALM_TALK_FRAMES.length }, () => chenHuihuiFrameMs(42)),
   loop: false,
   holdLastFrame: true,
   reducedMotionFrame: CHEN_HUIHUI_CALM_TALK_FRAMES.length - 1,
@@ -86,7 +88,7 @@ export const CHEN_HUIHUI_CALM_TAIL_BLINK: CharacterBlinkClip = {
   src: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0],
   sources: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES,
   frames: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES.length }, () => 55),
+  frameMs: Array.from({ length: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES.length }, () => chenHuihuiFrameMs(55)),
 };
 
 // The profile rests on the supplied neutral first frame and only plays blink frames.
@@ -110,7 +112,7 @@ export const CHEN_HUIHUI_HAPPY_TALK_CLIP: CharacterAnimationClip = {
   src: CHEN_HUIHUI_HAPPY_TALK_FRAMES[0],
   sources: CHEN_HUIHUI_HAPPY_TALK_FRAMES,
   frames: CHEN_HUIHUI_HAPPY_TALK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_HAPPY_TALK_FRAMES.length }, () => 42),
+  frameMs: Array.from({ length: CHEN_HUIHUI_HAPPY_TALK_FRAMES.length }, () => chenHuihuiFrameMs(42)),
   loop: false,
   holdLastFrame: true,
   reducedMotionFrame: CHEN_HUIHUI_HAPPY_TALK_FRAMES.length - 1,
@@ -122,7 +124,7 @@ export const CHEN_HUIHUI_HAPPY_TAIL_BLINK: CharacterBlinkClip = {
   src: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES[0],
   sources: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES,
   frames: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES.length }, () => 42),
+  frameMs: Array.from({ length: CHEN_HUIHUI_HAPPY_TAIL_BLINK_FRAMES.length }, () => chenHuihuiFrameMs(42)),
 };
 
 export const CHEN_HUIHUI_ANGRY_TALK_FRAMES = Array.from({ length: 25 }, (_, index) =>
@@ -135,7 +137,7 @@ export const CHEN_HUIHUI_ANGRY_TALK_CLIP: CharacterAnimationClip = {
   src: CHEN_HUIHUI_ANGRY_TALK_FRAMES[0],
   sources: CHEN_HUIHUI_ANGRY_TALK_FRAMES,
   frames: CHEN_HUIHUI_ANGRY_TALK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_ANGRY_TALK_FRAMES.length }, () => 42),
+  frameMs: Array.from({ length: CHEN_HUIHUI_ANGRY_TALK_FRAMES.length }, () => chenHuihuiFrameMs(42)),
   loop: false,
   holdLastFrame: true,
   reducedMotionFrame: CHEN_HUIHUI_ANGRY_TALK_FRAMES.length - 1,
@@ -148,7 +150,7 @@ export const CHEN_HUIHUI_ANGRY_TAIL_BLINK: CharacterBlinkClip = {
   src: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES[0],
   sources: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES,
   frames: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES.length }, () => 42),
+  frameMs: Array.from({ length: CHEN_HUIHUI_ANGRY_TAIL_BLINK_FRAMES.length }, () => chenHuihuiFrameMs(42)),
 };
 
 export const CHEN_HUIHUI_SAD_TALK_FRAMES = Array.from({ length: 25 }, (_, index) =>
@@ -161,7 +163,7 @@ export const CHEN_HUIHUI_SAD_TALK_CLIP: CharacterAnimationClip = {
   src: CHEN_HUIHUI_SAD_TALK_FRAMES[0],
   sources: CHEN_HUIHUI_SAD_TALK_FRAMES,
   frames: CHEN_HUIHUI_SAD_TALK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_SAD_TALK_FRAMES.length }, () => 42),
+  frameMs: Array.from({ length: CHEN_HUIHUI_SAD_TALK_FRAMES.length }, () => chenHuihuiFrameMs(42)),
   loop: false,
   holdLastFrame: true,
   reducedMotionFrame: CHEN_HUIHUI_SAD_TALK_FRAMES.length - 1,
@@ -175,7 +177,7 @@ export const CHEN_HUIHUI_SAD_TAIL_BLINK: CharacterBlinkClip = {
   src: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES[0],
   sources: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES,
   frames: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES.length,
-  frameMs: Array.from({ length: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES.length }, () => 42),
+  frameMs: Array.from({ length: CHEN_HUIHUI_SAD_TAIL_BLINK_FRAMES.length }, () => chenHuihuiFrameMs(42)),
 };
 
 export const LIN_JING_CALM_TALK_FRAMES = Array.from({ length: 5 }, (_, index) =>

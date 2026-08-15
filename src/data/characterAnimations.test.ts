@@ -114,7 +114,7 @@ describe('Chen Huihui calm/default animation', () => {
       src: CHEN_HUIHUI_CALM_TALK_FRAMES[0],
       sources: CHEN_HUIHUI_CALM_TALK_FRAMES,
       frames: 25,
-      frameMs: Array.from({ length: 25 }, () => 42),
+      frameMs: Array.from({ length: 25 }, () => 60),
       loop: false,
       holdLastFrame: true,
       reducedMotionFrame: 24,
@@ -123,7 +123,7 @@ describe('Chen Huihui calm/default animation', () => {
       src: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES[0],
       sources: CHEN_HUIHUI_CALM_TAIL_BLINK_FRAMES,
       frames: 9,
-      frameMs: Array.from({ length: 9 }, () => 55),
+      frameMs: Array.from({ length: 9 }, () => 79),
     });
   });
 
@@ -227,7 +227,7 @@ describe('Chen Huihui happy animation', () => {
       src: CHEN_HUIHUI_HAPPY_TALK_FRAMES[0],
       sources: CHEN_HUIHUI_HAPPY_TALK_FRAMES,
       frames: 14,
-      frameMs: Array.from({ length: 14 }, () => 42),
+      frameMs: Array.from({ length: 14 }, () => 60),
       loop: false,
       holdLastFrame: true,
       reducedMotionFrame: 13,
@@ -237,7 +237,7 @@ describe('Chen Huihui happy animation', () => {
       src: CHEN_HUIHUI_HAPPY_TALK_FRAMES[0],
       sources: CHEN_HUIHUI_HAPPY_TALK_FRAMES,
       frames: 14,
-      frameMs: Array.from({ length: 14 }, () => 42),
+      frameMs: Array.from({ length: 14 }, () => 60),
     });
   });
 });
@@ -261,7 +261,7 @@ describe('Chen Huihui angry animation', () => {
       src: CHEN_HUIHUI_ANGRY_TALK_FRAMES[0],
       sources: CHEN_HUIHUI_ANGRY_TALK_FRAMES,
       frames: 25,
-      frameMs: Array.from({ length: 25 }, () => 42),
+      frameMs: Array.from({ length: 25 }, () => 60),
       loop: false,
       holdLastFrame: true,
       reducedMotionFrame: 24,
@@ -270,7 +270,7 @@ describe('Chen Huihui angry animation', () => {
     expect(CHEN_HUIHUI_ANGRY_TAIL_BLINK).toMatchObject({
       sources: CHEN_HUIHUI_ANGRY_TALK_FRAMES,
       frames: 25,
-      frameMs: Array.from({ length: 25 }, () => 42),
+      frameMs: Array.from({ length: 25 }, () => 60),
     });
   });
 });
@@ -294,7 +294,7 @@ describe('Chen Huihui sad animation', () => {
       src: CHEN_HUIHUI_SAD_TALK_FRAMES[0],
       sources: CHEN_HUIHUI_SAD_TALK_FRAMES,
       frames: 25,
-      frameMs: Array.from({ length: 25 }, () => 42),
+      frameMs: Array.from({ length: 25 }, () => 60),
       loop: false,
       holdLastFrame: true,
       reducedMotionFrame: 24,
@@ -303,7 +303,7 @@ describe('Chen Huihui sad animation', () => {
     expect(CHEN_HUIHUI_SAD_TAIL_BLINK).toMatchObject({
       sources: CHEN_HUIHUI_SAD_TALK_FRAMES,
       frames: 25,
-      frameMs: Array.from({ length: 25 }, () => 42),
+      frameMs: Array.from({ length: 25 }, () => 60),
     });
   });
 });
