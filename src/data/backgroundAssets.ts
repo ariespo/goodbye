@@ -160,7 +160,7 @@ export const backgroundAssets: BackgroundAsset[] = [
   },
   {
     id: 'supermarket',
-    file: 'supermarket.png',
+    file: 'supermarket-redraw-v2.png',
     displayName: '便利店（默认日间）',
     description: '社区便利店的雨天日间状态；兼容旧场景文本。',
     usage: '便利店日间调查',
@@ -170,7 +170,7 @@ export const backgroundAssets: BackgroundAsset[] = [
   },
   {
     id: 'supermarket-day',
-    file: 'supermarket.png',
+    file: 'supermarket-redraw-v2.png',
     displayName: '便利店（日间）',
     description: '社区便利店的雨天日间状态。',
     usage: '便利店日间调查',
@@ -180,7 +180,7 @@ export const backgroundAssets: BackgroundAsset[] = [
   },
   {
     id: 'supermarket-night',
-    file: 'supermarket-night.png',
+    file: 'supermarket-night-redraw-v2.png',
     displayName: '便利店（夜间）',
     description: '同一便利店的雨夜营业状态，货架和收银台位置保持一致。',
     usage: '便利店夜间调查/结局演出',

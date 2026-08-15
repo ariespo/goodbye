@@ -6,7 +6,7 @@ describe('backgroundAssets time variants', () => {
     expect(getBackgroundById('bedroom1')?.file).toBe('bedroom1.png');
     expect(getBackgroundById('home')?.file).toBe('home.png');
     expect(getBackgroundById('school')?.file).toBe('school.png');
-    expect(getBackgroundById('supermarket')?.file).toBe('supermarket.png');
+    expect(getBackgroundById('supermarket')?.file).toBe('supermarket-redraw-v2.png');
     expect(getBackgroundById('street')?.file).toBe('street-redraw-v2.png');
     expect(getBackgroundById('street-night')?.file).toBe('street-night-redraw-v1.png');
   });
@@ -16,7 +16,7 @@ describe('backgroundAssets time variants', () => {
     expect(getBackgroundById('bedroom1-night.png')?.file).toBe('bedroom1-night.png');
     expect(getBackgroundById('home-night')?.file).toBe('home-night.png');
     expect(getBackgroundById('school-night')?.file).toBe('school-night.png');
-    expect(getBackgroundById('supermarket-night')?.file).toBe('supermarket-night.png');
+    expect(getBackgroundById('supermarket-night')?.file).toBe('supermarket-night-redraw-v2.png');
   });
 
   it('does not expose the retired bedroom2 scene', () => {
