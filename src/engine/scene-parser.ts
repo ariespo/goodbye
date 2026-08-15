@@ -217,8 +217,10 @@ export function maintextToScene(maintext: string, options: SceneParseOptions = {
     pendingAnimation = undefined;
   }
 
+  const sceneId = crypto.randomUUID();
+  lines.forEach((line, index) => { line.id = `${sceneId}:line:${index}`; });
   const scene: Scene = {
-    id: crypto.randomUUID(),
+    id: sceneId,
     lines,
     background: lines[0]?.background,
     bgm: lines[0]?.bgm,

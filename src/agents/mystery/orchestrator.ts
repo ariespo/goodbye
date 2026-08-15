@@ -63,6 +63,12 @@ export interface PreparedMysteryTurn {
   directorAttempts: number;
   /** 仅供程序提交玩家知识；不得序列化到 Director 或 Writer 消息。 */
   factAliases: FactAliasTable;
+  reviewPolicy: {
+    semantic: boolean;
+    pacing: boolean;
+    narrative: boolean;
+    state: boolean;
+  };
 }
 
 /** 表示事实安全闸已触发；调用方不得回退到未受控生成。 */
@@ -459,10 +465,30 @@ async function runMysteryPipeline(
     throw new MysteryPipelineBlockedError(`导演计划连续${directorAttempts}次未通过事实审查，本回合已停止。`);
   }
 
+  const intentMode = typeof intentPolicy?.mode === 'string' ? intentPolicy.mode : 'normal';
+  const reviewPolicy = {
+    semantic: options.mode === 'strict'
+      || directorPlan.revelations.length > 0
+      || (directorPlan.knowledgeEvents?.length ?? 0) > 0
+      || (brief.sceneContract?.requiredKnowledgeEvents.length ?? 0) > 0,
+    pacing: options.mode === 'strict'
+      || options.truthContext.cycleCount >= 3
+      || options.truthContext.lockedRoute !== null
+      || !!brief.saturationPivot
+      || intentMode === 'divert',
+    narrative: options.mode === 'strict'
+      || directorPlan.revelations.length > 0
+      || (directorPlan.knowledgeEvents?.length ?? 0) > 0
+      || (brief.sceneContract?.requiredKnowledgeEvents.length ?? 0) > 0,
+    state: options.mode === 'strict'
+      || !!brief.saturationPivot
+      || options.turnContext.requiresStateAgent === true,
+  };
+  const approvedReview: FactReview = { approved: true, violations: [], corrections: [] };
   let semanticReview: FactReview | null = null;
   let pacingReview: FactReview | null = null;
-  if (options.mode === 'strict' || options.mode === 'standard') {
-    const semanticPromise = timeStage('semantic-review', () => completeParsed(complete, supportKey, [
+  if (reviewPolicy.semantic || reviewPolicy.pacing) {
+    const semanticPromise = reviewPolicy.semantic ? timeStage('semantic-review', () => completeParsed(complete, supportKey, [
       { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
       {
         role: 'user',
@@ -477,11 +503,11 @@ async function runMysteryPipeline(
           })),
         ),
       },
-    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview));
-    const pacingPromise = timeStage('pacing-review', () => completeParsed(complete, supportKey, [
+    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview);
+    const pacingPromise = reviewPolicy.pacing ? timeStage('pacing-review', () => completeParsed(complete, supportKey, [
       { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
       { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview));
+    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview);
     const [semanticParsed, pacingParsed] = await Promise.all([semanticPromise, pacingPromise]);
     semanticReview = sanitizeFactReview(semanticParsed, directorPlan, brief, options.turnContext);
     pacingReview = sanitizeFactReview(pacingParsed, directorPlan, brief, options.turnContext);
@@ -508,17 +534,17 @@ async function runMysteryPipeline(
         throw new MysteryPipelineBlockedError('语义修复后的导演计划未通过硬审查，本回合已停止。');
       }
       const [semanticRetryText, pacingRetryText] = await Promise.all([
-        timeStage('semantic-review-retry', () => completeParsed(complete, supportKey, [
+        reviewPolicy.semantic ? timeStage('semantic-review-retry', () => completeParsed(complete, supportKey, [
           { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
           { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, MYSTERY_TRUTH_GRAPH.facts.map(fact => ({
             id: factAliases.factIdToAlias[fact.id], route: fact.route,
             canonicalTruth: fact.canonicalTruth, revelations: fact.revelations,
           }))) },
-        ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)),
-        timeStage('pacing-review-retry', () => completeParsed(complete, supportKey, [
+        ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
+        reviewPolicy.pacing ? timeStage('pacing-review-retry', () => completeParsed(complete, supportKey, [
           { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
           { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-        ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)),
+        ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
       ]);
       semanticReview = sanitizeFactReview(semanticRetryText, directorPlan, brief, options.turnContext);
       pacingReview = sanitizeFactReview(pacingRetryText, directorPlan, brief, options.turnContext);
@@ -545,17 +571,17 @@ async function runMysteryPipeline(
           throw new MysteryPipelineBlockedError('最终语义修复后的导演计划未通过硬审查，本回合已停止。');
         }
         const [semanticFinalText, pacingFinalText] = await Promise.all([
-          timeStage('semantic-review-final', () => completeParsed(complete, supportKey, [
+          reviewPolicy.semantic ? timeStage('semantic-review-final', () => completeParsed(complete, supportKey, [
             { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
             { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, MYSTERY_TRUTH_GRAPH.facts.map(fact => ({
               id: factAliases.factIdToAlias[fact.id], route: fact.route,
               canonicalTruth: fact.canonicalTruth, revelations: fact.revelations,
             }))) },
-          ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)),
-          timeStage('pacing-review-final', () => completeParsed(complete, supportKey, [
+          ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
+          reviewPolicy.pacing ? timeStage('pacing-review-final', () => completeParsed(complete, supportKey, [
             { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
             { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-          ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)),
+          ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
         ]);
         semanticReview = sanitizeFactReview(semanticFinalText, directorPlan, brief, options.turnContext);
         pacingReview = sanitizeFactReview(pacingFinalText, directorPlan, brief, options.turnContext);
@@ -584,11 +610,12 @@ async function runMysteryPipeline(
     brief,
     directorPlan,
     hardReview,
-    semanticReview,
-    pacingReview,
+    semanticReview: reviewPolicy.semantic ? semanticReview : null,
+    pacingReview: reviewPolicy.pacing ? pacingReview : null,
     writerPacket,
     writerMessages,
     directorAttempts,
     factAliases,
+    reviewPolicy,
   };
 }

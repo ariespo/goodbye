@@ -13,6 +13,7 @@ import { createLorebookEngine } from './lorebook-engine';
 import { getVariablePath } from './vars-merger';
 import { translateForWriter } from '../engine/variable-thresholds';
 import { buildLoopPacingContract } from '../agents/mystery/loop-contract';
+import { estimateTokens, type TurnContextBundle } from '../memory/world-memory';
 
 export interface AssembleOptions {
   userInput: string;
@@ -24,6 +25,8 @@ export interface AssembleOptions {
   characterName: string;
   variables?: Record<string, any>;
   formatPrompt?: string;
+  /** Shared, retrieval-backed context selected once for every agent in this turn. */
+  contextBundle?: TurnContextBundle;
 }
 
 export interface AssembleResult {
@@ -93,12 +96,14 @@ const MARKER_IDENTIFIERS = new Set([
 ]);
 
 export function assemblePrompt(options: AssembleOptions): AssembleResult {
-  const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt } = options;
+  const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt, contextBundle } = options;
 
   // 1) 扫描世界书
   const activeBooks = lorebooks.filter(b => activeLorebookIds.includes(b.id));
   const matchedAll: MatchedEntry[] = [];
-  const scanText = userInput + ' ' + history.slice(-5).map(m => m.content).join(' ');
+  const historyForPrompt = contextBundle?.recentMessages ?? history;
+  const scanText = contextBundle?.lorebookScanText
+    ?? `${userInput} ${historyForPrompt.map(m => m.content).join(' ')}`;
   for (const book of activeBooks) {
     const engine = createLorebookEngine(book);
     const matches = engine.recursiveScan(scanText, 3);
@@ -114,14 +119,23 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
   // 2) token 预算裁剪历史
   const maxContext = preset?.settings?.openai_max_context ?? 8192;
   const maxOutput = preset?.settings?.openai_max_tokens ?? 2048;
-  const availableContext = Math.max(1024, maxContext - maxOutput);
+  const memoryBlock = contextBundle ? formatMemoryContext(contextBundle) : '';
+  const fixedText = [
+    userInput,
+    formatPrompt ?? '',
+    memoryBlock,
+    ...uniqueEntries.map(entry => entry.entry.content),
+    formatVariablesForPrompt(variables || {}),
+  ].join('\n');
+  const repairReserve = contextBundle?.tokenBudget.reservedRepair ?? Math.max(512, Math.ceil(maxContext * 0.08));
+  const availableContext = Math.max(512, maxContext - maxOutput - repairReserve - estimateTokens(fixedText));
   const recentHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
   let currentTokens = 0;
-  for (let i = history.length - 1; i >= 0; i--) {
-    const msg = history[i];
+  for (let i = historyForPrompt.length - 1; i >= 0; i--) {
+    const msg = historyForPrompt[i];
     if (msg.role === 'system') continue;
-    const msgTokens = msg.content.length / 4;
-    if (currentTokens + msgTokens > availableContext * 0.85) break;
+    const msgTokens = estimateTokens(msg.content);
+    if (currentTokens + msgTokens > availableContext) break;
     recentHistory.unshift({ role: msg.role, content: msg.content });
     currentTokens += msgTokens;
   }
@@ -218,6 +232,7 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
   // 4) 附加变量/状态块
   const varBlock = formatVariablesForPrompt(variables || {});
   if (varBlock) systemAcc += (systemAcc ? '\n\n' : '') + varBlock;
+  if (memoryBlock) systemAcc += (systemAcc ? '\n\n' : '') + memoryBlock;
   systemAcc += (systemAcc ? '\n\n' : '') + translateForWriter(variables || {});
   systemAcc += (systemAcc ? '\n\n' : '') + buildLoopPacingContract(variables?.cycleCount);
 
@@ -291,20 +306,28 @@ export const SUPPORTED_MACROS = [
 // ========== Helpers ==========
 
 function formatVariablesForPrompt(variables: Record<string, any>): string {
-  const entries = Object.entries(variables);
+  // worldMemory has its own compact, retrieval-backed projection. Dumping the
+  // complete ledger here would defeat the shared token budget.
+  const entries = Object.entries(variables).filter(([key]) => key !== 'worldMemory');
   if (entries.length === 0) return '';
   const lines = entries.map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
   return `[当前状态]\n${lines.join('\n')}`;
 }
 
+function formatMemoryContext(bundle: TurnContextBundle): string {
+  return `[长期剧情记忆（本回合统一检索结果）]\n${JSON.stringify(bundle.writerMemory)}\n[/长期剧情记忆]`;
+}
+
 /** 提示词组装可视化检查 — 返回完整的中间状态 */
 export function inspectPrompt(options: AssembleOptions): PromptInspectionResult {
-  const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt } = options;
+  const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt, contextBundle } = options;
 
   // 1) 世界书扫描
   const activeBooks = lorebooks.filter(b => activeLorebookIds.includes(b.id));
   const matchedAll: MatchedEntry[] = [];
-  const scanText = userInput + ' ' + history.slice(-5).map(m => m.content).join(' ');
+  const historyForPrompt = contextBundle?.recentMessages ?? history;
+  const scanText = contextBundle?.lorebookScanText
+    ?? `${userInput} ${historyForPrompt.map(m => m.content).join(' ')}`;
   for (const book of activeBooks) {
     const engine = createLorebookEngine(book);
     const matches = engine.recursiveScan(scanText, 3);
@@ -320,14 +343,23 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   // 2) token 预算裁剪历史
   const maxContext = preset?.settings?.openai_max_context ?? 8192;
   const maxOutput = preset?.settings?.openai_max_tokens ?? 2048;
-  const availableContext = Math.max(1024, maxContext - maxOutput);
+  const memoryBlock = contextBundle ? formatMemoryContext(contextBundle) : '';
+  const repairReserve = contextBundle?.tokenBudget.reservedRepair ?? Math.max(512, Math.ceil(maxContext * 0.08));
+  const fixedText = [
+    userInput,
+    formatPrompt ?? '',
+    memoryBlock,
+    ...uniqueEntries.map(entry => entry.entry.content),
+    formatVariablesForPrompt(variables || {}),
+  ].join('\n');
+  const availableContext = Math.max(512, maxContext - maxOutput - repairReserve - estimateTokens(fixedText));
 
   const historyInspect: { role: string; content: string; tokens: number; included: boolean }[] = [];
   let currentTokens = 0;
-  for (let i = history.length - 1; i >= 0; i--) {
-    const msg = history[i];
-    const msgTokens = Math.ceil(msg.content.length / 4);
-    const included = msg.role !== 'system' && currentTokens + msgTokens <= availableContext * 0.85;
+  for (let i = historyForPrompt.length - 1; i >= 0; i--) {
+    const msg = historyForPrompt[i];
+    const msgTokens = estimateTokens(msg.content);
+    const included = msg.role !== 'system' && currentTokens + msgTokens <= availableContext;
     if (included) {
       currentTokens += msgTokens;
     }
@@ -453,9 +485,10 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   // 5) 组装最终消息（模拟）
   const finalMessages: { role: string; content: string; index: number }[] = [];
 
-  if (systemAcc || varBlock || formatPrompt) {
+  if (systemAcc || varBlock || memoryBlock || formatPrompt) {
     let sys = systemAcc;
     if (varBlock) sys += (sys ? '\n\n' : '') + varBlock;
+    if (memoryBlock) sys += (sys ? '\n\n' : '') + memoryBlock;
     sys += (sys ? '\n\n' : '') + translateForWriter(variables || {});
     sys += (sys ? '\n\n' : '') + buildLoopPacingContract(variables?.cycleCount);
     if (formatPrompt) sys += (sys ? '\n\n' : '') + formatPrompt;
@@ -471,20 +504,21 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   // 6) 统计
   const injectedWriterDirective = translateForWriter(variables || {});
   const injectedLoopContract = buildLoopPacingContract(variables?.cycleCount);
-  const systemTokens = Math.ceil((
-    systemAcc.length
-    + (varBlock?.length || 0)
-    + injectedWriterDirective.length
-    + injectedLoopContract.length
-    + (formatPrompt?.length || 0)
-  ) / 4);
+  const systemTokens = estimateTokens([
+    systemAcc,
+    varBlock,
+    memoryBlock,
+    injectedWriterDirective,
+    injectedLoopContract,
+    formatPrompt,
+  ].filter(Boolean).join('\n'));
   const historyTokens = includedHistory.reduce((sum, m) => sum + m.tokens, 0);
-  const userInputTokens = Math.ceil(userInput.length / 4);
+  const userInputTokens = estimateTokens(userInput);
 
   return {
     lorebook: { scanText, matchedEntries: uniqueEntries, beforeEntries, afterEntries },
     history: {
-      totalMessages: history.length,
+      totalMessages: historyForPrompt.length,
       includedMessages: includedHistory.length,
       maxContext,
       availableContext,

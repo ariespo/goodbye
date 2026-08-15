@@ -92,6 +92,14 @@ export const DEFAULT_GAME_VARIABLES: Record<string, any> = {
   knowledgeEvents: ['know:home', 'know:school', 'know:supermarket'],
   /** 除固定熟人外，后续通过明确自我介绍得知玩家姓名的 NPC。由程序事件维护。 */
   playerNameKnownByNpcIds: [],
+  /** Versioned accepted-event ledger, per-observer cognition graph and episodic memory. */
+  worldMemory: {
+    version: 1,
+    canonicalTruthVersion: 'mystery-truth-graph',
+    events: [],
+    cognition: [],
+    episodes: [],
+  },
   // 三层结局体系
   lockedRoute: null,
   overlay: null,

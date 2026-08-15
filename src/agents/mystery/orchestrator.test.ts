@@ -55,8 +55,8 @@ describe('mystery orchestrator', () => {
     });
     expect(result.hardReview.approved).toBe(true);
     expect(result.semanticReview?.approved).toBe(true);
-    expect(result.pacingReview?.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(3);
+    expect(result.pacingReview).toBeNull();
+    expect(complete).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(result.writerMessages)).not.toContain('c-player-killed-fumi');
     expect(JSON.stringify(result.writerMessages)).not.toContain('shared-apron-missing');
     expect(JSON.stringify(result.writerMessages)).toContain(apronFactAlias);
@@ -160,7 +160,7 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(result.hardReview.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(4);
+    expect(complete).toHaveBeenCalledTimes(3);
     expect(complete.mock.calls[1]?.[1]?.responseFormat).toBeUndefined();
 
     // 同一服务端的后续调用直接跳过 response_format，不再重复撞错
@@ -174,7 +174,7 @@ describe('mystery orchestrator', () => {
       presentationContext: {},
       complete,
     });
-    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete).toHaveBeenCalledTimes(2);
     expect(complete.mock.calls[0]?.[1]?.responseFormat).toBeUndefined();
   });
 
@@ -202,9 +202,7 @@ describe('mystery orchestrator', () => {
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(validPlan))
       .mockResolvedValueOnce(semanticRejected)
-      .mockResolvedValueOnce(approvedFactReview)
       .mockResolvedValueOnce(JSON.stringify(repaired))
-      .mockResolvedValueOnce(approvedFactReview)
       .mockResolvedValueOnce(approvedFactReview);
 
     const result = await prepareMysteryTurn({
@@ -221,8 +219,8 @@ describe('mystery orchestrator', () => {
     expect(result.directorPlan.beats[0]?.id).toBe('safe');
     expect(result.hardReview.approved).toBe(true);
     expect(result.semanticReview?.approved).toBe(true);
-    expect(result.pacingReview?.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(6);
+    expect(result.pacingReview).toBeNull();
+    expect(complete).toHaveBeenCalledTimes(4);
   });
 
   it('ignores critic claims that case revelations require player knowledge events', async () => {
@@ -250,7 +248,7 @@ describe('mystery orchestrator', () => {
 
     expect(result.semanticReview?.approved).toBe(true);
     expect(result.directorAttempts).toBe(1);
-    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete).toHaveBeenCalledTimes(2);
   });
 
   it('treats lies-about as permission rather than mandatory active lying', async () => {
@@ -336,7 +334,7 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(result.hardReview.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(4);
+    expect(complete).toHaveBeenCalledTimes(3);
     expect(complete.mock.calls[1]?.[1]?.responseFormat).toBeUndefined();
   });
 
@@ -361,7 +359,8 @@ describe('mystery orchestrator', () => {
     expect(entry.directorAttempts).toBe(1);
     expect(entry.directorPlan?.turnGoal).toBe(validPlan.turnGoal);
     expect(entry.hardReview?.approved).toBe(true);
-    expect(entry.stages.map(s => s.stage)).toEqual(expect.arrayContaining(['director', 'hard-review', 'semantic-review', 'pacing-review']));
+    expect(entry.stages.map(s => s.stage)).toEqual(expect.arrayContaining(['director', 'hard-review', 'semantic-review']));
+    expect(entry.stages.map(s => s.stage)).not.toContain('pacing-review');
     expect(entry.totalDurationMs).toBeGreaterThanOrEqual(0);
   });
 

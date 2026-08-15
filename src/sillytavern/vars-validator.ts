@@ -44,6 +44,7 @@ const PROGRAM_OWNED_KEYS = new Set([
   'endingsSeen',
   'knowledgeEvents',
   'playerNameKnownByNpcIds',
+  'worldMemory',
   'lockedRoute',
   'overlay',
   'finalChoice',

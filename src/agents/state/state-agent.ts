@@ -117,6 +117,7 @@ const STATE_AGENT_FORBIDDEN_ROOTS = new Set([
   'overlay',
   'finalChoice',
   'loopSuspicionStart',
+  'worldMemory',
 ]);
 
 export function validateStateAgentResponse(

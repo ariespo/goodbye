@@ -1,6 +1,11 @@
 import Dexie, { type Table } from 'dexie';
 import type { AppSettings, ChatPreset, Lorebook, ChatSession, SaveSlot } from './types';
 import { DEFAULT_FORMAT_PROMPT, DEFAULT_OPAQUE_TAGS } from './types';
+import {
+  legacyEpisodesFromSnapshots,
+  migrateChatWorldMemory,
+  normalizeWorldMemory,
+} from '../memory/world-memory';
 
 export class FarewellDatabase extends Dexie {
   settings!: Table<AppSettings>;
@@ -85,6 +90,34 @@ export class FarewellDatabase extends Dexie {
       .upgrade(async tx => {
         await tx.table('settings').toCollection().modify((s: any) => {
           if (!s.agentNarrativeMode) s.agentNarrativeMode = 'standard';
+        });
+      });
+
+    // v7: add the unified event/cognition/episode memory inside existing
+    // chat/save variables. The table schema is unchanged and migration is
+    // idempotent so imported saves can pass through the same normalizer.
+    this.version(7)
+      .stores({
+        settings: '++id',
+        presets: 'id, name, updatedAt',
+        lorebooks: 'id, name, updatedAt',
+        chats: 'id, name, updatedAt',
+        saves: 'id, name, createdAt',
+      })
+      .upgrade(async tx => {
+        await tx.table('chats').toCollection().modify((chat: ChatSession) => {
+          const migrated = migrateChatWorldMemory(chat);
+          chat.variables = migrated.variables;
+        });
+        await tx.table('saves').toCollection().modify((save: SaveSlot) => {
+          const variables = save.tavernState?.variables ?? {};
+          save.tavernState.variables = {
+            ...variables,
+            worldMemory: normalizeWorldMemory(
+              variables,
+              legacyEpisodesFromSnapshots(save.gameState?.history),
+            ),
+          };
         });
       });
   }
@@ -288,11 +321,11 @@ export async function deletePreset(id: string): Promise<void> {
 }
 
 export async function getChats(): Promise<ChatSession[]> {
-  return db.chats.orderBy('updatedAt').reverse().toArray();
+  return (await db.chats.orderBy('updatedAt').reverse().toArray()).map(migrateChatWorldMemory);
 }
 
 export async function saveChat(chat: ChatSession): Promise<void> {
-  await db.chats.put(chat);
+  await db.chats.put(migrateChatWorldMemory(chat));
 }
 
 export async function deleteChat(id: string): Promise<void> {
@@ -300,11 +333,33 @@ export async function deleteChat(id: string): Promise<void> {
 }
 
 export async function getSaves(): Promise<SaveSlot[]> {
-  return db.saves.orderBy('createdAt').reverse().toArray();
+  return (await db.saves.orderBy('createdAt').reverse().toArray()).map(slot => {
+    const variables = slot.tavernState?.variables ?? {};
+    return {
+      ...slot,
+      tavernState: {
+        ...slot.tavernState,
+        variables: {
+          ...variables,
+          worldMemory: normalizeWorldMemory(variables, legacyEpisodesFromSnapshots(slot.gameState?.history)),
+        },
+      },
+    };
+  });
 }
 
 export async function saveSlot(slot: SaveSlot): Promise<void> {
-  await db.saves.put(slot);
+  const variables = slot.tavernState?.variables ?? {};
+  await db.saves.put({
+    ...slot,
+    tavernState: {
+      ...slot.tavernState,
+      variables: {
+        ...variables,
+        worldMemory: normalizeWorldMemory(variables, legacyEpisodesFromSnapshots(slot.gameState?.history)),
+      },
+    },
+  });
 }
 
 export async function deleteSave(id: string): Promise<void> {

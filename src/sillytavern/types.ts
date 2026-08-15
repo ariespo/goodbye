@@ -421,6 +421,8 @@ export type Mood = 'calm' | 'horror' | 'insane' | 'sad' | 'angry' | 'happy';
 export interface Scene {
   id: string;
   lines: SceneLine[];
+  /** Generated turns commit all knowledge before playback; opening/legacy scenes may still commit on line completion. */
+  knowledgeAlreadyCommitted?: boolean;
   /** 首帧背景(由 lines[0] 决定),为兼容旧字段保留 */
   background?: string;
   character?: string;
@@ -454,6 +456,8 @@ export interface Scene {
 
 /** GalGame 风格的单行场景指令:同一时刻的完整状态快照 */
 export interface SceneLine {
+  /** Stable within one accepted turn, used as evidence by the world event ledger. */
+  id?: string;
   /** 当前背景文件名(继承上一行,直到显式切换) */
   background?: string;
   /** 当前 BGM 文件名 */

@@ -23,7 +23,10 @@ function familyNameOf(name: string): string {
   if (!normalized) return '';
   if (/^[\u3400-\u9fff]+$/u.test(normalized)) return normalized[0];
   const parts = normalized.split(/\s+/);
-  return parts.length > 1 ? parts[parts.length - 1] : normalized;
+  if (parts.length > 1) return parts[parts.length - 1];
+  // Latin names and player nicknames use one grapheme for familiar forms:
+  // CC -> C姐/C哥 and 小C, instead of leaking the whole nickname.
+  return Array.from(normalized)[0] ?? '';
 }
 
 export function resolveNpcPlayerKnowledge(

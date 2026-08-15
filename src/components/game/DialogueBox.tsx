@@ -108,7 +108,8 @@ export function DialogueBox() {
 
   /* ── 台词知识事件提交 ── */
   useEffect(() => {
-    if (!isComplete || !currentLine?.knowledgeEvents?.length || !currentScene) return;
+    if (!isComplete || !currentLine?.knowledgeEvents?.length || !currentScene
+      || currentScene.knowledgeAlreadyCommitted) return;
     commitKnowledgeEvents(currentLine.knowledgeEvents, `${currentScene.id}:${currentLineIndex}`, committedKnowledgeRef.current);
   }, [currentLine, currentLineIndex, currentScene, isComplete]);
 
@@ -163,7 +164,7 @@ export function DialogueBox() {
     }
     if (currentLineIndex < currentScene.lines.length - 1) {
       currentScene.lines.slice(currentLineIndex, -1).forEach((line, offset) => {
-        if (line.knowledgeEvents?.length) {
+        if (!currentScene.knowledgeAlreadyCommitted && line.knowledgeEvents?.length) {
           commitKnowledgeEvents(line.knowledgeEvents, `${currentScene.id}:${currentLineIndex + offset}`, committedKnowledgeRef.current);
         }
       });

@@ -70,6 +70,8 @@ import {
   resolveActionNarrativeContext,
   type ActionNarrativeContext,
 } from '../engine/action-narrative-context';
+import { buildTurnCommit, compileTurnContext, type TurnContextBundle } from '../memory/world-memory';
+import type { Scene } from '../sillytavern/types';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -366,6 +368,16 @@ export function useGameLoop() {
             activeNpcIds,
           )
         : basePromptUserInput;
+      const contextBundle: TurnContextBundle = compileTurnContext({
+        userInput,
+        locationId: mysteryLocation,
+        activeNpcIds,
+        history: historyMessages,
+        variables: narrativeVariables,
+        maxContext: Number(activePreset?.settings?.openai_max_context ?? 8192),
+        reservedOutput: Number(activePreset?.settings?.openai_max_tokens ?? 2048),
+        fixedPromptText: `${basePromptUserInput}\n${settings.formatPromptTemplate ?? ''}`,
+      });
       const { messages: promptMessages } = assemblePrompt({
         userInput: promptUserInput,
         history: historyMessages,
@@ -376,6 +388,7 @@ export function useGameLoop() {
         characterName: settings.characterName,
         variables: narrativeVariables,
         formatPrompt: settings.formatPromptTemplate,
+        contextBundle,
       });
 
       const abortController = new AbortController();
@@ -426,7 +439,7 @@ export function useGameLoop() {
           playerIdentityVariables,
           sceneContract: actionNarrativeContext?.sceneContract,
         };
-        const recentHistory = historyMessages.slice(-8).map(message => ({ role: message.role, content: message.content }));
+        const recentHistory = contextBundle.recentMessages.map(message => ({ role: message.role, content: message.content }));
         const analysisApi = resolveAnalysisApi(settings);
         try {
           // 失败回合重试：编排结果已缓存则直接复用，不重跑导演/审查
@@ -448,6 +461,9 @@ export function useGameLoop() {
               playerIntentPolicy: intentPolicy,
               sceneContract: actionNarrativeContext?.sceneContract,
               recentHistory,
+              memoryContext: contextBundle.directorMemory,
+              contextSelectionIds: contextBundle.selectedIds,
+              requiresStateAgent: !!pendingActionCost || intentPolicy.mode !== 'normal',
               gameStatus: {
                 time: game.gameStatus.time.toISOString(),
                 stamina: game.gameStatus.stamina,
@@ -467,6 +483,8 @@ export function useGameLoop() {
               characterName: settings.characterName,
               resourceInstructions: promptUserInput,
               playerIntentPolicy: intentPolicy,
+              memoryContext: contextBundle.writerMemory,
+              contextSelectionIds: contextBundle.selectedIds,
             },
             formatPrompt: settings.formatPromptTemplate,
             abortSignal: abortController.signal,
@@ -507,9 +525,10 @@ export function useGameLoop() {
           : actionNarrativeContext?.costs ?? null
       );
 
-      const finalize = (
+      const finalize = async (
         apiUsed: 'primary' | 'dual',
         stateAgentPatch: Record<string, any> = {},
+        acceptedScene: Scene,
       ) => {
         const parsed = parseStateRef.current.parsed;
         const explicitCosts = resolvePendingCosts();
@@ -569,14 +588,37 @@ export function useGameLoop() {
           deliverPendingDeathNews: hadPendingDeathNews,
         });
         pendingActionCost = null;
-        commitGameTransaction(transaction);
-
+        const acceptedAt = Date.now();
+        const turnId = crypto.randomUUID();
+        const memoryCommit = buildTurnCommit({
+          turnId,
+          turnIndex: game.history.length,
+          createdAt: acceptedAt,
+          occurredAt: transaction.gameStatus.time.toISOString(),
+          locationId: typeof transaction.variables.location === 'string'
+            ? transaction.variables.location
+            : mysteryLocation,
+          cycleCount: Number(transaction.variables.cycleCount ?? 1),
+          summary: parsed.summary || '回合结束',
+          scene: acceptedScene,
+          beforeVariables: tavern.variables,
+          settledVariables: transaction.variables,
+          introducedPlayerNameToNpcIds: introducesPlayerName ? activeNpcIds : [],
+        });
+        transaction.variables = {
+          ...transaction.variables,
+          worldMemory: memoryCommit.worldMemory,
+          // Compatibility projections remain authoritative for one migration release.
+          knowledgeEvents: memoryCommit.knowledgeEvents,
+          mysteryKnowledge: memoryCommit.mysteryKnowledge,
+          playerNameKnownByNpcIds: memoryCommit.playerNameKnownByNpcIds,
+        };
         const mergedVariables = transaction.variables;
         const nextStatus = transaction.gameStatus;
         const allowPreplan = agentMode !== 'legacy' && !transaction.ending && !transaction.failure;
 
         const assistantMessage: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: turnId,
           role: 'assistant',
           content: fullText,
           timestamp: Date.now(),
@@ -586,8 +628,20 @@ export function useGameLoop() {
 
         const finalMessages = [...messages, assistantMessage];
         if (activeChat) {
-          void persistActiveChat({ messages: finalMessages, variables: mergedVariables });
+          try {
+            await persistActiveChat({ messages: finalMessages, variables: mergedVariables });
+          } catch (persistError) {
+            actions.setStreaming(false);
+            actions.setIsWaitingForAI(false);
+            actions.setTurnRecovery({
+              phase: 'failed_stream',
+              userInput,
+              errorMessage: `回合写入本地存档失败，未播放也未结算：${persistError instanceof Error ? persistError.message : String(persistError)}`,
+            });
+            return;
+          }
         }
+        commitGameTransaction(transaction);
 
         actions.addHistorySnapshot({
           turnIndex: game.history.length,
@@ -600,6 +654,16 @@ export function useGameLoop() {
           },
           variables: mergedVariables,
         });
+
+        // The accepted scene only becomes visible after the transaction and
+        // all knowledge/profile projections have been committed together.
+        actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
+        actions.setCurrentScene(mergeParsedIntoScene(prevScene, {
+          ...acceptedScene,
+          knowledgeAlreadyCommitted: true,
+        }, parsed));
+        actions.setStreaming(false);
+        actions.setIsWaitingForAI(false);
 
         cachedPreparedTurn = null;
 
@@ -684,8 +748,18 @@ export function useGameLoop() {
             playerIdentity: readConfirmedPlayerIdentity(settings),
             playerIdentityVariables: mergedVariables,
           };
-          const speculativeHistory = finalMessages.slice(-8).map(m => ({ role: m.role, content: m.content }));
           const speculativePrompt = appendResourcePrompt(firstOption, game.currentState.background, mergedVariables);
+          const speculativeContextBundle = compileTurnContext({
+            userInput: firstOption,
+            locationId: mysteryLocation,
+            activeNpcIds: speculativeTruthContext.activeNpcIds,
+            history: finalMessages,
+            variables: mergedVariables,
+            maxContext: Number(activePreset?.settings?.openai_max_context ?? 8192),
+            reservedOutput: Number(activePreset?.settings?.openai_max_tokens ?? 2048),
+            fixedPromptText: `${speculativePrompt}\n${settings.formatPromptTemplate ?? ''}`,
+          });
+          const speculativeHistory = speculativeContextBundle.recentMessages.map(m => ({ role: m.role, content: m.content }));
           startPreplan({
             input: firstOption,
             contextKey: buildPreplanContextKey(agentMode, tavern.activeChatId, speculativeTruthContext),
@@ -697,6 +771,8 @@ export function useGameLoop() {
               turnContext: {
                 playerInput: firstOption,
                 recentHistory: speculativeHistory,
+                memoryContext: speculativeContextBundle.directorMemory,
+                contextSelectionIds: speculativeContextBundle.selectedIds,
                 gameStatus: {
                   time: Number.isNaN(nextStatus.time.getTime())
                     ? game.gameStatus.time.toISOString()
@@ -716,6 +792,8 @@ export function useGameLoop() {
                 userName: settings.userName,
                 characterName: settings.characterName,
                 resourceInstructions: speculativePrompt,
+                memoryContext: speculativeContextBundle.writerMemory,
+                contextSelectionIds: speculativeContextBundle.selectedIds,
               },
               formatPrompt: settings.formatPromptTemplate,
             },
@@ -748,26 +826,18 @@ export function useGameLoop() {
           onToken: (token) => {
             fullText += token;
             actions.setStreamBuffer(fullText);
-            parseStateRef.current = parseChunk(parseStateRef.current, token, { strict: true });
-            actions.setParsedContent(parseStateRef.current.parsed);
-
-            if (parseStateRef.current.parsed.maintext) {
-              const scene = parseNarrativeScene(parseStateRef.current.parsed.maintext);
-              actions.setCurrentScene(mergeParsedIntoScene(prevScene, scene, parseStateRef.current.parsed));
-            }
+            // Deliberately do not parse or render partial output. The complete
+            // turn must pass protocol, narrative and transaction validation first.
           },
           onComplete: async () => {
-            actions.setStreaming(false);
-            actions.setIsWaitingForAI(false);
-
             const repairedOutput = repairRecoverableOutput(fullText);
             if (repairedOutput.repairedTags.length > 0) {
               fullText = repairedOutput.text;
-              parseStateRef.current = parseChunk(createParseState(), fullText, { strict: true });
-              actions.setStreamBuffer(fullText);
-              actions.setParsedContent(parseStateRef.current.parsed);
               console.warn('[output-protocol] 已安全补全标签:', repairedOutput.repairedTags);
             }
+            parseStateRef.current = parseChunk(createParseState(), fullText, { strict: true });
+            actions.setStreamBuffer(fullText);
+            actions.setParsedContent(parseStateRef.current.parsed);
 
             // 严格校验 LLM 输出协议
             const validationErrors = outputProtocol.validate(fullText, parseStateRef.current.parsed);
@@ -775,8 +845,9 @@ export function useGameLoop() {
             if (streamErrors.length > 0) {
               validationErrors.push(...streamErrors.map(msg => ({ code: 'STREAM_PARSE_ERROR', message: msg })));
             }
+            let completedScene: Scene | null = null;
             if (parseStateRef.current.parsed.maintext) {
-              const completedScene = parseNarrativeScene(parseStateRef.current.parsed.maintext);
+              completedScene = parseNarrativeScene(parseStateRef.current.parsed.maintext);
               if (actionNarrativeContext) {
                 const contextError = actionNarrativeContextError(actionNarrativeContext, completedScene);
                 if (contextError) {
@@ -794,6 +865,8 @@ export function useGameLoop() {
             }
             if (validationErrors.length > 0) {
               const detail = formatValidationErrors(validationErrors);
+              actions.setStreaming(false);
+              actions.setIsWaitingForAI(false);
               actions.setApiError('AI 输出格式不合法:\n' + detail);
               actions.setTurnRecovery({
                 phase: 'failed_stream',
@@ -803,24 +876,52 @@ export function useGameLoop() {
               return;
             }
 
+            if (!completedScene) {
+              actions.setStreaming(false);
+              actions.setIsWaitingForAI(false);
+              actions.setTurnRecovery({
+                phase: 'failed_stream',
+                userInput,
+                errorMessage: 'AI 正文没有生成可播放场景。',
+              });
+              return;
+            }
+
             if (preparedTurn) {
-              try {
-                const narrativeReview = await reviewNarrativeAgainstWriterPacket({
-                  api: resolveAnalysisApi(settings),
-                  preset: activePreset,
-                  packet: preparedTurn.writerPacket,
-                  narrative: parseStateRef.current.parsed.maintext || fullText,
-                  abortSignal: abortController.signal,
-                });
-                if (!narrativeReview.approved) {
-                  const detail = narrativeReview.violations.map(item => item.message).join('\n');
+              if (preparedTurn.reviewPolicy.narrative) {
+                try {
+                  const narrativeReview = await reviewNarrativeAgainstWriterPacket({
+                    api: resolveAnalysisApi(settings),
+                    preset: activePreset,
+                    packet: preparedTurn.writerPacket,
+                    narrative: parseStateRef.current.parsed.maintext || fullText,
+                    abortSignal: abortController.signal,
+                  });
+                  if (!narrativeReview.approved) {
+                    const detail = narrativeReview.violations.map(item => item.message).join('\n');
+                    actions.setStreaming(false);
+                    actions.setIsWaitingForAI(false);
+                    actions.setTurnRecovery({
+                      phase: 'failed_stream',
+                      userInput,
+                      errorMessage: `正文越过事实或角色边界，已阻止写入存档：\n${detail}`,
+                    });
+                    return;
+                  }
+                } catch (reviewError) {
+                  actions.setStreaming(false);
+                  actions.setIsWaitingForAI(false);
                   actions.setTurnRecovery({
                     phase: 'failed_stream',
                     userInput,
-                    errorMessage: `正文越过事实或角色边界，已阻止写入存档：\n${detail}`,
+                    errorMessage: `正文审查失败，未播放也未写入存档：${reviewError instanceof Error ? reviewError.message : String(reviewError)}`,
                   });
                   return;
                 }
+              }
+
+              if (preparedTurn.reviewPolicy.state) {
+                try {
                 const stateResult = await runStateAgent({
                   api: resolveAnalysisApi(settings),
                   preset: activePreset,
@@ -850,18 +951,21 @@ export function useGameLoop() {
                     stateResult.clamped,
                   );
                 }
-                finalize('dual', stateResult.vars);
-              } catch (stateError) {
+                  await finalize('dual', stateResult.vars, completedScene);
+                } catch (stateError) {
                 actions.addNotification({
                   type: 'warning',
                   message: `状态分析失败，本回合仅结算固定成本：${stateError instanceof Error ? stateError.message : String(stateError)}`,
                   duration: 6000,
                 });
-                finalize('primary');
+                  await finalize('primary', {}, completedScene);
+                }
+              } else {
+                await finalize('primary', {}, completedScene);
               }
             } else {
               const augmented = await maybeAugmentWithSecondary();
-              finalize(augmented ? 'dual' : 'primary');
+              await finalize(augmented ? 'dual' : 'primary', {}, completedScene);
             }
           },
           onError: (error) => {

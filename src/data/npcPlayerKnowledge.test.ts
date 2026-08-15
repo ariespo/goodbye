@@ -16,6 +16,13 @@ describe('NPC knowledge of player identity', () => {
     expect(resolveNpcPlayerKnowledge('old-man', identity).allowedAddress).toBe('小张');
   });
 
+  it('uses the first grapheme for a Latin nickname', () => {
+    const latinIdentity = { name: 'CC', gender: 'female' as const };
+    expect(resolveNpcPlayerKnowledge('chen-huihui', latinIdentity).allowedAddress).toBe('C姐');
+    expect(resolveNpcPlayerKnowledge('old-man', latinIdentity).allowedAddress).toBe('小C');
+    expect(resolveNpcPlayerKnowledge('detective-b', latinIdentity).allowedAddress).toBe('你');
+  });
+
   it('keeps strangers from knowing the name until explicitly recorded', () => {
     expect(resolveNpcPlayerKnowledge('detective-b', identity).knowsPlayerName).toBe(false);
     expect(resolveNpcPlayerKnowledge('detective-b', identity, {
