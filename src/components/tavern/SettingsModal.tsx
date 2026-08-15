@@ -94,7 +94,7 @@ export function SettingsModal() {
     }
   }, [showSettings, hasDraft, draftMainBaseUrl, draftSecondaryBaseUrl]);
 
-  const apiMode: 'single' | 'dual' = draft?.api.secondary?.enabled ? 'dual' : 'single';
+  const independentAnalysisEnabled = draft?.api.secondary?.enabled === true;
 
   const patch = (p: Partial<AppSettings>) => setDraft({ ...draft, ...p });
   const patchApi = (p: Partial<AppSettings['api']>) => setDraft({ ...draft, api: { ...draft.api, ...p } });
@@ -114,20 +114,20 @@ export function SettingsModal() {
     setSecConn(null);
   };
 
-  const switchMode = (mode: 'single' | 'dual') => {
-    if (mode === 'single') {
+  const toggleIndependentAnalysis = (enabled: boolean) => {
+    if (!enabled) {
       patchSecondary({ enabled: false });
     } else {
       const cur = draft.api.secondary;
-      if (cur) {
+      if (cur?.apiKey && cur.baseUrl && cur.model) {
         patchSecondary({ enabled: true });
       } else {
         patchApi({
           secondary: {
             enabled: true,
-            baseUrl: SECONDARY_PRESET.baseUrl,
+            baseUrl: draft.api.baseUrl,
             apiKey: draft.api.apiKey,
-            model: SECONDARY_PRESET.model,
+            model: draft.api.model,
             temperature: SECONDARY_PRESET.temperature,
             maxTokens: SECONDARY_PRESET.maxTokens,
           },
@@ -369,11 +369,10 @@ export function SettingsModal() {
           {activeTab === 'story' && (
             <section className="settings-section settings-tab-panel">
               <h3 className="settings-section-title">剧情一致性</h3>
-              <p className="settings-help mb-4">“稳定剧情”和“严谨剧情”都会执行硬规则与语义事实复核；经典模式仅用于兼容旧存档与调试。</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <ModeCard active={(draft.agentNarrativeMode ?? 'standard') === 'standard'} icon={<GameIcon name="stack" size={18} />} title="稳定剧情" desc="推荐 · 硬规则、语义复核与事实隔离" onClick={() => patch({ agentNarrativeMode: 'standard' })} />
-                <ModeCard active={draft.agentNarrativeMode === 'strict'} icon={<GameIcon name="success" size={18} />} title="严谨剧情" desc="兼容档 · 当前采用同级事实审查" onClick={() => patch({ agentNarrativeMode: 'strict' })} />
-                <ModeCard active={draft.agentNarrativeMode === 'legacy'} icon={<GameIcon name="restart" size={18} />} title="经典模式" desc="沿用原有完整提示词生成流程" onClick={() => patch({ agentNarrativeMode: 'legacy' })} />
+              <p className="settings-help mb-4">稳定剧情会按回合风险自适应调用审查；全量审查会在每回合执行全部审查，质量边界更严，但速度更慢、消耗更高。</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <ModeCard active={(draft.agentNarrativeMode ?? 'standard') === 'standard'} icon={<GameIcon name="stack" size={18} />} title="稳定剧情" desc="推荐 · 硬规则常驻，关键回合自动加强审查" onClick={() => patch({ agentNarrativeMode: 'standard' })} />
+                <ModeCard active={draft.agentNarrativeMode === 'strict'} icon={<GameIcon name="success" size={18} />} title="全量审查" desc="高级 · 每回合执行事实、节奏、正文、文风与状态审查" onClick={() => patch({ agentNarrativeMode: 'strict' })} />
               </div>
             </section>
           )}
@@ -381,28 +380,37 @@ export function SettingsModal() {
           {activeTab === 'ai' && (
             <div className="settings-tab-panel space-y-6">
               <section className="settings-section">
-                <h3 className="settings-section-title">API 分工</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <ModeCard active={apiMode === 'single'} icon={<GameIcon name="lightning" size={18} />} title="单 API" desc="所有生成任务使用主接口" onClick={() => switchMode('single')} />
-                  <ModeCard active={apiMode === 'dual'} icon={<GameIcon name="stack" size={18} />} title="双 API" desc="使用次接口处理总结与状态" onClick={() => switchMode('dual')} />
+                <h3 className="settings-section-title">模型分工</h3>
+                <p className="settings-help mb-4">默认由主创作模型完成导演、审查和正文，使用高质量模型时通常最稳定。也可以启用更便宜的独立分析模型处理结构化任务，以降低多 Agent 调用成本。</p>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="settings-check">
+                    <input
+                      type="checkbox"
+                      checked={independentAnalysisEnabled}
+                      onChange={event => toggleIndependentAnalysis(event.target.checked)}
+                    />
+                    <span>使用独立分析模型</span>
+                  </label>
+                  <span className="settings-help text-right">{independentAnalysisEnabled ? '主模型写正文，分析模型负责编排与审查' : '全部任务使用主模型'}</span>
                 </div>
               </section>
               <section className="settings-section">
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="settings-section-title mb-0">主 API <span className="settings-section-hint">剧情生成</span></h3>
+                  <h3 className="settings-section-title mb-0">主创作模型 <span className="settings-section-hint">最终剧情正文</span></h3>
                   {mainConn && <span className={`settings-conn ${mainConn.ok ? 'is-ok' : 'is-bad'}`}>{mainConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}{mainConn.ok ? `${mainConn.latency}ms` : '未连通'}</span>}
                 </div>
                 <ProviderPresets selected={draft.api.baseUrl} onPick={applyMainProvider} />
                 <ApiConfigSection baseUrl={draft.api.baseUrl} apiKey={draft.api.apiKey} model={draft.api.model} models={mainModels} onChange={patchApi} onFetchModels={() => handleFetchModels(false)} onTest={() => handleTestConnectivity(false)} fetching={fetchingMain} testing={testingMain} />
               </section>
-              {apiMode === 'dual' && (
+              {independentAnalysisEnabled && (
                 <section className="settings-section">
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="settings-section-title mb-0">次 API <span className="settings-section-hint">Agent 编排 / 总结与状态</span></h3>
+                    <h3 className="settings-section-title mb-0">独立分析模型 <span className="settings-section-hint">导演 / 审查 / 修复 / 状态</span></h3>
                     {secConn && <span className={`settings-conn ${secConn.ok ? 'is-ok' : 'is-bad'}`}>{secConn.ok ? <GameIcon name="success" size={12} /> : <GameIcon name="warning" size={12} />}{secConn.ok ? `${secConn.latency}ms` : '未连通'}</span>}
                   </div>
+                  <p className="settings-help mb-3">建议选择价格较低、严格 JSON 输出稳定的模型。分析模型越弱，剧情规划与审查质量越可能下降。</p>
                   <ProviderPresets selected={draft.api.secondary?.baseUrl ?? ''} onPick={applySecondaryProvider} />
-                  <ApiConfigSection baseUrl={draft.api.secondary?.baseUrl ?? ''} apiKey={draft.api.secondary?.apiKey ?? ''} model={draft.api.secondary?.model ?? ''} models={secModels} onChange={p => patchSecondary({ baseUrl: p.baseUrl ?? draft.api.secondary?.baseUrl ?? '', apiKey: p.apiKey ?? draft.api.secondary?.apiKey ?? '', model: p.model ?? draft.api.secondary?.model ?? '' })} onFetchModels={() => handleFetchModels(true)} onTest={() => handleTestConnectivity(true)} fetching={fetchingSec} testing={testingSec} extraFields={<div className="mt-3 grid grid-cols-2 gap-3"><VolumeLikeRange label="温度" value={draft.api.secondary?.temperature ?? 0.3} max={2} step={0.1} onChange={value => patchSecondary({ temperature: value })} /><LabeledInput label="最大 Token" value={String(draft.api.secondary?.maxTokens ?? 512)} mono onChange={value => patchSecondary({ maxTokens: parseInt(value, 10) || 512 })} /></div>} />
+                  <ApiConfigSection baseUrl={draft.api.secondary?.baseUrl ?? ''} apiKey={draft.api.secondary?.apiKey ?? ''} model={draft.api.secondary?.model ?? ''} models={secModels} onChange={p => patchSecondary({ baseUrl: p.baseUrl ?? draft.api.secondary?.baseUrl ?? '', apiKey: p.apiKey ?? draft.api.secondary?.apiKey ?? '', model: p.model ?? draft.api.secondary?.model ?? '' })} onFetchModels={() => handleFetchModels(true)} onTest={() => handleTestConnectivity(true)} fetching={fetchingSec} testing={testingSec} />
                 </section>
               )}
             </div>
@@ -623,33 +631,6 @@ function VolumeControl({ label, value, onChange }: {
       <span className="settings-volume-scale" aria-hidden="true">
         <span>静音</span><span>最大</span>
       </span>
-    </label>
-  );
-}
-
-function VolumeLikeRange({ label, value, max, step, onChange }: {
-  label: string;
-  value: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="settings-volume-control__header">
-        <span className="settings-label">{label}</span>
-        <span className="settings-value">{value.toFixed(1)}</span>
-      </span>
-      <input
-        type="range"
-        min={0}
-        max={max}
-        step={step}
-        value={value}
-        aria-label={label}
-        onChange={event => onChange(Number(event.target.value))}
-        className="settings-range w-full"
-      />
     </label>
   );
 }

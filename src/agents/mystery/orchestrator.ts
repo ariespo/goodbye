@@ -1,4 +1,4 @@
-import type { ChatPreset } from '../../sillytavern/types';
+import type { AgentNarrativeModeSetting, ChatPreset } from '../../sillytavern/types';
 import type { ApiConfig, ChatCompletionMessage } from '../../sillytavern/api-router';
 import { callSecondaryApi } from '../../sillytavern/api-router';
 import { DIRECTOR_PLAN_RESPONSE_FORMAT, FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
@@ -33,13 +33,13 @@ import { selectSaturationPivot } from './saturation-pivot';
 import { completeStructured, extractJson, getResponseFormatSupport } from './structured';
 import type { AgentCompletion } from './structured';
 
-export type AgentNarrativeMode = 'legacy' | 'standard' | 'strict';
+export type AgentNarrativeMode = AgentNarrativeModeSetting;
 
 export { resetResponseFormatSupportCache } from './structured';
 export type { AgentCompletion } from './structured';
 
 export interface PrepareMysteryTurnOptions {
-  mode: Exclude<AgentNarrativeMode, 'legacy'>;
+  mode: AgentNarrativeMode;
   api: ApiConfig;
   preset: ChatPreset | null;
   truthContext: TruthContext;

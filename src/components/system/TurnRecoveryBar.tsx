@@ -55,14 +55,9 @@ export function TurnRecoveryBar() {
         </div>
         <div className="flex justify-end gap-2">
           {isBlocked ? (
-            <>
-              <RecoveryButton accent={accent} disabled={disabled} onClick={() => run(() => retryTurn())}>
-                重试编排
-              </RecoveryButton>
-              <RecoveryButton accent={accent} disabled={disabled} onClick={() => run(() => retryTurn({ forceLegacy: true }))}>
-                兼容模式继续
-              </RecoveryButton>
-            </>
+            <RecoveryButton accent={accent} disabled={disabled} onClick={() => run(() => retryTurn())}>
+              重试编排
+            </RecoveryButton>
           ) : (
             <RecoveryButton accent={accent} disabled={disabled} onClick={() => run(() => retryTurn())}>
               重试本回合

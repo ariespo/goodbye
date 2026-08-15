@@ -1,13 +1,14 @@
 import Dexie, { type Table } from 'dexie';
 import type { AppSettings, ChatPreset, Lorebook, ChatSession, SaveSlot } from './types';
-import { DEFAULT_FORMAT_PROMPT, DEFAULT_OPAQUE_TAGS } from './types';
+import { DEFAULT_FORMAT_PROMPT, DEFAULT_OPAQUE_TAGS, normalizeAgentNarrativeMode } from './types';
 import {
   legacyEpisodesFromSnapshots,
   migrateChatWorldMemory,
   normalizeWorldMemory,
 } from '../memory/world-memory';
 
-type LegacyAppSettings = Partial<AppSettings> & {
+type LegacyAppSettings = Omit<Partial<AppSettings>, 'agentNarrativeMode'> & {
+  agentNarrativeMode?: AppSettings['agentNarrativeMode'] | 'legacy';
   secondaryApi?: NonNullable<AppSettings['api']['secondary']>;
 };
 
@@ -145,6 +146,21 @@ export class FarewellDatabase extends Dexie {
             || preset.settings.openai_max_tokens === 2048) {
             preset.settings.openai_max_tokens = 4096;
           }
+        });
+      });
+
+    // v9: the uncontrolled legacy narrative path is no longer player-selectable.
+    this.version(9)
+      .stores({
+        settings: '++id',
+        presets: 'id, name, updatedAt',
+        lorebooks: 'id, name, updatedAt',
+        chats: 'id, name, updatedAt',
+        saves: 'id, name, createdAt',
+      })
+      .upgrade(async tx => {
+        await tx.table('settings').toCollection().modify((settings: LegacyAppSettings) => {
+          settings.agentNarrativeMode = normalizeAgentNarrativeMode(settings.agentNarrativeMode);
         });
       });
   }
@@ -293,6 +309,7 @@ function normalizeSettings(partial: AppSettings | Partial<AppSettings> | undefin
     playerIdentityConfirmed: partial.playerIdentityConfirmed === true
       && !!partial.userName?.trim()
       && !!playerGender,
+    agentNarrativeMode: normalizeAgentNarrativeMode((partial as LegacyAppSettings).agentNarrativeMode),
     api: {
       ...defaults.api,
       ...(partial.api || {}),

@@ -1,8 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
-import { assemblePrompt } from '../sillytavern/prompt-assembler';
 import { ApiCallError, streamChatCompletion } from '../sillytavern/api-router';
-import { augmentWithSecondary } from '../sillytavern/secondary-augment';
 import { maintextToScene, mergeParsedIntoScene } from '../engine/scene-parser';
 import { translateForDirector } from '../engine/variable-thresholds';
 import { sanitizeVarsPatch } from '../sillytavern/vars-validator';
@@ -15,7 +13,6 @@ import {
 import type { ChatMessage, DynamicRecord } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
 import { appendResourcePrompt } from '../utils/resourcePrompt';
-import { appendCharacterPerformancePrompt } from '../data/characterPerformance';
 import {
   buildNpcPlayerKnowledgeBrief,
   doesPlayerIntroduceName,
@@ -240,8 +237,6 @@ export interface SendMessageOptions {
   isReroll?: boolean;
   /** 重试失败回合：复用已持久化的 user 消息，不重复追加 */
   isRetry?: boolean;
-  /** 本回合强制回退 legacy 模式（编排阻塞后的逃生通道） */
-  forceLegacy?: boolean;
 }
 
 export function useGameLoop() {
@@ -351,7 +346,7 @@ export function useGameLoop() {
       const intentPolicy = evaluatePlayerIntent(userInput, narrativeVariables);
       const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
       const historyMessages = excludeCurrentInputFromHistory(messages, userInput);
-      const agentMode: AgentNarrativeMode = opts?.forceLegacy ? 'legacy' : (settings.agentNarrativeMode ?? 'standard');
+      const agentMode: AgentNarrativeMode = settings.agentNarrativeMode ?? 'standard';
       const mysteryLocation = actionNarrativeContext?.locationId ?? resolveMysteryLocation(narrativeBackground);
       const activeNpcIds = [...new Set([
         ...(npcIdsByLocation[mysteryLocation] ?? []),
@@ -374,13 +369,6 @@ export function useGameLoop() {
         + (npcPlayerKnowledge.length ? `\n\n${formatNpcPlayerKnowledgeDirective(npcPlayerKnowledge)}` : '')
         + `\n\n[玩家意图裁决] ${intentPolicy.directorDirective}`
         + (scheduledDirectives.length ? '\n\n' + scheduledDirectives.map(l => `[系统指令] ${l}`).join('\n') : '');
-      const promptUserInput = agentMode === 'legacy'
-        ? appendCharacterPerformancePrompt(
-            basePromptUserInput,
-            buildPlayerKnowledgeBrief({ ...narrativeVariables, location: mysteryLocation }),
-            activeNpcIds,
-          )
-        : basePromptUserInput;
       const contextBundle: TurnContextBundle = compileTurnContext({
         userInput,
         locationId: mysteryLocation,
@@ -391,19 +379,6 @@ export function useGameLoop() {
         reservedOutput: Math.max(4096, Number(activePreset?.settings?.openai_max_tokens ?? 4096)),
         fixedPromptText: `${basePromptUserInput}\n${settings.formatPromptTemplate ?? ''}`,
       });
-      const { messages: promptMessages } = assemblePrompt({
-        userInput: promptUserInput,
-        history: historyMessages,
-        preset: activePreset,
-        lorebooks: tavern.lorebooks,
-        activeLorebookIds: settings.activeLorebookIds,
-        userName: settings.userName,
-        characterName: settings.characterName,
-        variables: narrativeVariables,
-        formatPrompt: settings.formatPromptTemplate,
-        contextBundle,
-      });
-
       const abortController = new AbortController();
       actions.setAbortController(abortController);
 
@@ -419,8 +394,8 @@ export function useGameLoop() {
           variables: narrativeVariables,
         }),
       );
-      let requestMessages = promptMessages;
-      if (agentMode !== 'legacy') {
+      let requestMessages: PreparedMysteryTurn['writerMessages'] = [];
+      {
         const knownClueIds = (Array.isArray(game.endingCheckContext.unlockedClues)
           ? game.endingCheckContext.unlockedClues
           : []).filter(id => mysteryFactIds.has(id));
@@ -494,7 +469,7 @@ export function useGameLoop() {
               currentSpeaker: game.currentState.speaker,
               userName: settings.userName,
               characterName: settings.characterName,
-              resourceInstructions: promptUserInput,
+              resourceInstructions: basePromptUserInput,
               playerIntentPolicy: intentPolicy,
               memoryContext: contextBundle.writerMemory,
               contextSelectionIds: contextBundle.selectedIds,
@@ -507,7 +482,7 @@ export function useGameLoop() {
         } catch (pipelineError) {
           preparedTurn = null;
           if (pipelineError instanceof MysteryPipelineBlockedError) {
-            // 不硬终止：进入可恢复状态，玩家可选择重试编排或回退兼容模式
+            // 不硬终止：进入可恢复状态，玩家可以安全重试或撤回输入。
             actions.setStreaming(false);
             actions.setIsWaitingForAI(false);
             actions.setTurnRecovery({
@@ -517,14 +492,15 @@ export function useGameLoop() {
             });
             return;
           }
-          actions.addNotification({
-            type: 'warning',
-            message: `多 Agent 编排失败，本回合已回退兼容模式：${pipelineError instanceof Error ? pipelineError.message : String(pipelineError)}`,
-            duration: 8000,
+          actions.setStreaming(false);
+          actions.setIsWaitingForAI(false);
+          actions.setTurnRecovery({
+            phase: 'blocked_pipeline',
+            userInput,
+            errorMessage: `多 Agent 编排失败：${pipelineError instanceof Error ? pipelineError.message : String(pipelineError)}`,
           });
+          return;
         }
-      } else {
-        invalidatePreplans();
       }
 
       let fullText = '';
@@ -630,7 +606,7 @@ export function useGameLoop() {
         };
         const mergedVariables = transaction.variables;
         const nextStatus = transaction.gameStatus;
-        const allowPreplan = agentMode !== 'legacy' && !transaction.ending && !transaction.failure;
+        const allowPreplan = !transaction.ending && !transaction.failure;
 
         const assistantMessage: ChatMessage = {
           id: turnId,
@@ -786,7 +762,7 @@ export function useGameLoop() {
             input: firstOption,
             contextKey: buildPreplanContextKey(agentMode, tavern.activeChatId, speculativeTruthContext),
             options: {
-              mode: agentMode as Exclude<AgentNarrativeMode, 'legacy'>,
+              mode: agentMode,
               api: resolveAnalysisApi(settings),
               preset: activePreset,
               truthContext: speculativeTruthContext,
@@ -821,23 +797,6 @@ export function useGameLoop() {
             },
           });
         }
-      };
-
-      const maybeAugmentWithSecondary = async () => {
-        const parsed = parseStateRef.current.parsed;
-        const result = await augmentWithSecondary(settings.api.secondary, activePreset, parsed, fullText);
-        if (result.status === 'ok') {
-          actions.setParsedContent(parsed);
-          return true;
-        }
-        if (result.status === 'error') {
-          actions.addNotification({
-            type: 'warning',
-            message: '次 API 调用失败,使用主 API 结果: ' + result.message,
-            duration: 4000,
-          });
-        }
-        return false;
       };
 
       await streamChatCompletion(
@@ -1091,8 +1050,13 @@ export function useGameLoop() {
                 await finalize('primary', {}, completedScene);
               }
             } else {
-              const augmented = await maybeAugmentWithSecondary();
-              await finalize(augmented ? 'dual' : 'primary', {}, completedScene);
+              actions.setStreaming(false);
+              actions.setIsWaitingForAI(false);
+              actions.setTurnRecovery({
+                phase: 'blocked_pipeline',
+                userInput,
+                errorMessage: '受控剧情编排结果缺失，本回合未播放也未写入存档。',
+              });
             }
           },
           onError: (error) => {
@@ -1225,10 +1189,10 @@ export function useGameLoop() {
   }, [sendMessage]);
 
   /** 重试失败回合：复用已持久化的 user 消息与编排缓存 */
-  const retryTurn = useCallback(async (opts?: { forceLegacy?: boolean }) => {
+  const retryTurn = useCallback(async () => {
     const recovery = store.api.turnRecovery;
     if (recovery.phase === 'idle' || !recovery.userInput) return;
-    await sendMessage(recovery.userInput, { isRetry: true, forceLegacy: opts?.forceLegacy });
+    await sendMessage(recovery.userInput, { isRetry: true });
   }, [store, sendMessage]);
 
   /** 放弃失败回合：撤回孤儿 user 消息，恢复到失败前状态 */

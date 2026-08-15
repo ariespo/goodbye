@@ -237,8 +237,14 @@ export interface AppSettings {
   musicVolume?: number;
   /** 音效音量 0-1 */
   soundVolume?: number;
-  /** 叙事 Agent 编排：旧流程 / 受控流水线 / 带语义复核的严格流水线 */
-  agentNarrativeMode?: 'legacy' | 'standard' | 'strict';
+  /** 叙事 Agent 编排：自适应受控流水线 / 每回合全量审查 */
+  agentNarrativeMode?: AgentNarrativeModeSetting;
+}
+
+export type AgentNarrativeModeSetting = 'standard' | 'strict';
+
+export function normalizeAgentNarrativeMode(value: unknown): AgentNarrativeModeSetting {
+  return value === 'strict' ? 'strict' : 'standard';
 }
 
 export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格式输出回复。除标签内容外,不要输出任何 Markdown、解释或额外文字。
