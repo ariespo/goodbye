@@ -95,4 +95,16 @@ describe('deterministic narrative scene contract review', () => {
       contextSelectionIds: ['episode:known-visit'],
     }).approved).toBe(true);
   });
+
+  it('rejects invented evidence objects when no facts are authorized or known', () => {
+    const repaired = enforceNarrativeSceneContract(plan(), brief());
+    repaired.beats[1] = {
+      ...repaired.beats[1]!,
+      description: '陈慧慧从柜台下拿出一个文件夹，里面夹着文穗留下的小票。',
+    };
+
+    expect(reviewDirectorPlan(repaired, brief()).violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'ungrounded-evidence-detail' }),
+    ]));
+  });
 });

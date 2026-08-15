@@ -1,7 +1,12 @@
 import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
 import type { ChatPreset } from '../../sillytavern/types';
 import { completeStructured, extractJson } from './structured';
-import { buildNarrativeFactCriticUserPrompt, FACT_CRITIC_SYSTEM_PROMPT } from './prompts';
+import {
+  buildNarrativeFactCriticUserPrompt,
+  buildNarrativeRepairPrompt,
+  FACT_CRITIC_SYSTEM_PROMPT,
+  WRITER_SYSTEM_PROMPT,
+} from './prompts';
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import type { FactReview, WriterPacket } from './types';
 
@@ -36,4 +41,22 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     violations,
     corrections: violations.length === 0 ? [] : value.corrections,
   } as FactReview;
+}
+
+export async function repairNarrativeAgainstWriterPacket(options: {
+  api: ApiConfig;
+  preset: ChatPreset | null;
+  packet: WriterPacket;
+  rejectedNarrative: string;
+  review: FactReview;
+  formatPrompt?: string;
+  abortSignal?: AbortSignal;
+}): Promise<string> {
+  const systemPrompt = options.formatPrompt
+    ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
+    : WRITER_SYSTEM_PROMPT;
+  return callSecondaryApi(options.api, [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: buildNarrativeRepairPrompt(options.packet, options.rejectedNarrative, options.review) },
+  ], options.preset, { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
 }

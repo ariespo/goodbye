@@ -157,6 +157,18 @@ export function reviewDirectorPlan(
     }
   }
 
+  if (plan.revelations.length === 0 && brief.playerKnownFacts.length === 0) {
+    const evidenceText = JSON.stringify({ beats: plan.beats, scenePlan: plan.scenePlan });
+    const evidenceDetail = evidenceText.match(/小票|收据|文件夹|监控(?:记录|录像)?|病历|短信(?:记录)?|聊天记录|通话记录|照片|票据|物证/);
+    const authorizedKnowledgeEvidence = (plan.knowledgeEvents ?? []).map(event => event.evidence).join('\n');
+    if (evidenceDetail && !authorizedKnowledgeEvidence.includes(evidenceDetail[0])) {
+      violations.push({
+        code: 'ungrounded-evidence-detail',
+        message: `当前没有获准案件事实，禁止新增可调查物件或记录“${evidenceDetail[0]}”；请改为普通当下互动。`,
+      });
+    }
+  }
+
   if (brief.sceneContract) {
     const contract = brief.sceneContract;
     const destinationIndex = plan.beats.findIndex(beat => beat.locationId === contract.destinationLocationId);

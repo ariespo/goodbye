@@ -228,7 +228,8 @@ export type FactReviewViolationCode =
   | 'character-performance-violation'
   | 'player-knowledge-violation'
   | 'scene-contract-violation'
-  | 'ungrounded-past-claim';
+  | 'ungrounded-past-claim'
+  | 'ungrounded-evidence-detail';
 
 export interface FactReviewViolation {
   code: FactReviewViolationCode;

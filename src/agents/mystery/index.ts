@@ -10,7 +10,7 @@ export {
   WRITER_SYSTEM_PROMPT,
 } from './prompts';
 export { buildWriterPacket, reviewDirectorPlan } from './review';
-export { reviewNarrativeAgainstWriterPacket } from './narrative-review';
+export { repairNarrativeAgainstWriterPacket, reviewNarrativeAgainstWriterPacket } from './narrative-review';
 export {
   clearOrchestrationLog,
   getOrchestrationLog,

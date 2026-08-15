@@ -39,6 +39,7 @@ import {
   MYSTERY_TRUTH_GRAPH,
   MysteryPipelineBlockedError,
   prepareMysteryTurn,
+  repairNarrativeAgainstWriterPacket,
   reviewNarrativeAgainstWriterPacket,
   REVEAL_LEVELS,
   startPreplan,
@@ -898,15 +899,85 @@ export function useGameLoop() {
                     abortSignal: abortController.signal,
                   });
                   if (!narrativeReview.approved) {
-                    const detail = narrativeReview.violations.map(item => item.message).join('\n');
-                    actions.setStreaming(false);
-                    actions.setIsWaitingForAI(false);
-                    actions.setTurnRecovery({
-                      phase: 'failed_stream',
-                      userInput,
-                      errorMessage: `正文越过事实或角色边界，已阻止写入存档：\n${detail}`,
+                    const repairedNarrative = await repairNarrativeAgainstWriterPacket({
+                      api: resolveAnalysisApi(settings),
+                      preset: activePreset,
+                      packet: preparedTurn.writerPacket,
+                      rejectedNarrative: fullText,
+                      review: narrativeReview,
+                      formatPrompt: settings.formatPromptTemplate,
+                      abortSignal: abortController.signal,
                     });
-                    return;
+                    const repairedOutput = repairRecoverableOutput(repairedNarrative);
+                    fullText = repairedOutput.text;
+                    parseStateRef.current = parseChunk(createParseState(), fullText, { strict: true });
+
+                    const repairValidationErrors = outputProtocol.validate(fullText, parseStateRef.current.parsed);
+                    if (parseStateRef.current.errors.length > 0) {
+                      repairValidationErrors.push(...parseStateRef.current.errors.map(message => ({
+                        code: 'STREAM_PARSE_ERROR',
+                        message,
+                      })));
+                    }
+
+                    completedScene = parseStateRef.current.parsed.maintext
+                      ? parseNarrativeScene(parseStateRef.current.parsed.maintext)
+                      : null;
+                    if (completedScene && actionNarrativeContext) {
+                      const contextError = actionNarrativeContextError(actionNarrativeContext, completedScene);
+                      if (contextError) {
+                        repairValidationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
+                      }
+                    }
+                    if (completedScene) {
+                      const playerAddressError = npcPlayerKnowledgeError(
+                        completedScene.lines,
+                        playerIdentity,
+                        npcPlayerKnowledge,
+                      );
+                      if (playerAddressError) {
+                        repairValidationErrors.push({
+                          code: 'NPC_PLAYER_KNOWLEDGE_MISMATCH',
+                          message: playerAddressError,
+                        });
+                      }
+                    }
+
+                    if (repairValidationErrors.length > 0 || !completedScene) {
+                      const detail = repairValidationErrors.length > 0
+                        ? formatValidationErrors(repairValidationErrors)
+                        : 'AI 正文没有生成可播放场景。';
+                      actions.setStreaming(false);
+                      actions.setIsWaitingForAI(false);
+                      actions.setTurnRecovery({
+                        phase: 'failed_stream',
+                        userInput,
+                        errorMessage: `正文自动修复后格式仍不合法，未播放也未写入存档：\n${detail}`,
+                      });
+                      return;
+                    }
+
+                    const repairedReview = await reviewNarrativeAgainstWriterPacket({
+                      api: resolveAnalysisApi(settings),
+                      preset: activePreset,
+                      packet: preparedTurn.writerPacket,
+                      narrative: parseStateRef.current.parsed.maintext || fullText,
+                      abortSignal: abortController.signal,
+                    });
+                    if (!repairedReview.approved) {
+                      const detail = repairedReview.violations.map(item => item.message).join('\n');
+                      actions.setStreaming(false);
+                      actions.setIsWaitingForAI(false);
+                      actions.setTurnRecovery({
+                        phase: 'failed_stream',
+                        userInput,
+                        errorMessage: `正文自动修复后仍越过事实或角色边界，已阻止写入存档：\n${detail}`,
+                      });
+                      return;
+                    }
+
+                    actions.setStreamBuffer(fullText);
+                    actions.setParsedContent(parseStateRef.current.parsed);
                   }
                 } catch (reviewError) {
                   actions.setStreaming(false);
