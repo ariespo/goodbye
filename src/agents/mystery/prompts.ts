@@ -135,7 +135,15 @@ export function buildDirectorUserPrompt(
   brief: MysteryBrief,
   turnContext: Record<string, unknown>,
 ): string {
-  return `请为当前回合制定导演计划。\n\n[TurnContext]\n${jsonBlock(turnContext)}\n\n[MysteryBrief]\n${jsonBlock(brief)}`;
+  return `请为当前回合制定导演计划。
+
+凡是开局前旧经历，beat 必须在 sourceBackgroundFactIds 引用 TurnContext.memoryContext.backgroundFacts 的 factId，或在 sourceMemoryIds 引用已选剧情记忆。低风险日常细节可以放入 backgroundFactProposals；不得提案案件时间线、当日行踪、不在场证明、证据、隐藏身份、犯罪、死因、亲属或法律身份、疾病、严重创伤或具名关键人物。侦探可在内部知道调查档案，但伪装身份不得表达。
+
+[TurnContext]
+${jsonBlock(turnContext)}
+
+[MysteryBrief]
+${jsonBlock(brief)}`;
 }
 
 export function buildFactCriticUserPrompt(
@@ -151,7 +159,8 @@ export function buildNarrativeFactCriticUserPrompt(
   packet: WriterPacket,
   narrative: string,
 ): string {
-  return `请复核已经生成的正文，而不是导演计划。只检查正文是否严格服从 WriterPacket：
+  return `请复核已经生成的正文，而不是导演计划。authorizedBackgroundFacts 是已确认的开局前生活史，允许正文自然提及；approvedBackgroundFactProposals 只有在正文逐字出现 evidenceText 时才视为实际呈现。不得把一般生活史误判成案件事实，也不得允许生活史补出当日行踪、精确时间、购买记录、证据或隐藏身份。
+只检查正文是否严格服从 WriterPacket：
 - 是否出现 authorizedFacts/playerKnownFacts 未提供的证据细节、精确时间、号码、记录操作、动机、死因或时间线；
 - 是否让 stance=lies-about 的角色自白、说漏嘴、互相指认、默认承认，或让旁白把沉默/反应解释成答案；
 - 是否违反 characterPerformances、情绪禁演或玩家当前称呼权限。
@@ -189,7 +198,15 @@ export function buildWriterUserPrompt(
   packet: WriterPacket,
   presentationContext: Record<string, unknown>,
 ): string {
-  return `请生成可播放场景。\n\n[PresentationContext]\n${jsonBlock(presentationContext)}\n\n[WriterPacket]\n${jsonBlock(packet)}`;
+  return `请生成可播放场景。
+
+生活史规则：旧经历只能来自 authorizedBackgroundFacts、approvedBackgroundFactProposals 或计划中逐字引用的已选剧情记忆。不得把侦探的真实调查认知写成伪装身份可表达的信息。若采用 approvedBackgroundFactProposals，正文必须逐字出现对应 evidenceText，作为原子落库证据；未采用则不要暗示该提案已经发生。
+
+[PresentationContext]
+${jsonBlock(presentationContext)}
+
+[WriterPacket]
+${jsonBlock(packet)}`;
 }
 
 export function buildPacingCriticUserPrompt(

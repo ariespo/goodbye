@@ -1,5 +1,10 @@
 import { isRevealAtMost } from './reveal-level';
 import { isAllowedKnowledgeDiscovery } from '../../data/playerKnowledge';
+import {
+  FIXED_BACKGROUND_FACTS,
+  reviewBackgroundFactProposal,
+  type BackgroundFactRecord,
+} from '../../data/backgroundHistory';
 import type {
   DirectorPlan,
   FactReview,
@@ -69,7 +74,7 @@ export function ensureSaturationPivotOrder(plan: DirectorPlan, brief: MysteryBri
   };
 }
 
-const UNGROUNDED_PAST_CLAIM = /(?:昨天|昨晚|前天|上次|此前|之前|早些时候|刚才|曾经|平时|一向|向来|(?:今天)?早上|今早)[^。！？\n]{0,100}(?:说|提到|告诉|表示|来(?:过|了|买)?|去(?:过|了|往)?|见(?:过|到)?|听(?:过|说)?|买(?:过|了)?|拿(?:过|了)?|做(?:过|了)?|发生|准备|计划)/;
+const HISTORICAL_CLAIM = /(?:昨天|昨晚|前天|上次|此前|之前|早些时候|曾经|以前|平时|一向|向来|经常|总是|每次|(?:今天)?早上|今早)[^。！？\n]{0,100}(?:说|提到|告诉|表示|来|去|见|听|买|拿|做|发生|同行|生活|照顾|打招呼|认识)/;
 const UNGROUNDED_EVIDENCE_DETAIL = /小票|收据|文件夹|监控(?:记录|录像)?|病历|短信(?:记录)?|聊天记录|通话记录|照片|票据|物证/;
 
 /** 将确定性场景契约落实为导演节拍；只补角色与地点，不新增案件事实。 */
@@ -82,7 +87,9 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
   let beats = plan.beats
     .filter(beat => {
       const beatText = `${beat.purpose} ${beat.description}`;
-      if (UNGROUNDED_PAST_CLAIM.test(beatText) && (beat.sourceMemoryIds?.length ?? 0) === 0) return false;
+      if (HISTORICAL_CLAIM.test(beatText)
+        && (beat.sourceMemoryIds?.length ?? 0) === 0
+        && (beat.sourceBackgroundFactIds?.length ?? 0) === 0) return false;
       if (!stripUngroundedEvidence) return true;
       const evidenceDetail = beatText.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
       return !evidenceDetail || authorizedKnowledgeEvidence.includes(evidenceDetail);
@@ -145,6 +152,29 @@ function selectedMemoryIds(turnContext?: Record<string, unknown>): Set<string> {
   ].filter((item): item is string => typeof item === 'string'));
 }
 
+function selectedBackgroundFacts(turnContext?: Record<string, unknown>): BackgroundFactRecord[] {
+  const memoryContext = turnContext?.memoryContext;
+  if (!memoryContext || typeof memoryContext !== 'object') return [];
+  const facts = (memoryContext as { backgroundFacts?: unknown }).backgroundFacts;
+  return Array.isArray(facts)
+    ? facts.filter((item): item is BackgroundFactRecord => !!item && typeof item === 'object' && typeof (item as BackgroundFactRecord).factId === 'string')
+    : [];
+}
+
+function expressibleBackgroundFactIds(turnContext?: Record<string, unknown>): Set<string> {
+  const memoryContext = turnContext?.memoryContext;
+  if (!memoryContext || typeof memoryContext !== 'object') return new Set();
+  const cognition = (memoryContext as { backgroundCognition?: unknown }).backgroundCognition;
+  if (!Array.isArray(cognition)) return new Set();
+  return new Set(cognition.flatMap(item => (
+    item && typeof item === 'object'
+      && (item as { expressibleUnderCover?: unknown }).expressibleUnderCover === true
+      && typeof (item as { factId?: unknown }).factId === 'string'
+      ? [(item as { factId: string }).factId]
+      : []
+  )));
+}
+
 export function reviewDirectorPlan(
   plan: DirectorPlan,
   brief: MysteryBrief,
@@ -153,17 +183,51 @@ export function reviewDirectorPlan(
   const violations: FactReviewViolation[] = [];
   const seen = new Set<string>();
   const allowedMemoryIds = selectedMemoryIds(turnContext);
+  const contextBackgroundFacts = selectedBackgroundFacts(turnContext);
+  const expressibleBackgroundIds = expressibleBackgroundFactIds(turnContext);
+  const allowedBackgroundIds = new Set([
+    ...contextBackgroundFacts.map(fact => fact.factId),
+    ...(plan.backgroundFactProposals ?? []).map(proposal => proposal.proposalId),
+    ...(plan.backgroundFactProposals ?? []).map(proposal => `soft:${proposal.proposalId}`),
+  ]);
+
+  const seenProposalIds = new Set<string>();
+  for (const proposal of plan.backgroundFactProposals ?? []) {
+    const proposalReview = reviewBackgroundFactProposal(proposal);
+    const duplicate = seenProposalIds.has(proposal.proposalId);
+    seenProposalIds.add(proposal.proposalId);
+    const existing = contextBackgroundFacts.find(fact => fact.factId === `soft:${proposal.proposalId}`);
+    if (!proposalReview.approved || duplicate || (existing && existing.text !== proposal.text)) {
+      violations.push({
+        code: 'soft-canon-violation',
+        message: `软设定 ${proposal.proposalId} 未通过程序审查：${proposalReview.reason ?? (duplicate ? '提案 ID 重复' : '与既有软设定冲突')}`,
+      });
+    }
+  }
 
   for (const beat of plan.beats) {
-    if (!UNGROUNDED_PAST_CLAIM.test(`${beat.purpose} ${beat.description}`)) continue;
-    const sources = beat.sourceMemoryIds ?? [];
-    const invalidSources = sources.filter(id => !allowedMemoryIds.has(id));
-    if (sources.length === 0 || invalidSources.length > 0) {
+    if (!HISTORICAL_CLAIM.test(`${beat.purpose} ${beat.description}`)) continue;
+    const memorySources = beat.sourceMemoryIds ?? [];
+    const backgroundSources = beat.sourceBackgroundFactIds ?? [];
+    const invalidMemorySources = memorySources.filter(id => !allowedMemoryIds.has(id));
+    const invalidBackgroundSources = backgroundSources.filter(id => !allowedBackgroundIds.has(id));
+    if ((memorySources.length === 0 && backgroundSources.length === 0)
+      || invalidMemorySources.length > 0 || invalidBackgroundSources.length > 0) {
       violations.push({
         code: 'ungrounded-past-claim',
-        message: sources.length === 0
-          ? `beat ${beat.id} 补写了本回合之前的行动或对话，却没有引用 sourceMemoryIds；请删除该往事或引用真实记忆。`
-          : `beat ${beat.id} 引用了未进入本回合上下文的记忆：${invalidSources.join('、')}。`,
+        message: memorySources.length === 0 && backgroundSources.length === 0
+          ? `beat ${beat.id} 写了旧经历，却未引用 sourceMemoryIds 或 sourceBackgroundFactIds。`
+          : `beat ${beat.id} 引用了未授权来源：${[...invalidMemorySources, ...invalidBackgroundSources].join('、')}。`,
+      });
+    }
+    const hiddenSources = backgroundSources.filter(id => {
+      const fact = contextBackgroundFacts.find(item => item.factId === id);
+      return fact?.privacy === 'investigative' && !expressibleBackgroundIds.has(id);
+    });
+    if (hiddenSources.length > 0) {
+      violations.push({
+        code: 'npc-knowledge-violation',
+        message: `beat ${beat.id} 试图让公开身份表达不可暴露的调查认知：${hiddenSources.join('、')}。`,
       });
     }
   }
@@ -436,8 +500,23 @@ export function buildWriterPacket(
     throw new Error(`导演计划未通过事实审查：${review.corrections.join('；')}`);
   }
 
-  const { revelations: _revelations, knowledgeEvents: authorizedKnowledgeEvents = [], ...safePlan } = plan;
+  const {
+    revelations: _revelations,
+    knowledgeEvents: authorizedKnowledgeEvents = [],
+    backgroundFactProposals = [],
+    ...safePlan
+  } = plan;
   void _revelations;
+  const backgroundById = new Map([
+    ...FIXED_BACKGROUND_FACTS.map(fact => [fact.factId, fact] as const),
+    ...selectedBackgroundFacts(turnContext).map(fact => [fact.factId, fact] as const),
+  ]);
+  const usedBackgroundIds = new Set(plan.beats.flatMap(beat => beat.sourceBackgroundFactIds ?? []));
+  const authorizedBackgroundFacts = [...backgroundById.values()].filter(fact => (
+    fact.level === 'soft'
+    || expressibleBackgroundFactIds(turnContext).has(fact.factId)
+    || (usedBackgroundIds.has(fact.factId) && fact.privacy !== 'investigative')
+  ));
   return {
     plan: safePlan,
     playerKnownFacts: brief.playerKnownFacts,
@@ -454,6 +533,8 @@ export function buildWriterPacket(
       };
     }),
     authorizedKnowledgeEvents,
+    authorizedBackgroundFacts,
+    approvedBackgroundFactProposals: backgroundFactProposals,
     forbiddenInstructions: [
       '只能使用 authorizedFacts 中的事实及其给定措辞层级。',
       '不得推断、补写或暗示其他隐藏真相。',
@@ -467,7 +548,10 @@ export function buildWriterPacket(
     ],
     playerPresentation: brief.playerPresentation,
     characterPerformances: brief.characterPerformances,
-    npcPlayerKnowledge: brief.npcPlayerKnowledge,
+    npcPlayerKnowledge: brief.npcPlayerKnowledge?.map(item => ({
+      ...item,
+      actualKnowledgeScope: item.expressibleKnowledgeScope,
+    })),
     sceneContract: brief.sceneContract,
     saturationPivot: brief.saturationPivot,
   };

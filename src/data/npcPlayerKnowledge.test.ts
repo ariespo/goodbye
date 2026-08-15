@@ -24,10 +24,19 @@ describe('NPC knowledge of player identity', () => {
   });
 
   it('keeps strangers from knowing the name until explicitly recorded', () => {
-    expect(resolveNpcPlayerKnowledge('detective-b', identity).knowsPlayerName).toBe(false);
+    const undercover = resolveNpcPlayerKnowledge('detective-b', identity);
+    expect(undercover.knowsPlayerName).toBe(false);
+    expect(undercover.actualKnowledgeScope).toBe('full-name');
+    expect(undercover.expressibleKnowledgeScope).toBe('unknown');
     expect(resolveNpcPlayerKnowledge('detective-b', identity, {
       playerNameKnownByNpcIds: ['detective-b'],
     }).allowedAddress).toBe('张明');
+  });
+
+  it('lets the teacher use a formal guardian-contact address without granting family secrets', () => {
+    const teacher = resolveNpcPlayerKnowledge('liu-renguang', identity);
+    expect(teacher.allowedAddress).toBe('张先生');
+    expect(teacher.knowledgeScope).toBe('guardian-formal');
   });
 
   it('recognizes an explicit self-introduction but not a refusal to share the name', () => {

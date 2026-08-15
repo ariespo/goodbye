@@ -11,6 +11,8 @@ const INHERITED_KEYS = [
   'knowledgeEvents',
   'mysteryKnowledge',
   'suspicion',
+  'worldMemory',
+  'playerNameKnownByNpcIds',
 ] as const;
 
 export function settleCycleVariables(

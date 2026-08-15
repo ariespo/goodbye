@@ -7,7 +7,10 @@ export interface NpcPlayerKnowledgeBrief {
   npcId: string;
   knowsPlayerName: boolean;
   allowedAddress: string;
-  knowledgeScope: 'full-name' | 'familiar-honorific' | 'family-nickname' | 'unknown';
+  /** Compatibility projection: the knowledge scope the current public identity may express. */
+  knowledgeScope: 'full-name' | 'familiar-honorific' | 'family-nickname' | 'guardian-formal' | 'unknown';
+  actualKnowledgeScope: 'full-name' | 'familiar-honorific' | 'family-nickname' | 'guardian-formal' | 'unknown';
+  expressibleKnowledgeScope: 'full-name' | 'familiar-honorific' | 'family-nickname' | 'guardian-formal' | 'unknown';
   reason: string;
 }
 
@@ -16,6 +19,13 @@ const ESTABLISHED_NAME_KNOWLEDGE: Record<string, NpcPlayerKnowledgeBrief['knowle
   touko: 'full-name',
   'chen-huihui': 'familiar-honorific',
   'old-man': 'family-nickname',
+  'liu-renguang': 'guardian-formal',
+};
+
+const ACTUAL_NAME_KNOWLEDGE: Record<string, NpcPlayerKnowledgeBrief['actualKnowledgeScope']> = {
+  ...ESTABLISHED_NAME_KNOWLEDGE,
+  'detective-a': 'full-name',
+  'detective-b': 'full-name',
 };
 
 function familyNameOf(name: string): string {
@@ -39,6 +49,8 @@ export function resolveNpcPlayerKnowledge(
     : [];
   const scope = ESTABLISHED_NAME_KNOWLEDGE[npcId]
     ?? (learnedBy.includes(npcId) ? 'full-name' : 'unknown');
+  const actualScope = ACTUAL_NAME_KNOWLEDGE[npcId]
+    ?? (learnedBy.includes(npcId) ? 'full-name' : 'unknown');
   const familyName = familyNameOf(identity.name);
 
   if (scope === 'full-name') {
@@ -47,6 +59,8 @@ export function resolveNpcPlayerKnowledge(
       knowsPlayerName: true,
       allowedAddress: identity.name,
       knowledgeScope: scope,
+      actualKnowledgeScope: actualScope,
+      expressibleKnowledgeScope: scope,
       reason: npcId === 'fumi' ? '与玩家共同生活，当然知道姓名。' : '与玩家早已相识，知道姓名。',
     };
   }
@@ -56,6 +70,8 @@ export function resolveNpcPlayerKnowledge(
       knowsPlayerName: true,
       allowedAddress: `${familyName}${identity.gender === 'male' ? '哥' : '姐'}`,
       knowledgeScope: scope,
+      actualKnowledgeScope: actualScope,
+      expressibleKnowledgeScope: scope,
       reason: '作为附近便利店的熟面孔，只用自己习惯的姓氏加哥/姐称呼。',
     };
   }
@@ -65,7 +81,20 @@ export function resolveNpcPlayerKnowledge(
       knowsPlayerName: true,
       allowedAddress: `小${familyName}`,
       knowledgeScope: scope,
+      actualKnowledgeScope: actualScope,
+      expressibleKnowledgeScope: scope,
       reason: '作为熟悉附近年轻人的长辈，用“小+姓”称呼。',
+    };
+  }
+  if (scope === 'guardian-formal') {
+    return {
+      npcId,
+      knowsPlayerName: true,
+      allowedAddress: `${familyName}${identity.gender === 'male' ? '先生' : '女士'}`,
+      knowledgeScope: scope,
+      actualKnowledgeScope: actualScope,
+      expressibleKnowledgeScope: scope,
+      reason: '校方记录将玩家列为文穗的家庭联系人或监护责任人；只可使用正式称呼，不得延伸家庭隐私。',
     };
   }
   return {
@@ -73,6 +102,8 @@ export function resolveNpcPlayerKnowledge(
     knowsPlayerName: false,
     allowedAddress: '你',
     knowledgeScope: 'unknown',
+    actualKnowledgeScope: actualScope,
+    expressibleKnowledgeScope: 'unknown',
     reason: '当前没有可靠经历表明该角色知道玩家姓名，只能使用“你”、职业称呼或现场称呼。',
   };
 }

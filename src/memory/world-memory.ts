@@ -1,6 +1,15 @@
 import type { ChatMessage, ChatSession, Scene, TurnSnapshot } from '../sillytavern/types';
+import {
+  BACKGROUND_HISTORY_VERSION,
+  FIXED_BACKGROUND_FACTS,
+  FIXED_NPC_BACKGROUND_COGNITION,
+  relevantFixedBackgroundFacts,
+  reviewBackgroundFactProposal,
+  type BackgroundFactProposal,
+  type BackgroundFactRecord,
+} from '../data/backgroundHistory';
 
-export const WORLD_MEMORY_VERSION = 1;
+export const WORLD_MEMORY_VERSION = 2;
 
 export type CognitionStatus =
   | 'observed'
@@ -39,7 +48,7 @@ export interface CognitionRecord {
   firstLearnedTurn: number;
   lastUpdatedTurn: number;
   summary: string;
-  identityScope?: 'full-name' | 'familiar-honorific' | 'family-nickname' | 'unknown';
+  identityScope?: 'full-name' | 'familiar-honorific' | 'family-nickname' | 'guardian-formal' | 'unknown';
 }
 
 export interface CognitionDelta {
@@ -73,6 +82,7 @@ export interface WorldMemoryState {
   events: WorldEventRecord[];
   cognition: CognitionRecord[];
   episodes: EpisodeMemoryRecord[];
+  softCanonFacts: BackgroundFactRecord[];
 }
 
 export interface ContextTokenBudget {
@@ -84,11 +94,12 @@ export interface ContextTokenBudget {
 }
 
 export interface TurnContextBundle {
-  version: 1;
+  version: 2;
   selectedIds: string[];
   recentMessages: ChatMessage[];
   relevantEpisodes: EpisodeMemoryRecord[];
   relevantCognition: CognitionRecord[];
+  relevantBackgroundFacts: BackgroundFactRecord[];
   lorebookScanText: string;
   directorMemory: Record<string, unknown>;
   writerMemory: Record<string, unknown>;
@@ -108,6 +119,9 @@ const ESTABLISHED_PLAYER_NAME_SCOPES: Record<string, CognitionRecord['identitySc
   touko: 'full-name',
   'chen-huihui': 'familiar-honorific',
   'old-man': 'family-nickname',
+  'liu-renguang': 'guardian-formal',
+  'detective-a': 'full-name',
+  'detective-b': 'full-name',
 };
 
 function uniqueStrings(value: unknown): string[] {
@@ -143,6 +157,7 @@ export function createEmptyWorldMemory(canonicalTruthVersion = 'mystery-truth-gr
     events: [],
     cognition: [],
     episodes: [],
+    softCanonFacts: [],
   };
 }
 
@@ -162,6 +177,18 @@ export function normalizeWorldMemory(
       .map(item => ({ ...item, sourceEventIds: uniqueStrings(item.sourceEventIds) })) : [],
     episodes: Array.isArray(stored.episodes) ? (stored.episodes.filter(item => item && typeof item === 'object') as EpisodeMemoryRecord[])
       .map(item => ({ ...item, actorIds: uniqueStrings(item.actorIds), factIds: uniqueStrings(item.factIds), cognitionIds: uniqueStrings(item.cognitionIds), unresolvedTags: uniqueStrings(item.unresolvedTags) })) : [],
+    softCanonFacts: Array.isArray(stored.softCanonFacts)
+      ? (stored.softCanonFacts.filter(item => item && typeof item === 'object') as BackgroundFactRecord[])
+        .filter(item => item.level === 'soft' && reviewBackgroundFactProposal({
+          proposalId: item.factId,
+          text: item.text,
+          characterIds: uniqueStrings(item.characterIds),
+          locationIds: uniqueStrings(item.locationIds),
+          knowerIds: uniqueStrings(item.characterIds).length ? [uniqueStrings(item.characterIds)[0]] : ['player'],
+          evidenceText: item.text,
+        }).approved)
+        .map(item => ({ ...item, characterIds: uniqueStrings(item.characterIds), locationIds: uniqueStrings(item.locationIds) }))
+      : [],
   };
 
   const turnIndex = memory.episodes.reduce((max, item) => Math.max(max, Number(item.turnIndex) || 0), 0);
@@ -227,6 +254,23 @@ export function normalizeWorldMemory(
       lastUpdatedTurn: turnIndex,
       summary: `${npcId} 已从明确介绍中得知玩家姓名`,
       identityScope: 'full-name',
+    });
+  }
+
+  for (const baseline of FIXED_NPC_BACKGROUND_COGNITION) {
+    const cognitionId = `${baseline.npcId}|background:${baseline.factId}`;
+    if (memory.cognition.some(item => item.cognitionId === cognitionId)) continue;
+    upsertCognition(memory.cognition, {
+      cognitionId,
+      observerId: baseline.npcId,
+      propositionId: `background:${baseline.factId}`,
+      subjectId: baseline.factId,
+      status: 'confirmed',
+      confidence: baseline.confidence,
+      sourceEventIds: [`baseline:${BACKGROUND_HISTORY_VERSION}`],
+      firstLearnedTurn: 0,
+      lastUpdatedTurn: turnIndex,
+      summary: FIXED_BACKGROUND_FACTS.find(fact => fact.factId === baseline.factId)?.text ?? baseline.factId,
     });
   }
 
@@ -330,6 +374,13 @@ export function compileTurnContext(options: {
     || (item.subjectId ? options.activeNpcIds.includes(item.subjectId) : false)
     || scoreText(`${item.propositionId} ${item.summary}`, terms) > 0
   )).slice(-40);
+  const fixedBackgroundFacts = relevantFixedBackgroundFacts(options.locationId, options.activeNpcIds);
+  const relevantSoftFacts = memory.softCanonFacts.filter(fact => (
+    fact.locationIds.includes(options.locationId)
+    || fact.characterIds.some(id => options.activeNpcIds.includes(id))
+    || scoreText(fact.text, terms) > 0
+  )).slice(-20);
+  const relevantBackgroundFacts = [...fixedBackgroundFacts, ...relevantSoftFacts];
 
   const maxContext = options.maxContext ?? 8192;
   const reservedOutput = options.reservedOutput ?? 2048;
@@ -339,13 +390,15 @@ export function compileTurnContext(options: {
     ...recentMessages.map(item => item.content),
     ...relevantEpisodes.map(item => item.summary),
     ...relevantCognition.map(item => item.summary),
+    ...relevantBackgroundFacts.map(item => item.text),
   ].join('\n');
   const selectedIds = [
     ...recentMessages.map(item => `message:${item.id}`),
     ...relevantEpisodes.map(item => item.episodeId),
     ...relevantCognition.map(item => item.cognitionId),
+    ...relevantBackgroundFacts.map(item => item.factId),
   ];
-  const memoryProjection = {
+  const baseMemoryProjection = {
     selectedIds,
     episodes: relevantEpisodes.map(({ episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }) => (
       { episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }
@@ -354,15 +407,54 @@ export function compileTurnContext(options: {
       { cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }
     )),
   };
+  const directorMemory = {
+    ...baseMemoryProjection,
+    backgroundFacts: relevantBackgroundFacts,
+    backgroundCognition: FIXED_NPC_BACKGROUND_COGNITION.filter(item => options.activeNpcIds.includes(item.npcId)),
+  };
+  const expressibleFixedIds = new Set(FIXED_NPC_BACKGROUND_COGNITION
+    .filter(item => item.expressibleUnderCover && options.activeNpcIds.includes(item.npcId))
+    .map(item => item.factId));
+  const writerBackgroundFacts = relevantBackgroundFacts.filter(fact => (
+    fact.level === 'fixed'
+      ? expressibleFixedIds.has(fact.factId)
+      : options.activeNpcIds.some(npcId => memory.cognition.some(cognition => (
+        cognition.observerId === npcId && cognition.propositionId === `background:${fact.factId}`
+      )))
+  ));
+  const hiddenBackgroundCognitionIds = new Set(FIXED_NPC_BACKGROUND_COGNITION
+    .filter(item => !item.expressibleUnderCover)
+    .map(item => `${item.npcId}|background:${item.factId}`));
+  const writerCognition = relevantCognition.filter(item => (
+    !hiddenBackgroundCognitionIds.has(item.cognitionId)
+    && !((item.observerId === 'detective-a' || item.observerId === 'detective-b')
+      && item.propositionId === 'identity:player-name')
+  ));
+  const writerVisibleIds = new Set([
+    ...recentMessages.map(item => `message:${item.id}`),
+    ...relevantEpisodes.map(item => item.episodeId),
+    ...writerCognition.map(item => item.cognitionId),
+    ...writerBackgroundFacts.map(item => item.factId),
+  ]);
+  const writerMemory = {
+    ...baseMemoryProjection,
+    selectedIds: selectedIds.filter(id => writerVisibleIds.has(id)),
+    cognition: writerCognition.map(({ cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }) => (
+      { cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }
+    )),
+    backgroundFacts: writerBackgroundFacts,
+    rule: '只可表现 backgroundFacts 中的开局前生活史；侦探调查档案等不可表达认知已被裁掉。',
+  };
   return {
-    version: 1,
+    version: 2,
     selectedIds,
     recentMessages,
     relevantEpisodes,
     relevantCognition,
+    relevantBackgroundFacts,
     lorebookScanText: [options.userInput, options.locationId, ...options.activeNpcIds, ...relevantEpisodes.map(item => item.summary)].join('\n'),
-    directorMemory: memoryProjection,
-    writerMemory: memoryProjection,
+    directorMemory,
+    writerMemory,
     tokenBudget: {
       maxContext,
       reservedOutput,
@@ -401,6 +493,8 @@ export function buildTurnCommit(options: {
   introducedPlayerNameToNpcIds?: string[];
   /** Already-reviewed subjective beliefs. These never mutate objective events. */
   cognitionDeltas?: CognitionDelta[];
+  approvedBackgroundFactProposals?: BackgroundFactProposal[];
+  narrativeText?: string;
 }): TurnCommit {
   const memory = normalizeWorldMemory(options.beforeVariables);
   const knowledgeEvents = uniqueStrings(options.settledVariables.knowledgeEvents);
@@ -467,19 +561,24 @@ export function buildTurnCommit(options: {
     });
   }
   for (const npcId of options.introducedPlayerNameToNpcIds ?? []) {
-    const cognitionId = `${npcId}|identity:player-name`;
+    const isUndercoverDetective = npcId === 'detective-a' || npcId === 'detective-b';
+    const cognitionId = isUndercoverDetective
+      ? `${npcId}|expression:player-name`
+      : `${npcId}|identity:player-name`;
     cognitionIds.push(cognitionId);
     upsertCognition(memory.cognition, {
       cognitionId,
       observerId: npcId,
-      propositionId: 'identity:player-name',
+      propositionId: isUndercoverDetective ? 'expression:player-name' : 'identity:player-name',
       subjectId: 'player',
       status: 'confirmed',
       confidence: 1,
       sourceEventIds: [rootEvent.eventId],
       firstLearnedTurn: options.turnIndex,
       lastUpdatedTurn: options.turnIndex,
-      summary: `${npcId} 在本回合得知玩家姓名`,
+      summary: isUndercoverDetective
+        ? `${npcId} 的公开身份在玩家主动介绍后获准使用玩家姓名；其真实调查认知未发生变化`
+        : `${npcId} 在本回合得知玩家姓名`,
       identityScope: 'full-name',
     });
   }
@@ -499,6 +598,41 @@ export function buildTurnCommit(options: {
       summary: delta.summary,
       identityScope: delta.identityScope,
     });
+  }
+
+  for (const proposal of options.approvedBackgroundFactProposals ?? []) {
+    if (!reviewBackgroundFactProposal(proposal).approved) continue;
+    if (!(options.narrativeText ?? '').includes(proposal.evidenceText)) continue;
+    const factId = `soft:${proposal.proposalId}`;
+    if (!memory.softCanonFacts.some(item => item.factId === factId)) {
+      memory.softCanonFacts.push({
+        factId,
+        text: proposal.text,
+        characterIds: uniqueStrings(proposal.characterIds),
+        locationIds: uniqueStrings(proposal.locationIds),
+        level: 'soft',
+        privacy: 'common',
+        timeScope: 'pre-game',
+        source: 'director',
+        createdTurn: options.turnIndex,
+      });
+    }
+    for (const npcId of uniqueStrings(proposal.knowerIds)) {
+      const cognitionId = `${npcId}|background:${factId}`;
+      cognitionIds.push(cognitionId);
+      upsertCognition(memory.cognition, {
+        cognitionId,
+        observerId: npcId,
+        propositionId: `background:${factId}`,
+        subjectId: factId,
+        status: 'confirmed',
+        confidence: 1,
+        sourceEventIds: [rootEvent.eventId],
+        firstLearnedTurn: options.turnIndex,
+        lastUpdatedTurn: options.turnIndex,
+        summary: proposal.text,
+      });
+    }
   }
 
   const episode: EpisodeMemoryRecord = {

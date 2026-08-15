@@ -45,6 +45,8 @@ describe('settleCycleVariables', () => {
     routesLockedEver: ['A'],
     knowledgeEvents: ['know:home', 'meet:old-man'],
     mysteryKnowledge: { 'fact-1': 'clue' },
+    playerNameKnownByNpcIds: ['detective-b'],
+    worldMemory: { ...createDefaultVariables().worldMemory, softCanonFacts: [{ factId: 'soft:coffee' }] },
     stayStreak: 1,
     stayedEver: false,
   };
@@ -57,6 +59,8 @@ describe('settleCycleVariables', () => {
     expect(next.routesLockedEver).toEqual(['A']);
     expect(next.knowledgeEvents).toContain('meet:old-man');
     expect(next.mysteryKnowledge).toEqual({ 'fact-1': 'clue' });
+    expect(next.playerNameKnownByNpcIds).toEqual(['detective-b']);
+    expect(next.worldMemory.softCanonFacts).toEqual([{ factId: 'soft:coffee' }]);
   });
 
   it('重置当日状态且 cycleCount+1', () => {

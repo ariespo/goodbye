@@ -605,6 +605,8 @@ export function useGameLoop() {
           beforeVariables: tavern.variables,
           settledVariables: transaction.variables,
           introducedPlayerNameToNpcIds: introducesPlayerName ? activeNpcIds : [],
+          approvedBackgroundFactProposals: preparedTurn?.writerPacket.approvedBackgroundFactProposals ?? [],
+          narrativeText: parsed.maintext || fullText,
         });
         transaction.variables = {
           ...transaction.variables,

@@ -1,3 +1,5 @@
+import type { BackgroundFactProposal, BackgroundFactRecord } from '../../data/backgroundHistory';
+
 export const MYSTERY_ROUTE_IDS = ['A', 'B', 'C', 'NONE', 'FAKE'] as const;
 export type MysteryRouteId = (typeof MYSTERY_ROUTE_IDS)[number];
 export const MYSTERY_OVERLAY_IDS = ['CULT', 'PSYCH'] as const;
@@ -182,6 +184,8 @@ export interface DirectorBeat {
   speakerIds?: string[];
   /** 只有叙述已发生的往事时才填写，且必须引用本回合上下文中真实存在的记忆 ID。 */
   sourceMemoryIds?: string[];
+  /** Fixed or accepted soft-canon facts authorizing pre-game history. */
+  sourceBackgroundFactIds?: string[];
 }
 
 export interface DirectorOptionIntent {
@@ -211,6 +215,7 @@ export interface DirectorPlan {
   optionIntents: DirectorOptionIntent[];
   assetRequests: string[];
   knowledgeEvents?: Array<{ eventId: string; evidence: string }>;
+  backgroundFactProposals?: BackgroundFactProposal[];
   scenePlan?: DirectorScenePlan;
   /** 本回合预计经过的分钟数(1-180)，引擎据此推进游戏时钟 */
   timeCostMinutes?: number;
@@ -229,7 +234,9 @@ export type FactReviewViolationCode =
   | 'player-knowledge-violation'
   | 'scene-contract-violation'
   | 'ungrounded-past-claim'
-  | 'ungrounded-evidence-detail';
+  | 'ungrounded-evidence-detail'
+  | 'unknown-background-fact'
+  | 'soft-canon-violation';
 
 export interface FactReviewViolation {
   code: FactReviewViolationCode;
@@ -252,10 +259,12 @@ export interface WriterFact {
 }
 
 export interface WriterPacket {
-  plan: Omit<DirectorPlan, 'revelations' | 'knowledgeEvents'>;
+  plan: Omit<DirectorPlan, 'revelations' | 'knowledgeEvents' | 'backgroundFactProposals'>;
   playerKnownFacts: ProjectedFact[];
   authorizedFacts: WriterFact[];
   authorizedKnowledgeEvents: Array<{ eventId: string; evidence: string }>;
+  authorizedBackgroundFacts: BackgroundFactRecord[];
+  approvedBackgroundFactProposals: BackgroundFactProposal[];
   forbiddenInstructions: string[];
   playerPresentation: PlayerKnowledgeBrief;
   characterPerformances: CharacterPerformanceProfile[];

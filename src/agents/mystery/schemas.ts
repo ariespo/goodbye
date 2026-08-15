@@ -23,6 +23,7 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
           locationId: { type: 'string' },
           speakerIds: { type: 'array', items: { type: 'string' } },
           sourceMemoryIds: { type: 'array', items: { type: 'string' } },
+          sourceBackgroundFactIds: { type: 'array', items: { type: 'string' } },
         },
       },
     },
@@ -99,6 +100,22 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
         properties: {
           eventId: { type: 'string' },
           evidence: { type: 'string' },
+        },
+      },
+    },
+    backgroundFactProposals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['proposalId', 'text', 'characterIds', 'locationIds', 'knowerIds', 'evidenceText'],
+        properties: {
+          proposalId: { type: 'string' },
+          text: { type: 'string' },
+          characterIds: { type: 'array', items: { type: 'string' } },
+          locationIds: { type: 'array', items: { type: 'string' } },
+          knowerIds: { type: 'array', items: { type: 'string' } },
+          evidenceText: { type: 'string' },
         },
       },
     },

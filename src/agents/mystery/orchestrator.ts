@@ -482,6 +482,7 @@ async function runMysteryPipeline(
   const reviewPolicy = {
     semantic: options.mode === 'strict'
       || directorPlan.revelations.length > 0
+      || (directorPlan.backgroundFactProposals?.length ?? 0) > 0
       || (plannedKnowledgeEvents.length > 0 && !deterministicSceneKnowledgeOnly),
     pacing: options.mode === 'strict'
       || options.truthContext.cycleCount >= 3
@@ -490,6 +491,8 @@ async function runMysteryPipeline(
       || intentMode === 'divert',
     narrative: options.mode === 'strict'
       || directorPlan.revelations.length > 0
+      || (directorPlan.backgroundFactProposals?.length ?? 0) > 0
+      || directorPlan.beats.some(beat => (beat.sourceBackgroundFactIds?.length ?? 0) > 0)
       || (directorPlan.knowledgeEvents?.length ?? 0) > 0
       || (brief.sceneContract?.requiredKnowledgeEvents.length ?? 0) > 0,
     state: options.mode === 'strict'
@@ -497,6 +500,18 @@ async function runMysteryPipeline(
       || options.turnContext.requiresStateAgent === true,
   };
   const approvedReview: FactReview = { approved: true, violations: [], corrections: [] };
+  const memoryContext = options.turnContext.memoryContext && typeof options.turnContext.memoryContext === 'object'
+    ? options.turnContext.memoryContext as { backgroundFacts?: unknown }
+    : {};
+  const semanticCanon = {
+    caseFacts: MYSTERY_TRUTH_GRAPH.facts.map(fact => ({
+      id: factAliases.factIdToAlias[fact.id],
+      route: fact.route,
+      canonicalTruth: fact.canonicalTruth,
+      revelations: fact.revelations,
+    })),
+    backgroundFacts: Array.isArray(memoryContext.backgroundFacts) ? memoryContext.backgroundFacts : [],
+  };
   let semanticReview: FactReview | null = null;
   let pacingReview: FactReview | null = null;
   if (reviewPolicy.semantic || reviewPolicy.pacing) {
@@ -507,12 +522,7 @@ async function runMysteryPipeline(
         content: buildFactCriticUserPrompt(
           brief,
           directorPlan,
-          MYSTERY_TRUTH_GRAPH.facts.map(fact => ({
-            id: factAliases.factIdToAlias[fact.id],
-            route: fact.route,
-            canonicalTruth: fact.canonicalTruth,
-            revelations: fact.revelations,
-          })),
+          semanticCanon,
         ),
       },
     ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview);
@@ -548,10 +558,7 @@ async function runMysteryPipeline(
       const [semanticRetryText, pacingRetryText] = await Promise.all([
         reviewPolicy.semantic ? timeStage('semantic-review-retry', () => completeParsed(complete, supportKey, [
           { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
-          { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, MYSTERY_TRUTH_GRAPH.facts.map(fact => ({
-            id: factAliases.factIdToAlias[fact.id], route: fact.route,
-            canonicalTruth: fact.canonicalTruth, revelations: fact.revelations,
-          }))) },
+          { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, semanticCanon) },
         ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
         reviewPolicy.pacing ? timeStage('pacing-review-retry', () => completeParsed(complete, supportKey, [
           { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
@@ -585,10 +592,7 @@ async function runMysteryPipeline(
         const [semanticFinalText, pacingFinalText] = await Promise.all([
           reviewPolicy.semantic ? timeStage('semantic-review-final', () => completeParsed(complete, supportKey, [
             { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
-            { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, MYSTERY_TRUTH_GRAPH.facts.map(fact => ({
-              id: factAliases.factIdToAlias[fact.id], route: fact.route,
-              canonicalTruth: fact.canonicalTruth, revelations: fact.revelations,
-            }))) },
+            { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, semanticCanon) },
           ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
           reviewPolicy.pacing ? timeStage('pacing-review-final', () => completeParsed(complete, supportKey, [
             { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },

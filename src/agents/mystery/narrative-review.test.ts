@@ -32,4 +32,17 @@ describe('deterministic final narrative review', () => {
       expect.objectContaining({ code: 'ungrounded-past-claim' }),
     ]);
   });
+
+  it('allows habitual visits when fixed background history authorizes them', () => {
+    expect(reviewNarrativeDeterministically({
+      ...emptyAuthority,
+      authorizedBackgroundFacts: [{
+        factId: 'bg:supermarket-regulars',
+        text: '便利店是住处附近最近、常去的店；陈慧慧长期见过玩家与文穗，两人经常同行。',
+        characterIds: ['player', 'fumi', 'chen-huihui'],
+        locationIds: ['supermarket'],
+        level: 'fixed', privacy: 'common', timeScope: 'pre-game', source: 'author', createdTurn: 0,
+      }],
+    }, '陈慧慧|“以前文穗不是经常跟你一起来吗？”')).toEqual([]);
+  });
 });

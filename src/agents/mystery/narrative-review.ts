@@ -10,15 +10,26 @@ import {
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 
-const UNAUTHORIZED_PAST_ACTION = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|早上|来过|来买|买了|买过|付钱|付款|赶时间|离开(?:了)?|走了|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了)|(?:经常|总是|每次|以前|平时|这几天)[^。！？\n]{0,40}(?:来|一起|见))|(?:今早|早上)[^。！？\n]{0,80}(?:文穗|女孩|她)/;
+const UNAUTHORIZED_CASE_HISTORY = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|今天早上|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买了|付钱|付款|离开(?:了)?|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了))|(?:今早|今天早上|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2})[^。！？\n]{0,80}(?:文穗|女孩|她)/;
+const HISTORICAL_HABIT = /(?:以前|平时|经常|总是|每次|向来)[^。！？\n]{0,80}(?:来|一起|同行|买|照顾|打招呼|见)/;
 
 export function reviewNarrativeDeterministically(
-  packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>,
+  packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>
+    & Partial<Pick<WriterPacket, 'authorizedBackgroundFacts'>>,
   narrative: string,
 ): FactReviewViolation[] {
-  if (packet.authorizedFacts.length > 0 || packet.playerKnownFacts.length > 0) return [];
-  const match = narrative.match(UNAUTHORIZED_PAST_ACTION);
+  const habitMatch = narrative.match(HISTORICAL_HABIT);
+  if (habitMatch && (packet.authorizedBackgroundFacts?.length ?? 0) === 0) {
+    return [{
+      code: 'ungrounded-past-claim',
+      message: `正文出现了无固定生活史或已接受软设定来源的习惯性旧经历：“${habitMatch[0]}”。`,
+    }];
+  }
+  const match = narrative.match(UNAUTHORIZED_CASE_HISTORY);
   if (!match) return [];
+  const caseAuthorization = [...packet.authorizedFacts, ...packet.playerKnownFacts]
+    .some(fact => /今早|今天早上|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买|付款|离开|去往|行踪/.test(fact.text));
+  if (caseAuthorization) return [];
   return [{
     code: 'ungrounded-past-claim',
     message: `正文补写了未获授权的既往来访、购买或去向：“${match[0]}”。请删除该信息，只保留当下普通互动。`,

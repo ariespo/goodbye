@@ -120,10 +120,53 @@ describe('unified world memory', () => {
     expect(bundle.recentMessages.map(item => item.id)).toEqual(['m-6', 'm-7', 'm-8', 'm-9']);
     expect(bundle.relevantEpisodes.map(item => item.episodeId)).toContain('episode:old');
     expect(bundle.selectedIds).toContain('episode:old');
+    expect(bundle.relevantBackgroundFacts.map(item => item.factId)).toContain('bg:supermarket-regulars');
+    expect(JSON.stringify(bundle.writerMemory)).not.toContain('bg:detective-dossier');
+  });
+
+  it('commits approved soft canon only when its evidence text is actually presented', () => {
+    const proposal = {
+      proposalId: 'huihui-remembers-coffee',
+      text: '慧慧记得玩家常买无糖咖啡。',
+      characterIds: ['player', 'chen-huihui'],
+      locationIds: ['supermarket'],
+      knowerIds: ['chen-huihui'],
+      evidenceText: '你以前常买无糖的，对吧',
+    };
+    const absent = buildTurnCommit({
+      turnId: 'soft-absent', turnIndex: 2, createdAt: 2, occurredAt: '2026-08-15T09:00:00.000Z',
+      locationId: 'supermarket', cycleCount: 1, summary: '普通结账。', scene: scene(),
+      beforeVariables: {}, settledVariables: {}, approvedBackgroundFactProposals: [proposal], narrativeText: '欢迎光临。',
+    });
+    expect(absent.worldMemory.softCanonFacts).toEqual([]);
+    const committed = buildTurnCommit({
+      turnId: 'soft-present', turnIndex: 2, createdAt: 2, occurredAt: '2026-08-15T09:00:00.000Z',
+      locationId: 'supermarket', cycleCount: 1, summary: '慧慧记得玩家的口味。', scene: scene(),
+      beforeVariables: {}, settledVariables: {}, approvedBackgroundFactProposals: [proposal],
+      narrativeText: '慧慧小声问：“你以前常买无糖的，对吧”',
+    });
+    expect(committed.worldMemory.softCanonFacts).toContainEqual(expect.objectContaining({
+      factId: 'soft:huihui-remembers-coffee', level: 'soft',
+    }));
+    expect(committed.worldMemory.cognition).toContainEqual(expect.objectContaining({
+      cognitionId: 'chen-huihui|background:soft:huihui-remembers-coffee',
+    }));
   });
 
   it('uses a conservative CJK-aware token estimate', () => {
     expect(estimateTokens('这是十个左右的中文字')).toBeGreaterThan(8);
     expect(estimateTokens('abcdefghijkl')).toBeLessThan(10);
+  });
+
+  it('shows detective dossier knowledge to the director but not to the undercover writer', () => {
+    const bundle = compileTurnContext({
+      userInput: '去医院询问新来的护士', locationId: 'hospital', activeNpcIds: ['detective-b'],
+      history: [], variables: {},
+    });
+    expect(JSON.stringify(bundle.directorMemory)).toContain('bg:detective-dossier');
+    expect(JSON.stringify(bundle.writerMemory)).not.toContain('bg:detective-dossier');
+    expect(bundle.relevantCognition).toContainEqual(expect.objectContaining({
+      cognitionId: 'detective-b|identity:player-name', identityScope: 'full-name',
+    }));
   });
 });

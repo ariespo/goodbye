@@ -94,11 +94,12 @@ export const DEFAULT_GAME_VARIABLES: Record<string, any> = {
   playerNameKnownByNpcIds: [],
   /** Versioned accepted-event ledger, per-observer cognition graph and episodic memory. */
   worldMemory: {
-    version: 1,
+    version: 2,
     canonicalTruthVersion: 'mystery-truth-graph',
     events: [],
     cognition: [],
     episodes: [],
+    softCanonFacts: [],
   },
   // 三层结局体系
   lockedRoute: null,
