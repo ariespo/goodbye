@@ -8,7 +8,22 @@ import {
   WRITER_SYSTEM_PROMPT,
 } from './prompts';
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
-import type { FactReview, WriterPacket } from './types';
+import type { FactReview, FactReviewViolation, WriterPacket } from './types';
+
+const UNAUTHORIZED_PAST_ACTION = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|早上|来过|来买|买了|买过|付钱|付款|赶时间|离开(?:了)?|走了|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了))|(?:今早|早上)[^。！？\n]{0,80}(?:文穗|女孩|她)/;
+
+export function reviewNarrativeDeterministically(
+  packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>,
+  narrative: string,
+): FactReviewViolation[] {
+  if (packet.authorizedFacts.length > 0 || packet.playerKnownFacts.length > 0) return [];
+  const match = narrative.match(UNAUTHORIZED_PAST_ACTION);
+  if (!match) return [];
+  return [{
+    code: 'ungrounded-past-claim',
+    message: `正文补写了未获授权的既往来访、购买或去向：“${match[0]}”。请删除该信息，只保留当下普通互动。`,
+  }];
+}
 
 export async function reviewNarrativeAgainstWriterPacket(options: {
   api: ApiConfig;
@@ -17,6 +32,14 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
   narrative: string;
   abortSignal?: AbortSignal;
 }): Promise<FactReview> {
+  const deterministicViolations = reviewNarrativeDeterministically(options.packet, options.narrative);
+  if (deterministicViolations.length > 0) {
+    return {
+      approved: false,
+      violations: deterministicViolations,
+      corrections: ['删除所有关于文穗此前来过、买过、付过钱、离开或去向的补写，改为当下服务互动。'],
+    };
+  }
   const messages = [
     { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
     { role: 'user', content: buildNarrativeFactCriticUserPrompt(options.packet, options.narrative) },
