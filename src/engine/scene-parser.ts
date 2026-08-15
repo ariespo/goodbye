@@ -298,6 +298,21 @@ const SPEAKER_SPRITE_MAP: Record<string, string> = {
   幼年文穗: 'fumi-child.png',
 };
 
+/**
+ * Writer may naturally add a surname, honorific, or role suffix to a known
+ * character. Exact aliases above keep special portraits authoritative; these
+ * unique-name keywords are only the fallback for ordinary character sprites.
+ */
+const SPEAKER_SPRITE_KEYWORDS: Array<{ pattern: RegExp; base: string }> = [
+  { pattern: /慧慧|便利店员|店员/i, base: 'chen-huihui' },
+  { pattern: /刘仁光|体育老师/i, base: 'liu-renguang' },
+  { pattern: /文穗|文穂|fumi/i, base: 'fumi' },
+  { pattern: /灯织|灯織|touko/i, base: 'touko' },
+  { pattern: /周德明|周德星|周大爷|独居老头|老头/i, base: 'old-man' },
+  { pattern: /侦探\s*A|赵刚|寸头男人|货车司机|detective-a/i, base: 'detective-a' },
+  { pattern: /侦探\s*B|林静|护士|detective-b/i, base: 'detective-b' },
+];
+
 /** 有独立立绘的情绪列表 */
 const EMOTION_SPRITES: Mood[] = ['angry', 'happy', 'horror', 'insane', 'sad'];
 
@@ -315,7 +330,8 @@ function speakerToCharacterAsset(speaker: string, emotion?: Mood): string | unde
   const normalizedSpeaker = speaker.trim();
   if (/\.(png|jpg|jpeg|gif|webp)$/i.test(normalizedSpeaker)) return normalizedSpeaker;
 
-  const base = SPEAKER_SPRITE_MAP[normalizedSpeaker];
+  const base = SPEAKER_SPRITE_MAP[normalizedSpeaker]
+    ?? SPEAKER_SPRITE_KEYWORDS.find(({ pattern }) => pattern.test(normalizedSpeaker))?.base;
   if (!base) return undefined;
   if (/\.(png|jpg|jpeg|gif|webp)$/i.test(base)) return base;
 

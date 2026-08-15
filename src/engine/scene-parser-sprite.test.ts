@@ -106,6 +106,16 @@ describe('emotion sprite mapping', () => {
     expect(scene.lines[0].character).toBe('chen-huihui-sad.png');
   });
 
+  it.each([
+    ['灯织学姐', 'happy', 'touko-happy.png'],
+    ['慧慧', 'calm', 'chen-huihui-normal.png'],
+    ['陈慧慧小姐', 'sad', 'chen-huihui-sad.png'],
+    ['周大爷', 'angry', 'old-man-angry.png'],
+  ])('recognizes unique character keywords in natural speaker labels: %s', (speaker, emotion, expected) => {
+    const scene = maintextToScene(`对话|${speaker}|${emotion}|测试台词。`);
+    expect(scene.lines[0].character).toBe(expected);
+  });
+
   it('maps fixed special sprites', () => {
     const touko = maintextToScene('对话|灯织半眯眼|calm|我在看你。');
     expect(touko.lines[0].character).toBe('touko-half-closed.png');
