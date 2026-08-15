@@ -1,4 +1,4 @@
-import type { Ending, GameStatus } from '../sillytavern/types';
+import type { DynamicRecord, Ending, GameStatus } from '../sillytavern/types';
 import { checkEndingConditions } from '../sillytavern/ending-checker';
 import { mergeVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 import { checkCycleFailure, type CycleResetReason } from '../utils/cycleLoop';
@@ -12,9 +12,9 @@ export interface GameResourceCosts {
 }
 
 export interface GameTransactionInput {
-  variables: Record<string, any>;
+  variables: DynamicRecord;
   gameStatus: GameStatus;
-  variablePatch?: Record<string, any>;
+  variablePatch?: DynamicRecord;
   costs?: GameResourceCosts;
   endings?: Ending[];
   endingsSeen?: string[];
@@ -24,11 +24,11 @@ export interface GameTransactionInput {
 }
 
 export interface GameTransactionResult {
-  previousVariables: Record<string, any>;
+  previousVariables: DynamicRecord;
   previousGameStatus: GameStatus;
-  variables: Record<string, any>;
+  variables: DynamicRecord;
   gameStatus: GameStatus;
-  scheduledEventPatch: Record<string, any>;
+  scheduledEventPatch: DynamicRecord;
   ending: Ending | null;
   failure: CycleResetReason | null;
 }
@@ -43,7 +43,7 @@ function finiteStatus(value: unknown, fallback: number, min: number, max: number
   return Math.min(max, Math.max(min, Number.isFinite(number) ? number : fallback));
 }
 
-function resolvePreviousTime(variables: Record<string, any>, status: GameStatus): string {
+function resolvePreviousTime(variables: DynamicRecord, status: GameStatus): string {
   if (typeof variables.time === 'string' && !Number.isNaN(new Date(variables.time).getTime())) {
     return variables.time;
   }

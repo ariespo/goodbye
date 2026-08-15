@@ -1,5 +1,5 @@
 import { saveChat } from '../sillytavern/database';
-import type { ChatMessage, ChatSession } from '../sillytavern/types';
+import type { ChatMessage, ChatSession, DynamicRecord } from '../sillytavern/types';
 import { useGameStore } from '../stores/gameStore';
 
 /**
@@ -8,7 +8,7 @@ import { useGameStore } from '../stores/gameStore';
  */
 export async function persistActiveChat(patch: {
   messages?: ChatMessage[];
-  variables?: Record<string, any>;
+  variables?: DynamicRecord;
   userName?: string;
 }): Promise<ChatSession | null> {
   const state = useGameStore.getState();

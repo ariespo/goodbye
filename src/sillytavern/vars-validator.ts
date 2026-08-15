@@ -1,4 +1,5 @@
 import { getVariablePath } from './vars-merger';
+import type { DynamicRecord } from './types';
 
 /** 数值字段规则: [最小值, 最大值, 单回合最大变化幅度] */
 type NumericRule = { min: number; max: number; maxDelta: number; noDecrease?: boolean };
@@ -53,7 +54,7 @@ const PROGRAM_OWNED_KEYS = new Set([
 
 export interface SanitizeResult {
   /** 校验后的安全 patch(扁平 dot-path 键) */
-  vars: Record<string, any>;
+  vars: DynamicRecord;
   /** 被拒绝的键及原因 */
   rejected: { path: string; reason: string }[];
   /** 被钳制的键(值被修正) */
@@ -61,11 +62,11 @@ export interface SanitizeResult {
 }
 
 /** 将嵌套对象展开为 dot-path 扁平结构(数组视为叶子) */
-function flatten(patch: Record<string, any>, prefix = '', out: Record<string, any> = {}): Record<string, any> {
+function flatten(patch: DynamicRecord, prefix = '', out: DynamicRecord = {}): DynamicRecord {
   for (const [key, value] of Object.entries(patch)) {
     const path = prefix ? `${prefix}.${key}` : key;
     if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-      flatten(value, path, out);
+      flatten(value as DynamicRecord, path, out);
     } else {
       out[path] = value;
     }
@@ -78,11 +79,11 @@ function flatten(patch: Record<string, any>, prefix = '', out: Record<string, an
  * 白名单过滤 → 数值范围/增幅钳制；路线、解释层与最终选择只允许程序写入。
  */
 export function sanitizeVarsPatch(
-  patch: Record<string, any>,
-  current: Record<string, any>,
+  patch: DynamicRecord,
+  current: DynamicRecord,
 ): SanitizeResult {
   const flat = flatten(patch ?? {});
-  const vars: Record<string, any> = {};
+  const vars: DynamicRecord = {};
   const rejected: SanitizeResult['rejected'] = [];
   const clamped: SanitizeResult['clamped'] = [];
 

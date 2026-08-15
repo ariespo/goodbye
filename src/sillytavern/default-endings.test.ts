@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { createDefaultEndings } from '../stores/gameStore';
 import { checkEndingConditions } from './ending-checker';
 import { variablesToEndingContext } from './vars-merger';
+import type { DynamicRecord } from './types';
 
 const endings = createDefaultEndings();
 
-function contextWith(vars: Record<string, any>, endingsSeen: string[] = []) {
+function contextWith(vars: DynamicRecord, endingsSeen: string[] = []) {
   return variablesToEndingContext(vars, endingsSeen);
 }
 

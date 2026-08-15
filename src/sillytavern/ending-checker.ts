@@ -1,4 +1,4 @@
-import type { Ending, EndingConditionItem } from './types';
+import type { DynamicRecord, Ending, EndingConditionItem } from './types';
 import { getVariablePath } from './vars-merger';
 
 const TAG_PRIORITY: Record<Ending['tag'], number> = {
@@ -10,7 +10,7 @@ const TAG_PRIORITY: Record<Ending['tag'], number> = {
 };
 
 export function checkEndingConditions(
-  variables: Record<string, any>,
+  variables: DynamicRecord,
   endings: Ending[],
   endingsSeen: string[] = []
 ): Ending | null {
@@ -30,7 +30,7 @@ export function checkEndingConditions(
   return matched[0] ?? null;
 }
 
-function evaluateCondition(variables: Record<string, any>, condition: EndingConditionItem): boolean {
+function evaluateCondition(variables: DynamicRecord, condition: EndingConditionItem): boolean {
   const currentValue = getVariablePath(variables, condition.variablePath);
   const targetValue = condition.targetValue;
 

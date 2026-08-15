@@ -1,3 +1,5 @@
+import type { DynamicRecord } from './types';
+
 const UNIQUE_ARRAY_KEYS = new Set([
   'unlockedClues',
   'organizedClues',
@@ -11,10 +13,10 @@ const UNIQUE_ARRAY_KEYS = new Set([
 ]);
 
 export function mergeVariables(
-  current: Record<string, any>,
-  updates: Record<string, any>
-): Record<string, any> {
-  let result: Record<string, any> = { ...current };
+  current: DynamicRecord,
+  updates: DynamicRecord
+): DynamicRecord {
+  let result: DynamicRecord = { ...current };
 
   for (const [key, value] of Object.entries(updates)) {
     if (key.includes('.')) {
@@ -22,12 +24,10 @@ export function mergeVariables(
     } else if (value === null || value === undefined) {
       delete result[key];
     } else if (
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      typeof result[key] === 'object' &&
-      !Array.isArray(result[key])
+      isRecord(value) &&
+      isRecord(result[key])
     ) {
-      result[key] = mergeVariables(result[key] || {}, value);
+      result[key] = mergeVariables(result[key], value);
     } else if (UNIQUE_ARRAY_KEYS.has(key) && Array.isArray(result[key]) && Array.isArray(value)) {
       result[key] = mergeUniqueArray(result[key], value);
     } else {
@@ -47,12 +47,18 @@ export function mergeVariables(
 
 const LOCKABLE_ROUTES = new Set(['A', 'B', 'C', 'NONE', 'FAKE']);
 
-function mergeUniqueArray(current: any[], updates: any[]): any[] {
+export function isRecord(value: unknown): value is DynamicRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mergeUniqueArray(current: unknown[], updates: unknown[]): unknown[] {
   const result = [...current];
   for (const item of updates) {
     const exists = result.some(existing => {
       if (typeof existing === 'string' || typeof item === 'string') return existing === item;
-      if (existing?.id && item?.id) return existing.id === item.id;
+      if (isRecord(existing) && isRecord(item) && existing.id && item.id) {
+        return existing.id === item.id;
+      }
       return JSON.stringify(existing) === JSON.stringify(item);
     });
     if (!exists) result.push(item);
@@ -60,7 +66,7 @@ function mergeUniqueArray(current: any[], updates: any[]): any[] {
   return result;
 }
 
-export const DEFAULT_GAME_VARIABLES: Record<string, any> = {
+export const DEFAULT_GAME_VARIABLES: DynamicRecord = {
   cycleCount: 1,
   location: 'home',
   stamina: 100,
@@ -114,23 +120,25 @@ export const DEFAULT_GAME_VARIABLES: Record<string, any> = {
   stayedEver: false,
 };
 
-export function createDefaultVariables(): Record<string, any> {
+export function createDefaultVariables(): DynamicRecord {
   return mergeVariables({}, DEFAULT_GAME_VARIABLES);
 }
 
-export function getVariablePath(source: Record<string, any> | undefined, path: string): any {
+export function getVariablePath(source: DynamicRecord | undefined, path: string): unknown {
   if (!source || !path) return undefined;
-  return path.split('.').reduce<any>((value, key) => {
-    if (value === null || value === undefined) return undefined;
-    return value[key];
-  }, source);
+  let value: unknown = source;
+  for (const key of path.split('.')) {
+    if (!isRecord(value)) return undefined;
+    value = value[key];
+  }
+  return value;
 }
 
 export function setVariablePath(
-  source: Record<string, any>,
+  source: DynamicRecord,
   path: string,
-  value: any
-): Record<string, any> {
+  value: unknown
+): DynamicRecord {
   const [head, ...rest] = path.split('.').filter(Boolean);
   if (!head) return source;
 
@@ -140,7 +148,7 @@ export function setVariablePath(
 
   return mergeVariables(source, {
     [head]: setVariablePath(
-      typeof source[head] === 'object' && source[head] !== null && !Array.isArray(source[head])
+      isRecord(source[head])
         ? source[head]
         : {},
       rest.join('.'),
@@ -150,17 +158,17 @@ export function setVariablePath(
 }
 
 export function variablesToEndingContext(
-  variables: Record<string, any>,
+  variables: DynamicRecord,
   endingsSeen: string[] = []
-): Record<string, any> {
+): DynamicRecord {
   const merged = mergeVariables(createDefaultVariables(), variables);
   const arrayLength = (value: unknown) => (Array.isArray(value) ? value.length : 0);
   return {
     ...merged,
     cycleCount: Number(merged.cycleCount ?? 1),
-    affinity: merged.affinity ?? {},
-    suspicion: merged.suspicion ?? {},
-    investigation: merged.investigation ?? {},
+    affinity: isRecord(merged.affinity) ? merged.affinity : {},
+    suspicion: isRecord(merged.suspicion) ? merged.suspicion : {},
+    investigation: isRecord(merged.investigation) ? merged.investigation : {},
     unlockedClues: Array.isArray(merged.unlockedClues) ? merged.unlockedClues : [],
     organizedClues: Array.isArray(merged.organizedClues) ? merged.organizedClues : [],
     endingsSeen,

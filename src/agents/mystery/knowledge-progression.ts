@@ -1,4 +1,5 @@
 import type { RevealLevel } from './types';
+import type { DynamicRecord } from '../../sillytavern/types';
 
 const COLLECTED_REVEAL_LEVELS = new Set<RevealLevel>(['clue', 'confirmation']);
 
@@ -26,10 +27,10 @@ function isCollected(level: RevealLevel | undefined): boolean {
  * State Agent prose. Existing entries are preserved for save compatibility.
  */
 export function deriveAuthorizedFactProgress(
-  variables: Record<string, any>,
+  variables: DynamicRecord,
   knowledge: Record<string, RevealLevel>,
 ): Pick<
-  Record<string, any>,
+  DynamicRecord,
   'letterFragments' | 'fakeEvidence' | 'cultClues' | 'worldGlitchClues' | 'tripProgress'
 > {
   const letterFragments = stringSet(variables.letterFragments);

@@ -30,7 +30,7 @@ export function LorebookEntryEditor({ entry, onChange, onDelete }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [local, setLocal] = useState(entry);
 
-  useEffect(() => { setLocal(entry); }, [entry.id]);
+  useEffect(() => { setLocal(entry); }, [entry]);
 
   function patch(p: Partial<LorebookEntry>) {
     const next = { ...local, ...p };

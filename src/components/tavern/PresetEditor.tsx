@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ChatPreset, PromptOrderItem } from '../../sillytavern/types';
+import type { ChatPreset, DynamicRecord, PromptOrderItem } from '../../sillytavern/types';
 import { DEFAULT_PROMPT_ORDER } from '../../sillytavern/types';
 import { ArrowUp, ArrowDown, CaretDown, CaretRight } from '@phosphor-icons/react';
 
@@ -38,7 +38,7 @@ const MARKER_IDS = new Set([
 export function PresetEditor({ preset, onChange }: Props) {
   const [tab, setTab] = useState<Tab>('basic');
 
-  const patchSettings = (p: Record<string, any>) => {
+  const patchSettings = (p: DynamicRecord) => {
     onChange({ ...preset, settings: { ...preset.settings, ...p }, updatedAt: Date.now() });
   };
   const patchPreset = (p: Partial<ChatPreset>) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { getSaves, saveSlot, deleteSave } from '../../sillytavern/database';
 import { GameIcon } from '../ui/GameIcon';
@@ -15,13 +15,13 @@ export function SaveModal() {
   const showTitle = useGameStore(state => state.ui.showTitle);
   const actions = useGameStore(state => state.actions);
 
-  const loadSaves = async () => setSaves(await getSaves());
+  const loadSaves = useCallback(async () => setSaves(await getSaves()), []);
 
-  const handleOpen = async (nextMode: SaveModalMode = 'manage') => {
+  const handleOpen = useCallback(async (nextMode: SaveModalMode = 'manage') => {
     setMode(nextMode);
     setIsOpen(true);
     await loadSaves();
-  };
+  }, [loadSaves]);
 
   useEffect(() => {
     const openFromExternal = (event: Event) => {
@@ -30,7 +30,7 @@ export function SaveModal() {
     };
     window.addEventListener('farewell:open-save-modal', openFromExternal);
     return () => window.removeEventListener('farewell:open-save-modal', openFromExternal);
-  }, []);
+  }, [handleOpen]);
 
   const handleSave = async () => {
     if (busy) return;

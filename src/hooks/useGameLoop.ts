@@ -12,7 +12,7 @@ import {
   formatValidationErrors,
   repairRecoverableOutput,
 } from '../sillytavern/output-protocol';
-import type { ChatMessage } from '../sillytavern/types';
+import type { ChatMessage, DynamicRecord } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
 import { appendResourcePrompt } from '../utils/resourcePrompt';
 import { appendCharacterPerformancePrompt } from '../data/characterPerformance';
@@ -104,14 +104,14 @@ function resolveMysteryLocation(background: string | null): string {
   return location?.id ?? 'home';
 }
 
-function readLockedRoute(variables: Record<string, any>): MysteryRouteId | null {
+function readLockedRoute(variables: DynamicRecord): MysteryRouteId | null {
   const value = variables.lockedRoute ?? variables.mysteryRoute;
   return value === 'A' || value === 'B' || value === 'C' || value === 'NONE' || value === 'FAKE'
     ? value
     : null;
 }
 
-function readPlayerKnowledge(variables: Record<string, any>, clueIds: string[]): Record<string, RevealLevel> {
+function readPlayerKnowledge(variables: DynamicRecord, clueIds: string[]): Record<string, RevealLevel> {
   const result: Record<string, RevealLevel> = {};
   const stored = variables.mysteryKnowledge;
   if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
@@ -128,11 +128,11 @@ function readPlayerKnowledge(variables: Record<string, any>, clueIds: string[]):
 }
 
 function mergeAuthorizedKnowledge(
-  variables: Record<string, any>,
+  variables: DynamicRecord,
   prepared: PreparedMysteryTurn | null,
   presentedKnowledgeEventIds: readonly string[] = [],
   additionalAuthorizedEventIds: readonly string[] = [],
-): Record<string, any> {
+): DynamicRecord {
   const authorizedKnowledgeEventIds = [
     ...(prepared?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? []),
     ...additionalAuthorizedEventIds,
@@ -174,7 +174,7 @@ function mergeAuthorizedKnowledge(
   };
 }
 
-function readActiveOverlay(variables: Record<string, any>): MysteryOverlayId | null {
+function readActiveOverlay(variables: DynamicRecord): MysteryOverlayId | null {
   return variables.overlay === 'CULT' || variables.overlay === 'PSYCH'
     ? variables.overlay
     : null;
@@ -528,12 +528,12 @@ export function useGameLoop() {
 
       const finalize = async (
         apiUsed: 'primary' | 'dual',
-        stateAgentPatch: Record<string, any> = {},
+        stateAgentPatch: DynamicRecord = {},
         acceptedScene: Scene,
       ) => {
         const parsed = parseStateRef.current.parsed;
         const explicitCosts = resolvePendingCosts();
-        let variablePatch: Record<string, any>;
+        let variablePatch: DynamicRecord;
         let reportedTimeCost: unknown;
 
         if (preparedTurn) {
@@ -544,7 +544,7 @@ export function useGameLoop() {
           if (finitePositive(explicitCosts?.stamina)) delete variablePatch.stamina;
           if (finitePositive(explicitCosts?.sanity)) delete variablePatch.sanity;
         } else {
-          const { timeCost, ...writerPatch } = (parsed.vars ?? {}) as Record<string, any>;
+          const { timeCost, ...writerPatch } = parsed.vars ?? {};
           reportedTimeCost = timeCost;
           const sanitized = sanitizeVarsPatch(writerPatch, tavern.variables);
           if (sanitized.rejected.length > 0 || sanitized.clamped.length > 0) {

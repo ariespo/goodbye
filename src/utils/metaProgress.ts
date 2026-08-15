@@ -1,3 +1,5 @@
+import type { DynamicRecord } from '../sillytavern/types';
+
 export interface MetaProgress {
   version: 1;
   endingsSeen: string[];
@@ -81,7 +83,7 @@ export function saveMetaProgress(
 
 export function recordEndingProgress(
   endingId: string,
-  variables: Record<string, any>,
+  variables: DynamicRecord,
   storage: StorageLike | null = browserStorage(),
 ): MetaProgress {
   const route = typeof variables.lockedRoute === 'string' ? variables.lockedRoute : null;
@@ -96,10 +98,10 @@ export function recordEndingProgress(
 }
 
 export function mergeMetaProgress(
-  variables: Record<string, any>,
+  variables: DynamicRecord,
   endingsSeen: string[],
   meta: MetaProgress = loadMetaProgress(),
-): { variables: Record<string, any>; endingsSeen: string[] } {
+): { variables: DynamicRecord; endingsSeen: string[] } {
   return {
     variables: {
       ...variables,

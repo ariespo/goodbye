@@ -5,7 +5,8 @@
  * 预设导入会把 prompts 仓库 + prompt_order 索引规范化合并,使运行时直接消费。
  */
 
-import type { Lorebook, LorebookEntry, ChatPreset, SillyTavernLorebookExport, PromptOrderItem } from './types';
+import type { Lorebook, LorebookEntry, ChatPreset, DynamicRecord, SillyTavernLorebookExport, PromptOrderItem } from './types';
+import { isRecord } from './vars-merger';
 
 const POSITION_MAP: Record<number, LorebookEntry['position']> = {
   0: 'before_char',
@@ -166,30 +167,35 @@ export function exportLorebook(lorebook: Lorebook): SillyTavernLorebookExport {
  *   C. 角色卡包装:`data.prompt_order = [{character_id, order:[{identifier, enabled}]}]`
  *   D. 按 API 分组:`data.prompt_order = { openai: [{identifier, enabled}], claude: [...] }`
  */
-function normalizePromptOrder(rawOrder: any, promptsRepo: any[]): PromptOrderItem[] {
-  let flat: any[] = [];
+function recordArray(value: unknown): DynamicRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function normalizePromptOrder(rawOrder: unknown, promptsRepo: unknown[]): PromptOrderItem[] {
+  let flat: DynamicRecord[] = [];
 
   if (Array.isArray(rawOrder)) {
     if (rawOrder.length === 0) {
       flat = [];
-    } else if (rawOrder[0] && typeof rawOrder[0] === 'object' && Array.isArray(rawOrder[0].order)) {
-      flat = rawOrder[0].order;
-    } else if (rawOrder[0] && (rawOrder[0].identifier !== undefined || rawOrder[0].id !== undefined)) {
-      flat = rawOrder;
+    } else if (isRecord(rawOrder[0]) && Array.isArray(rawOrder[0].order)) {
+      flat = recordArray(rawOrder[0].order);
+    } else if (isRecord(rawOrder[0]) && (rawOrder[0].identifier !== undefined || rawOrder[0].id !== undefined)) {
+      flat = recordArray(rawOrder);
     }
   } else if (rawOrder && typeof rawOrder === 'object') {
     for (const k of Object.keys(rawOrder)) {
-      const arr = rawOrder[k];
+      const arr = (rawOrder as DynamicRecord)[k];
       if (Array.isArray(arr) && arr.length > 0) {
-        flat = arr;
+        flat = recordArray(arr);
         break;
       }
     }
   }
 
-  const repoMap = new Map<string, any>();
+  const repoMap = new Map<string, DynamicRecord>();
   for (const p of promptsRepo) {
-    const id = p?.identifier || p?.id;
+    if (!isRecord(p)) continue;
+    const id = typeof p.identifier === 'string' ? p.identifier : typeof p.id === 'string' ? p.id : null;
     if (id) repoMap.set(id, p);
   }
 
@@ -198,27 +204,33 @@ function normalizePromptOrder(rawOrder: any, promptsRepo: any[]): PromptOrderIte
   // 严格按 prompt_order 数组顺序输出。每项的 enabled 直接从 prompt_order 项读,
   // 不与 prompts 仓库的 def.enabled 混合(酒馆设计上以 prompt_order 为权威)。
   for (const entry of flat) {
-    const identifier = entry?.identifier || entry?.id;
+    const identifier = typeof entry.identifier === 'string'
+      ? entry.identifier
+      : typeof entry.id === 'string' ? entry.id : null;
     if (!identifier) continue;
     const def = repoMap.get(identifier);
     result.push({
       identifier,
-      name: def?.name ?? entry?.name ?? identifier,
+      name: typeof def?.name === 'string' ? def.name : typeof entry.name === 'string' ? entry.name : identifier,
       role: resolveRole(def, entry),
       enabled: entry?.enabled !== false,
-      ...({
-        content: def?.content ?? entry?.content ?? entry?.system_prompt ?? '',
-        marker: !!(def?.marker ?? entry?.marker),
-        injection_position: def?.injection_position ?? entry?.injection_position,
-        injection_depth: def?.injection_depth ?? entry?.injection_depth,
-      } as any),
+      content: typeof def?.content === 'string'
+        ? def.content
+        : typeof entry.content === 'string' ? entry.content : typeof entry.system_prompt === 'string' ? entry.system_prompt : '',
+      marker: Boolean(def?.marker ?? entry.marker),
+      injection_position: typeof (def?.injection_position ?? entry.injection_position) === 'number'
+        ? (def?.injection_position ?? entry.injection_position) as number
+        : undefined,
+      injection_depth: typeof (def?.injection_depth ?? entry.injection_depth) === 'number'
+        ? (def?.injection_depth ?? entry.injection_depth) as number
+        : undefined,
     });
   }
 
   return result;
 }
 
-function resolveRole(def: any, entry: any): 'system' | 'user' | 'assistant' {
+function resolveRole(def: DynamicRecord | undefined, entry: DynamicRecord): 'system' | 'user' | 'assistant' {
   const r = def?.role ?? entry?.role;
   if (typeof r === 'string') {
     const lower = r.toLowerCase();
@@ -229,9 +241,9 @@ function resolveRole(def: any, entry: any): 'system' | 'user' | 'assistant' {
   return 'system';
 }
 
-export function importPreset(data: Record<string, any>, fileName?: string): ChatPreset {
-  const derivedName: string =
-    data.preset || data.name ||
+export function importPreset(data: Record<string, unknown>, fileName?: string): ChatPreset {
+  const rawName = data.preset ?? data.name;
+  const derivedName = (typeof rawName === 'string' && rawName) ||
     (fileName ? fileName.replace(/\.json$/i, '') : '导入的预设');
 
   // 1) 合并 prompts 仓库 + prompt_order 索引
@@ -239,7 +251,7 @@ export function importPreset(data: Record<string, any>, fileName?: string): Chat
   const normalizedOrder = normalizePromptOrder(data.prompt_order ?? data.promptOrder, promptsRepo);
 
   // 2) 参数 fallback(支持嵌套 gen_params/parameters)
-  const params = data.gen_params || data.parameters || data;
+  const params = isRecord(data.gen_params) ? data.gen_params : isRecord(data.parameters) ? data.parameters : data;
   const fallbackParam = (...keys: string[]) => {
     for (const k of keys) {
       if (params[k] !== undefined) return params[k];
@@ -250,51 +262,51 @@ export function importPreset(data: Record<string, any>, fileName?: string): Chat
   // 3) 写回 settings:保留原始字段,规范化 prompt_order 覆盖,补全参数缺省值
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = data;
-  const settings: Record<string, any> = {
+  const settings: DynamicRecord = {
     ...rest,
     prompt_order: normalizedOrder,
   };
 
   if (settings.temp_openai === undefined) {
     const v = fallbackParam('temperature', 'temp');
-    if (v !== undefined) settings.temp_openai = v;
+    if (Number.isFinite(Number(v))) settings.temp_openai = Number(v);
   }
   if (settings.openai_max_tokens === undefined) {
     const v = fallbackParam('openai_max_tokens', 'max_tokens', 'maxTokens', 'max_length', 'genamt');
-    if (v !== undefined) settings.openai_max_tokens = v;
+    if (Number.isFinite(Number(v))) settings.openai_max_tokens = Number(v);
   }
   if (settings.top_p_openai === undefined) {
     const v = fallbackParam('top_p_openai', 'top_p', 'topP');
-    if (v !== undefined) settings.top_p_openai = v;
+    if (Number.isFinite(Number(v))) settings.top_p_openai = Number(v);
   }
   if (settings.freq_pen_openai === undefined) {
     const v = fallbackParam('freq_pen_openai', 'frequency_penalty', 'frequencyPenalty', 'rep_pen');
-    if (v !== undefined) settings.freq_pen_openai = v;
+    if (Number.isFinite(Number(v))) settings.freq_pen_openai = Number(v);
   }
   if (settings.pres_pen_openai === undefined) {
     const v = fallbackParam('pres_pen_openai', 'presence_penalty', 'presencePenalty');
-    if (v !== undefined) settings.pres_pen_openai = v;
+    if (Number.isFinite(Number(v))) settings.pres_pen_openai = Number(v);
   }
   if (settings.openai_max_context === undefined) {
     const v = data.openai_max_context ?? data.contextLength ?? data.context_length ?? data.truncation_length;
-    if (v !== undefined) settings.openai_max_context = v;
+    if (Number.isFinite(Number(v))) settings.openai_max_context = Number(v);
   }
   if (settings.openai_model === undefined) {
     const v = data.openai_model || data.model || data.modelName;
-    if (v !== undefined) settings.openai_model = v;
+    if (typeof v === 'string') settings.openai_model = v;
   }
 
   return {
     id: crypto.randomUUID(),
     name: derivedName,
-    description: data.description,
+    description: typeof data.description === 'string' ? data.description : undefined,
     settings,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
 }
 
-export function exportPreset(preset: ChatPreset): Record<string, any> {
+export function exportPreset(preset: ChatPreset): DynamicRecord {
   return {
     ...preset.settings,
     name: preset.name,

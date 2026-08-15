@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   CurrentState,
+  DynamicRecord,
   GameStatus,
   Scene,
 } from '../sillytavern/types';
@@ -13,7 +14,7 @@ export interface TurnStateSource {
   currentScene: Scene | null;
   currentLineIndex: number;
   sceneComplete: boolean;
-  variables: Record<string, any>;
+  variables: DynamicRecord;
 }
 
 function cloneStatus(status: GameStatus): GameStatus {

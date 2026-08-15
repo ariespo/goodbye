@@ -1,4 +1,4 @@
-import type { ChatPreset, GameStatus } from '../../sillytavern/types';
+import type { ChatPreset, DynamicRecord, GameStatus } from '../../sillytavern/types';
 import {
   callSecondaryApi,
   type ApiConfig,
@@ -18,7 +18,7 @@ export interface StateEvidence {
 
 export interface StateAgentResponse {
   summary?: string;
-  patch: Record<string, any>;
+  patch: DynamicRecord;
   evidence: StateEvidence[];
 }
 
@@ -29,7 +29,7 @@ export interface ValidatedStateAgentResult extends SanitizeResult {
 export interface RunStateAgentOptions {
   api: ApiConfig;
   preset: ChatPreset | null;
-  currentVariables: Record<string, any>;
+  currentVariables: DynamicRecord;
   gameStatus: GameStatus;
   playerInput: string;
   narrative: string;
@@ -77,14 +77,14 @@ const STATE_AGENT_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 - 不要使用 Markdown 代码块。`;
 
 function flatten(
-  patch: Record<string, any>,
+  patch: DynamicRecord,
   prefix = '',
-  result: Record<string, any> = {},
-): Record<string, any> {
+  result: DynamicRecord = {},
+): DynamicRecord {
   for (const [key, value] of Object.entries(patch)) {
     const path = prefix ? `${prefix}.${key}` : key;
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      flatten(value, path, result);
+      flatten(value as DynamicRecord, path, result);
     } else {
       result[path] = value;
     }
@@ -122,7 +122,7 @@ const STATE_AGENT_FORBIDDEN_ROOTS = new Set([
 
 export function validateStateAgentResponse(
   response: StateAgentResponse,
-  currentVariables: Record<string, any>,
+  currentVariables: DynamicRecord,
   evidenceText: string,
   saturationPivot?: RunStateAgentOptions['saturationPivot'],
 ): ValidatedStateAgentResult {
@@ -134,7 +134,7 @@ export function validateStateAgentResponse(
       .map(item => [item.path, item] as const),
   );
 
-  let evidencedPatch: Record<string, any> = {};
+  let evidencedPatch: DynamicRecord = {};
   for (const [path, value] of Object.entries(flatten(response.patch ?? {}))) {
     const root = path.split('.')[0];
     if (STATE_AGENT_FORBIDDEN_ROOTS.has(root)) {

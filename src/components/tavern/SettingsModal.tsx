@@ -51,6 +51,11 @@ export function SettingsModal() {
   const [testingMain, setTestingMain] = useState(false);
   const [testingSec, setTestingSec] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('game');
+  const draftFontFamily = draft?.fontFamily;
+  const draftSoundVolume = draft?.soundVolume;
+  const draftMainBaseUrl = draft?.api.baseUrl;
+  const draftSecondaryBaseUrl = draft?.api.secondary?.baseUrl;
+  const hasDraft = draft !== null;
 
   useEffect(() => {
     if (settings) setDraft(settings);
@@ -63,31 +68,31 @@ export function SettingsModal() {
   }, []);
 
   useEffect(() => {
-    if (!showSettings || !draft) return;
-    applyFontFamily(draft.fontFamily);
+    if (!showSettings || !hasDraft) return;
+    applyFontFamily(draftFontFamily);
     return () => applyFontFamily(settings?.fontFamily);
-  }, [showSettings, draft?.fontFamily, settings?.fontFamily]);
+  }, [showSettings, hasDraft, draftFontFamily, settings?.fontFamily]);
 
   useEffect(() => {
-    if (!showSettings || !draft) return;
-    setSfxVolume(draft.soundVolume ?? 0.65);
+    if (!showSettings || !hasDraft) return;
+    setSfxVolume(draftSoundVolume ?? 0.65);
     return () => setSfxVolume(settings?.soundVolume ?? 0.65);
-  }, [showSettings, draft?.soundVolume, settings?.soundVolume]);
+  }, [showSettings, hasDraft, draftSoundVolume, settings?.soundVolume]);
 
   useEffect(() => {
-    if (!showSettings || !draft) return;
+    if (!showSettings || !hasDraft) return;
     // 尝试从缓存恢复模型列表
-    const mainCache = modelCache[draft.api.baseUrl];
+    const mainCache = modelCache[draftMainBaseUrl];
     if (mainCache && Date.now() - mainCache.timestamp < CACHE_TTL) {
       setMainModels(mainCache.models);
     }
-    if (draft.api.secondary?.baseUrl) {
-      const secCache = modelCache[draft.api.secondary.baseUrl];
+    if (draftSecondaryBaseUrl) {
+      const secCache = modelCache[draftSecondaryBaseUrl];
       if (secCache && Date.now() - secCache.timestamp < CACHE_TTL) {
         setSecModels(secCache.models);
       }
     }
-  }, [showSettings, draft?.api.baseUrl, draft?.api.secondary?.baseUrl]);
+  }, [showSettings, hasDraft, draftMainBaseUrl, draftSecondaryBaseUrl]);
 
   const apiMode: 'single' | 'dual' = draft?.api.secondary?.enabled ? 'dual' : 'single';
 

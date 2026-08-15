@@ -1,4 +1,5 @@
 import { getVariablePath } from '../sillytavern/vars-merger';
+import type { DynamicRecord } from '../sillytavern/types';
 
 export type PlayerIntentMode = 'normal' | 'divert' | 'fantasy';
 
@@ -34,7 +35,7 @@ function findTarget(input: string): string | null {
   return ACTOR_ALIASES.find(([, pattern]) => pattern.test(input))?.[0] ?? null;
 }
 
-export function evaluatePlayerIntent(input: string, variables: Record<string, any>): PlayerIntentPolicy {
+export function evaluatePlayerIntent(input: string, variables: DynamicRecord): PlayerIntentPolicy {
   const targetedActorId = findTarget(input);
   if (FANTASY_PATTERNS.some(pattern => pattern.test(input))) {
     return {

@@ -56,12 +56,12 @@ const INVESTIGATION_LABELS: Record<string, string> = {
 };
 
 function readNumber(variables: Record<string, unknown>, path: string, fallback: number): number {
-  const value = Number(getVariablePath(variables as Record<string, any>, path));
+  const value = Number(getVariablePath(variables, path));
   return Number.isFinite(value) ? value : fallback;
 }
 
 function readRecord(variables: Record<string, unknown>, path: string): Record<string, number> {
-  const raw = getVariablePath(variables as Record<string, any>, path);
+  const raw = getVariablePath(variables, path);
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const result: Record<string, number> = {};
   for (const [key, value] of Object.entries(raw)) {

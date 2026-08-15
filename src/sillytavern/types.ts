@@ -4,6 +4,48 @@
 
 // ========== World Book (Lorebook) Types ==========
 
+/**
+ * JSON-like data received from models, imports, and persisted variable stores.
+ * Frequently used legacy fields stay typed while unknown extension keys remain
+ * available for imported presets and forward-compatible saves.
+ */
+export interface DynamicRecord extends Record<string, unknown> {
+  affinity?: Record<string, number>;
+  suspicion?: Record<string, number>;
+  investigation?: Record<string, number>;
+  cycleCount?: number;
+  stayStreak?: number;
+  stayedEver?: boolean;
+  tripProgress?: number;
+  routesLockedEver?: string[];
+  organizedClues?: OrganizedClue[];
+  knowledgeEvents?: string[];
+  loopSuspicionStart?: Record<string, number>;
+  worldMemory?: import('../memory/world-memory').WorldMemoryState | {
+    cognition?: unknown[];
+    softCanonFacts?: unknown[];
+    [key: string]: unknown;
+  };
+  prompt_order?: PromptOrderItem[];
+  prompts?: PromptDefinition[];
+  temp_openai?: number;
+  freq_pen_openai?: number;
+  pres_pen_openai?: number;
+  top_p_openai?: number;
+  top_k_openai?: number;
+  openai_max_context?: number;
+  openai_max_tokens?: number;
+  main?: string;
+  nsfw?: string;
+  jailbreak?: string;
+  character_description?: string;
+  character_personality?: string;
+  scenario?: string;
+  persona_description?: string;
+  dialogue_examples?: string;
+  openai_model?: string;
+}
+
 export interface LorebookEntry {
   id: string;
   keys: string[];
@@ -124,7 +166,7 @@ export interface ChatPreset {
   id: string;
   name: string;
   description?: string;
-  settings: Record<string, any>;
+  settings: DynamicRecord;
   createdAt: number;
   updatedAt: number;
 }
@@ -318,7 +360,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
-  variables: Record<string, any>;
+  variables: DynamicRecord;
   /** 该玩家回合开始前的可回滚运行时快照。旧消息可不存在。 */
   turnState?: {
     gameStatus: GameStatus;
@@ -326,7 +368,7 @@ export interface ChatMessage {
     currentScene: Scene | null;
     currentLineIndex: number;
     sceneComplete: boolean;
-    variables: Record<string, any>;
+    variables: DynamicRecord;
   };
   parsed?: ParsedContent;
   apiUsed?: ApiTarget;
@@ -340,7 +382,7 @@ export interface ChatSession {
   userName: string;
   presetId: string | null;
   lorebookIds: string[];
-  variables: Record<string, any>;
+  variables: DynamicRecord;
   createdAt: number;
   updatedAt: number;
 }
@@ -352,7 +394,7 @@ export interface ParsedContent {
   maintext: string;
   options: string[];
   summary: string;
-  vars: Record<string, any>;
+  vars: DynamicRecord;
 
   // 观察/调查/行动（主剧情回复中附带）
   observe?: string;
@@ -395,7 +437,7 @@ export interface TurnSnapshot {
   timestamp: number;
   summary: string;
   gameStatus: GameStatus;
-  variables: Record<string, any>;
+  variables: DynamicRecord;
 }
 
 export interface GameStatus {
@@ -526,7 +568,7 @@ export interface SaveSlot {
     sceneComplete?: boolean;
   };
   tavernState: {
-    variables: Record<string, any>;
+    variables: DynamicRecord;
     messages: ChatMessage[];
   };
   /** @deprecated 仅旧档兼容，优先使用 gameState.history */
@@ -586,7 +628,7 @@ export interface Ending {
   /** 排序权重 */
   order: number;
   /** 额外元数据 */
-  metadata?: Record<string, any>;
+  metadata?: DynamicRecord;
 }
 
 /** 结局面板状态 */
@@ -608,5 +650,5 @@ export interface EndingCheckContext {
   investigation: Record<string, number>;
   unlockedClues: string[];
   endingsSeen: string[];
-  [key: string]: any;
+  [key: string]: unknown;
 }

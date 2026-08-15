@@ -1,4 +1,5 @@
 import { crossesThreshold } from './game-clock';
+import type { DynamicRecord } from '../sillytavern/types';
 
 export const DEATH_NEWS_TIME = '2024-09-09T16:00:00';
 
@@ -9,7 +10,7 @@ export const DEATH_NEWS_TIME = '2024-09-09T16:00:00';
 export function checkScheduledEvents(
   prevTimeISO: string,
   nextTimeISO: string,
-  variables: Record<string, any>,
+  variables: DynamicRecord,
 ): { deathNews?: 'pending' } {
   if (!variables.deathNews && crossesThreshold(prevTimeISO, nextTimeISO, DEATH_NEWS_TIME)) {
     return { deathNews: 'pending' };
@@ -23,7 +24,7 @@ const DEATH_NEWS_DIRECTIVE =
 const COLLAPSE_DIRECTIVE =
   '【崩溃段】玩家已得知文穗的死讯。维持崩溃与失序氛围：理智持续下滑，调查/行动项收窄为与死讯相关或麻木的日常动作，NPC 反应事件余波。不要提供任何能拯救文穗的选项，时间将自然推进到午夜触发轮回。';
 
-export function buildScheduledDirectives(variables: Record<string, any>): string[] {
+export function buildScheduledDirectives(variables: DynamicRecord): string[] {
   if (variables.deathNews === 'pending') return [DEATH_NEWS_DIRECTIVE];
   if (variables.deathNews === 'delivered') return [COLLAPSE_DIRECTIVE];
   return [];

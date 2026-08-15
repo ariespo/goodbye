@@ -1,6 +1,6 @@
 import { maintextToScene } from '../engine/scene-parser';
 import { invalidatePreplans } from '../agents/mystery';
-import type { ChatMessage } from '../sillytavern/types';
+import type { ChatMessage, DynamicRecord } from '../sillytavern/types';
 import { persistActiveChat } from './chatPersistence';
 import { variablesToEndingContext } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
@@ -38,16 +38,16 @@ export function checkCycleFailure(status: { stamina: number; sanity: number; tim
  */
 /** 元层选项: STAY 需锁定过≥1条路线且见过≥3个结局且在家；TRUE 需三线锁定且曾 STAY */
 export function getCycleMetaOptions(
-  variables: Record<string, any>,
+  variables: DynamicRecord,
   endingsSeen: string[],
 ): string[] {
   const ctx = variablesToEndingContext(variables, endingsSeen);
   const atHome = (variables.location ?? 'home') === 'home';
   const options: string[] = [];
-  if (atHome && ctx.routesLockedCount >= 1 && endingsSeen.length >= 3) {
+  if (atHome && Number(ctx.routesLockedCount) >= 1 && endingsSeen.length >= 3) {
     options.push(STAY_OPTION_TEXT);
   }
-  if (atHome && ctx.routesLockedCount >= 3 && ctx.stayedEver) {
+  if (atHome && Number(ctx.routesLockedCount) >= 3 && Boolean(ctx.stayedEver)) {
     options.push(GOODBYE_OPTION_TEXT);
   }
   return options;
@@ -96,7 +96,7 @@ function transitionContextFromMessages(messages: ChatMessage[]): CycleTransition
  * variables 必须是已结算(settleCycleVariables)后的变量。
  */
 export async function startNextCycle(opts: {
-  variables: Record<string, any>;
+  variables: DynamicRecord;
   reason: CycleResetReason;
 }): Promise<void> {
   const state = useGameStore.getState();
@@ -190,7 +190,7 @@ export async function handleCycleMetaOption(option: string): Promise<boolean> {
 
   if (option === STAY_OPTION_TEXT) {
     const settled = settleCycleVariables(state.tavern.variables, { stayed: true });
-    if (settled.stayStreak >= 3 && !state.game.endingsSeen.includes('STAY')) {
+    if (Number(settled.stayStreak) >= 3 && !state.game.endingsSeen.includes('STAY')) {
       actions.setVariables(settled);
       actions.setEndingPanel({ isPreview: false });
       actions.setPendingEnding('STAY');

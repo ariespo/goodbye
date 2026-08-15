@@ -35,7 +35,7 @@ export function PresetModal() {
   };
 
   const handleImport = async () => {
-    const result = await importJsonFile<Record<string, any>>();
+    const result = await importJsonFile<Record<string, unknown>>();
     if (!result) return;
     const imported = importPreset(result.data, result.fileName);
     await savePreset(imported);

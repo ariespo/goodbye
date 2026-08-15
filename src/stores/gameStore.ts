@@ -3,6 +3,7 @@ import type {
   AppSettings, ChatPreset, Lorebook, ChatSession,
   GameStatus, CurrentState, Scene, TurnSnapshot, Notification,
   ParsedContent, Ending, EndingPanelState, EndingCheckContext,
+  DynamicRecord,
 } from '../sillytavern/types';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 import { recordEndingProgress } from '../utils/metaProgress';
@@ -52,7 +53,7 @@ interface GameStore {
     presets: ChatPreset[];
     chats: ChatSession[];
     activeChatId: string | null;
-    variables: Record<string, any>;
+    variables: DynamicRecord;
   };
   api: {
     isStreaming: boolean;
@@ -88,7 +89,7 @@ interface GameStore {
     setPresets: (presets: ChatPreset[]) => void;
     setChats: (chats: ChatSession[]) => void;
     setActiveChatId: (id: string | null) => void;
-    setVariables: (vars: Record<string, any>) => void;
+    setVariables: (vars: DynamicRecord) => void;
     setCurrentScene: (scene: Scene | null) => void;
     setCurrentLineIndex: (index: number) => void;
     setGameStatus: (status: Partial<GameStatus>) => void;

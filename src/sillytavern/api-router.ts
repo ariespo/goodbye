@@ -1,4 +1,4 @@
-import type { ChatPreset } from './types';
+import type { ChatPreset, DynamicRecord } from './types';
 
 export type ApiErrorKind =
   | 'network'
@@ -131,7 +131,7 @@ function isDeepSeekV4(config: ApiConfig): boolean {
     && /^deepseek-v4-(?:flash|pro)$/i.test(config.model);
 }
 
-function applyProviderCompatibility(body: Record<string, any>, config: ApiConfig): void {
+function applyProviderCompatibility(body: DynamicRecord, config: ApiConfig): void {
   // DeepSeek V4 defaults to thinking mode. These calls require strict
   // machine-readable output, so hidden reasoning must not consume the output
   // budget before the final answer begins.
@@ -176,8 +176,19 @@ export async function fetchModels(config: ApiConfig): Promise<FetchedModel[]> {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const models = (data.data || []).map((m: any) => ({ id: m.id, object: m.object }));
+        const data: unknown = await response.json();
+        const rawModels = typeof data === 'object' && data !== null && 'data' in data
+          ? (data as { data?: unknown }).data
+          : undefined;
+        const models = (Array.isArray(rawModels) ? rawModels : [])
+          .filter((model): model is { id: string; object?: string } => (
+            typeof model === 'object'
+            && model !== null
+            && 'id' in model
+            && typeof model.id === 'string'
+            && (!('object' in model) || model.object === undefined || typeof model.object === 'string')
+          ))
+          .map(model => ({ id: model.id, object: model.object }));
         return models;
       }
       if (response.status !== 401 && response.status !== 403) break;
@@ -302,7 +313,7 @@ export async function streamChatCompletion(
   abortSignal?: AbortSignal,
   retryOptions?: StreamRetryOptions
 ): Promise<void> {
-  const body: Record<string, any> = {
+  const body: DynamicRecord = {
     model: config.model || preset?.settings.openai_model,
     messages,
     stream: true,
@@ -432,7 +443,7 @@ export async function callSecondaryApi(
   preset: ChatPreset | null,
   options?: SecondaryApiOptions
 ): Promise<string> {
-  const body: Record<string, any> = {
+  const body: DynamicRecord = {
     model: config.model || preset?.settings.openai_model,
     messages,
   };

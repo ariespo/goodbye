@@ -98,14 +98,6 @@ export function DialogueBox() {
     return () => window.clearTimeout(timer);
   }, [currentLine?.minimumDisplayMs, currentLineIndex, currentScene?.id]);
 
-  /* ── 自动模式推进 ── */
-  useEffect(() => {
-    if (autoMode && isComplete && minimumHoldReady && currentLine && !isLastLine && !requiresIdentityConfirmation) {
-      autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
-    }
-    return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
-  }, [autoMode, isComplete, minimumHoldReady, currentLineIndex, currentScene, autoIntervalMs, requiresIdentityConfirmation]);
-
   /* ── 场景完成检测 ── */
   useEffect(() => {
     if (isComplete && isLastLine && currentScene) {
@@ -132,6 +124,14 @@ export function DialogueBox() {
       setCurrentLineIndex(currentLineIndex + 1);
     }
   }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, requiresIdentityConfirmation, skip, setCurrentLineIndex]);
+
+  /* ── 自动模式推进 ── */
+  useEffect(() => {
+    if (autoMode && isComplete && minimumHoldReady && currentLine && !isLastLine && !requiresIdentityConfirmation) {
+      autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
+    }
+    return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
+  }, [autoMode, isComplete, minimumHoldReady, currentLine, isLastLine, handleAdvance, autoIntervalMs, requiresIdentityConfirmation]);
 
   const handleStartOrAdvance = useCallback(() => {
     if (!advanceHintDone) {

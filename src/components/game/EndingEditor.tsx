@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { GameIcon } from '../ui/GameIcon';
-import type { Ending, EndingConditionGroup, TruthType, EndingTag } from '../../sillytavern/types';
+import type { Ending, EndingConditionGroup, EndingConditionItem, TruthType, EndingTag } from '../../sillytavern/types';
 
 const PANEL_BG = 'rgba(12, 12, 16, 0.96)';
 const BORDER = '#3a3a42';
@@ -446,7 +446,7 @@ function ConditionGroupEditor({
               options={OPERATOR_OPTIONS}
               onChange={(v) => {
                 const next = [...group.conditions];
-                next[ci] = { ...cond, operator: v as any };
+                next[ci] = { ...cond, operator: v as EndingConditionItem['operator'] };
                 onChange({ ...group, conditions: next });
               }}
               small

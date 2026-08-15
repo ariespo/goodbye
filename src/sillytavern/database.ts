@@ -7,6 +7,10 @@ import {
   normalizeWorldMemory,
 } from '../memory/world-memory';
 
+type LegacyAppSettings = Partial<AppSettings> & {
+  secondaryApi?: NonNullable<AppSettings['api']['secondary']>;
+};
+
 export class FarewellDatabase extends Dexie {
   settings!: Table<AppSettings>;
   presets!: Table<ChatPreset>;
@@ -37,7 +41,7 @@ export class FarewellDatabase extends Dexie {
       })
       .upgrade(async tx => {
         await tx.table('lorebooks').clear();
-        await tx.table('settings').toCollection().modify((s: any) => {
+        await tx.table('settings').toCollection().modify((s: LegacyAppSettings) => {
           if (s.api && !s.api.secondary) {
             s.api.secondary = s.secondaryApi
               ? { ...s.secondaryApi }
@@ -59,7 +63,7 @@ export class FarewellDatabase extends Dexie {
         saves: 'id, name, createdAt',
       })
       .upgrade(async tx => {
-        await tx.table('settings').toCollection().modify((s: any) => {
+        await tx.table('settings').toCollection().modify((s: LegacyAppSettings) => {
           if (!s.fontFamily) s.fontFamily = 'renou-fangsong';
           if (s.musicVolume === undefined) s.musicVolume = 0.5;
         });
@@ -74,7 +78,7 @@ export class FarewellDatabase extends Dexie {
         saves: 'id, name, createdAt',
       })
       .upgrade(async tx => {
-        await tx.table('settings').toCollection().modify((s: any) => {
+        await tx.table('settings').toCollection().modify((s: LegacyAppSettings) => {
           if (s.soundVolume === undefined) s.soundVolume = 0.65;
         });
       });
@@ -88,7 +92,7 @@ export class FarewellDatabase extends Dexie {
         saves: 'id, name, createdAt',
       })
       .upgrade(async tx => {
-        await tx.table('settings').toCollection().modify((s: any) => {
+        await tx.table('settings').toCollection().modify((s: LegacyAppSettings) => {
           if (!s.agentNarrativeMode) s.agentNarrativeMode = 'standard';
         });
       });
@@ -209,7 +213,6 @@ export async function initializeDatabase(): Promise<boolean> {
     }
     return true;
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.warn('IndexedDB 无法打开，切换到内存存储:', error);
     db = new MemoryDatabase();
     await db.open();

@@ -8,7 +8,7 @@
  * 每个 prompt_order 项已经带上了 content/role/marker 等字段,运行时直接消费。
  */
 
-import type { ChatPreset, Lorebook, ChatMessage, MatchedEntry } from './types';
+import type { ChatPreset, DynamicRecord, Lorebook, ChatMessage, MatchedEntry } from './types';
 import { createLorebookEngine } from './lorebook-engine';
 import { getVariablePath } from './vars-merger';
 import { translateForWriter } from '../engine/variable-thresholds';
@@ -23,7 +23,7 @@ export interface AssembleOptions {
   activeLorebookIds: string[];
   userName: string;
   characterName: string;
-  variables?: Record<string, any>;
+  variables?: DynamicRecord;
   formatPrompt?: string;
   /** Shared, retrieval-backed context selected once for every agent in this turn. */
   contextBundle?: TurnContextBundle;
@@ -261,7 +261,7 @@ interface MacroContext {
   userName: string;
   characterName: string;
   userInput: string;
-  variables?: Record<string, any>;
+  variables?: DynamicRecord;
 }
 
 export function replaceMacros(template: string, ctx: MacroContext): string {
@@ -305,7 +305,7 @@ export const SUPPORTED_MACROS = [
 
 // ========== Helpers ==========
 
-function formatVariablesForPrompt(variables: Record<string, any>): string {
+function formatVariablesForPrompt(variables: DynamicRecord): string {
   // worldMemory has its own compact, retrieval-backed projection. Dumping the
   // complete ledger here would defeat the shared token budget.
   const entries = Object.entries(variables).filter(([key]) => key !== 'worldMemory');

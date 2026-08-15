@@ -425,10 +425,10 @@ describe('mystery orchestrator', () => {
   });
 
   it('exposes json schemas with required top-level fields', () => {
-    expect((DIRECTOR_PLAN_JSON_SCHEMA as any).required).toEqual(
+    expect(DIRECTOR_PLAN_JSON_SCHEMA.required).toEqual(
       expect.arrayContaining(['turnGoal', 'tone', 'beats', 'revelations', 'optionIntents', 'assetRequests']),
     );
-    expect((FACT_REVIEW_JSON_SCHEMA as any).required).toEqual(
+    expect(FACT_REVIEW_JSON_SCHEMA.required).toEqual(
       expect.arrayContaining(['approved', 'violations', 'corrections']),
     );
   });
