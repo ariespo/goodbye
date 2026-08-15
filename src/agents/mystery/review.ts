@@ -69,15 +69,28 @@ export function ensureSaturationPivotOrder(plan: DirectorPlan, brief: MysteryBri
   };
 }
 
+const UNGROUNDED_PAST_CLAIM = /(?:昨天|昨晚|前天|上次|此前|之前|早些时候|刚才|曾经|平时|一向|向来|(?:今天)?早上|今早)[^。！？\n]{0,100}(?:说|提到|告诉|表示|来(?:过|了|买)?|去(?:过|了|往)?|见(?:过|到)?|听(?:过|说)?|买(?:过|了)?|拿(?:过|了)?|做(?:过|了)?|发生|准备|计划)/;
+const UNGROUNDED_EVIDENCE_DETAIL = /小票|收据|文件夹|监控(?:记录|录像)?|病历|短信(?:记录)?|聊天记录|通话记录|照片|票据|物证/;
+
 /** 将确定性场景契约落实为导演节拍；只补角色与地点，不新增案件事实。 */
 export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
   const contract = brief.sceneContract;
   if (!contract) return plan;
   const forbidden = new Set(contract.forbiddenNpcIds);
-  let beats = plan.beats.map(beat => ({
-    ...beat,
-    speakerIds: beat.speakerIds?.filter(id => !forbidden.has(id)),
-  }));
+  const authorizedKnowledgeEvidence = (plan.knowledgeEvents ?? []).map(event => event.evidence).join('\n');
+  const stripUngroundedEvidence = plan.revelations.length === 0 && brief.playerKnownFacts.length === 0;
+  let beats = plan.beats
+    .filter(beat => {
+      const beatText = `${beat.purpose} ${beat.description}`;
+      if (UNGROUNDED_PAST_CLAIM.test(beatText) && (beat.sourceMemoryIds?.length ?? 0) === 0) return false;
+      if (!stripUngroundedEvidence) return true;
+      const evidenceDetail = beatText.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
+      return !evidenceDetail || authorizedKnowledgeEvidence.includes(evidenceDetail);
+    })
+    .map(beat => ({
+      ...beat,
+      speakerIds: beat.speakerIds?.filter(id => !forbidden.has(id)),
+    }));
 
   const destinationIndex = beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
   const destinationSpeakers = contract.requiredDestinationNpcIds;
@@ -121,8 +134,6 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
   return { ...plan, beats, knowledgeEvents };
 }
 
-const UNGROUNDED_PAST_CLAIM = /(?:昨天|昨晚|前天|上次|此前|之前|早些时候|刚才|曾经|平时|一向|向来)[^。！？\n]{0,100}(?:说|提到|告诉|表示|来(?:过|了|买)?|去(?:过|了|往)?|见(?:过|到)?|听(?:过|说)?|买(?:过|了)?|拿(?:过|了)?|做(?:过|了)?|发生|准备|计划)/;
-
 function selectedMemoryIds(turnContext?: Record<string, unknown>): Set<string> {
   const memoryContext = turnContext?.memoryContext;
   const nestedIds = memoryContext && typeof memoryContext === 'object'
@@ -158,8 +169,8 @@ export function reviewDirectorPlan(
   }
 
   if (plan.revelations.length === 0 && brief.playerKnownFacts.length === 0) {
-    const evidenceText = JSON.stringify({ beats: plan.beats, scenePlan: plan.scenePlan });
-    const evidenceDetail = evidenceText.match(/小票|收据|文件夹|监控(?:记录|录像)?|病历|短信(?:记录)?|聊天记录|通话记录|照片|票据|物证/);
+    const evidenceText = JSON.stringify({ beats: plan.beats });
+    const evidenceDetail = evidenceText.match(UNGROUNDED_EVIDENCE_DETAIL);
     const authorizedKnowledgeEvidence = (plan.knowledgeEvents ?? []).map(event => event.evidence).join('\n');
     if (evidenceDetail && !authorizedKnowledgeEvidence.includes(evidenceDetail[0])) {
       violations.push({

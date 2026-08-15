@@ -98,13 +98,37 @@ describe('deterministic narrative scene contract review', () => {
 
   it('rejects invented evidence objects when no facts are authorized or known', () => {
     const repaired = enforceNarrativeSceneContract(plan(), brief());
-    repaired.beats[1] = {
-      ...repaired.beats[1]!,
-      description: '陈慧慧从柜台下拿出一个文件夹，里面夹着文穗留下的小票。',
+    const unsafePlan = {
+      ...repaired,
+      beats: [...repaired.beats, {
+        id: 'invented-evidence',
+        purpose: '凭空提供线索',
+        description: '陈慧慧从柜台下拿出一个文件夹，里面夹着文穗留下的小票。',
+        locationId: 'supermarket',
+        speakerIds: ['chen-huihui'],
+      }],
     };
 
-    expect(reviewDirectorPlan(repaired, brief()).violations).toEqual(expect.arrayContaining([
+    expect(reviewDirectorPlan(unsafePlan, brief()).violations).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'ungrounded-evidence-detail' }),
     ]));
+    expect(enforceNarrativeSceneContract(unsafePlan, brief()).beats)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'invented-evidence' })]));
+  });
+
+  it('deterministically removes an uncited same-morning visit claim', () => {
+    const unsafePlan = {
+      ...plan(),
+      beats: [...plan().beats, {
+        id: 'invented-visit',
+        purpose: '打听行踪',
+        description: '陈慧慧说今天早上好像见过一个穿校服的女孩。',
+        locationId: 'supermarket',
+        speakerIds: ['chen-huihui'],
+      }],
+    };
+
+    expect(enforceNarrativeSceneContract(unsafePlan, brief()).beats)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'invented-visit' })]));
   });
 });
