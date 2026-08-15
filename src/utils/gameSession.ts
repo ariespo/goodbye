@@ -1,16 +1,18 @@
 import { maintextToScene } from '../engine/scene-parser';
 import { OPENING_STORYLINE, parseOpeningStoryline } from '../engine/opening-storyline';
 import { getChats, saveChat } from '../sillytavern/database';
+import { createParseState, parseChunk } from '../sillytavern/stream-parser';
 import type {
   ChatMessage,
   ChatSession,
   CurrentState,
   GameStatus,
+  ParsedContent,
   SaveSlot,
   TurnSnapshot,
 } from '../sillytavern/types';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
-import { useGameStore } from '../stores/gameStore';
+import { IDLE_TURN_RECOVERY, useGameStore } from '../stores/gameStore';
 import { invalidatePreplans } from '../agents/mystery';
 import { resolveSceneEnvironment } from './sceneEnvironment';
 import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
@@ -72,6 +74,30 @@ function abortActiveStream() {
   actions.setApiError(null);
   actions.setIsWaitingForAI(false);
   actions.setIsTyping(false);
+}
+
+function cloneParsedContent(content: ParsedContent): ParsedContent {
+  return {
+    ...content,
+    options: [...content.options],
+    vars: { ...content.vars },
+    investigateItems: content.investigateItems?.map(item => ({ ...item })),
+    actionItems: content.actionItems?.map(item => ({ ...item })),
+  };
+}
+
+/** Restore the accepted response that drives choices and free input. */
+export function resolveSavedParsedContent(save: SaveSlot, messages: ChatMessage[]): ParsedContent {
+  if (save.gameState?.parsedContent) {
+    return cloneParsedContent(save.gameState.parsedContent);
+  }
+
+  const lastAssistant = [...messages].reverse().find(message => message.role === 'assistant');
+  if (lastAssistant?.parsed) {
+    return cloneParsedContent(lastAssistant.parsed);
+  }
+
+  return parseChunk(createParseState(), lastAssistant?.content ?? '').parsed;
 }
 
 /**
@@ -195,6 +221,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
     : createDefaultVariables();
 
   const messages = Array.isArray(save.tavernState?.messages) ? save.tavernState.messages : [];
+  const parsedContent = resolveSavedParsedContent(save, messages);
   const history: TurnSnapshot[] = Array.isArray(save.gameState?.history)
     ? save.gameState.history
     : [];
@@ -300,6 +327,8 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
       ...s.api,
       isStreaming: false,
       streamBuffer: '',
+      turnRecovery: IDLE_TURN_RECOVERY,
+      parsedContent,
       error: null,
       abortController: null,
     },
@@ -320,7 +349,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
 
 /** 构造完整存档载荷（供 SaveModal 使用） */
 export function buildSaveSlotPayload(name: string, thumbnail: string): SaveSlot {
-  const { game, tavern } = useGameStore.getState();
+  const { game, tavern, api } = useGameStore.getState();
   const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
 
   return {
@@ -350,6 +379,7 @@ export function buildSaveSlotPayload(name: string, thumbnail: string): SaveSlot 
       endingsSeen: [...game.endingsSeen],
       autoMode: game.autoMode,
       sceneComplete: game.sceneComplete,
+      parsedContent: cloneParsedContent(api.parsedContent),
     },
     tavernState: {
       variables: { ...tavern.variables },

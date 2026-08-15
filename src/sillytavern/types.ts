@@ -566,6 +566,8 @@ export interface SaveSlot {
     autoMode?: boolean;
     /** 当前场景是否播完 */
     sceneComplete?: boolean;
+    /** Accepted response state needed to restore choices after loading. */
+    parsedContent?: ParsedContent;
   };
   tavernState: {
     variables: DynamicRecord;

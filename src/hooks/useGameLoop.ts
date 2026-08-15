@@ -626,6 +626,13 @@ export function useGameLoop() {
           content: fullText,
           timestamp: Date.now(),
           variables: mergedVariables,
+          parsed: {
+            ...parsed,
+            options: [...parsed.options],
+            vars: { ...parsed.vars },
+            investigateItems: parsed.investigateItems?.map(item => ({ ...item })),
+            actionItems: parsed.actionItems?.map(item => ({ ...item })),
+          },
           apiUsed: apiUsed === 'dual' ? 'secondary' : 'primary',
         };
 
