@@ -76,6 +76,7 @@ export function ensureSaturationPivotOrder(plan: DirectorPlan, brief: MysteryBri
 
 const HISTORICAL_CLAIM = /(?:昨天|昨晚|前天|上次|此前|之前|早些时候|曾经|以前|平时|一向|向来|经常|总是|每次|(?:今天)?早上|今早)[^。！？\n]{0,100}(?:说|提到|告诉|表示|来|去|见|听|买|拿|做|发生|同行|生活|照顾|打招呼|认识)/;
 const UNGROUNDED_EVIDENCE_DETAIL = /小票|收据|文件夹|监控(?:记录|录像)?|病历|短信(?:记录)?|聊天记录|通话记录|照片|票据|物证/;
+const OPEN_HISTORY_QUESTION = /是否|有没有|有没|可能|吗|未必|不确定/;
 
 /** 将确定性场景契约落实为导演节拍；只补角色与地点，不新增案件事实。 */
 export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
@@ -87,12 +88,14 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
     const detail = text.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
     return !!detail && !authorizedKnowledgeEvidence.includes(detail);
   };
+  const hasUngroundedHistory = (text: string) => HISTORICAL_CLAIM.test(text)
+    && !OPEN_HISTORY_QUESTION.test(text);
   let beats = plan.beats.map(beat => {
     const hasSource = (beat.sourceMemoryIds?.length ?? 0) > 0
       || (beat.sourceBackgroundFactIds?.length ?? 0) > 0;
     const description = beat.description
       .split(/(?<=[。！？；])/)
-      .filter(sentence => !(!hasSource && HISTORICAL_CLAIM.test(sentence)))
+      .filter(sentence => !(!hasSource && hasUngroundedHistory(sentence)))
       .filter(sentence => {
         return !hasUngroundedEvidence(sentence);
       })
@@ -107,7 +110,7 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
     beats = beats.filter((_, index) => {
       const original = plan.beats[index];
       const originalText = `${original.purpose} ${original.description}`;
-      if (HISTORICAL_CLAIM.test(originalText)
+      if (hasUngroundedHistory(originalText)
         && (original.sourceMemoryIds?.length ?? 0) === 0
         && (original.sourceBackgroundFactIds?.length ?? 0) === 0) return false;
       return !hasUngroundedEvidence(originalText);
@@ -116,19 +119,30 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
   const scenePlan = plan.scenePlan ? {
     ...plan.scenePlan,
     observeFocus: hasUngroundedEvidence(plan.scenePlan.observeFocus)
+      || hasUngroundedHistory(plan.scenePlan.observeFocus)
       ? '当前可观察的人物反应与普通环境'
       : plan.scenePlan.observeFocus,
-    observeConceal: plan.scenePlan.observeConceal && !hasUngroundedEvidence(plan.scenePlan.observeConceal)
+    observeConceal: plan.scenePlan.observeConceal
+      && !hasUngroundedEvidence(plan.scenePlan.observeConceal)
+      && !hasUngroundedHistory(plan.scenePlan.observeConceal)
       ? plan.scenePlan.observeConceal
       : undefined,
-    investigateIntents: plan.scenePlan.investigateIntents.filter(item => !hasUngroundedEvidence(item.intent)),
-    actionIntents: plan.scenePlan.actionIntents.filter(item => !hasUngroundedEvidence(item.intent)),
+    investigateIntents: plan.scenePlan.investigateIntents.filter(item => (
+      !hasUngroundedEvidence(item.intent) && !hasUngroundedHistory(item.intent)
+    )),
+    actionIntents: plan.scenePlan.actionIntents.filter(item => (
+      !hasUngroundedEvidence(item.intent) && !hasUngroundedHistory(item.intent)
+    )),
   } : undefined;
   const sanitizedPlan = {
     ...plan,
-    turnGoal: hasUngroundedEvidence(plan.turnGoal) ? '围绕玩家当前输入推进当下互动' : plan.turnGoal,
+    turnGoal: hasUngroundedEvidence(plan.turnGoal) || hasUngroundedHistory(plan.turnGoal)
+      ? '围绕玩家当前输入推进当下互动'
+      : plan.turnGoal,
     beats,
-    optionIntents: plan.optionIntents.filter(item => !hasUngroundedEvidence(item.intent)),
+    optionIntents: plan.optionIntents.filter(item => (
+      !hasUngroundedEvidence(item.intent) && !hasUngroundedHistory(item.intent)
+    )),
     scenePlan,
   };
   if (!contract) return sanitizedPlan;
