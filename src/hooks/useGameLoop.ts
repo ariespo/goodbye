@@ -1042,7 +1042,25 @@ export function useGameLoop() {
                       formatPrompt: settings.formatPromptTemplate,
                       abortSignal: abortController.signal,
                     });
-                    const repairCandidate = await repairProtocol(repairedNarrative);
+                    let repairCandidate = await repairProtocol(repairedNarrative);
+                    const groundedRepair = removeUngroundedNarrativeLines(
+                      preparedTurn.writerPacket,
+                      repairCandidate.text,
+                    );
+                    if (groundedRepair !== repairCandidate.text) {
+                      const candidate = validateNarrativeCandidate(groundedRepair);
+                      if (candidate.validationErrors.length === 0 && candidate.scene) repairCandidate = candidate;
+                    }
+                    const repairMaintext = repairCandidate.parseState.parsed.maintext || repairCandidate.text;
+                    const dedupedRepair = removeExactRepeatedLines(
+                      repairMaintext,
+                      recentNarratives,
+                      styleExemptTexts,
+                    );
+                    if (dedupedRepair !== repairMaintext) {
+                      const candidate = validateNarrativeCandidate(repairCandidate.text.replace(repairMaintext, dedupedRepair));
+                      if (candidate.validationErrors.length === 0 && candidate.scene) repairCandidate = candidate;
+                    }
                     fullText = repairCandidate.text;
                     parseStateRef.current = repairCandidate.parseState;
                     completedScene = repairCandidate.scene;
