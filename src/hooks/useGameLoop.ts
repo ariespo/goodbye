@@ -987,14 +987,14 @@ export function useGameLoop() {
                     ...preparedTurn.writerPacket.approvedBackgroundFactProposals.map(fact => fact.text),
                   ];
                   const approvedReview: FactReview = { approved: true, violations: [], corrections: [] };
-                  const reviewCandidate = async (candidateNarrative: string) => {
+                  const reviewCandidate = async (candidateNarrative: string, candidateOutput: string) => {
                     const [candidateFactReview, candidateStyleReview] = await Promise.all([
                       preparedTurn.reviewPolicy.narrative
                         ? reviewNarrativeAgainstWriterPacket({
                             api: resolveAnalysisApi(settings),
                             preset: activePreset,
                             packet: preparedTurn.writerPacket,
-                            narrative: candidateNarrative,
+                            narrative: candidateOutput,
                             abortSignal: abortController.signal,
                           })
                         : Promise.resolve(approvedReview),
@@ -1010,7 +1010,7 @@ export function useGameLoop() {
                     return combineNarrativeReviews([candidateFactReview, candidateStyleReview]);
                   };
 
-                  let narrativeReview = await reviewCandidate(narrative);
+                  let narrativeReview = await reviewCandidate(narrative, fullText);
                   for (let attempt = 0; attempt < 3 && !narrativeReview.approved; attempt += 1) {
                     const repairedNarrative = await repairNarrativeAgainstWriterPacket({
                       api: resolveAnalysisApi(settings),
@@ -1050,6 +1050,7 @@ export function useGameLoop() {
 
                     narrativeReview = await reviewCandidate(
                       repairCandidate.parseState.parsed.maintext || repairCandidate.text,
+                      repairCandidate.text,
                     );
                   }
 
