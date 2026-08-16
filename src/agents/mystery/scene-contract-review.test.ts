@@ -143,10 +143,28 @@ describe('deterministic narrative scene contract review', () => {
         locationId: 'supermarket',
         speakerIds: ['chen-huihui'],
       }],
+      optionIntents: [{
+        id: 'inspect-folder', intent: '追问她手里的文件夹', tone: '直接', expectedPressure: 'medium' as const,
+      }],
+      scenePlan: {
+        observeFocus: '陈慧慧与收银台旁的文件夹',
+        observeConceal: '文件夹里的物证',
+        investigateIntents: [
+          { intent: '检查文件夹', costTier: 'light' as const },
+          { intent: '观察陈慧慧的当下反应', costTier: 'light' as const },
+        ],
+        actionIntents: [{ intent: '查看监控录像', costTier: 'medium' as const }],
+      },
     };
 
     const repaired = enforceNarrativeSceneContract(unsafePlan, followUpBrief);
     expect(repaired.beats[0]?.description).toBe('陈慧慧回答玩家当下的问题。');
+    expect(repaired.optionIntents).toEqual([]);
+    expect(repaired.scenePlan).toMatchObject({
+      observeFocus: '当前可观察的人物反应与普通环境',
+      investigateIntents: [{ intent: '观察陈慧慧的当下反应', costTier: 'light' }],
+      actionIntents: [],
+    });
     expect(reviewDirectorPlan(repaired, followUpBrief).approved).toBe(true);
   });
 });

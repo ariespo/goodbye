@@ -82,6 +82,11 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
   const contract = brief.sceneContract;
   const authorizedKnowledgeEvidence = (plan.knowledgeEvents ?? []).map(event => event.evidence).join('\n');
   const stripUngroundedEvidence = plan.revelations.length === 0 && brief.playerKnownFacts.length === 0;
+  const hasUngroundedEvidence = (text: string) => {
+    if (!stripUngroundedEvidence) return false;
+    const detail = text.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
+    return !!detail && !authorizedKnowledgeEvidence.includes(detail);
+  };
   let beats = plan.beats.map(beat => {
     const hasSource = (beat.sourceMemoryIds?.length ?? 0) > 0
       || (beat.sourceBackgroundFactIds?.length ?? 0) > 0;
@@ -89,9 +94,7 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
       .split(/(?<=[。！？；])/)
       .filter(sentence => !(!hasSource && HISTORICAL_CLAIM.test(sentence)))
       .filter(sentence => {
-        if (!stripUngroundedEvidence) return true;
-        const detail = sentence.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
-        return !detail || authorizedKnowledgeEvidence.includes(detail);
+        return !hasUngroundedEvidence(sentence);
       })
       .join('')
       .trim();
@@ -107,12 +110,27 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
       if (HISTORICAL_CLAIM.test(originalText)
         && (original.sourceMemoryIds?.length ?? 0) === 0
         && (original.sourceBackgroundFactIds?.length ?? 0) === 0) return false;
-      if (!stripUngroundedEvidence) return true;
-      const detail = originalText.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
-      return !detail || authorizedKnowledgeEvidence.includes(detail);
+      return !hasUngroundedEvidence(originalText);
     });
   }
-  const sanitizedPlan = { ...plan, beats };
+  const scenePlan = plan.scenePlan ? {
+    ...plan.scenePlan,
+    observeFocus: hasUngroundedEvidence(plan.scenePlan.observeFocus)
+      ? '当前可观察的人物反应与普通环境'
+      : plan.scenePlan.observeFocus,
+    observeConceal: plan.scenePlan.observeConceal && !hasUngroundedEvidence(plan.scenePlan.observeConceal)
+      ? plan.scenePlan.observeConceal
+      : undefined,
+    investigateIntents: plan.scenePlan.investigateIntents.filter(item => !hasUngroundedEvidence(item.intent)),
+    actionIntents: plan.scenePlan.actionIntents.filter(item => !hasUngroundedEvidence(item.intent)),
+  } : undefined;
+  const sanitizedPlan = {
+    ...plan,
+    turnGoal: hasUngroundedEvidence(plan.turnGoal) ? '围绕玩家当前输入推进当下互动' : plan.turnGoal,
+    beats,
+    optionIntents: plan.optionIntents.filter(item => !hasUngroundedEvidence(item.intent)),
+    scenePlan,
+  };
   if (!contract) return sanitizedPlan;
 
   const forbidden = new Set(contract.forbiddenNpcIds);
@@ -255,7 +273,12 @@ export function reviewDirectorPlan(
   }
 
   if (plan.revelations.length === 0 && brief.playerKnownFacts.length === 0) {
-    const evidenceText = JSON.stringify({ beats: plan.beats });
+    const evidenceText = JSON.stringify({
+      turnGoal: plan.turnGoal,
+      beats: plan.beats,
+      optionIntents: plan.optionIntents,
+      scenePlan: plan.scenePlan,
+    });
     const evidenceDetail = evidenceText.match(UNGROUNDED_EVIDENCE_DETAIL);
     const authorizedKnowledgeEvidence = (plan.knowledgeEvents ?? []).map(event => event.evidence).join('\n');
     if (evidenceDetail && !authorizedKnowledgeEvidence.includes(evidenceDetail[0])) {
