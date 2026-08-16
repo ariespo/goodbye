@@ -25,12 +25,25 @@ export function isStyleOnlyNarrativeReview(review: FactReview): boolean {
 
 const UNAUTHORIZED_CASE_HISTORY = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买了|付钱|付款|离开(?:了)?|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了))|(?:今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2})[^。！？\n]{0,80}(?:文穗|女孩|她)/;
 const HISTORICAL_HABIT = /(?:以前|平时|经常|总是|每次|向来)[^。！？\n]{0,80}(?:来|一起|同行|买|照顾|打招呼|见)/;
+const UNAUTHORIZED_EVIDENCE_DETAIL = /小票|收据|文件夹|监控(?:记录|录像)?|病历|短信(?:记录)?|聊天记录|通话记录|照片|票据|物证/;
 
 export function reviewNarrativeDeterministically(
   packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>
-    & Partial<Pick<WriterPacket, 'authorizedBackgroundFacts'>>,
+    & Partial<Pick<WriterPacket, 'authorizedBackgroundFacts' | 'authorizedKnowledgeEvents'>>,
   narrative: string,
 ): FactReviewViolation[] {
+  const evidenceMatch = narrative.match(UNAUTHORIZED_EVIDENCE_DETAIL);
+  const authorizedText = [
+    ...packet.authorizedFacts.map(fact => fact.text),
+    ...packet.playerKnownFacts.map(fact => fact.text),
+    ...(packet.authorizedKnowledgeEvents ?? []).map(event => event.evidence),
+  ].join('\n');
+  if (evidenceMatch && !authorizedText.includes(evidenceMatch[0])) {
+    return [{
+      code: 'ungrounded-evidence-detail',
+      message: `正文补写了未获授权的可调查物件或记录：“${evidenceMatch[0]}”。请删除该信息，只保留当下普通互动。`,
+    }];
+  }
   const habitMatch = narrative.match(HISTORICAL_HABIT);
   if (habitMatch && (packet.authorizedBackgroundFacts?.length ?? 0) === 0) {
     return [{

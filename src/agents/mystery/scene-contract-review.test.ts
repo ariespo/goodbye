@@ -131,4 +131,22 @@ describe('deterministic narrative scene contract review', () => {
     expect(enforceNarrativeSceneContract(unsafePlan, brief()).beats)
       .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'invented-visit' })]));
   });
+
+  it('sanitizes unsupported evidence on follow-up turns without a scene contract', () => {
+    const followUpBrief = { ...brief(), sceneContract: undefined };
+    const unsafePlan = {
+      ...plan(),
+      beats: [{
+        id: 'follow-up',
+        purpose: '回应玩家询问',
+        description: '陈慧慧回答玩家当下的问题。她又去摸收银台旁的文件夹，并暗示文穗今早来买过东西。',
+        locationId: 'supermarket',
+        speakerIds: ['chen-huihui'],
+      }],
+    };
+
+    const repaired = enforceNarrativeSceneContract(unsafePlan, followUpBrief);
+    expect(repaired.beats[0]?.description).toBe('陈慧慧回答玩家当下的问题。');
+    expect(reviewDirectorPlan(repaired, followUpBrief).approved).toBe(true);
+  });
 });

@@ -80,24 +80,46 @@ const UNGROUNDED_EVIDENCE_DETAIL = /小票|收据|文件夹|监控(?:记录|录�
 /** 将确定性场景契约落实为导演节拍；只补角色与地点，不新增案件事实。 */
 export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
   const contract = brief.sceneContract;
-  if (!contract) return plan;
-  const forbidden = new Set(contract.forbiddenNpcIds);
   const authorizedKnowledgeEvidence = (plan.knowledgeEvents ?? []).map(event => event.evidence).join('\n');
   const stripUngroundedEvidence = plan.revelations.length === 0 && brief.playerKnownFacts.length === 0;
-  let beats = plan.beats
-    .filter(beat => {
-      const beatText = `${beat.purpose} ${beat.description}`;
-      if (HISTORICAL_CLAIM.test(beatText)
-        && (beat.sourceMemoryIds?.length ?? 0) === 0
-        && (beat.sourceBackgroundFactIds?.length ?? 0) === 0) return false;
-      if (!stripUngroundedEvidence) return true;
-      const evidenceDetail = beatText.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
-      return !evidenceDetail || authorizedKnowledgeEvidence.includes(evidenceDetail);
-    })
-    .map(beat => ({
+  let beats = plan.beats.map(beat => {
+    const hasSource = (beat.sourceMemoryIds?.length ?? 0) > 0
+      || (beat.sourceBackgroundFactIds?.length ?? 0) > 0;
+    const description = beat.description
+      .split(/(?<=[。！？；])/)
+      .filter(sentence => !(!hasSource && HISTORICAL_CLAIM.test(sentence)))
+      .filter(sentence => {
+        if (!stripUngroundedEvidence) return true;
+        const detail = sentence.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
+        return !detail || authorizedKnowledgeEvidence.includes(detail);
+      })
+      .join('')
+      .trim();
+    return {
       ...beat,
-      speakerIds: beat.speakerIds?.filter(id => !forbidden.has(id)),
-    }));
+      description: description || '围绕玩家当前输入进行当下普通互动，不新增既往事实或可调查物件。',
+    };
+  });
+  if (contract) {
+    beats = beats.filter((_, index) => {
+      const original = plan.beats[index];
+      const originalText = `${original.purpose} ${original.description}`;
+      if (HISTORICAL_CLAIM.test(originalText)
+        && (original.sourceMemoryIds?.length ?? 0) === 0
+        && (original.sourceBackgroundFactIds?.length ?? 0) === 0) return false;
+      if (!stripUngroundedEvidence) return true;
+      const detail = originalText.match(UNGROUNDED_EVIDENCE_DETAIL)?.[0];
+      return !detail || authorizedKnowledgeEvidence.includes(detail);
+    });
+  }
+  const sanitizedPlan = { ...plan, beats };
+  if (!contract) return sanitizedPlan;
+
+  const forbidden = new Set(contract.forbiddenNpcIds);
+  beats = beats.map(beat => ({
+    ...beat,
+    speakerIds: beat.speakerIds?.filter(id => !forbidden.has(id)),
+  }));
 
   const destinationIndex = beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
   const destinationSpeakers = contract.requiredDestinationNpcIds;
@@ -138,7 +160,7 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
   for (const required of contract.requiredKnowledgeEvents) {
     if (!knowledgeEvents.some(item => item.eventId === required.eventId)) knowledgeEvents.push(required);
   }
-  return { ...plan, beats, knowledgeEvents };
+  return { ...sanitizedPlan, beats, knowledgeEvents };
 }
 
 function selectedMemoryIds(turnContext?: Record<string, unknown>): Set<string> {

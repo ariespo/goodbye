@@ -40,6 +40,20 @@ describe('deterministic final narrative review', () => {
     ].join('\n'));
   });
 
+  it('removes invented evidence details from dialogue and options', () => {
+    const candidate = [
+      '对话|陈慧慧|calm|“我、我没见过……你要看看这个文件夹吗？”',
+      '对话|旁白|calm|冷气从通风口吹下来。',
+      '<option>检查收银台旁的文件夹</option>',
+      '<option>询问她今天有没有见过文穗</option>',
+    ].join('\n');
+
+    expect(removeUngroundedNarrativeLines(emptyAuthority, candidate)).toBe([
+      '对话|旁白|calm|冷气从通风口吹下来。',
+      '<option>询问她今天有没有见过文穗</option>',
+    ].join('\n'));
+  });
+
   it('allows present-time service interaction and the authorized identity introduction', () => {
     expect(reviewNarrativeDeterministically(
       emptyAuthority,
