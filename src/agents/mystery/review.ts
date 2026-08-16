@@ -260,7 +260,10 @@ export function reviewDirectorPlan(
   }
 
   for (const beat of plan.beats) {
-    if (!HISTORICAL_CLAIM.test(`${beat.purpose} ${beat.description}`)) continue;
+    const unsupportedHistory = `${beat.purpose}。${beat.description}`
+      .split(/(?<=[。！？；])/)
+      .find(sentence => HISTORICAL_CLAIM.test(sentence) && !OPEN_HISTORY_QUESTION.test(sentence));
+    if (!unsupportedHistory) continue;
     const memorySources = beat.sourceMemoryIds ?? [];
     const backgroundSources = beat.sourceBackgroundFactIds ?? [];
     const invalidMemorySources = memorySources.filter(id => !allowedMemoryIds.has(id));

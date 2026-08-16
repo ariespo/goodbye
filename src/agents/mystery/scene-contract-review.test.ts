@@ -96,6 +96,16 @@ describe('deterministic narrative scene contract review', () => {
     }).approved).toBe(true);
   });
 
+  it('allows asking whether an earlier event happened without presupposing that it did', () => {
+    const repaired = enforceNarrativeSceneContract(plan(), brief());
+    repaired.beats[1] = {
+      ...repaired.beats[1]!,
+      description: '玩家询问陈慧慧今早是否见过文穗。陈慧慧摇头说今天还没见过她。',
+    };
+
+    expect(reviewDirectorPlan(repaired, brief()).approved).toBe(true);
+  });
+
   it('rejects invented evidence objects when no facts are authorized or known', () => {
     const repaired = enforceNarrativeSceneContract(plan(), brief());
     const unsafePlan = {
