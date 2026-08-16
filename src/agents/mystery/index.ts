@@ -4,6 +4,8 @@ export type { AgentNarrativeMode, PreparedMysteryTurn, PrepareMysteryTurnOptions
 export {
   buildDirectorUserPrompt,
   buildFactCriticUserPrompt,
+  buildNarrativeFormatRepairPrompt,
+  buildNarrativeRepairPrompt,
   buildWriterUserPrompt,
   DIRECTOR_SYSTEM_PROMPT,
   FACT_CRITIC_SYSTEM_PROMPT,
@@ -13,6 +15,7 @@ export { buildWriterPacket, reviewDirectorPlan } from './review';
 export {
   isStyleOnlyNarrativeReview,
   repairNarrativeAgainstWriterPacket,
+  repairNarrativeFormatAgainstWriterPacket,
   reviewNarrativeAgainstWriterPacket,
 } from './narrative-review';
 export { recentAcceptedNarratives, reviewNarrativeStyle, reviewProseDeterministically } from './style-review';

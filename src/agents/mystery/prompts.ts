@@ -1,4 +1,5 @@
 import type { DirectorPlan, FactReview, MysteryBrief, WriterPacket } from './types';
+import type { ValidationError } from '../../sillytavern/output-protocol';
 import { LOOP_PACING_CONTRACT } from './loop-contract';
 
 export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
@@ -217,6 +218,7 @@ ${jsonBlock(review)}`;
 
   return `上一版可播放场景未通过事实或角色审查。请在保留原剧情构思的前提下做最小范围修复，并只输出项目规定标签。
 必须逐条落实 corrections；删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
+如果 violations 同时包含文风重复，只改写被点名的句子、意象或动作模板，不得借此改动剧情节点。
 stance=lies-about 的角色只能明确否认、质疑证据或普通拒答；不得用台词、沉默、眼神、动作或旁白形成半自白。
 不得改变 WriterPacket、不得新增事实、不得省略闭合标签。
 
@@ -228,6 +230,25 @@ ${rejectedNarrative}
 
 [FactReview]
 ${jsonBlock(review)}`;
+}
+
+export function buildNarrativeFormatRepairPrompt(
+  packet: WriterPacket,
+  rejectedNarrative: string,
+  errors: ValidationError[],
+): string {
+  return `上一版正文的剧情内容已经生成，但输出协议不合法。请只修复输出协议，并输出一份可直接替换原文的完整结果。
+不得重新构思剧情，不得改变事件顺序、人物意图、台词含义、事实揭示、知识事件、变量、时间消耗、摘要或已有选项；只允许补全/纠正标签、行指令字段和满足最低数量所必需的中性选项。若 ProtocolErrors 明确指出场景、说话人或称呼不符，只对该字段做最小纠正。
+若必须补足选项，新选项只能延续 WriterPacket 已有 optionIntents，不得新增事实或剧情结果。不要解释修改过程，不要输出 Markdown。
+
+[WriterPacket]
+${jsonBlock(packet)}
+
+[ProtocolErrors]
+${jsonBlock(errors)}
+
+[RejectedNarrative]
+${rejectedNarrative}`;
 }
 
 export function buildStyleCriticUserPrompt(

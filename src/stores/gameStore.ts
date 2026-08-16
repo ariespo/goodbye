@@ -12,6 +12,8 @@ export interface TurnRecoveryState {
   phase: 'idle' | 'failed_stream' | 'blocked_pipeline';
   userInput: string | null;
   errorMessage: string | null;
+  /** 已保留失败正文与审查意见，可从原稿继续修复。 */
+  repairable?: boolean;
 }
 
 export const IDLE_TURN_RECOVERY: TurnRecoveryState = { phase: 'idle', userInput: null, errorMessage: null };

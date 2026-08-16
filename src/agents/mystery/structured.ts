@@ -76,6 +76,38 @@ export async function completeStructured(
   return complete(messages, options);
 }
 
+/** 对结构化 Agent 的内容再提供一次“带原响应纠错”的解析机会。 */
+export async function completeParsedStructured<T>(
+  complete: AgentCompletion,
+  supportKey: string,
+  messages: ChatCompletionMessage[],
+  options: SecondaryApiOptions,
+  responseFormat: ResponseFormat,
+  parse: (text: string) => T,
+): Promise<T> {
+  const first = await completeStructured(complete, supportKey, messages, options, responseFormat);
+  try {
+    return parse(first);
+  } catch (error) {
+    const retryMessages: ChatCompletionMessage[] = [
+      ...messages,
+      { role: 'assistant', content: first },
+      {
+        role: 'user',
+        content: `上一响应不可解析：${error instanceof Error ? error.message : String(error)}。只重新输出一个完整、合法、无 Markdown 的 JSON 对象；不得省略、截断或添加解释。`,
+      },
+    ];
+    const retry = await completeStructured(
+      complete,
+      supportKey,
+      retryMessages,
+      { ...options, temperature: 0 },
+      responseFormat,
+    );
+    return parse(retry);
+  }
+}
+
 export function extractJson(text: string): unknown {
   const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const start = trimmed.indexOf('{');

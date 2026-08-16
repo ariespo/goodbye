@@ -9,7 +9,7 @@ const ACCENT_WARNING = '#d4a853';
 export function TurnRecoveryBar() {
   const recovery = useGameStore(state => state.api.turnRecovery);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
-  const { retryTurn, dismissRecovery } = useGameLoop();
+  const { retryTurn, regenerateTurn, dismissRecovery } = useGameLoop();
   const [busy, setBusy] = useState(false);
 
   if (recovery.phase === 'idle') return null;
@@ -58,6 +58,15 @@ export function TurnRecoveryBar() {
             <RecoveryButton accent={accent} disabled={disabled} onClick={() => run(() => retryTurn())}>
               重试编排
             </RecoveryButton>
+          ) : recovery.repairable ? (
+            <>
+              <RecoveryButton accent={accent} disabled={disabled} onClick={() => run(() => retryTurn())}>
+                继续修复
+              </RecoveryButton>
+              <RecoveryButton accent="#b7a98f" disabled={disabled} onClick={() => run(() => regenerateTurn())}>
+                重新生成
+              </RecoveryButton>
+            </>
           ) : (
             <RecoveryButton accent={accent} disabled={disabled} onClick={() => run(() => retryTurn())}>
               重试本回合

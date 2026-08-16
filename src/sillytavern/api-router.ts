@@ -145,7 +145,7 @@ export interface ChatCompletionMessage {
 
 export interface StreamCallbacks {
   onToken: (token: string) => void;
-  onComplete: () => void;
+  onComplete: () => void | Promise<void>;
   onError: (error: Error) => void;
 }
 
@@ -367,7 +367,7 @@ export async function streamChatCompletion(
               if (!contentEmitted) {
                 throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
               }
-              callbacks.onComplete();
+              await callbacks.onComplete();
               return;
             }
             if (line.startsWith('data: ')) {
@@ -394,7 +394,7 @@ export async function streamChatCompletion(
       if (!contentEmitted) {
         throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
       }
-      callbacks.onComplete();
+      await callbacks.onComplete();
     } finally {
       timeout.dispose();
     }

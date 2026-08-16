@@ -3,7 +3,7 @@ import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
 import type { ChatMessage, ChatPreset } from '../../sillytavern/types';
 import { buildStyleCriticUserPrompt, STYLE_CRITIC_SYSTEM_PROMPT } from './prompts';
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
-import { completeStructured, extractJson, type AgentCompletion } from './structured';
+import { completeParsedStructured, extractJson, type AgentCompletion } from './structured';
 import type { FactReview, FactReviewViolation } from './types';
 
 const MIN_EXACT_LENGTH = 10;
@@ -135,7 +135,7 @@ export async function reviewNarrativeStyle(options: {
 
   const complete = options.complete
     ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
-  const raw = await completeStructured(
+  const value = await completeParsedStructured(
     complete,
     `${options.api.baseUrl}|${options.api.model}`,
     [
@@ -144,12 +144,15 @@ export async function reviewNarrativeStyle(options: {
     ],
     { temperature: 0, maxTokens: 1200, abortSignal: options.abortSignal },
     FACT_REVIEW_RESPONSE_FORMAT,
+    raw => {
+      const parsed = extractJson(raw) as Partial<FactReview> | null;
+      if (!parsed || typeof parsed.approved !== 'boolean'
+        || !Array.isArray(parsed.violations) || !Array.isArray(parsed.corrections)) {
+        throw new Error('文风连续性审查返回了不可解析的结果。');
+      }
+      return parsed as FactReview;
+    },
   );
-  const value = extractJson(raw) as Partial<FactReview> | null;
-  if (!value || typeof value.approved !== 'boolean'
-    || !Array.isArray(value.violations) || !Array.isArray(value.corrections)) {
-    throw new Error('文风连续性审查返回了不可解析的结果。');
-  }
   const violations = value.violations.filter(item => item && typeof item.message === 'string');
   return {
     approved: violations.length === 0,

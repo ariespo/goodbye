@@ -1,14 +1,16 @@
 import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
 import type { ChatPreset } from '../../sillytavern/types';
-import { completeStructured, extractJson } from './structured';
+import { completeParsedStructured, extractJson } from './structured';
 import {
   buildNarrativeFactCriticUserPrompt,
+  buildNarrativeFormatRepairPrompt,
   buildNarrativeRepairPrompt,
   FACT_CRITIC_SYSTEM_PROMPT,
   WRITER_SYSTEM_PROMPT,
 } from './prompts';
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
+import type { ValidationError } from '../../sillytavern/output-protocol';
 
 const STYLE_VIOLATION_CODES = new Set([
   'repeated-prose',
@@ -66,17 +68,21 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
     { role: 'user', content: buildNarrativeFactCriticUserPrompt(options.packet, options.narrative) },
   ] as const;
-  const raw = await completeStructured(
+  const value = await completeParsedStructured(
     (requestMessages, requestOptions) => callSecondaryApi(options.api, requestMessages, options.preset, requestOptions),
     `${options.api.baseUrl}|${options.api.model}`,
     [...messages],
     { temperature: 0, maxTokens: 2500, abortSignal: options.abortSignal },
     FACT_REVIEW_RESPONSE_FORMAT,
+    raw => {
+      const parsed = extractJson(raw) as Partial<FactReview> | null;
+      if (!parsed || typeof parsed.approved !== 'boolean'
+        || !Array.isArray(parsed.violations) || !Array.isArray(parsed.corrections)) {
+        throw new Error('正文事实复核返回了不可解析的结果。');
+      }
+      return parsed as FactReview;
+    },
   );
-  const value = extractJson(raw) as Partial<FactReview> | null;
-  if (!value || typeof value.approved !== 'boolean' || !Array.isArray(value.violations) || !Array.isArray(value.corrections)) {
-    throw new Error('正文事实复核返回了不可解析的结果。');
-  }
   const violations = value.violations.filter(item => !(
     /不构成违规|并非违规|无需修正|(?:未发现|没有发现|不存在|无)(?:任何|潜在)?违规|故不违规|已获授权.*(?:符合|不违规)/
       .test(item.message)
@@ -103,5 +109,26 @@ export async function repairNarrativeAgainstWriterPacket(options: {
   return callSecondaryApi(options.api, [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: buildNarrativeRepairPrompt(options.packet, options.rejectedNarrative, options.review) },
+  ], options.preset, { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
+}
+
+export async function repairNarrativeFormatAgainstWriterPacket(options: {
+  api: ApiConfig;
+  preset: ChatPreset | null;
+  packet: WriterPacket;
+  rejectedNarrative: string;
+  errors: ValidationError[];
+  formatPrompt?: string;
+  abortSignal?: AbortSignal;
+}): Promise<string> {
+  const systemPrompt = options.formatPrompt
+    ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
+    : WRITER_SYSTEM_PROMPT;
+  return callSecondaryApi(options.api, [
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content: buildNarrativeFormatRepairPrompt(options.packet, options.rejectedNarrative, options.errors),
+    },
   ], options.preset, { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
 }

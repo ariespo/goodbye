@@ -18,6 +18,14 @@ describe('turnRecovery 状态', () => {
     actions.setTurnRecovery({ phase: 'blocked_pipeline', userInput: '搜保险柜', errorMessage: '硬审查未通过' });
     expect(useGameStore.getState().api.turnRecovery.phase).toBe('blocked_pipeline');
 
+    actions.setTurnRecovery({
+      phase: 'failed_stream',
+      userInput: '继续询问',
+      errorMessage: '正文需要继续修复',
+      repairable: true,
+    });
+    expect(useGameStore.getState().api.turnRecovery.repairable).toBe(true);
+
     actions.clearTurnRecovery();
     expect(useGameStore.getState().api.turnRecovery).toEqual(IDLE_TURN_RECOVERY);
   });

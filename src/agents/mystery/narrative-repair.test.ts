@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isStyleOnlyNarrativeReview } from './narrative-review';
-import { buildNarrativeRepairPrompt } from './prompts';
+import { buildNarrativeFormatRepairPrompt, buildNarrativeRepairPrompt } from './prompts';
 import type { FactReview, WriterPacket } from './types';
 
 const packet = {
@@ -38,5 +38,21 @@ describe('narrative repair strategy', () => {
     const prompt = buildNarrativeRepairPrompt(packet, '<maintext>原剧情</maintext>', review);
     expect(prompt).toContain('最小范围修复');
     expect(prompt).toContain('保留原有事件顺序');
+  });
+
+  it('repairs protocol errors without asking the writer to regenerate the plot', () => {
+    const prompt = buildNarrativeFormatRepairPrompt(
+      packet,
+      '<maintext>原剧情\n<option>调查</option>',
+      [
+        { code: 'MISMATCHED_TAG', message: '<maintext> 缺少闭合标签', tag: 'maintext' },
+        { code: 'INSUFFICIENT_OPTIONS', message: '<option> 至少需要 2 项', tag: 'option' },
+      ],
+    );
+
+    expect(prompt).toContain('只修复输出协议');
+    expect(prompt).toContain('<maintext> 缺少闭合标签');
+    expect(prompt).toContain('不得重新构思剧情');
+    expect(prompt).toContain('<maintext>原剧情');
   });
 });

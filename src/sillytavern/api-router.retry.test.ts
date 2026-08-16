@@ -109,6 +109,26 @@ describe('reasoning_content compatibility', () => {
     });
     expect(tokens).toEqual(['visible answer']);
   });
+
+  it('waits for asynchronous completion validation before resolving', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseDeltaResponse([{ content: 'answer' }])));
+    let releaseCompletion!: () => void;
+    const completionGate = new Promise<void>(resolve => { releaseCompletion = resolve; });
+    let resolved = false;
+    const streamPromise = streamChatCompletion(config, [{ role: 'user', content: 'hi' }], null, {
+      onToken: vi.fn(),
+      onComplete: async () => {
+        await completionGate;
+      },
+      onError: vi.fn(),
+    });
+    void streamPromise.then(() => { resolved = true; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(resolved).toBe(false);
+    releaseCompletion();
+    await streamPromise;
+    expect(resolved).toBe(true);
+  });
 });
 
 describe('classifyHttpStatus / toApiCallError', () => {

@@ -9,6 +9,7 @@ import {
   createOutputProtocol,
   formatValidationErrors,
   repairRecoverableOutput,
+  type ValidationError,
 } from '../sillytavern/output-protocol';
 import type { ChatMessage, DynamicRecord } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
@@ -31,13 +32,15 @@ import {
   normalizeKnowledgeEvents,
 } from '../data/playerKnowledge';
 import {
+  buildNarrativeFormatRepairPrompt,
+  buildNarrativeRepairPrompt,
   consumePreplan,
   invalidatePreplans,
   MYSTERY_TRUTH_GRAPH,
   MysteryPipelineBlockedError,
   prepareMysteryTurn,
-  isStyleOnlyNarrativeReview,
   repairNarrativeAgainstWriterPacket,
+  repairNarrativeFormatAgainstWriterPacket,
   recentAcceptedNarratives,
   reviewNarrativeAgainstWriterPacket,
   reviewNarrativeStyle,
@@ -226,6 +229,17 @@ function buildPreplanContextKey(
 // 失败回合的编排结果缓存：重试时输入未变则跳过导演/审查重跑
 let cachedPreparedTurn: { chatId: string | null; input: string; turn: PreparedMysteryTurn } | null = null;
 
+interface CachedNarrativeFailure {
+  chatId: string | null;
+  input: string;
+  draft: string;
+  review?: FactReview;
+  formatErrors?: ValidationError[];
+}
+
+// 保留失败正文和精确审查意见；玩家重试时从原稿继续修复，而不是重新抽样同一 WriterPacket。
+let cachedNarrativeFailure: CachedNarrativeFailure | null = null;
+
 // 玩家点击调查/行动项时缓存其标注耗时；重试同一输入时仍可命中
 let pendingActionCost: {
   chatId: string;
@@ -238,6 +252,8 @@ export interface SendMessageOptions {
   isReroll?: boolean;
   /** 重试失败回合：复用已持久化的 user 消息，不重复追加 */
   isRetry?: boolean;
+  /** 放弃失败草稿，明确要求写手重新生成。 */
+  forceRegenerate?: boolean;
 }
 
 export function useGameLoop() {
@@ -258,6 +274,11 @@ export function useGameLoop() {
     const { tavern, game, actions } = liveStore;
     const isReroll = opts?.isReroll ?? false;
     const isRetry = opts?.isRetry ?? false;
+    const forceRegenerate = opts?.forceRegenerate ?? false;
+
+    if (!isRetry || forceRegenerate) {
+      cachedNarrativeFailure = null;
+    }
 
     try {
       const settings = tavern.settings;
@@ -384,6 +405,7 @@ export function useGameLoop() {
       actions.setAbortController(abortController);
 
       let preparedTurn: PreparedMysteryTurn | null = null;
+      let resumedNarrativeFailure: CachedNarrativeFailure | null = null;
       const getAuthorizedKnowledgeEventIds = () => [...new Set([
         ...(preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? []),
         ...(actionNarrativeContext?.sceneContract.requiredKnowledgeEvents.map(event => event.eventId) ?? []),
@@ -480,6 +502,25 @@ export function useGameLoop() {
           });
           requestMessages = preparedTurn.writerMessages;
           cachedPreparedTurn = { chatId: tavern.activeChatId, input: userInput, turn: preparedTurn };
+          if (isRetry && !forceRegenerate
+            && cachedNarrativeFailure
+            && cachedNarrativeFailure.chatId === tavern.activeChatId
+            && cachedNarrativeFailure.input === userInput) {
+            resumedNarrativeFailure = cachedNarrativeFailure;
+            const systemMessage = preparedTurn.writerMessages[0];
+            const repairPrompt = resumedNarrativeFailure.review
+              ? buildNarrativeRepairPrompt(
+                  preparedTurn.writerPacket,
+                  resumedNarrativeFailure.draft,
+                  resumedNarrativeFailure.review,
+                )
+              : buildNarrativeFormatRepairPrompt(
+                  preparedTurn.writerPacket,
+                  resumedNarrativeFailure.draft,
+                  resumedNarrativeFailure.formatErrors ?? [],
+                );
+            requestMessages = [systemMessage, { role: 'user', content: repairPrompt }];
+          }
         } catch (pipelineError) {
           preparedTurn = null;
           if (pipelineError instanceof MysteryPipelineBlockedError) {
@@ -665,6 +706,7 @@ export function useGameLoop() {
         actions.setIsWaitingForAI(false);
 
         cachedPreparedTurn = null;
+        cachedNarrativeFailure = null;
 
         // 写手未输出完整清单时，异步补全场景清单；不阻塞正文播放，失败静默（performAction 有 LLM fallback）
         const needChecklist = preparedTurn && activeChat
@@ -812,59 +854,122 @@ export function useGameLoop() {
             // turn must pass protocol, narrative and transaction validation first.
           },
           onComplete: async () => {
-            const repairedOutput = repairRecoverableOutput(fullText);
-            if (repairedOutput.repairedTags.length > 0) {
-              fullText = repairedOutput.text;
-              console.warn('[output-protocol] 已安全补全标签:', repairedOutput.repairedTags);
+            const validateNarrativeCandidate = (rawNarrative: string) => {
+              const candidateText = repairRecoverableOutput(rawNarrative).text;
+              const candidateParseState = parseChunk(createParseState(), candidateText, { strict: true });
+              const candidateValidationErrors = outputProtocol.validate(
+                candidateText,
+                candidateParseState.parsed,
+              );
+              if (candidateParseState.errors.length > 0) {
+                candidateValidationErrors.push(...candidateParseState.errors.map(message => ({
+                  code: 'STREAM_PARSE_ERROR',
+                  message,
+                })));
+              }
+
+              const candidateScene = candidateParseState.parsed.maintext
+                ? parseNarrativeScene(candidateParseState.parsed.maintext)
+                : null;
+              if (candidateScene && actionNarrativeContext) {
+                const contextError = actionNarrativeContextError(actionNarrativeContext, candidateScene);
+                if (contextError) {
+                  candidateValidationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
+                }
+              }
+              if (candidateScene) {
+                const playerAddressError = npcPlayerKnowledgeError(
+                  candidateScene.lines,
+                  playerIdentity,
+                  npcPlayerKnowledge,
+                );
+                if (playerAddressError) {
+                  candidateValidationErrors.push({
+                    code: 'NPC_PLAYER_KNOWLEDGE_MISMATCH',
+                    message: playerAddressError,
+                  });
+                }
+              }
+
+              return {
+                text: candidateText,
+                parseState: candidateParseState,
+                scene: candidateScene,
+                validationErrors: candidateValidationErrors,
+              };
+            };
+            const repairProtocol = async (rawNarrative: string) => {
+              let candidate = validateNarrativeCandidate(rawNarrative);
+              if (!preparedTurn) return candidate;
+              for (let attempt = 0;
+                attempt < 2 && (candidate.validationErrors.length > 0 || !candidate.scene);
+                attempt += 1) {
+                const errors = candidate.validationErrors.length > 0
+                  ? candidate.validationErrors
+                  : [{ code: 'MISSING_SCENE', message: '正文没有生成可播放场景。' }];
+                const repaired = await repairNarrativeFormatAgainstWriterPacket({
+                  api: resolveAnalysisApi(settings),
+                  preset: activePreset,
+                  packet: preparedTurn.writerPacket,
+                  rejectedNarrative: candidate.text,
+                  errors,
+                  formatPrompt: settings.formatPromptTemplate,
+                  abortSignal: abortController.signal,
+                });
+                candidate = validateNarrativeCandidate(repaired);
+              }
+              return candidate;
+            };
+
+            let acceptedCandidate;
+            try {
+              acceptedCandidate = await repairProtocol(fullText);
+            } catch (formatRepairError) {
+              cachedNarrativeFailure = {
+                chatId: tavern.activeChatId,
+                input: userInput,
+                draft: fullText,
+                formatErrors: [{
+                  code: 'FORMAT_REPAIR_CALL_FAILED',
+                  message: formatRepairError instanceof Error ? formatRepairError.message : String(formatRepairError),
+                }],
+              };
+              actions.setStreaming(false);
+              actions.setIsWaitingForAI(false);
+              actions.setTurnRecovery({
+                phase: 'failed_stream',
+                userInput,
+                errorMessage: `正文格式修复调用失败，已保留原稿：${formatRepairError instanceof Error ? formatRepairError.message : String(formatRepairError)}`,
+                repairable: true,
+              });
+              return;
             }
-            parseStateRef.current = parseChunk(createParseState(), fullText, { strict: true });
+
+            fullText = acceptedCandidate.text;
+            parseStateRef.current = acceptedCandidate.parseState;
+            let completedScene: Scene | null = acceptedCandidate.scene;
             actions.setStreamBuffer(fullText);
             actions.setParsedContent(parseStateRef.current.parsed);
 
-            // 严格校验 LLM 输出协议
-            const validationErrors = outputProtocol.validate(fullText, parseStateRef.current.parsed);
-            const streamErrors = parseStateRef.current.errors;
-            if (streamErrors.length > 0) {
-              validationErrors.push(...streamErrors.map(msg => ({ code: 'STREAM_PARSE_ERROR', message: msg })));
-            }
-            let completedScene: Scene | null = null;
-            if (parseStateRef.current.parsed.maintext) {
-              completedScene = parseNarrativeScene(parseStateRef.current.parsed.maintext);
-              if (actionNarrativeContext) {
-                const contextError = actionNarrativeContextError(actionNarrativeContext, completedScene);
-                if (contextError) {
-                  validationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
-                }
-              }
-              const playerAddressError = npcPlayerKnowledgeError(
-                completedScene.lines,
-                playerIdentity,
-                npcPlayerKnowledge,
-              );
-              if (playerAddressError) {
-                validationErrors.push({ code: 'NPC_PLAYER_KNOWLEDGE_MISMATCH', message: playerAddressError });
-              }
-            }
-            if (validationErrors.length > 0) {
-              const detail = formatValidationErrors(validationErrors);
+            if (acceptedCandidate.validationErrors.length > 0 || !completedScene) {
+              const errors = acceptedCandidate.validationErrors.length > 0
+                ? acceptedCandidate.validationErrors
+                : [{ code: 'MISSING_SCENE', message: 'AI 正文没有生成可播放场景。' }];
+              const detail = formatValidationErrors(errors);
+              cachedNarrativeFailure = {
+                chatId: tavern.activeChatId,
+                input: userInput,
+                draft: fullText,
+                formatErrors: errors,
+              };
               actions.setStreaming(false);
               actions.setIsWaitingForAI(false);
               actions.setApiError('AI 输出格式不合法:\n' + detail);
               actions.setTurnRecovery({
                 phase: 'failed_stream',
                 userInput,
-                errorMessage: 'AI 输出格式不合法:\n' + detail,
-              });
-              return;
-            }
-
-            if (!completedScene) {
-              actions.setStreaming(false);
-              actions.setIsWaitingForAI(false);
-              actions.setTurnRecovery({
-                phase: 'failed_stream',
-                userInput,
-                errorMessage: 'AI 正文没有生成可播放场景。',
+                errorMessage: `正文连续修复后格式仍不合法，已保留最新原稿：\n${detail}`,
+                repairable: true,
               });
               return;
             }
@@ -882,165 +987,93 @@ export function useGameLoop() {
                     ...preparedTurn.writerPacket.approvedBackgroundFactProposals.map(fact => fact.text),
                   ];
                   const approvedReview: FactReview = { approved: true, violations: [], corrections: [] };
-                  const [factReview, styleReview] = await Promise.all([
-                    preparedTurn.reviewPolicy.narrative
-                      ? reviewNarrativeAgainstWriterPacket({
-                          api: resolveAnalysisApi(settings),
-                          preset: activePreset,
-                          packet: preparedTurn.writerPacket,
-                          narrative,
-                          abortSignal: abortController.signal,
-                        })
-                      : Promise.resolve(approvedReview),
-                    reviewNarrativeStyle({
-                      api: resolveAnalysisApi(settings),
-                      preset: activePreset,
-                      narrative,
-                      recentNarratives,
-                      exemptTexts: styleExemptTexts,
-                      abortSignal: abortController.signal,
-                    }),
-                  ]);
-                  const narrativeReview = combineNarrativeReviews([factReview, styleReview]);
-                  if (!narrativeReview.approved) {
-                    const validateRepairCandidate = (rawNarrative: string) => {
-                      const candidateText = repairRecoverableOutput(rawNarrative).text;
-                      const candidateParseState = parseChunk(createParseState(), candidateText, { strict: true });
-                      const candidateValidationErrors = outputProtocol.validate(
-                        candidateText,
-                        candidateParseState.parsed,
-                      );
-                      if (candidateParseState.errors.length > 0) {
-                        candidateValidationErrors.push(...candidateParseState.errors.map(message => ({
-                          code: 'STREAM_PARSE_ERROR',
-                          message,
-                        })));
-                      }
-
-                      const candidateScene = candidateParseState.parsed.maintext
-                        ? parseNarrativeScene(candidateParseState.parsed.maintext)
-                        : null;
-                      if (candidateScene && actionNarrativeContext) {
-                        const contextError = actionNarrativeContextError(actionNarrativeContext, candidateScene);
-                        if (contextError) {
-                          candidateValidationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
-                        }
-                      }
-                      if (candidateScene) {
-                        const playerAddressError = npcPlayerKnowledgeError(
-                          candidateScene.lines,
-                          playerIdentity,
-                          npcPlayerKnowledge,
-                        );
-                        if (playerAddressError) {
-                          candidateValidationErrors.push({
-                            code: 'NPC_PLAYER_KNOWLEDGE_MISMATCH',
-                            message: playerAddressError,
-                          });
-                        }
-                      }
-
-                      return {
-                        text: candidateText,
-                        parseState: candidateParseState,
-                        scene: candidateScene,
-                        validationErrors: candidateValidationErrors,
-                      };
-                    };
-                    const reviewRepairCandidate = async (candidateNarrative: string) => {
-                      const [candidateFactReview, candidateStyleReview] = await Promise.all([
-                        reviewNarrativeAgainstWriterPacket({
-                          api: resolveAnalysisApi(settings),
-                          preset: activePreset,
-                          packet: preparedTurn.writerPacket,
-                          narrative: candidateNarrative,
-                          abortSignal: abortController.signal,
-                        }),
-                        reviewNarrativeStyle({
-                          api: resolveAnalysisApi(settings),
-                          preset: activePreset,
-                          narrative: candidateNarrative,
-                          recentNarratives,
-                          exemptTexts: styleExemptTexts,
-                          abortSignal: abortController.signal,
-                        }),
-                      ]);
-                      return combineNarrativeReviews([candidateFactReview, candidateStyleReview]);
-                    };
-                    const requestRepair = (rejectedNarrative: string, review: FactReview) =>
-                      repairNarrativeAgainstWriterPacket({
+                  const reviewCandidate = async (candidateNarrative: string) => {
+                    const [candidateFactReview, candidateStyleReview] = await Promise.all([
+                      preparedTurn.reviewPolicy.narrative
+                        ? reviewNarrativeAgainstWriterPacket({
+                            api: resolveAnalysisApi(settings),
+                            preset: activePreset,
+                            packet: preparedTurn.writerPacket,
+                            narrative: candidateNarrative,
+                            abortSignal: abortController.signal,
+                          })
+                        : Promise.resolve(approvedReview),
+                      reviewNarrativeStyle({
                         api: resolveAnalysisApi(settings),
                         preset: activePreset,
-                        packet: preparedTurn.writerPacket,
-                        rejectedNarrative,
-                        review,
-                        formatPrompt: settings.formatPromptTemplate,
+                        narrative: candidateNarrative,
+                        recentNarratives,
+                        exemptTexts: styleExemptTexts,
                         abortSignal: abortController.signal,
-                      });
+                      }),
+                    ]);
+                    return combineNarrativeReviews([candidateFactReview, candidateStyleReview]);
+                  };
 
-                    let repairCandidate = validateRepairCandidate(await requestRepair(fullText, narrativeReview));
-                    if (repairCandidate.validationErrors.length > 0 || !repairCandidate.scene) {
-                      const detail = repairCandidate.validationErrors.length > 0
-                        ? formatValidationErrors(repairCandidate.validationErrors)
-                        : 'AI 正文没有生成可播放场景。';
-                      actions.setStreaming(false);
-                      actions.setIsWaitingForAI(false);
-                      actions.setTurnRecovery({
-                        phase: 'failed_stream',
-                        userInput,
-                        errorMessage: `正文自动修复后格式仍不合法，未播放也未写入存档：\n${detail}`,
-                      });
-                      return;
-                    }
-
+                  let narrativeReview = await reviewCandidate(narrative);
+                  for (let attempt = 0; attempt < 3 && !narrativeReview.approved; attempt += 1) {
+                    const repairedNarrative = await repairNarrativeAgainstWriterPacket({
+                      api: resolveAnalysisApi(settings),
+                      preset: activePreset,
+                      packet: preparedTurn.writerPacket,
+                      rejectedNarrative: fullText,
+                      review: narrativeReview,
+                      formatPrompt: settings.formatPromptTemplate,
+                      abortSignal: abortController.signal,
+                    });
+                    const repairCandidate = await repairProtocol(repairedNarrative);
                     fullText = repairCandidate.text;
                     parseStateRef.current = repairCandidate.parseState;
                     completedScene = repairCandidate.scene;
-                    let repairedReview = await reviewRepairCandidate(
-                      repairCandidate.parseState.parsed.maintext || repairCandidate.text,
-                    );
 
-                    // 文风问题只改措辞，不应因此推翻整段剧情。第一次局部改写仍有残留时，
-                    // 再给一次同样受限的句级润色机会；事实或角色问题仍坚持一次修复后阻断。
-                    if (!repairedReview.approved && isStyleOnlyNarrativeReview(repairedReview)) {
-                      repairCandidate = validateRepairCandidate(await requestRepair(fullText, repairedReview));
-                      if (repairCandidate.validationErrors.length > 0 || !repairCandidate.scene) {
-                        const detail = repairCandidate.validationErrors.length > 0
-                          ? formatValidationErrors(repairCandidate.validationErrors)
-                          : 'AI 正文没有生成可播放场景。';
-                        actions.setStreaming(false);
-                        actions.setIsWaitingForAI(false);
-                        actions.setTurnRecovery({
-                          phase: 'failed_stream',
-                          userInput,
-                          errorMessage: `正文局部润色后格式不合法，未播放也未写入存档：\n${detail}`,
-                        });
-                        return;
-                      }
-
-                      fullText = repairCandidate.text;
-                      parseStateRef.current = repairCandidate.parseState;
-                      completedScene = repairCandidate.scene;
-                      repairedReview = await reviewRepairCandidate(
-                        repairCandidate.parseState.parsed.maintext || repairCandidate.text,
-                      );
-                    }
-
-                    if (!repairedReview.approved) {
-                      const detail = repairedReview.violations.map(item => item.message).join('\n');
+                    if (repairCandidate.validationErrors.length > 0 || !completedScene) {
+                      const errors = repairCandidate.validationErrors.length > 0
+                        ? repairCandidate.validationErrors
+                        : [{ code: 'MISSING_SCENE', message: 'AI 正文没有生成可播放场景。' }];
+                      const detail = formatValidationErrors(errors);
+                      cachedNarrativeFailure = {
+                        chatId: tavern.activeChatId,
+                        input: userInput,
+                        draft: fullText,
+                        formatErrors: errors,
+                      };
                       actions.setStreaming(false);
                       actions.setIsWaitingForAI(false);
                       actions.setTurnRecovery({
                         phase: 'failed_stream',
                         userInput,
-                        errorMessage: `正文局部修复后仍存在事实、角色或文风问题，已阻止写入存档：\n${detail}`,
+                        errorMessage: `正文修复后的格式仍不合法，已保留最新原稿：\n${detail}`,
+                        repairable: true,
                       });
                       return;
                     }
 
-                    actions.setStreamBuffer(fullText);
-                    actions.setParsedContent(parseStateRef.current.parsed);
+                    narrativeReview = await reviewCandidate(
+                      repairCandidate.parseState.parsed.maintext || repairCandidate.text,
+                    );
                   }
+
+                  if (!narrativeReview.approved) {
+                    const detail = narrativeReview.violations.map(item => item.message).join('\n');
+                    cachedNarrativeFailure = {
+                      chatId: tavern.activeChatId,
+                      input: userInput,
+                      draft: fullText,
+                      review: narrativeReview,
+                    };
+                    actions.setStreaming(false);
+                    actions.setIsWaitingForAI(false);
+                    actions.setTurnRecovery({
+                      phase: 'failed_stream',
+                      userInput,
+                      errorMessage: `正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n${detail}`,
+                      repairable: true,
+                    });
+                    return;
+                  }
+
+                  actions.setStreamBuffer(fullText);
+                  actions.setParsedContent(parseStateRef.current.parsed);
                 } catch (reviewError) {
                   actions.setStreaming(false);
                   actions.setIsWaitingForAI(false);
@@ -1242,6 +1275,14 @@ export function useGameLoop() {
     await sendMessage(recovery.userInput, { isRetry: true });
   }, [store, sendMessage]);
 
+  /** 明确丢弃失败正文，但仍复用已通过的导演计划重新生成。 */
+  const regenerateTurn = useCallback(async () => {
+    const recovery = store.api.turnRecovery;
+    if (recovery.phase === 'idle' || !recovery.userInput) return;
+    cachedNarrativeFailure = null;
+    await sendMessage(recovery.userInput, { isRetry: true, forceRegenerate: true });
+  }, [store, sendMessage]);
+
   /** 放弃失败回合：撤回孤儿 user 消息，恢复到失败前状态 */
   const dismissRecovery = useCallback(async () => {
     const { tavern, actions } = store;
@@ -1252,6 +1293,7 @@ export function useGameLoop() {
       await persistActiveChat({ messages: activeChat.messages.slice(0, -1) });
     }
     cachedPreparedTurn = null;
+    cachedNarrativeFailure = null;
     checklistTokenRef.current = null;
     actions.setApiError(null);
     actions.clearTurnRecovery();
@@ -1358,5 +1400,5 @@ ${narrativeContext ? `\n${narrativeContext.directive}\n` : ''}
     sendMessage(message);
   }, [sendMessage, store]);
 
-  return { sendMessage, selectOption, performAction, reroll, retryTurn, dismissRecovery };
+  return { sendMessage, selectOption, performAction, reroll, retryTurn, regenerateTurn, dismissRecovery };
 }
