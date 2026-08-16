@@ -15,6 +15,17 @@ describe('deterministic final narrative review', () => {
     ]);
   });
 
+  it('blocks an option that turns an unsupported plain "morning" into established history', () => {
+    const violations = reviewNarrativeDeterministically(
+      emptyAuthority,
+      '<option>追问陈慧慧，她早上还看到什么了</option>',
+    );
+
+    expect(violations).toEqual([
+      expect.objectContaining({ code: 'ungrounded-past-claim' }),
+    ]);
+  });
+
   it('allows present-time service interaction and the authorized identity introduction', () => {
     expect(reviewNarrativeDeterministically(
       emptyAuthority,

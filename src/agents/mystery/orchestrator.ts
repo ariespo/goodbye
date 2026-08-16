@@ -302,6 +302,7 @@ function repairPrompt(brief: MysteryBrief, plan: DirectorPlan, review: FactRevie
 - routeMode 已锁定、allowConfirmation=true 且玩家明确要求用既有 clue 确认真相时，必须使用 usableFacts 允许的 confirmation 收束；禁止降回 hint/clue，禁止新增“巧合、他人布置、缺少未知物证”等替代解释来人为续悬念。
 - 当 NPC stance 为 lies-about 时，只能让其平静否认、给出获准的替代说法或拒答；不得用沉默、僵硬、视线转移、笑容消失、异常平直的语气、保留证物等动作暗示其知道事实。除非该 solution 已获 confirmation，否则宁可删除反应 beat。
 - corrections 中只有与 MysteryBrief 一致的要求才可执行；MysteryBrief 与硬规则优先。删除违规 beat/台词优先于换一种措辞保留同一泄密。
+- 对 ungrounded-past-claim 或 unknown-fact，必须从 turnGoal、beats、optionIntents、scenePlan 和 revelations 中删除同一虚构信息，不能只清空 factId 或 revelations 后保留其语义。若玩家追问的旧事没有授权来源，就让 NPC 明确说不知道、记不清，或把互动转回当下；不要为了满足问题而编造答案。
 \n[MysteryBrief]\n${JSON.stringify(brief, null, 2)}\n\n[RejectedPlan]\n${JSON.stringify(plan, null, 2)}\n\n[Violations]\n${JSON.stringify(review.violations, null, 2)}\n\n[Corrections]\n${JSON.stringify(review.corrections, null, 2)}`;
 }
 
@@ -429,7 +430,7 @@ async function runMysteryPipeline(
   observe.setDirectorPlan(directorPlan);
   let hardReview = await timeStage('hard-review', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
   observe.setHardReview(hardReview);
-  if (!hardReview.approved) {
+  for (let repairAttempt = 0; !hardReview.approved && repairAttempt < 2; repairAttempt += 1) {
     directorAttempts += 1;
     observe.setDirectorAttempts(directorAttempts);
     const rejectedPlan = directorPlan;

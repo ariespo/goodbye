@@ -85,6 +85,30 @@ describe('mystery orchestrator', () => {
     expect(result.hardReview.approved).toBe(true);
   });
 
+  it('keeps repairing a recoverable director plan instead of stopping after one failed repair', async () => {
+    const safePlan = { ...validPlan, revelations: [] };
+    const invalid = { ...safePlan, revelations: [
+      { factId: 'invented-morning-detail', level: 'atmosphere', delivery: 'dialogue' },
+    ] };
+    const complete = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(invalid))
+      .mockResolvedValueOnce(JSON.stringify(invalid))
+      .mockResolvedValueOnce(JSON.stringify(safePlan));
+
+    const result = await prepareMysteryTurn({
+      mode: 'standard',
+      api: { baseUrl: 'test', apiKey: 'test', model: 'test' },
+      preset: null,
+      truthContext,
+      turnContext: {},
+      presentationContext: {},
+      complete,
+    });
+
+    expect(result.directorAttempts).toBe(3);
+    expect(result.hardReview.approved).toBe(true);
+  });
+
   it('runs semantic review in strict mode', async () => {
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(validPlan))
@@ -419,9 +443,13 @@ describe('mystery orchestrator', () => {
     })).rejects.toBeInstanceOf(MysteryPipelineBlockedError);
     const entry = getOrchestrationLog()[0]!;
     expect(entry.outcome).toBe('blocked');
-    expect(entry.directorAttempts).toBe(2);
+    expect(entry.directorAttempts).toBe(3);
     expect(entry.error).toContain('事实审查');
-    expect(entry.stages.map(s => s.stage)).toEqual(['director', 'hard-review', 'director-repair', 'hard-review-retry']);
+    expect(entry.stages.map(s => s.stage)).toEqual([
+      'director', 'hard-review',
+      'director-repair', 'hard-review-retry',
+      'director-repair', 'hard-review-retry',
+    ]);
   });
 
   it('exposes json schemas with required top-level fields', () => {
