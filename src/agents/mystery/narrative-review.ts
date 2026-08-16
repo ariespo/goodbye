@@ -49,6 +49,16 @@ export function reviewNarrativeDeterministically(
   }];
 }
 
+export function removeUngroundedNarrativeLines(
+  packet: Parameters<typeof reviewNarrativeDeterministically>[0],
+  narrative: string,
+): string {
+  return narrative
+    .split(/\r?\n/)
+    .filter(line => reviewNarrativeDeterministically(packet, line).length === 0)
+    .join('\n');
+}
+
 export async function reviewNarrativeAgainstWriterPacket(options: {
   api: ApiConfig;
   preset: ChatPreset | null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reviewNarrativeDeterministically } from './narrative-review';
+import { removeUngroundedNarrativeLines, reviewNarrativeDeterministically } from './narrative-review';
 
 const emptyAuthority = { authorizedFacts: [], playerKnownFacts: [] };
 
@@ -24,6 +24,20 @@ describe('deterministic final narrative review', () => {
     expect(violations).toEqual([
       expect.objectContaining({ code: 'ungrounded-past-claim' }),
     ]);
+  });
+
+  it('removes only unsupported lines so a valid scene can continue without another model call', () => {
+    const candidate = [
+      '对话|陈慧慧|calm|“她今天早上来过。”',
+      '对话|旁白|calm|你收起雨伞。',
+      '<option>直接问她今天早上有没有见过文穗</option>',
+      '<option>观察便利店环境</option>',
+    ].join('\n');
+
+    expect(removeUngroundedNarrativeLines(emptyAuthority, candidate)).toBe([
+      '对话|旁白|calm|你收起雨伞。',
+      '<option>观察便利店环境</option>',
+    ].join('\n'));
   });
 
   it('allows present-time service interaction and the authorized identity introduction', () => {

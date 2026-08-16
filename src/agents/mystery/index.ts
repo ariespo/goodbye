@@ -14,6 +14,7 @@ export {
 export { buildWriterPacket, reviewDirectorPlan } from './review';
 export {
   isStyleOnlyNarrativeReview,
+  removeUngroundedNarrativeLines,
   repairNarrativeAgainstWriterPacket,
   repairNarrativeFormatAgainstWriterPacket,
   reviewNarrativeAgainstWriterPacket,

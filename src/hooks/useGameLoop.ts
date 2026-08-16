@@ -43,6 +43,7 @@ import {
   repairNarrativeFormatAgainstWriterPacket,
   recentAcceptedNarratives,
   removeExactRepeatedLines,
+  removeUngroundedNarrativeLines,
   reviewNarrativeAgainstWriterPacket,
   reviewNarrativeStyle,
   REVEAL_LEVELS,
@@ -978,6 +979,15 @@ export function useGameLoop() {
             if (preparedTurn) {
               if (preparedTurn.reviewPolicy.narrative || preparedTurn.reviewPolicy.style) {
                 try {
+                  const withoutUngroundedLines = removeUngroundedNarrativeLines(preparedTurn.writerPacket, fullText);
+                  if (withoutUngroundedLines !== fullText) {
+                    const groundedCandidate = validateNarrativeCandidate(withoutUngroundedLines);
+                    if (groundedCandidate.validationErrors.length === 0 && groundedCandidate.scene) {
+                      fullText = groundedCandidate.text;
+                      parseStateRef.current = groundedCandidate.parseState;
+                      completedScene = groundedCandidate.scene;
+                    }
+                  }
                   const recentNarratives = recentAcceptedNarratives(messages);
                   let narrative = parseStateRef.current.parsed.maintext || fullText;
                   const styleExemptTexts = [
