@@ -18,7 +18,12 @@ export {
   repairNarrativeFormatAgainstWriterPacket,
   reviewNarrativeAgainstWriterPacket,
 } from './narrative-review';
-export { recentAcceptedNarratives, reviewNarrativeStyle, reviewProseDeterministically } from './style-review';
+export {
+  recentAcceptedNarratives,
+  removeExactRepeatedLines,
+  reviewNarrativeStyle,
+  reviewProseDeterministically,
+} from './style-review';
 export {
   clearOrchestrationLog,
   getOrchestrationLog,

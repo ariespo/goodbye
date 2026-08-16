@@ -95,6 +95,20 @@ export function reviewProseDeterministically(
   return [];
 }
 
+/** Exact repeats add no new plot information; drop their whole dialogue line before model review. */
+export function removeExactRepeatedLines(
+  narrative: string,
+  recentNarratives: string[],
+  exemptTexts: string[] = [],
+): string {
+  const previous = new Set(recentNarratives.flatMap(sentenceList).map(item => item.normalized));
+  const duplicates = sentenceList(narrative)
+    .filter(item => previous.has(item.normalized) && !isAuthorizedEvidenceSentence(item.normalized, exemptTexts))
+    .map(item => item.raw);
+  if (duplicates.length === 0) return narrative;
+  return narrative.split(/\r?\n/).filter(line => !duplicates.some(sentence => line.includes(sentence))).join('\n');
+}
+
 export function recentAcceptedNarratives(messages: ChatMessage[], limit = 3): string[] {
   return messages
     .filter(message => message.role === 'assistant')

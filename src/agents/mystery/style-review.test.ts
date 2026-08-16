@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { recentAcceptedNarratives, reviewNarrativeStyle, reviewProseDeterministically } from './style-review';
+import {
+  recentAcceptedNarratives,
+  removeExactRepeatedLines,
+  reviewNarrativeStyle,
+  reviewProseDeterministically,
+} from './style-review';
 
 describe('narrative style continuity', () => {
   it('blocks an exact sentence repeated from a recent accepted turn', () => {
@@ -8,6 +13,15 @@ describe('narrative style continuity', () => {
     expect(reviewProseDeterministically(current, [previous])).toEqual([
       expect.objectContaining({ code: 'repeated-prose' }),
     ]);
+  });
+
+  it('drops only the redundant line while preserving the rest of the scene', () => {
+    const repeated = '对话|陈慧慧|calm|“C姐，今天真的只是一个人来啊……”';
+    const current = `${repeated}\n对话|旁白|calm|你推开门，朝学校走去。`;
+
+    expect(removeExactRepeatedLines(current, [repeated])).toBe(
+      '对话|旁白|calm|你推开门，朝学校走去。',
+    );
   });
 
   it('blocks a lightly rewritten near-duplicate', () => {

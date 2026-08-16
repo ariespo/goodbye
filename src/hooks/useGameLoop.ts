@@ -42,6 +42,7 @@ import {
   repairNarrativeAgainstWriterPacket,
   repairNarrativeFormatAgainstWriterPacket,
   recentAcceptedNarratives,
+  removeExactRepeatedLines,
   reviewNarrativeAgainstWriterPacket,
   reviewNarrativeStyle,
   REVEAL_LEVELS,
@@ -978,7 +979,7 @@ export function useGameLoop() {
               if (preparedTurn.reviewPolicy.narrative || preparedTurn.reviewPolicy.style) {
                 try {
                   const recentNarratives = recentAcceptedNarratives(messages);
-                  const narrative = parseStateRef.current.parsed.maintext || fullText;
+                  let narrative = parseStateRef.current.parsed.maintext || fullText;
                   const styleExemptTexts = [
                     ...preparedTurn.writerPacket.authorizedFacts.map(fact => fact.text),
                     ...preparedTurn.writerPacket.playerKnownFacts.map(fact => fact.text),
@@ -986,6 +987,16 @@ export function useGameLoop() {
                     ...preparedTurn.writerPacket.authorizedBackgroundFacts.map(fact => fact.text),
                     ...preparedTurn.writerPacket.approvedBackgroundFactProposals.map(fact => fact.text),
                   ];
+                  const withoutExactRepeats = removeExactRepeatedLines(narrative, recentNarratives, styleExemptTexts);
+                  if (withoutExactRepeats !== narrative) {
+                    const dedupedCandidate = validateNarrativeCandidate(fullText.replace(narrative, withoutExactRepeats));
+                    if (dedupedCandidate.validationErrors.length === 0 && dedupedCandidate.scene) {
+                      fullText = dedupedCandidate.text;
+                      parseStateRef.current = dedupedCandidate.parseState;
+                      completedScene = dedupedCandidate.scene;
+                      narrative = dedupedCandidate.parseState.parsed.maintext || dedupedCandidate.text;
+                    }
+                  }
                   const approvedReview: FactReview = { approved: true, violations: [], corrections: [] };
                   const reviewCandidate = async (candidateNarrative: string, candidateOutput: string) => {
                     const [candidateFactReview, candidateStyleReview] = await Promise.all([
