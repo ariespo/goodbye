@@ -26,6 +26,8 @@ export function isStyleOnlyNarrativeReview(review: FactReview): boolean {
 const UNAUTHORIZED_CASE_HISTORY = /(?:文穗|穿校服的女孩|那个女孩|她)[^。！？\n]{0,100}(?:今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买了|付钱|付款|离开(?:了)?|好像往|似乎往|往[^。！？\n]{1,16}(?:走了|去了))|(?:今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2})[^。！？\n]{0,80}(?:文穗|女孩|她)/;
 const HISTORICAL_HABIT = /(?:以前|平时|经常|总是|每次|向来)[^。！？\n]{0,80}(?:来|一起|同行|买|照顾|打招呼|见)/;
 const UNAUTHORIZED_EVIDENCE_DETAIL = /小票|收据|文件夹|监控(?:记录|录像)?|病历|短信(?:记录)?|聊天记录|通话记录|照片|票据|物证/;
+const OPEN_HISTORY_QUESTION = /是否|有没有|有没|可能|吗|未必|不确定/;
+const NEGATED_HISTORY_RESULT = /(?:未|没有|并未|无法|不能)(?:提供|得知|确认|获得|发现|说明)[^。！？\n]{0,30}(?:今早|今天早上|早上(?!好)|昨晚|昨天|行踪|去向)/;
 
 export function reviewNarrativeDeterministically(
   packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>
@@ -53,6 +55,7 @@ export function reviewNarrativeDeterministically(
   }
   const match = narrative.match(UNAUTHORIZED_CASE_HISTORY);
   if (!match) return [];
+  if (OPEN_HISTORY_QUESTION.test(narrative) || NEGATED_HISTORY_RESULT.test(narrative)) return [];
   const caseAuthorization = [...packet.authorizedFacts, ...packet.playerKnownFacts]
     .some(fact => /今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买|付款|离开|去往|行踪/.test(fact.text));
   if (caseAuthorization) return [];

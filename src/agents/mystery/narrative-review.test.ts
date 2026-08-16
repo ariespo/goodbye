@@ -26,6 +26,17 @@ describe('deterministic final narrative review', () => {
     ]);
   });
 
+  it('allows open questions and summaries that explicitly say no history was learned', () => {
+    expect(reviewNarrativeDeterministically(
+      emptyAuthority,
+      '<option>询问陈慧慧今早是否见过文穗</option>',
+    )).toEqual([]);
+    expect(reviewNarrativeDeterministically(
+      emptyAuthority,
+      '<sum>玩家询问文穗去向，但未提供今早行踪信息。</sum>',
+    )).toEqual([]);
+  });
+
   it('removes only unsupported lines so a valid scene can continue without another model call', () => {
     const candidate = [
       '对话|陈慧慧|calm|“她今天早上来过。”',
@@ -36,6 +47,7 @@ describe('deterministic final narrative review', () => {
 
     expect(removeUngroundedNarrativeLines(emptyAuthority, candidate)).toBe([
       '对话|旁白|calm|你收起雨伞。',
+      '<option>直接问她今天早上有没有见过文穗</option>',
       '<option>观察便利店环境</option>',
     ].join('\n'));
   });
