@@ -1,6 +1,6 @@
 import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
 import type { ChatPreset } from '../../sillytavern/types';
-import { completeParsedStructured, extractJson } from './structured';
+import { completeParsedStructured, extractJson, type AgentCompletion } from './structured';
 import {
   buildNarrativeFactCriticUserPrompt,
   buildNarrativeFormatRepairPrompt,
@@ -9,8 +9,116 @@ import {
   WRITER_SYSTEM_PROMPT,
 } from './prompts';
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
+import { mergeRepairResiduals } from './repair-task';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 import type { ValidationError } from '../../sillytavern/output-protocol';
+
+export interface NarrativeRepairFailure {
+  draft: string;
+  /** The draft is valid; retry must resume at the reviewer instead of invoking Writer. */
+  reviewPending?: boolean;
+  review?: FactReview;
+  formatErrors?: ValidationError[];
+  priorResiduals?: FactReviewViolation[];
+  priorFormatResiduals?: ValidationError[];
+}
+
+/** Cache payload when a fact-repair attempt then fails protocol. Keeps both lists. */
+export function snapshotFactRepairFormatFailure(options: {
+  draft: string;
+  errors: ValidationError[];
+  priorFormatResiduals?: ValidationError[];
+  review: FactReview;
+  priorResiduals?: FactReviewViolation[];
+}): NarrativeRepairFailure {
+  return {
+    draft: options.draft,
+    formatErrors: options.errors,
+    priorFormatResiduals: options.priorFormatResiduals ?? [],
+    review: options.review,
+    priorResiduals: options.priorResiduals ?? [],
+  };
+}
+
+/** Cache payload when format repair throws. Keeps in-flight fact residuals if a review exists. */
+export function snapshotFormatRepairCallFailure(options: {
+  draft: string;
+  error: unknown;
+  priorFormatResiduals?: ValidationError[];
+  review?: FactReview;
+  priorResiduals?: FactReviewViolation[];
+}): NarrativeRepairFailure {
+  const errors: ValidationError[] = [{
+    code: 'FORMAT_REPAIR_CALL_FAILED',
+    message: options.error instanceof Error ? options.error.message : String(options.error),
+  }];
+  if (options.review) {
+    return snapshotFactRepairFormatFailure({
+      draft: options.draft,
+      errors,
+      priorFormatResiduals: options.priorFormatResiduals,
+      review: options.review,
+      priorResiduals: options.priorResiduals,
+    });
+  }
+  return {
+    draft: options.draft,
+    formatErrors: errors,
+    priorFormatResiduals: options.priorFormatResiduals ?? [],
+  };
+}
+
+/** Cache payload when the narrative critic/style call throws. Retry resumes the failed review stage. */
+export function snapshotNarrativeReviewCallFailure(options: {
+  draft: string;
+  error: unknown;
+  priorResiduals?: FactReviewViolation[];
+}): NarrativeRepairFailure {
+  // Touch the error so callers can pass unknown safely while keeping transient
+  // transport details out of Writer-facing repair instructions.
+  void (options.error instanceof Error ? options.error.message : String(options.error));
+  return {
+    draft: options.draft,
+    reviewPending: true,
+    priorResiduals: options.priorResiduals ?? [],
+  };
+}
+
+/** Player retry: fix tags first if protocol is still broken; otherwise continue fact repair in place. */
+export function buildRetryPromptFromNarrativeFailure(
+  packet: WriterPacket,
+  failure: NarrativeRepairFailure,
+): string {
+  if (failure.reviewPending) {
+    throw new Error('正文仍待审查，不应构造 Writer 修复提示。');
+  }
+  const formatErrors = failure.formatErrors;
+  if (formatErrors && formatErrors.length > 0) {
+    return buildNarrativeFormatRepairPrompt(
+      packet,
+      failure.draft,
+      formatErrors,
+      failure.priorFormatResiduals ?? [],
+    );
+  }
+  if (failure.review) {
+    return buildNarrativeRepairPrompt(
+      packet,
+      failure.draft,
+      failure.review,
+      failure.priorResiduals ?? [],
+    );
+  }
+  throw new Error('失败正文缓存缺少协议错误和事实审查，无法继续修复。');
+}
+
+export function factResidualsForRetry(
+  failure: Pick<NarrativeRepairFailure, 'review' | 'priorResiduals'> | null | undefined,
+): FactReviewViolation[] {
+  const prior = failure?.priorResiduals ?? [];
+  if (!failure?.review) return prior;
+  return mergeRepairResiduals(prior, failure.review.violations);
+}
 
 const STYLE_VIOLATION_CODES = new Set([
   'repeated-prose',
@@ -75,12 +183,58 @@ export function removeUngroundedNarrativeLines(
     .join('\n');
 }
 
+export function sanitizeNarrativeFactReview(
+  review: FactReview,
+  packet: Pick<WriterPacket, 'authorizedFacts'>,
+): FactReview {
+  const hasAuthorizedConfirmation = packet.authorizedFacts.some(fact => fact.level === 'confirmation');
+  const authorizedIds = new Set(packet.authorizedFacts.map(fact => fact.id));
+  const explicitlySaysNoViolation = (value: string) => (
+    /不构成违规|并非违规|无需修正|(?:未发现|没有发现|不存在|无)(?:任何|潜在)?违规|故不违规|已获授权.*(?:符合|不违规)/
+      .test(value)
+  );
+  const isFalseMandatoryLyingClaim = (value: string) => {
+    const normalized = value.toLowerCase();
+    return normalized.includes('lies-about')
+      && (normalized.includes('未体现其主动撒谎')
+        || normalized.includes('未体现主动撒谎')
+        || normalized.includes('必须主动撒谎'));
+  };
+  const falselyRejectsAuthorizedConfirmation = (value: string) => (
+    hasAuthorizedConfirmation
+    && /player[_-]?agency(?:[_-]?override|[_-]?violation)?|premature[_-]?confirmation|player[_-]?assertion[_-]?as[_-]?fact|玩家.*直接转化为世界事实|把已授权.?confirmation|已授权.*confirmation.*(?:越权|违规)|confirmation.*(?:未授权|越权)/i
+      .test(value)
+  );
+  const falselyDemandsNewEvidenceForAuthorizedConfirmation = (
+    violation: FactReview['violations'][number],
+    value: string,
+  ) => (
+    hasAuthorizedConfirmation
+    && (!violation.factId || authorizedIds.has(violation.factId))
+    && /未提供任何?新增证据|未提供新的可呈现证据|推迟至后续回合|no[_-]?new[_-]?evidence|既有线索与新增 confirmation/i
+      .test(value)
+  );
+  const violations = review.violations.filter(violation => {
+    const value = `${violation.code} ${violation.factId ?? ''} ${violation.message}`;
+    return !explicitlySaysNoViolation(violation.message)
+      && !isFalseMandatoryLyingClaim(value)
+      && !falselyRejectsAuthorizedConfirmation(value)
+      && !falselyDemandsNewEvidenceForAuthorizedConfirmation(violation, value);
+  });
+  const corrections = violations.length === 0 ? [] : review.corrections.filter(correction => (
+    !explicitlySaysNoViolation(correction)
+    && !isFalseMandatoryLyingClaim(correction)
+  ));
+  return { approved: violations.length === 0, violations, corrections };
+}
+
 export async function reviewNarrativeAgainstWriterPacket(options: {
   api: ApiConfig;
   preset: ChatPreset | null;
   packet: WriterPacket;
   narrative: string;
   abortSignal?: AbortSignal;
+  complete?: AgentCompletion;
 }): Promise<FactReview> {
   const deterministicViolations = reviewNarrativeDeterministically(options.packet, options.narrative);
   if (deterministicViolations.length > 0) {
@@ -90,12 +244,14 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       corrections: ['删除所有关于文穗此前来过、买过、付过钱、离开或去向的补写，改为当下服务互动。'],
     };
   }
+  const complete = options.complete
+    ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
   const messages = [
     { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
     { role: 'user', content: buildNarrativeFactCriticUserPrompt(options.packet, options.narrative) },
   ] as const;
   const value = await completeParsedStructured(
-    (requestMessages, requestOptions) => callSecondaryApi(options.api, requestMessages, options.preset, requestOptions),
+    complete,
     `${options.api.baseUrl}|${options.api.model}`,
     [...messages],
     { temperature: 0, maxTokens: 2500, abortSignal: options.abortSignal },
@@ -109,15 +265,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       return parsed as FactReview;
     },
   );
-  const violations = value.violations.filter(item => !(
-    /不构成违规|并非违规|无需修正|(?:未发现|没有发现|不存在|无)(?:任何|潜在)?违规|故不违规|已获授权.*(?:符合|不违规)/
-      .test(item.message)
-  ));
-  return {
-    approved: violations.length === 0,
-    violations,
-    corrections: violations.length === 0 ? [] : value.corrections,
-  } as FactReview;
+  return sanitizeNarrativeFactReview(value, options.packet);
 }
 
 export async function repairNarrativeAgainstWriterPacket(options: {
@@ -128,14 +276,26 @@ export async function repairNarrativeAgainstWriterPacket(options: {
   review: FactReview;
   formatPrompt?: string;
   abortSignal?: AbortSignal;
+  priorResiduals?: FactReviewViolation[];
+  complete?: AgentCompletion;
 }): Promise<string> {
   const systemPrompt = options.formatPrompt
     ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
     : WRITER_SYSTEM_PROMPT;
-  return callSecondaryApi(options.api, [
+  const complete = options.complete
+    ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
+  return complete([
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: buildNarrativeRepairPrompt(options.packet, options.rejectedNarrative, options.review) },
-  ], options.preset, { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
+    {
+      role: 'user',
+      content: buildNarrativeRepairPrompt(
+        options.packet,
+        options.rejectedNarrative,
+        options.review,
+        options.priorResiduals ?? [],
+      ),
+    },
+  ], { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
 }
 
 export async function repairNarrativeFormatAgainstWriterPacket(options: {
@@ -146,15 +306,24 @@ export async function repairNarrativeFormatAgainstWriterPacket(options: {
   errors: ValidationError[];
   formatPrompt?: string;
   abortSignal?: AbortSignal;
+  priorResiduals?: ValidationError[];
+  complete?: AgentCompletion;
 }): Promise<string> {
   const systemPrompt = options.formatPrompt
     ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
     : WRITER_SYSTEM_PROMPT;
-  return callSecondaryApi(options.api, [
+  const complete = options.complete
+    ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
+  return complete([
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: buildNarrativeFormatRepairPrompt(options.packet, options.rejectedNarrative, options.errors),
+      content: buildNarrativeFormatRepairPrompt(
+        options.packet,
+        options.rejectedNarrative,
+        options.errors,
+        options.priorResiduals ?? [],
+      ),
     },
-  ], options.preset, { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
+  ], { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { removeUngroundedNarrativeLines, reviewNarrativeDeterministically } from './narrative-review';
+import {
+  removeUngroundedNarrativeLines,
+  reviewNarrativeAgainstWriterPacket,
+  reviewNarrativeDeterministically,
+} from './narrative-review';
+import type { WriterPacket } from './types';
 
 const emptyAuthority = { authorizedFacts: [], playerKnownFacts: [] };
 
@@ -95,5 +100,81 @@ describe('deterministic final narrative review', () => {
         level: 'fixed', privacy: 'common', timeScope: 'pre-game', source: 'author', createdTurn: 0,
       }],
     }, '陈慧慧|“以前文穗不是经常跟你一起来吗？”')).toEqual([]);
+  });
+
+  it('drops narrative critic false-positives for lies-about denials and authorized confirmation', async () => {
+    const packet = {
+      authorizedFacts: [{
+        id: 'a-murder-staged-fall',
+        level: 'confirmation',
+        text: '楼梯扶手上的擦痕与已知线索闭合：这是伪装成意外的推落。',
+        delivery: 'narration',
+      }],
+      playerKnownFacts: [],
+    } as unknown as WriterPacket;
+    const narrative = '<maintext>旁白|楼梯扶手上的擦痕与已知线索闭合：这是伪装成意外的推落。周德明只说记不清。</maintext>';
+
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' },
+      preset: null,
+      packet,
+      narrative,
+      complete: async () => JSON.stringify({
+        approved: false,
+        violations: [
+          {
+            code: 'npc-knowledge-violation',
+            message: 'old-man stance 为 lies-about，但未体现其主动撒谎。',
+          },
+          {
+            code: 'unknown-fact',
+            factId: 'a-murder-staged-fall',
+            message: 'premature-confirmation：把已授权 confirmation 判为越权。',
+          },
+          {
+            code: 'unknown-fact',
+            message: '正文出现未授权时间线。',
+          },
+        ],
+        corrections: ['lies-about 角色必须主动撒谎。', '删除确认。', '删除未授权时间线。'],
+      }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations).toEqual([
+      expect.objectContaining({ code: 'unknown-fact', message: '正文出现未授权时间线。' }),
+    ]);
+    expect(review.corrections).toContain('删除未授权时间线。');
+    expect(review.corrections).not.toContain('lies-about 角色必须主动撒谎。');
+  });
+
+  it('approves when the narrative critic only reports authorized-confirmation false positives', async () => {
+    const packet = {
+      authorizedFacts: [{
+        id: 'a-murder-staged-fall',
+        level: 'confirmation',
+        text: '这是伪装成意外的推落。',
+        delivery: 'narration',
+      }],
+      playerKnownFacts: [],
+    } as unknown as WriterPacket;
+
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' },
+      preset: null,
+      packet,
+      narrative: '<maintext>旁白|这是伪装成意外的推落。</maintext>',
+      complete: async () => JSON.stringify({
+        approved: false,
+        violations: [{
+          code: 'unknown-fact',
+          factId: 'a-murder-staged-fall',
+          message: '未提供任何新增证据，把已授权 confirmation 判为越权。',
+        }],
+        corrections: ['推迟至后续回合。'],
+      }),
+    });
+
+    expect(review).toEqual({ approved: true, violations: [], corrections: [] });
   });
 });

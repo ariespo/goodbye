@@ -13,12 +13,27 @@ export {
 } from './prompts';
 export { buildWriterPacket, reviewDirectorPlan } from './review';
 export {
+  buildDirectorRepairTask,
+  buildDoNotRepeatBlock,
+  formatProtocolErrorResidual,
+  formatViolationResidual,
+  mergeProtocolRepairResiduals,
+  mergeRepairResiduals,
+} from './repair-task';
+export {
+  buildRetryPromptFromNarrativeFailure,
+  factResidualsForRetry,
   isStyleOnlyNarrativeReview,
   removeUngroundedNarrativeLines,
   repairNarrativeAgainstWriterPacket,
   repairNarrativeFormatAgainstWriterPacket,
   reviewNarrativeAgainstWriterPacket,
+  sanitizeNarrativeFactReview,
+  snapshotFactRepairFormatFailure,
+  snapshotFormatRepairCallFailure,
+  snapshotNarrativeReviewCallFailure,
 } from './narrative-review';
+export type { NarrativeRepairFailure } from './narrative-review';
 export {
   recentAcceptedNarratives,
   removeExactRepeatedLines,

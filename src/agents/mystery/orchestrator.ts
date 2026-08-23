@@ -32,6 +32,8 @@ import type { DirectorPlan, FactReview, MysteryBrief, TruthContext, WriterPacket
 import { selectSaturationPivot } from './saturation-pivot';
 import { completeStructured, extractJson, getResponseFormatSupport } from './structured';
 import type { AgentCompletion } from './structured';
+import { buildDirectorRepairTask, mergeRepairResiduals } from './repair-task';
+import type { RepairFailedStage } from './repair-task';
 
 export type AgentNarrativeMode = AgentNarrativeModeSetting;
 
@@ -285,25 +287,30 @@ function sanitizeFactReview(
   return { approved: violations.length === 0, violations, corrections };
 }
 
-function repairPrompt(brief: MysteryBrief, plan: DirectorPlan, review: FactReview): string {
-  return `上一版导演计划未通过审查。只修正违规项并重新输出完整 JSON。
-修复时必须遵守：
-- knowledgeEvents 只能列出本回合确定会触发、且正文会展示充分 evidence 的事件；不要列出“不触发”“暂不触发”或仅作候选的事件。
-- revelations 与 knowledgeEvents 完全独立。F001/F002 等案件事实只属于 revelations，不能为它新增、猜测或捏造 knowledgeEvent；若 allowedDiscoveries 为空，knowledgeEvents 必须为空。
-- red-herring 只能保持为明确的猜测，不得改写成 NPC 亲眼见闻、环境事实或可靠证据。
-- red-herring 若没有 deliveryNpcIds，必须从所有 NPC 台词、回忆和目击 beat 中彻底删除；不得以“好像”“不敢说准”等降调措辞保留。
-- dialogue revelation 只有在该事实 deliveryNpcIds 明列对应 speakerId 时才允许。若玩家已持有某事实、但在场 NPC 无讲述权，只能通过玩家出示的物证、记录或 narration/object/environment 重述；绝不能让 NPC 代替证据宣布结论。
-- speakerId 必须逐字复制 npcKnowledge[].npcId，不得使用简称、显示名或同义 ID。
-- saturationPivot 存在时不可删除或软化：先完整响应 blockedActorId 的原调查，再由 interveningNpcId 在后续独立 beat 自然介入并以 dialogue 揭示 factId。正文只写获准事实，不得直说 redirectedActorId 内部 ID 或补写因果；状态归属由程序处理，不得继续增加 blockedActorId 的嫌疑。
-- beat/台词中的结论层级不得高于 revelations。若玩家明确提出凶手、手法等 confirmation 结论，且 brief 允许 confirmation，就必须把对应事实登记为 confirmation；否则必须删掉或降级该结论台词，不能保留指控再只申请 hint。
-- stance=lies-about 的 confirmation 不得被修成“证据压力下被迫承认”。用 narration/object/environment 让证据链独立确认，NPC 可平静否认。若确认会解锁 insane，必须先有一个明确的外部证据确认 beat，再在后续独立 beat 安排；否则删除 insane。
-- confirmation beat 必须写出 revealOptions.confirmation 已授权的因果。对 playerKnownFacts 已有的 clue，直接写“复核该已知 clue 并与其他已知 clue 合并”即可；不得为了具体化而补造 revealOptions/playerKnownFacts 未定义的脚印、杯痕、录像、证人、检验结果或第三方痕迹。
-- 对 lies-about 角色，即使外部证据已经 confirmation，也不要替角色编写含蓄自白或邪恶格言。禁止“你什么都不知道”“她去了该去的地方”“别管闲事”等暗示性台词，以及沉默后默认承认。只能明确否认、声称证据解释错误、普通拒答，或完全不安排该角色发言。
-- routeMode 已锁定、allowConfirmation=true 且玩家明确要求用既有 clue 确认真相时，必须使用 usableFacts 允许的 confirmation 收束；禁止降回 hint/clue，禁止新增“巧合、他人布置、缺少未知物证”等替代解释来人为续悬念。
-- 当 NPC stance 为 lies-about 时，只能让其平静否认、给出获准的替代说法或拒答；不得用沉默、僵硬、视线转移、笑容消失、异常平直的语气、保留证物等动作暗示其知道事实。除非该 solution 已获 confirmation，否则宁可删除反应 beat。
-- corrections 中只有与 MysteryBrief 一致的要求才可执行；MysteryBrief 与硬规则优先。删除违规 beat/台词优先于换一种措辞保留同一泄密。
-- 对 ungrounded-past-claim 或 unknown-fact，必须从 turnGoal、beats、optionIntents、scenePlan 和 revelations 中删除同一虚构信息，不能只清空 factId 或 revelations 后保留其语义。若玩家追问的旧事没有授权来源，就让 NPC 明确说不知道、记不清，或把互动转回当下；不要为了满足问题而编造答案。
-\n[MysteryBrief]\n${JSON.stringify(brief, null, 2)}\n\n[RejectedPlan]\n${JSON.stringify(plan, null, 2)}\n\n[Violations]\n${JSON.stringify(review.violations, null, 2)}\n\n[Corrections]\n${JSON.stringify(review.corrections, null, 2)}`;
+function directorRepairMessages(
+  rejectedPlan: DirectorPlan,
+  review: FactReview,
+  priorResiduals: FactReview['violations'],
+  failedStage: RepairFailedStage,
+): ChatCompletionMessage[] {
+  return [
+    { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content: buildDirectorRepairTask({
+        rejectedPlan,
+        review,
+        priorResiduals,
+        failedStage,
+      }),
+    },
+  ];
+}
+
+function criticStageFor(review: { semantic: FactReview; pacing: FactReview }): RepairFailedStage {
+  if (!review.semantic.approved && !review.pacing.approved) return 'semantic-pacing-review';
+  if (!review.pacing.approved) return 'pacing-review';
+  return 'semantic-review';
 }
 
 function removeUnauthorizedKnowledgeEvents(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
@@ -430,15 +437,21 @@ async function runMysteryPipeline(
   observe.setDirectorPlan(directorPlan);
   let hardReview = await timeStage('hard-review', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
   observe.setHardReview(hardReview);
+  let hardReviewResiduals: FactReview['violations'] = [];
   for (let repairAttempt = 0; !hardReview.approved && repairAttempt < 2; repairAttempt += 1) {
     directorAttempts += 1;
     observe.setDirectorAttempts(directorAttempts);
     const rejectedPlan = directorPlan;
     const rejectedReview = hardReview;
-    directorPlan = await timeStage('director-repair', () => completeParsed(complete, supportKey, [
-      { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
-      { role: 'user', content: repairPrompt(brief, rejectedPlan, rejectedReview) },
-    ], { temperature: 0.1, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT, parseDirectorPlan));
+    directorPlan = await timeStage('director-repair', () => completeParsed(
+      complete,
+      supportKey,
+      directorRepairMessages(rejectedPlan, rejectedReview, hardReviewResiduals, 'hard-review'),
+      { temperature: 0.1, maxTokens: 4000 },
+      DIRECTOR_PLAN_RESPONSE_FORMAT,
+      parseDirectorPlan,
+    ));
+    hardReviewResiduals = mergeRepairResiduals(hardReviewResiduals, rejectedReview.violations);
     directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
     observe.setDirectorPlan(directorPlan);
     hardReview = await timeStage('hard-review-retry', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
@@ -539,73 +552,93 @@ async function runMysteryPipeline(
     observe.setSemanticReview(semanticReview);
     observe.setPacingReview(pacingReview);
     if (!semanticReview.approved || !pacingReview.approved) {
-      directorAttempts += 1;
-      observe.setDirectorAttempts(directorAttempts);
-      const combinedReview: FactReview = {
-        approved: false,
-        violations: [...semanticReview.violations, ...pacingReview.violations],
-        corrections: [...semanticReview.corrections, ...pacingReview.corrections],
-      };
-      directorPlan = await timeStage('semantic-repair', () => completeParsed(complete, supportKey, [
-        { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
-        { role: 'user', content: repairPrompt(brief, directorPlan, combinedReview) },
-      ], { temperature: 0.05, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT, parseDirectorPlan));
-      directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
-      directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
-      observe.setDirectorPlan(directorPlan);
-      hardReview = await timeStage('hard-review-after-semantic-repair', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
-      observe.setHardReview(hardReview);
-      if (!hardReview.approved) {
-        throw new MysteryPipelineBlockedError('语义修复后的导演计划未通过硬审查，本回合已停止。');
-      }
-      const [semanticRetryText, pacingRetryText] = await Promise.all([
-        reviewPolicy.semantic ? timeStage('semantic-review-retry', () => completeParsed(complete, supportKey, [
-          { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
-          { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, semanticCanon) },
-        ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
-        reviewPolicy.pacing ? timeStage('pacing-review-retry', () => completeParsed(complete, supportKey, [
-          { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
-          { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-        ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
-      ]);
-      semanticReview = sanitizeFactReview(semanticRetryText, directorPlan, brief, options.turnContext);
-      pacingReview = sanitizeFactReview(pacingRetryText, directorPlan, brief, options.turnContext);
-      observe.setSemanticReview(semanticReview);
-      observe.setPacingReview(pacingReview);
-      if (!semanticReview.approved || !pacingReview.approved) {
+      let criticResiduals: FactReview['violations'] = [];
+      let pendingHardReviewRepair = false;
+      const runCriticRepair = async (
+        stageName: 'semantic-repair' | 'semantic-repair-final',
+        hardReviewStage: 'hard-review-after-semantic-repair' | 'hard-review-after-semantic-final',
+        semanticRetryStage: 'semantic-review-retry' | 'semantic-review-final',
+        pacingRetryStage: 'pacing-review-retry' | 'pacing-review-final',
+      ) => {
         directorAttempts += 1;
         observe.setDirectorAttempts(directorAttempts);
-        const finalCombinedReview: FactReview = {
+        const combinedReview: FactReview = {
           approved: false,
-          violations: [...semanticReview.violations, ...pacingReview.violations],
-          corrections: [...semanticReview.corrections, ...pacingReview.corrections],
+          violations: [...semanticReview!.violations, ...pacingReview!.violations],
+          corrections: [...semanticReview!.corrections, ...pacingReview!.corrections],
         };
-        directorPlan = await timeStage('semantic-repair-final', () => completeParsed(complete, supportKey, [
-          { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
-          { role: 'user', content: repairPrompt(brief, directorPlan, finalCombinedReview) },
-        ], { temperature: 0, maxTokens: 4000 }, DIRECTOR_PLAN_RESPONSE_FORMAT, parseDirectorPlan));
+        const failedStage = pendingHardReviewRepair
+          ? 'hard-review'
+          : criticStageFor({ semantic: semanticReview!, pacing: pacingReview! });
+        const rejectedPlan = directorPlan;
+        directorPlan = await timeStage(stageName, () => completeParsed(
+          complete,
+          supportKey,
+          directorRepairMessages(rejectedPlan, combinedReview, criticResiduals, failedStage),
+          { temperature: stageName === 'semantic-repair' ? 0.05 : 0, maxTokens: 4000 },
+          DIRECTOR_PLAN_RESPONSE_FORMAT,
+          parseDirectorPlan,
+        ));
+        criticResiduals = mergeRepairResiduals(criticResiduals, combinedReview.violations);
         directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
         directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
         observe.setDirectorPlan(directorPlan);
-        hardReview = await timeStage('hard-review-after-semantic-final', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
+        hardReview = await timeStage(hardReviewStage, () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
         observe.setHardReview(hardReview);
         if (!hardReview.approved) {
+          criticResiduals = mergeRepairResiduals(criticResiduals, hardReview.violations);
+          if (stageName === 'semantic-repair') {
+            pendingHardReviewRepair = true;
+            semanticReview = {
+              approved: false,
+              violations: mergeRepairResiduals(semanticReview!.violations, hardReview.violations),
+              corrections: [...semanticReview!.corrections, ...hardReview.corrections],
+            };
+            observe.setSemanticReview(semanticReview);
+            return;
+          }
           throw new MysteryPipelineBlockedError('最终语义修复后的导演计划未通过硬审查，本回合已停止。');
         }
-        const [semanticFinalText, pacingFinalText] = await Promise.all([
-          reviewPolicy.semantic ? timeStage('semantic-review-final', () => completeParsed(complete, supportKey, [
-            { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
-            { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, semanticCanon) },
-          ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
-          reviewPolicy.pacing ? timeStage('pacing-review-final', () => completeParsed(complete, supportKey, [
-            { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
-            { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-          ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview),
+        pendingHardReviewRepair = false;
+        const semanticFailed = !semanticReview!.approved;
+        const pacingFailed = !pacingReview!.approved;
+        const [semanticRetryText, pacingRetryText] = await Promise.all([
+          reviewPolicy.semantic && (semanticFailed || pacingFailed)
+            ? timeStage(semanticRetryStage, () => completeParsed(complete, supportKey, [
+              { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
+              { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, semanticCanon) },
+            ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview))
+            : Promise.resolve(semanticReview ?? approvedReview),
+          reviewPolicy.pacing && (pacingFailed || semanticFailed)
+            ? timeStage(pacingRetryStage, () => completeParsed(complete, supportKey, [
+              { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
+              { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
+            ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview))
+            : Promise.resolve(pacingReview ?? approvedReview),
         ]);
-        semanticReview = sanitizeFactReview(semanticFinalText, directorPlan, brief, options.turnContext);
-        pacingReview = sanitizeFactReview(pacingFinalText, directorPlan, brief, options.turnContext);
-        observe.setSemanticReview(semanticReview);
-        observe.setPacingReview(pacingReview);
+        if (reviewPolicy.semantic && (semanticFailed || pacingFailed)) {
+          semanticReview = sanitizeFactReview(semanticRetryText, directorPlan, brief, options.turnContext);
+          observe.setSemanticReview(semanticReview);
+        }
+        if (reviewPolicy.pacing && (pacingFailed || semanticFailed)) {
+          pacingReview = sanitizeFactReview(pacingRetryText, directorPlan, brief, options.turnContext);
+          observe.setPacingReview(pacingReview);
+        }
+      };
+
+      await runCriticRepair(
+        'semantic-repair',
+        'hard-review-after-semantic-repair',
+        'semantic-review-retry',
+        'pacing-review-retry',
+      );
+      if (!semanticReview.approved || !pacingReview.approved) {
+        await runCriticRepair(
+          'semantic-repair-final',
+          'hard-review-after-semantic-final',
+          'semantic-review-final',
+          'pacing-review-final',
+        );
       }
       if (!semanticReview.approved) {
         throw new MysteryPipelineBlockedError('语义事实复核修复后仍发现潜在泄密，本回合已停止。');

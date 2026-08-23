@@ -32,15 +32,20 @@ import {
   normalizeKnowledgeEvents,
 } from '../data/playerKnowledge';
 import {
-  buildNarrativeFormatRepairPrompt,
-  buildNarrativeRepairPrompt,
+  buildRetryPromptFromNarrativeFailure,
   consumePreplan,
+  factResidualsForRetry,
   invalidatePreplans,
+  mergeProtocolRepairResiduals,
+  mergeRepairResiduals,
   MYSTERY_TRUTH_GRAPH,
   MysteryPipelineBlockedError,
   prepareMysteryTurn,
   repairNarrativeAgainstWriterPacket,
   repairNarrativeFormatAgainstWriterPacket,
+  snapshotFactRepairFormatFailure,
+  snapshotFormatRepairCallFailure,
+  snapshotNarrativeReviewCallFailure,
   recentAcceptedNarratives,
   removeExactRepeatedLines,
   removeUngroundedNarrativeLines,
@@ -50,6 +55,7 @@ import {
   startPreplan,
   type AgentNarrativeMode,
   type FactReview,
+  type FactReviewViolation,
   type MysteryOverlayId,
   type MysteryRouteId,
   type PreparedMysteryTurn,
@@ -235,8 +241,11 @@ interface CachedNarrativeFailure {
   chatId: string | null;
   input: string;
   draft: string;
+  reviewPending?: boolean;
   review?: FactReview;
   formatErrors?: ValidationError[];
+  priorResiduals?: FactReviewViolation[];
+  priorFormatResiduals?: ValidationError[];
 }
 
 // 保留失败正文和精确审查意见；玩家重试时从原稿继续修复，而不是重新抽样同一 WriterPacket。
@@ -509,19 +518,14 @@ export function useGameLoop() {
             && cachedNarrativeFailure.chatId === tavern.activeChatId
             && cachedNarrativeFailure.input === userInput) {
             resumedNarrativeFailure = cachedNarrativeFailure;
-            const systemMessage = preparedTurn.writerMessages[0];
-            const repairPrompt = resumedNarrativeFailure.review
-              ? buildNarrativeRepairPrompt(
-                  preparedTurn.writerPacket,
-                  resumedNarrativeFailure.draft,
-                  resumedNarrativeFailure.review,
-                )
-              : buildNarrativeFormatRepairPrompt(
-                  preparedTurn.writerPacket,
-                  resumedNarrativeFailure.draft,
-                  resumedNarrativeFailure.formatErrors ?? [],
-                );
-            requestMessages = [systemMessage, { role: 'user', content: repairPrompt }];
+            if (!resumedNarrativeFailure.reviewPending) {
+              const systemMessage = preparedTurn.writerMessages[0];
+              const repairPrompt = buildRetryPromptFromNarrativeFailure(
+                preparedTurn.writerPacket,
+                resumedNarrativeFailure,
+              );
+              requestMessages = [systemMessage, { role: 'user', content: repairPrompt }];
+            }
           }
         } catch (pipelineError) {
           preparedTurn = null;
@@ -844,18 +848,7 @@ export function useGameLoop() {
         }
       };
 
-      await streamChatCompletion(
-        settings.api,
-        requestMessages,
-        activePreset,
-        {
-          onToken: (token) => {
-            fullText += token;
-            actions.setStreamBuffer(fullText);
-            // Deliberately do not parse or render partial output. The complete
-            // turn must pass protocol, narrative and transaction validation first.
-          },
-          onComplete: async () => {
+      const completeNarrative = async () => {
             const validateNarrativeCandidate = (rawNarrative: string) => {
               const candidateText = repairRecoverableOutput(rawNarrative).text;
               const candidateParseState = parseChunk(createParseState(), candidateText, { strict: true });
@@ -900,6 +893,13 @@ export function useGameLoop() {
                 validationErrors: candidateValidationErrors,
               };
             };
+            let protocolResiduals: ValidationError[] = resumedNarrativeFailure?.priorFormatResiduals ?? [];
+            if (resumedNarrativeFailure?.formatErrors) {
+              protocolResiduals = mergeProtocolRepairResiduals(
+                protocolResiduals,
+                resumedNarrativeFailure.formatErrors,
+              );
+            }
             const repairProtocol = async (rawNarrative: string) => {
               let candidate = validateNarrativeCandidate(rawNarrative);
               if (!preparedTurn) return candidate;
@@ -915,9 +915,11 @@ export function useGameLoop() {
                   packet: preparedTurn.writerPacket,
                   rejectedNarrative: candidate.text,
                   errors,
+                  priorResiduals: protocolResiduals,
                   formatPrompt: settings.formatPromptTemplate,
                   abortSignal: abortController.signal,
                 });
+                protocolResiduals = mergeProtocolRepairResiduals(protocolResiduals, errors);
                 candidate = validateNarrativeCandidate(repaired);
               }
               return candidate;
@@ -930,11 +932,11 @@ export function useGameLoop() {
               cachedNarrativeFailure = {
                 chatId: tavern.activeChatId,
                 input: userInput,
-                draft: fullText,
-                formatErrors: [{
-                  code: 'FORMAT_REPAIR_CALL_FAILED',
-                  message: formatRepairError instanceof Error ? formatRepairError.message : String(formatRepairError),
-                }],
+                ...snapshotFormatRepairCallFailure({
+                  draft: fullText,
+                  error: formatRepairError,
+                  priorFormatResiduals: protocolResiduals,
+                }),
               };
               actions.setStreaming(false);
               actions.setIsWaitingForAI(false);
@@ -963,6 +965,7 @@ export function useGameLoop() {
                 input: userInput,
                 draft: fullText,
                 formatErrors: errors,
+                priorFormatResiduals: protocolResiduals,
               };
               actions.setStreaming(false);
               actions.setIsWaitingForAI(false);
@@ -978,6 +981,8 @@ export function useGameLoop() {
 
             if (preparedTurn) {
               if (preparedTurn.reviewPolicy.narrative || preparedTurn.reviewPolicy.style) {
+                let narrativeReview: FactReview | undefined;
+                let narrativeResiduals: FactReviewViolation[] = factResidualsForRetry(resumedNarrativeFailure);
                 try {
                   const withoutUngroundedLines = removeUngroundedNarrativeLines(preparedTurn.writerPacket, fullText);
                   if (withoutUngroundedLines !== fullText) {
@@ -1031,18 +1036,45 @@ export function useGameLoop() {
                     return combineNarrativeReviews([candidateFactReview, candidateStyleReview]);
                   };
 
-                  let narrativeReview = await reviewCandidate(narrative, fullText);
-                  for (let attempt = 0; attempt < 3 && !narrativeReview.approved; attempt += 1) {
+                  narrativeReview = await reviewCandidate(narrative, fullText);
+                  for (let attempt = 0; attempt < 3 && narrativeReview && !narrativeReview.approved; attempt += 1) {
+                    const rejectedReview = narrativeReview;
                     const repairedNarrative = await repairNarrativeAgainstWriterPacket({
                       api: resolveAnalysisApi(settings),
                       preset: activePreset,
                       packet: preparedTurn.writerPacket,
                       rejectedNarrative: fullText,
-                      review: narrativeReview,
+                      review: rejectedReview,
+                      priorResiduals: narrativeResiduals,
                       formatPrompt: settings.formatPromptTemplate,
                       abortSignal: abortController.signal,
                     });
-                    let repairCandidate = await repairProtocol(repairedNarrative);
+                    narrativeResiduals = mergeRepairResiduals(narrativeResiduals, rejectedReview.violations);
+                    let repairCandidate;
+                    try {
+                      repairCandidate = await repairProtocol(repairedNarrative);
+                    } catch (formatRepairError) {
+                      cachedNarrativeFailure = {
+                        chatId: tavern.activeChatId,
+                        input: userInput,
+                        ...snapshotFormatRepairCallFailure({
+                          draft: repairedNarrative,
+                          error: formatRepairError,
+                          priorFormatResiduals: protocolResiduals,
+                          review: rejectedReview,
+                          priorResiduals: narrativeResiduals,
+                        }),
+                      };
+                      actions.setStreaming(false);
+                      actions.setIsWaitingForAI(false);
+                      actions.setTurnRecovery({
+                        phase: 'failed_stream',
+                        userInput,
+                        errorMessage: `正文格式修复调用失败，已保留原稿：${formatRepairError instanceof Error ? formatRepairError.message : String(formatRepairError)}`,
+                        repairable: true,
+                      });
+                      return;
+                    }
                     const groundedRepair = removeUngroundedNarrativeLines(
                       preparedTurn.writerPacket,
                       repairCandidate.text,
@@ -1073,8 +1105,13 @@ export function useGameLoop() {
                       cachedNarrativeFailure = {
                         chatId: tavern.activeChatId,
                         input: userInput,
-                        draft: fullText,
-                        formatErrors: errors,
+                        ...snapshotFactRepairFormatFailure({
+                          draft: fullText,
+                          errors,
+                          priorFormatResiduals: protocolResiduals,
+                          review: rejectedReview,
+                          priorResiduals: narrativeResiduals,
+                        }),
                       };
                       actions.setStreaming(false);
                       actions.setIsWaitingForAI(false);
@@ -1093,13 +1130,14 @@ export function useGameLoop() {
                     );
                   }
 
-                  if (!narrativeReview.approved) {
+                  if (narrativeReview && !narrativeReview.approved) {
                     const detail = narrativeReview.violations.map(item => item.message).join('\n');
                     cachedNarrativeFailure = {
                       chatId: tavern.activeChatId,
                       input: userInput,
                       draft: fullText,
                       review: narrativeReview,
+                      priorResiduals: narrativeResiduals,
                     };
                     actions.setStreaming(false);
                     actions.setIsWaitingForAI(false);
@@ -1115,12 +1153,22 @@ export function useGameLoop() {
                   actions.setStreamBuffer(fullText);
                   actions.setParsedContent(parseStateRef.current.parsed);
                 } catch (reviewError) {
+                  cachedNarrativeFailure = {
+                    chatId: tavern.activeChatId,
+                    input: userInput,
+                    ...snapshotNarrativeReviewCallFailure({
+                      draft: fullText,
+                      error: reviewError,
+                      priorResiduals: narrativeResiduals,
+                    }),
+                  };
                   actions.setStreaming(false);
                   actions.setIsWaitingForAI(false);
                   actions.setTurnRecovery({
                     phase: 'failed_stream',
                     userInput,
                     errorMessage: `正文审查失败，未播放也未写入存档：${reviewError instanceof Error ? reviewError.message : String(reviewError)}`,
+                    repairable: true,
                   });
                   return;
                 }
@@ -1178,25 +1226,46 @@ export function useGameLoop() {
                 errorMessage: '受控剧情编排结果缺失，本回合未播放也未写入存档。',
               });
             }
+      };
+
+      if (resumedNarrativeFailure?.reviewPending) {
+        // The Writer already produced a protocol-valid draft. A transient critic
+        // failure resumes here so retry does not spend a call rewriting good text.
+        fullText = resumedNarrativeFailure.draft;
+        actions.setStreamBuffer(fullText);
+        await completeNarrative();
+      } else {
+        await streamChatCompletion(
+          settings.api,
+          requestMessages,
+          activePreset,
+          {
+            onToken: (token) => {
+              fullText += token;
+              actions.setStreamBuffer(fullText);
+              // Deliberately do not parse or render partial output. The complete
+              // turn must pass protocol, narrative and transaction validation first.
+            },
+            onComplete: completeNarrative,
+            onError: (error) => {
+              actions.setStreaming(false);
+              actions.setIsWaitingForAI(false);
+              actions.setApiError(error.message);
+              actions.setTurnRecovery({ phase: 'failed_stream', userInput, errorMessage: error.message });
+            },
           },
-          onError: (error) => {
-            actions.setStreaming(false);
-            actions.setIsWaitingForAI(false);
-            actions.setApiError(error.message);
-            actions.setTurnRecovery({ phase: 'failed_stream', userInput, errorMessage: error.message });
-          },
-        },
-        abortController.signal,
-        {
-          onRetry: (attempt, retryError) => {
-            actions.addNotification({
-              type: 'warning',
-              message: `连接失败，正在自动重试（第 ${attempt} 次）: ${retryError.message}`,
-              duration: 4000,
-            });
-          },
-        }
-      );
+          abortController.signal,
+          {
+            onRetry: (attempt, retryError) => {
+              actions.addNotification({
+                type: 'warning',
+                message: `连接失败，正在自动重试（第 ${attempt} 次）: ${retryError.message}`,
+                duration: 4000,
+              });
+            },
+          }
+        );
+      }
     } catch (error) {
       actions.setStreaming(false);
       actions.setIsWaitingForAI(false);

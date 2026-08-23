@@ -1,6 +1,7 @@
-import type { DirectorPlan, FactReview, MysteryBrief, WriterPacket } from './types';
+import type { DirectorPlan, FactReview, FactReviewViolation, MysteryBrief, WriterPacket } from './types';
 import type { ValidationError } from '../../sillytavern/output-protocol';
 import { LOOP_PACING_CONTRACT } from './loop-contract';
+import { buildDoNotRepeatBlock, buildProtocolDoNotRepeatBlock } from './repair-task';
 
 export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 
@@ -194,10 +195,12 @@ export function buildNarrativeRepairPrompt(
   packet: WriterPacket,
   rejectedNarrative: string,
   review: FactReview,
+  priorResiduals: FactReviewViolation[] = [],
 ): string {
   const styleCodes = new Set(['repeated-prose', 'repeated-imagery', 'style-template-repetition']);
   const styleOnly = review.violations.length > 0
     && review.violations.every(item => styleCodes.has(item.code));
+  const doNotRepeat = buildDoNotRepeatBlock(review.violations, priorResiduals);
 
   if (styleOnly) {
     return `上一版可播放场景只有语言重复问题。请做局部文笔润色，并输出一份标签完整、可直接替换原文的全文。
@@ -206,6 +209,8 @@ export function buildNarrativeRepairPrompt(
 violations 中引号标出的候选原句必须从新输出中完全消失；不得把它当作角色口癖保留，也不得只改标点、引号或语气词。
 改写时换用具体且符合当前人物和场景的表达，不要只是替换同义词，也不要把原来的重复意象改成另一套贯穿全文的新模板。
 不得新增 WriterPacket 未授权的事实；不得省略任何闭合标签。只输出项目规定标签，不要解释修改过程。
+
+${doNotRepeat}
 
 [WriterPacket]
 ${jsonBlock(packet)}
@@ -221,7 +226,9 @@ ${jsonBlock(review)}`;
 必须逐条落实 corrections；删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
 如果 violations 同时包含文风重复，只改写被点名的句子、意象或动作模板，不得借此改动剧情节点。
 stance=lies-about 的角色只能明确否认、质疑证据或普通拒答；不得用台词、沉默、眼神、动作或旁白形成半自白。
-不得改变 WriterPacket、不得新增事实、不得省略闭合标签。
+不得改变 WriterPacket、不得新增事实、不得省略闭合标签。不得从头另写剧情。
+
+${doNotRepeat}
 
 [WriterPacket]
 ${jsonBlock(packet)}
@@ -237,10 +244,13 @@ export function buildNarrativeFormatRepairPrompt(
   packet: WriterPacket,
   rejectedNarrative: string,
   errors: ValidationError[],
+  priorResiduals: ValidationError[] = [],
 ): string {
   return `上一版正文的剧情内容已经生成，但输出协议不合法。请只修复输出协议，并输出一份可直接替换原文的完整结果。
-不得重新构思剧情，不得改变事件顺序、人物意图、台词含义、事实揭示、知识事件、变量、时间消耗、摘要或已有选项；只允许补全/纠正标签、行指令字段和满足最低数量所必需的中性选项。若 ProtocolErrors 明确指出场景、说话人或称呼不符，只对该字段做最小纠正。
+不得重新构思剧情，不得从头另写剧情，不得改变事件顺序、人物意图、台词含义、事实揭示、知识事件、变量、时间消耗、摘要或已有选项；只允许补全/纠正标签、行指令字段和满足最低数量所必需的中性选项。若 ProtocolErrors 明确指出场景、说话人或称呼不符，只对该字段做最小纠正。
 若必须补足选项，新选项只能延续 WriterPacket 已有 optionIntents，不得新增事实或剧情结果。不要解释修改过程，不要输出 Markdown。
+
+${buildProtocolDoNotRepeatBlock(errors, priorResiduals)}
 
 [WriterPacket]
 ${jsonBlock(packet)}

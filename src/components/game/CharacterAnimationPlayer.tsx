@@ -7,6 +7,7 @@ import {
   type CharacterAnimationClip,
   type CharacterBlinkClip,
 } from '../../engine/character-animation';
+import { preloadImages } from '../../utils/assetManager';
 
 interface CharacterAnimationPlayerProps {
   clip: CharacterAnimationClip;
@@ -34,6 +35,13 @@ export function CharacterAnimationPlayer({
   const [held, setHeld] = useState(false);
   const [tailBlinkClosed, setTailBlinkClosed] = useState(false);
   const [tailBlinkFrame, setTailBlinkFrame] = useState(0);
+  const assetKey = useMemo(() => [
+    clip.src,
+    ...(clip.sources ?? []),
+    ...(tailBlink ? [tailBlink.src, ...(tailBlink.sources ?? [])] : []),
+  ].join('|'), [clip.src, clip.sources, tailBlink]);
+  const [loadedAssetKey, setLoadedAssetKey] = useState<string | null>(null);
+  const assetsReady = loadedAssetKey === assetKey;
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   const startedAtRef = useRef(0);
@@ -55,6 +63,8 @@ export function CharacterAnimationPlayer({
     setTailBlinkClosed(false);
     setTailBlinkFrame(0);
     stopAtElapsedRef.current = null;
+
+    if (!assetsReady) return;
 
     if (reduceMotion) {
       const frame = reducedMotionFrame(clip);
@@ -95,7 +105,7 @@ export function CharacterAnimationPlayer({
     };
     animationFrame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(animationFrame);
-  }, [clip, reduceMotion]);
+  }, [assetsReady, clip, reduceMotion]);
 
   useEffect(() => {
     if (!clip.loop || !stopAfterCycle || held || reduceMotion) return;
@@ -145,35 +155,20 @@ export function CharacterAnimationPlayer({
   }, [held, reduceMotion, tailBlink]);
 
   useEffect(() => {
-    const sheet = new Image();
-    const clipImages = clip.sources?.map(source => {
-      const image = new Image();
-      image.src = source;
-      return image;
-    }) ?? [];
-    const blinkImages = tailBlink
-      ? (tailBlink.sources ?? [tailBlink.src]).map(source => {
-          const image = new Image();
-          image.src = source;
-          return image;
-        })
-      : [];
-    sheet.onload = () => setSheetFailed(false);
-    sheet.onerror = () => setSheetFailed(true);
-    sheet.src = clip.src;
-    return () => {
-      sheet.onload = null;
-      sheet.onerror = null;
-      clipImages.forEach(image => {
-        image.onload = null;
-        image.onerror = null;
-      });
-      blinkImages.forEach(image => {
-        image.onload = null;
-        image.onerror = null;
-      });
-    };
-  }, [clip.src, clip.sources, tailBlink]);
+    let cancelled = false;
+    setLoadedAssetKey(null);
+    const sources = [
+      clip.src,
+      ...(clip.sources ?? []),
+      ...(tailBlink ? [tailBlink.src, ...(tailBlink.sources ?? [])] : []),
+    ];
+    void preloadImages(sources).then(progress => {
+      if (cancelled) return;
+      setSheetFailed(progress.failed > 0);
+      setLoadedAssetKey(assetKey);
+    });
+    return () => { cancelled = true; };
+  }, [assetKey, clip.src, clip.sources, tailBlink]);
 
   const clipUsesFrameFiles = Boolean(clip.sources?.length);
   const displayedClipHref = clip.sources?.[frame] ?? clip.src;
@@ -193,7 +188,7 @@ export function CharacterAnimationPlayer({
       className={className}
       data-animation-frame={frame}
       data-animation-blink-frame={tailBlinkClosed ? tailBlinkFrame : undefined}
-      data-animation-state={sheetFailed ? 'fallback' : tailBlinkClosed ? 'blink' : held ? 'held' : 'playing'}
+      data-animation-state={!assetsReady ? 'loading' : sheetFailed ? 'fallback' : tailBlinkClosed ? 'blink' : held ? 'held' : 'playing'}
       style={style}
       aria-hidden={ariaHidden}
     >
@@ -205,18 +200,18 @@ export function CharacterAnimationPlayer({
         style={{ display: 'block', overflow: 'hidden', imageRendering: 'pixelated' }}
       >
         <image
-          href={sheetFailed
+          href={!assetsReady || sheetFailed
             ? fallbackSrc
             : (tailBlinkClosed || restOnBlinkSource) && tailBlink
               ? displayedBlinkHref
               : displayedClipHref}
-          x={sheetFailed
+          x={!assetsReady || sheetFailed
             ? 0
             : (tailBlinkClosed || restOnBlinkSource) && tailBlink
               ? blinkUsesFrameFiles ? 0 : -tailBlinkFrame * STANDARD_CHARACTER_CANVAS.width
               : clipUsesFrameFiles ? 0 : -frame * STANDARD_CHARACTER_CANVAS.width}
           y={0}
-          width={sheetFailed
+          width={!assetsReady || sheetFailed
             ? STANDARD_CHARACTER_CANVAS.width
             : (tailBlinkClosed || restOnBlinkSource) && tailBlink
               ? blinkUsesFrameFiles

@@ -21,6 +21,10 @@ import { applyCharacterEmotionPolicies } from '../../engine/character-emotion-po
 import { PlayerIdentityPrompt } from './PlayerIdentityPrompt';
 import { resolveNpcPlayerKnowledge } from '../../data/npcPlayerKnowledge';
 import { projectKnowledgeForPlayback } from '../../utils/knowledgePresentation';
+import { getBackgroundById, resolveBackgroundForTime } from '../../data/backgroundAssets';
+import { resolveCharacterSprite } from '../../utils/characterAssets';
+import { assetUrl } from '../../utils/assetUrl';
+import { prefetchImages } from '../../utils/assetManager';
 
 /* ── 像素风对话框 ── */
 
@@ -29,6 +33,7 @@ export function DialogueBox() {
   const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
   const autoMode = useGameStore(state => state.game.autoMode);
   const sceneComplete = useGameStore(state => state.game.sceneComplete);
+  const gameTime = useGameStore(state => state.game.gameStatus.time);
   const settings = useGameStore(state => state.tavern.settings);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const variables = useGameStore(state => state.tavern.variables);
@@ -75,6 +80,24 @@ export function DialogueBox() {
   const displayText = applyMacros(currentLine?.text || '', userName, characterName, dialogueMacros);
 
   const { displayedText, isComplete, skip } = useTypewriter(displayText, typingSpeed, true);
+
+  useEffect(() => {
+    const nextLine = currentScene?.lines[currentLineIndex + 1];
+    if (!nextLine) return;
+    const urls: string[] = [];
+    if (nextLine.background) {
+      const resolved = resolveBackgroundForTime(nextLine.background, gameTime);
+      const background = getBackgroundById(resolved)?.file ?? resolved;
+      urls.push(background.startsWith('http')
+        ? background
+        : assetUrl(`assets/backgrounds/${background}${background.includes('.') ? '' : '.png'}`));
+    }
+    if (nextLine.character) {
+      const portrait = resolveCharacterSprite(nextLine.character);
+      urls.push(portrait.startsWith('http') ? portrait : assetUrl(`assets/characters/${portrait}`));
+    }
+    prefetchImages(urls);
+  }, [currentLineIndex, currentScene, gameTime]);
 
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committedKnowledgeRef = useRef(new Set<string>());

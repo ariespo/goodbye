@@ -4,12 +4,15 @@
   "version": "0.8.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run assets:manifest",
     "dev": "vite",
+    "prebuild": "npm run assets:manifest",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest",
     "lint": "eslint src",
-    "assets:placeholders": "node scripts/generate-placeholder-assets.mjs"
+    "assets:placeholders": "node scripts/generate-placeholder-assets.mjs",
+    "assets:manifest": "node scripts/generate-asset-manifest.mjs"
   },
   "dependencies": {
     "@chinese-fonts/lxgwwenkai": "^1.1.0",
