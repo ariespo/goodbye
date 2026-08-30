@@ -1,4 +1,5 @@
 import type { DynamicRecord } from './types';
+import { INITIAL_PLAYER_RESOURCES } from '../data/gameDefaults';
 
 const UNIQUE_ARRAY_KEYS = new Set([
   'unlockedClues',
@@ -69,8 +70,7 @@ function mergeUniqueArray(current: unknown[], updates: unknown[]): unknown[] {
 export const DEFAULT_GAME_VARIABLES: DynamicRecord = {
   cycleCount: 1,
   location: 'home',
-  stamina: 100,
-  sanity: 80,
+  ...INITIAL_PLAYER_RESOURCES,
   affinity: { fumi: 70, touko: 40 },
   suspicion: {
     'old-man': 0,

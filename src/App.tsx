@@ -20,6 +20,7 @@ import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
 import { OPENING_STORYLINE } from './engine/opening-storyline';
 import { createDefaultVariables } from './sillytavern/vars-merger';
+import { INITIAL_PLAYER_RESOURCES } from './data/gameDefaults';
 import './styles/animations.css';
 import './styles/themes.css';
 import { applyFontFamily } from './utils/fonts';
@@ -100,7 +101,7 @@ function App() {
           const openingMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穗的早晨</sum>\n<vars>{ "stamina": 100, "sanity": 80 }</vars>`,
+            content: `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:回到与文穗的早晨</sum>\n<vars>{ "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`,
             timestamp: Date.now(),
             variables: openingVariables,
           };

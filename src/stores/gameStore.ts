@@ -6,6 +6,7 @@ import type {
   DynamicRecord,
 } from '../sillytavern/types';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
+import { INITIAL_PLAYER_RESOURCES } from '../data/gameDefaults';
 import { recordEndingProgress } from '../utils/metaProgress';
 
 export interface TurnRecoveryState {
@@ -135,8 +136,7 @@ interface GameStore {
 
 const defaultGameStatus: GameStatus = {
   time: new Date(2024, 8, 9, 9, 0),
-  stamina: 100,
-  sanity: 80,
+  ...INITIAL_PLAYER_RESOURCES,
   items: [],
 };
 

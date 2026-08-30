@@ -1,5 +1,6 @@
 import { maintextToScene } from '../engine/scene-parser';
 import { OPENING_STORYLINE, parseOpeningStoryline } from '../engine/opening-storyline';
+import { INITIAL_PLAYER_RESOURCES } from '../data/gameDefaults';
 import { getChats, saveChat } from '../sillytavern/database';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
 import type {
@@ -18,13 +19,12 @@ import { resolveSceneEnvironment } from './sceneEnvironment';
 import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
 
 const OPENING_ASSISTANT_CONTENT =
-  `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:暴雨第五天，文穗已出门，联系不上</sum>\n<vars>{ "location": "home", "stamina": 100, "sanity": 70 }</vars>`;
+  `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:暴雨第五天，文穗已出门，联系不上</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
 
 export function createDefaultGameStatus(): GameStatus {
   return {
     time: new Date(2024, 8, 9, 8, 0),
-    stamina: 100,
-    sanity: 70,
+    ...INITIAL_PLAYER_RESOURCES,
     items: [],
   };
 }

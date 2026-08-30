@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage, ParsedContent, SaveSlot } from '../sillytavern/types';
+import { createDefaultVariables } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
-import { buildSaveSlotPayload, loadGameFromSave, resolveSavedParsedContent } from './gameSession';
+import {
+  buildSaveSlotPayload,
+  createDefaultGameStatus,
+  loadGameFromSave,
+  resolveSavedParsedContent,
+} from './gameSession';
 
 vi.mock('../sillytavern/database', () => ({
   getChats: vi.fn(async () => []),
@@ -54,6 +60,13 @@ function createSave(overrides: Partial<SaveSlot['gameState']> = {}): SaveSlot {
     historyIndex: 0,
   };
 }
+
+describe('new-game resource initialization', () => {
+  it('starts both runtime status and Agent variables at 70 sanity', () => {
+    expect(createDefaultGameStatus().sanity).toBe(70);
+    expect(createDefaultVariables().sanity).toBe(70);
+  });
+});
 
 describe('choice-screen save restoration', () => {
   beforeEach(() => {
