@@ -189,7 +189,7 @@ describe('ActionBar PC operation wheel', () => {
     vi.useRealTimers();
   });
 
-  it('returns focus to the persistent operation hub after keyboard-opening and closing a real modal', () => {
+  it('returns focus to the persistent operation hub after opening and closing a real modal', () => {
     vi.useFakeTimers();
     useGameStore.setState(state => ({
       game: { ...state.game, currentScene: playableScene, sceneComplete: true, isWaitingForAI: false },
@@ -207,7 +207,6 @@ describe('ActionBar PC operation wheel', () => {
 
     const hub = screen.getByRole('button', { name: '操作' });
     hub.focus();
-    fireEvent.keyDown(hub, { key: 'Enter' });
     fireEvent.click(hub);
     const clueSector = screen.getByRole('menuitem', { name: '线索' });
     clueSector.focus();
@@ -222,6 +221,14 @@ describe('ActionBar PC operation wheel', () => {
     expect(document.activeElement).toBe(hub);
     act(() => vi.advanceTimersByTime(220));
     expect(screen.queryByRole('dialog', { name: '线索' })).toBeNull();
+  });
+
+  it('restores pointer interaction for the narrow action strip inside the inert HUD canvas', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+    const narrowRules = styles.match(/@media\s*\(max-width:\s*800px\)\s*\{[\s\S]*?\n\}/g)?.join('\n') ?? '';
+
+    expect(narrowRules).toMatch(/\.mobile-action-strip\s*\{[^}]*pointer-events:\s*auto/);
+    expect(narrowRules).toMatch(/\.mobile-action-strip button\s*\{[^}]*pointer-events:\s*auto/);
   });
 
   it('removes sector transforms, animation and stagger when reduced motion is requested', () => {

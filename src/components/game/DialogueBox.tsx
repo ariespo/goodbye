@@ -314,6 +314,9 @@ export function DialogueBox() {
     }
     function onKey(e: KeyboardEvent) {
       if (e.code === 'Space' || e.code === 'Enter') {
+        if (e.target instanceof Element && e.target.closest(
+          'button, a[href], input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="button"]',
+        )) return;
         if (isAdvanceBlocked()) return;
         e.preventDefault();
         handleStartOrAdvance();

@@ -3269,8 +3269,8 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   .mobile-status-panel__readout { display: grid; grid-template-columns: repeat(2, auto); gap: 4px 12px; padding: 8px; border: 2px solid #f2f2f0; background: #050505; font-size: 12px; }
   .archive-menu { position: fixed; top: 58px; left: 10px; width: min(300px, calc(100vw - 20px)); }
   .operation-dock { display: none; }
-  .mobile-action-strip { position: absolute; z-index: 40; right: 8px; bottom: var(--mobile-safe-bottom, 8px); left: 8px; display: flex; gap: 5px; overflow-x: auto; }
-  .mobile-action-strip button { display: grid; min-width: 58px; height: 48px; grid-template-columns: 22px auto; align-items: center; gap: 4px; padding: 4px 7px; border: 2px solid #aaa9a3; background: #050505; color: #f2f2f0; }
+  .mobile-action-strip { position: absolute; z-index: 40; right: 8px; bottom: var(--mobile-safe-bottom, 8px); left: 8px; display: flex; gap: 5px; overflow-x: auto; pointer-events: auto; }
+  .mobile-action-strip button { display: grid; min-width: 58px; height: 48px; grid-template-columns: 22px auto; align-items: center; gap: 4px; padding: 4px 7px; border: 2px solid #aaa9a3; background: #050505; color: #f2f2f0; pointer-events: auto; }
   .mobile-action-strip button:disabled { opacity: 0.35; }
   .mobile-action-strip img { width: 22px; height: 22px; }
   .game-canvas .dialogue-panel { left: 50%; bottom: calc(var(--mobile-safe-bottom, 8px) + 58px); width: calc(100vw - 20px); }
