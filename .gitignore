@@ -32,3 +32,4 @@ docs/superpowers/completion-reports/
 # Large source/reference assets kept locally outside the deployable baseline
 docs/development-assets/
 docs/approved-art/
+.worktrees/
