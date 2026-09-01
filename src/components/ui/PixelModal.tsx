@@ -1,5 +1,5 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import type { ButtonHTMLAttributes, HTMLAttributes, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { assetUrl } from '../../utils/assetUrl';
 import { PixelFrame } from './PixelFrame';
 
@@ -11,9 +11,25 @@ const pixelModalIconSrc = {
   investigate: assetUrl('assets/ui/penpot/pc/icon-modal-investigate.svg'),
   action: assetUrl('assets/ui/penpot/pc/icon-modal-action.svg'),
   warning: assetUrl('assets/ui/penpot/pc/icon-modal-warning.svg'),
+  close: assetUrl('assets/ui/penpot/pc/icon-modal-close.svg'),
 } as const;
 
 type PixelModalIconName = keyof typeof pixelModalIconSrc;
+
+const PixelModalCloseContext = createContext<(() => void) | null>(null);
+
+const focusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
+function getFocusableElements(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLElement>(focusableSelector)).filter(element => element.tabIndex >= 0);
+}
 
 interface PixelModalShellProps {
   open: boolean;
@@ -36,6 +52,7 @@ export function PixelModalShell({
 }: PixelModalShellProps) {
   const [rendered, setRendered] = useState(open);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -61,26 +78,66 @@ export function PixelModalShell({
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [closeBlocked, onClose, open]);
 
+  useEffect(() => {
+    if (!open || !rendered) return;
+
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    (getFocusableElements(dialog)[0] ?? dialog).focus();
+  }, [open, rendered]);
+
   if (!rendered) return null;
 
   const requestClose = () => {
     if (!closeBlocked) onClose();
   };
 
+  const trapFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return;
+
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const focusableElements = getFocusableElements(dialog);
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+    const focusEscaped = !dialog.contains(activeElement);
+
+    if (event.shiftKey && (activeElement === firstElement || focusEscaped)) {
+      event.preventDefault();
+      lastElement.focus();
+    } else if (!event.shiftKey && (activeElement === lastElement || focusEscaped)) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  };
+
   return (
     <div
+      ref={dialogRef}
       className={`pixel-modal-shell ${open ? 'is-open' : 'is-closing'} ${compact ? 'is-compact' : ''} ${className}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
+      tabIndex={-1}
       data-testid="pixel-modal-backdrop"
+      onKeyDown={trapFocus}
       onClick={(event) => {
         if (event.target === event.currentTarget) requestClose();
       }}
     >
-      <PixelFrame variant="modal" className="pixel-modal-frame" contentClassName="pixel-modal-frame-content">
-        {children}
-      </PixelFrame>
+      <PixelModalCloseContext.Provider value={requestClose}>
+        <PixelFrame variant="modal" className="pixel-modal-frame" contentClassName="pixel-modal-frame-content">
+          {children}
+        </PixelFrame>
+      </PixelModalCloseContext.Provider>
     </div>
   );
 }
@@ -102,6 +159,7 @@ export function PixelModalHeader({
   onClose,
   closeLabel = '关闭',
 }: PixelModalHeaderProps) {
+  const requestShellClose = useContext(PixelModalCloseContext);
   const resolvedIconSrc = iconSrc && (pixelModalIconSrc[iconSrc as PixelModalIconName] ?? iconSrc);
 
   return (
@@ -111,8 +169,8 @@ export function PixelModalHeader({
         <h2 id={titleId} className="pixel-modal-title">{title}</h2>
         {meta && <p className="pixel-modal-meta">{meta}</p>}
       </div>
-      <button type="button" className="pixel-modal-close" onClick={onClose} aria-label={closeLabel}>
-        <span aria-hidden="true">×</span>
+      <button type="button" className="pixel-modal-close" onClick={requestShellClose ?? onClose} aria-label={closeLabel}>
+        <img className="pixel-modal-close-icon" src={pixelModalIconSrc.close} alt="" />
       </button>
     </header>
   );

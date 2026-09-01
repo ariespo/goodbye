@@ -84,6 +84,49 @@ describe('PixelModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('blocks the header close control when a nested confirmation blocks the shell', () => {
+    const onClose = vi.fn();
+    render(<Harness open onClose={onClose} closeBlocked />);
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('moves focus into the dialog and contains Tab navigation', () => {
+    render(
+      <>
+        <button type="button">外部操作</button>
+        <PixelModalShell open onClose={vi.fn()} labelledBy="focus-title">
+          <PixelModalHeader titleId="focus-title" title="焦点" onClose={vi.fn()} closeLabel="关闭" />
+          <PixelModalContent>
+            <button type="button">内部操作</button>
+          </PixelModalContent>
+        </PixelModalShell>
+      </>,
+    );
+
+    const closeButton = screen.getByRole('button', { name: '关闭' });
+    const insideButton = screen.getByRole('button', { name: '内部操作' });
+    expect(closeButton).toHaveFocus();
+
+    insideButton.focus();
+    fireEvent.keyDown(insideButton, { key: 'Tab' });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true });
+    expect(insideButton).toHaveFocus();
+  });
+
+  it('uses the independent close SVG instead of text content', () => {
+    render(<Harness open onClose={vi.fn()} />);
+
+    const closeButton = screen.getByRole('button', { name: '关闭' });
+    const closeIcon = closeButton.querySelector('img');
+    expect(closeButton.textContent).toBe('');
+    expect(closeIcon).toHaveAttribute('src', expect.stringContaining('assets/ui/penpot/pc/icon-modal-close.svg'));
+  });
+
   it('exposes active action and list item states as presentation-only data attributes', () => {
     render(
       <>

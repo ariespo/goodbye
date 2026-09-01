@@ -3922,6 +3922,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 
   .pixel-modal-close:hover { background: #f2f2f0; color: #050505; }
   .pixel-modal-close:active { transform: translate(2px, 2px); }
+  .pixel-modal-close-icon { width: 20px; height: 20px; image-rendering: pixelated; }
 
   .pixel-modal-content {
     min-height: 0;
