@@ -4209,3 +4209,136 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   color: #050505;
   box-shadow: none;
 }
+
+/* Map is a PC HUD board. These measured coordinates match BOARD_MAP while the
+ * generic PixelModal rules continue to serve portrait and mobile layouts. */
+.hud-design-canvas .map-modal-shell.pixel-modal-shell {
+  z-index: 245;
+  padding: 0;
+  background: rgba(5, 5, 5, .88);
+}
+
+.hud-design-canvas .map-modal-shell .pixel-modal-frame {
+  position: absolute;
+  top: 122px;
+  left: 90px;
+  width: 1460px;
+  height: 738px;
+  max-height: none;
+}
+
+.hud-design-canvas .map-modal-shell .pixel-modal-frame-content {
+  height: 100%;
+  max-height: none;
+  background: #050505;
+}
+
+.hud-design-canvas .map-modal-shell .pixel-modal-header {
+  min-height: 126px;
+  height: 126px;
+  padding: 28px 50px;
+  border-bottom-width: 3px;
+}
+
+.hud-design-canvas .map-modal-shell .pixel-modal-header-icon {
+  width: 40px;
+  height: 44px;
+}
+
+.hud-design-canvas .map-modal-shell .pixel-modal-title {
+  font-size: 32px;
+}
+
+.hud-design-canvas .map-modal-shell .pixel-modal-content.map-modal-content {
+  height: 412px;
+  flex: 0 0 412px;
+  overflow: hidden !important;
+  padding: 27px 50px 0;
+  background: #050505;
+}
+
+.hud-design-canvas .map-modal-shell .map-modal-map {
+  width: 1354px;
+  height: 385px;
+  overflow: hidden;
+  border: 3px solid #f2f2f0;
+  background: #080808;
+}
+
+.hud-design-canvas .map-modal-shell .map-canvas {
+  width: 100%;
+  min-width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+
+.hud-design-canvas .map-modal-shell .map-pixel-background { filter: grayscale(1) contrast(1.08); }
+.hud-design-canvas .map-modal-shell .map-location-node { color: #f2f2f0; }
+.hud-design-canvas .map-modal-shell .map-location-node[data-knowledge-stage='rumored'] { filter: grayscale(1); }
+.hud-design-canvas .map-modal-shell .map-location-node[data-current='true'] { z-index: 2; }
+.hud-design-canvas .map-modal-shell .map-player-marker::after { background: #f2f2f0; }
+.hud-design-canvas .map-modal-shell .map-player-marker__sprite {
+  filter: drop-shadow(2px 0 0 #050505) drop-shadow(-2px 0 0 #050505) drop-shadow(0 2px 0 #050505) drop-shadow(0 0 4px #f2f2f0);
+}
+.hud-design-canvas .map-modal-shell .map-player-marker__shadow { box-shadow: 0 0 0 2px #f2f2f0; }
+
+.hud-design-canvas .map-modal-shell .pixel-modal-footer.map-modal-footer {
+  position: relative;
+  display: block;
+  min-height: 200px;
+  height: 200px;
+  padding: 26px 50px 0;
+  border-top-width: 0;
+  background: #050505;
+}
+
+.hud-design-canvas .map-modal-shell .map-modal-info-copy { width: 640px; }
+.hud-design-canvas .map-modal-shell .map-location-name { color: #f2f2f0; font-size: 28px; }
+.hud-design-canvas .map-modal-shell .map-location-description { color: #b9b9b4; font-size: 16px; }
+.hud-design-canvas .map-modal-shell .map-location-signal,
+.hud-design-canvas .map-modal-shell .map-location-status {
+  border-color: #f2f2f0;
+  background: #050505;
+  color: #f2f2f0;
+}
+.hud-design-canvas .map-modal-shell .map-location-status[data-state='current'] { background: #f2f2f0; color: #050505; }
+.hud-design-canvas .map-modal-shell .map-location-status[data-state='rumored'] { border-color: #777773; color: #aaa9a3; }
+
+.hud-design-canvas .map-modal-shell .map-travel-meta {
+  position: absolute;
+  top: 70px;
+  left: 760px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #b9b9b4;
+  font: 16px/1 "JetBrains Mono", monospace;
+}
+
+.hud-design-canvas .map-modal-shell .map-travel-chip {
+  display: inline-flex;
+  gap: 6px;
+  color: #f2f2f0;
+}
+.hud-design-canvas .map-modal-shell .map-travel-chip > span { color: #b9b9b4; }
+.hud-design-canvas .map-modal-shell .map-travel-chip[data-danger='true'] { color: #f2f2f0; text-decoration: underline; }
+
+.hud-design-canvas .pixel-modal-action.map-travel-button {
+  position: absolute;
+  top: 30px;
+  right: 56px;
+  width: 299px;
+  min-width: 299px;
+  height: 82px;
+  min-height: 82px;
+  justify-content: center;
+  border-width: 3px;
+  font-size: 24px;
+}
+
+.hud-design-canvas .pixel-modal-action.map-travel-button:disabled {
+  border-color: #777773;
+  background: #050505;
+  color: #777773;
+  opacity: 1;
+}
