@@ -5,10 +5,14 @@ import { GameIcon } from '../ui/GameIcon';
 import type { OrganizedClue } from '../../sillytavern/types';
 import { saveChat } from '../../sillytavern/database';
 import { ConfirmModal } from '../system/ConfirmModal';
-
-const TEXT_MAIN = '#e8e4dc';
-const TEXT_DIM = '#aaa59e';
-const BLUE = '#86a8f2';
+import {
+  PixelModalAction,
+  PixelModalContent,
+  PixelModalFooter,
+  PixelModalHeader,
+  PixelModalListItem,
+  PixelModalShell,
+} from '../ui/PixelModal';
 
 export function ClueModal() {
   const showClues = useGameStore(state => state.ui.showClues);
@@ -26,8 +30,6 @@ export function ClueModal() {
     () => Array.isArray(variables.organizedClues) ? variables.organizedClues : [],
     [variables.organizedClues]
   );
-
-  if (!showClues) return null;
 
   const close = () => toggleModal('clues');
 
@@ -80,36 +82,25 @@ ${clueText}
   };
 
   return (
-    <div
-      className="clue-modal-shell fixed inset-0 z-[245] flex items-center justify-center px-4"
-      style={{ background: 'radial-gradient(circle at 50% 45%, rgba(24,30,40,0.42), rgba(0,0,0,0.88) 62%)' }}
-      onClick={close}
+    <PixelModalShell
+      open={showClues}
+      onClose={close}
+      labelledBy="clue-modal-title"
+      className="clue-modal-shell"
+      closeBlocked={pendingDeleteId !== null}
     >
-      <div
-        className="clue-modal clean-modal-frame clean-modal-frame-blue relative w-[720px] max-w-[94vw] select-none px-8 py-7"
-        onClick={event => event.stopPropagation()}
-        style={{
-          minHeight: 460,
-          maxHeight: '86vh',
-          imageRendering: 'pixelated',
-          filter: 'drop-shadow(0 24px 54px rgba(0,0,0,0.66))',
-        }}
-      >
-        <div className="mb-5 flex items-center justify-between border-b-2 border-[#25252d] pb-3">
-          <div>
-            <h2 className="font-serif-cn text-[22px] tracking-[0.18em]" style={{ color: TEXT_MAIN }}>线索</h2>
-            <div className="font-mono text-[11px] tracking-[0.2em]" style={{ color: TEXT_DIM }}>
-              ORGANIZED CLUE INDEX {clues.length}/6
-            </div>
-          </div>
-          <button onClick={close} data-cursor="pointer" className="pixel-close-button flex h-9 w-9 items-center justify-center" style={{ cursor: 'pointer' }}>
-            <GameIcon name="close" size={15} />
-          </button>
-        </div>
-
-        <div className="pixel-scroll-blue max-h-[52vh] space-y-3 overflow-y-auto pr-3">
+      <PixelModalHeader
+        titleId="clue-modal-title"
+        title="线索"
+        meta={`ORGANIZED CLUE INDEX ${clues.length}/6`}
+        iconSrc="clue"
+        onClose={close}
+        closeLabel="关闭线索"
+      />
+      <PixelModalContent className="clue-modal-content">
+        <div className="clue-modal-list">
           {clues.length === 0 ? (
-            <div className="py-20 text-center text-sm tracking-[0.12em]" style={{ color: TEXT_DIM }}>
+            <div className="clue-empty-state">
               暂无整理线索
             </div>
           ) : clues.map(clue => {
@@ -117,55 +108,56 @@ ${clueText}
             return (
               <div
                 key={clue.id}
-                className={`clue-card relative px-4 py-3 ${selected ? 'is-selected' : ''}`}
+                className="clue-card"
               >
-                <div className="flex items-start gap-3">
-                  <button
-                    data-cursor="pointer"
-                    onClick={() => toggleSelect(clue.id)}
-                    className="clue-select-button mt-1 flex h-8 w-8 shrink-0 items-center justify-center"
-                    aria-label={`${selected ? '取消选择' : '选择'}线索：${clue.title}`}
-                    aria-pressed={selected}
-                  >
+                <PixelModalListItem
+                  selected={selected}
+                  onClick={() => toggleSelect(clue.id)}
+                  className="clue-card-select"
+                  aria-label={`${selected ? '取消选择' : '选择'}线索：${clue.title}`}
+                  aria-pressed={selected}
+                >
+                  <span className="clue-select-mark" aria-hidden="true">
                     {selected && <GameIcon name="success" size={14} />}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 font-serif-cn text-[18px]" style={{ color: selected ? BLUE : TEXT_MAIN }}>{clue.title}</div>
-                    <div className="mb-2 text-[13px]" style={{ color: TEXT_DIM }}>来源：{clue.source}</div>
-                    <div className="whitespace-pre-wrap text-[15px] leading-7" style={{ color: TEXT_MAIN }}>{clue.description}</div>
-                  </div>
-                  <button
-                    data-cursor="pointer"
-                    onClick={() => setPendingDeleteId(clue.id)}
-                    className="clue-delete-button flex h-8 w-8 shrink-0 items-center justify-center"
-                    aria-label="删除线索"
-                  >
-                    <GameIcon name="trash" size={15} />
-                  </button>
-                </div>
+                  </span>
+                  <span className="clue-card-copy">
+                    <span className="clue-card-title">{clue.title}</span>
+                    <span className="clue-card-source">来源：{clue.source}</span>
+                    <span className="clue-card-description">{clue.description}</span>
+                  </span>
+                </PixelModalListItem>
+                <button
+                  type="button"
+                  data-cursor="pointer"
+                  onClick={() => setPendingDeleteId(clue.id)}
+                  className="clue-delete-button"
+                  aria-label="删除线索"
+                >
+                  <GameIcon name="trash" size={15} />
+                </button>
               </div>
             );
           })}
         </div>
-
-        <div className="clue-modal-footer mt-5 flex items-center justify-between gap-4 border-t-2 border-[#25252d] pt-4">
-          <div className="clue-selection-count text-[13px]" style={{ color: TEXT_DIM }}>
-            已选择 <strong>{selectedIds.length}</strong> 条
-          </div>
-          <button
-            data-sfx="deduction-start"
-            data-cursor={isWaitingForAI ? undefined : 'pointer'}
-            data-ready={selectedIds.length >= 2 ? 'true' : 'false'}
-            disabled={isWaitingForAI}
-            onClick={handleInfer}
-            className="clue-infer-button flex h-[46px] min-w-[150px] items-center justify-center gap-2 px-5 text-sm"
-            aria-label={selectedIds.length >= 2 ? `使用已选中的${selectedIds.length}条线索尝试推理` : '尝试推理，至少需要选择两条线索'}
-          >
-            <span className="clue-infer-icon"><GameIcon name="lightning" size={16} /></span>
-            {isWaitingForAI ? '推理中' : '尝试推理'}
-          </button>
+      </PixelModalContent>
+      <PixelModalFooter className="clue-modal-footer">
+        <div className="clue-selection-count">
+          已选择 <strong>{selectedIds.length}</strong> 条
         </div>
-      </div>
+        <PixelModalAction
+          active={selectedIds.length >= 2}
+          data-sfx="deduction-start"
+          data-cursor={isWaitingForAI ? undefined : 'pointer'}
+          data-ready={selectedIds.length >= 2 ? 'true' : 'false'}
+          disabled={isWaitingForAI}
+          onClick={handleInfer}
+          className="clue-infer-button"
+          aria-label={selectedIds.length >= 2 ? `使用已选中的${selectedIds.length}条线索尝试推理` : '尝试推理，至少需要选择两条线索'}
+          icon={<GameIcon name="lightning" size={16} />}
+        >
+          {isWaitingForAI ? '推理中' : '尝试推理'}
+        </PixelModalAction>
+      </PixelModalFooter>
       <ConfirmModal
         isOpen={!!pendingDeleteId}
         title="删除线索"
@@ -175,6 +167,6 @@ ${clueText}
           if (pendingDeleteId) removeClue(pendingDeleteId);
         }}
       />
-    </div>
+    </PixelModalShell>
   );
 }
