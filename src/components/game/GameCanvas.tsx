@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { BackgroundLayer } from './BackgroundLayer';
 import { DialogueBox } from './DialogueBox';
@@ -30,6 +30,28 @@ import { rebuildSceneFromChat } from '../../utils/sceneFromChat';
 const EndingEditor = lazy(() => import('./EndingEditor')
   .then(module => ({ default: module.EndingEditor })));
 
+const MOBILE_MAP_MEDIA_QUERY = '(max-width: 800px)';
+
+function useNarrowMapViewport() {
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(MOBILE_MAP_MEDIA_QUERY).matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    const query = window.matchMedia(MOBILE_MAP_MEDIA_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsNarrow(event.matches);
+    setIsNarrow(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  return isNarrow;
+}
+
 export function GameCanvas() {
   const mood = useGameStore(state => state.game.currentState.mood);
   const currentScene = useGameStore(state => state.game.currentScene);
@@ -39,6 +61,7 @@ export function GameCanvas() {
   });
   const actions = useGameStore(state => state.actions);
   const showEndingEditor = useGameStore(state => state.ui.showEndingEditor);
+  const isNarrowMapViewport = useNarrowMapViewport();
 
   // Fallback: 如果 currentScene 为 null 但 activeChat 有 assistant 消息,
   // 自动从最后一条 assistant message 重建 scene(解决刷新页面后 scene 丢失)
@@ -82,13 +105,14 @@ export function GameCanvas() {
       <KnowledgeUpdateOverlay />
       <GameplayGuide />
       <ApiGuideCard />
+      {isNarrowMapViewport && <MapModal />}
       <HudViewport>
         <DialogueBox />
         <StatusPanel />
         <ActionBar />
         <ActionPanel />
         <ClueModal />
-        <MapModal />
+        {!isNarrowMapViewport && <MapModal />}
       </HudViewport>
       <LoadingOverlay />
     </div>
