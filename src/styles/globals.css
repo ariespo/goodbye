@@ -4015,6 +4015,110 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   to { opacity: 0; transform: translateY(24px) scale(.96); }
 }
 
+/* Confirmations use the same opaque stepped frame as the three HUD boards,
+ * but stay deliberately compact so the pending decision remains the focus. */
+.confirm-modal-shell.pixel-modal-shell {
+  z-index: 300;
+  padding: 0;
+  background: rgba(5, 5, 5, .88);
+}
+
+.confirm-modal-shell .pixel-modal-frame {
+  width: 560px;
+  height: 310px;
+  max-height: none;
+}
+
+.confirm-modal-shell .pixel-modal-frame-content {
+  height: 100%;
+  max-height: none;
+  background: #050505;
+}
+
+.confirm-modal-shell .pixel-modal-header {
+  position: relative;
+  min-height: 94px;
+  height: 94px;
+  gap: 18px;
+  padding: 0 28px 0 34px;
+  border-bottom-width: 0;
+}
+
+.confirm-modal-shell .pixel-modal-header::after {
+  position: absolute;
+  right: 28px;
+  bottom: 0;
+  left: 34px;
+  height: 2px;
+  background: #f2f2f0;
+  content: '';
+}
+
+.confirm-modal-shell .pixel-modal-header-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.confirm-modal-shell .pixel-modal-title { font-size: 26px; }
+.confirm-modal-shell .pixel-modal-meta { font-size: 12px; }
+
+.confirm-modal-shell .pixel-modal-close {
+  position: absolute;
+  top: 25px;
+  right: 28px;
+  width: 40px;
+  height: 40px;
+}
+
+.confirm-modal-shell .pixel-modal-content.confirm-modal-content {
+  display: flex;
+  align-items: center;
+  padding: 18px 34px;
+  overflow: auto;
+  background: #050505;
+}
+
+.confirm-modal-content p {
+  margin: 0;
+  color: #d5d5cf;
+  font: 18px/1.65 "RenOuFangSong 16", "LXGW WenKai", monospace;
+  letter-spacing: .06em;
+}
+
+.confirm-modal-shell .pixel-modal-footer.confirm-modal-footer {
+  min-height: 78px;
+  height: 78px;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 14px 28px 14px 34px;
+  border-top-width: 2px;
+}
+
+.confirm-modal-shell .pixel-modal-action {
+  min-width: 118px;
+  min-height: 48px;
+  justify-content: center;
+  border-width: 3px;
+  font-size: 18px;
+}
+
+@media (max-width: 700px) {
+  .confirm-modal-shell.pixel-modal-shell {
+    position: fixed;
+    inset: 0;
+    padding: 18px;
+  }
+
+  .confirm-modal-shell .pixel-modal-frame {
+    width: min(560px, 100%);
+    height: auto;
+    min-height: 280px;
+    max-height: calc(100dvh - 36px);
+  }
+
+  .confirm-modal-shell .pixel-modal-frame-content { max-height: calc(100dvh - 36px); }
+}
+
 /* Clue index is a PC HUD board: keep this scoped so the portrait rules above
  * remain the source of truth outside the measured design canvas. */
 .hud-design-canvas .clue-modal-shell.pixel-modal-shell {
