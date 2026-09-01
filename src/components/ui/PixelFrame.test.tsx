@@ -38,7 +38,7 @@ describe('PixelFrame stepped rails', () => {
 
   it('uses the corrected nine-pixel stepped modal corners', () => {
     const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
-    const modalRule = styles.match(/\.world-pixel-frame-modal\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+    const modalRule = styles.match(/\.world-pixel-frame-modal\s*>\s*\.pixel-frame-layers\s*>\s*\.pixel-frame-layer\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
 
     expect(modalRule).toContain('calc(100% - 4px) 9px');
     expect(modalRule).toContain('100% 9px');
@@ -55,5 +55,42 @@ describe('PixelFrame stepped rails', () => {
     expect(modalLayers).toContain('overflow: visible');
     expect(modalContent).toContain('z-index: 3');
     expect(modalContent).toContain('clip-path: inset(12px)');
+  });
+
+  it('computes both modal rails without requiring a hud-design-canvas ancestor', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+    const selectors = [
+      '.world-pixel-frame-modal',
+      '.world-pixel-frame-modal > .pixel-frame-layers',
+      '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer',
+      '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--underlay',
+      '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--outer',
+      '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--gap',
+      '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--inner',
+      '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--fill',
+    ];
+    const escaped = (selector: string) => selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const modalRules = selectors.map(selector => {
+      const match = styles.match(new RegExp(`${escaped(selector)}\\s*\\{[^}]*\\}`));
+      return match?.[0] ?? '';
+    }).join('\n');
+    const style = document.createElement('style');
+    style.textContent = modalRules;
+    document.head.append(style);
+
+    render(<PixelFrame variant="modal">Portal modal</PixelFrame>);
+    const frame = screen.getByText('Portal modal').closest('.world-pixel-frame') as HTMLElement;
+    const outer = frame.querySelector('.pixel-frame-layer--outer') as HTMLElement;
+    const inner = frame.querySelector('.pixel-frame-layer--inner') as HTMLElement;
+
+    expect(getComputedStyle(frame).overflow).toBe('visible');
+    expect(getComputedStyle(outer).position).toBe('absolute');
+    expect(getComputedStyle(outer).inset).toBe('0');
+    expect(getComputedStyle(outer).backgroundColor).toBe('rgb(244, 244, 240)');
+    expect(getComputedStyle(inner).inset).toBe('8px');
+    expect(getComputedStyle(inner).backgroundColor).toBe('rgb(244, 244, 240)');
+    expect(getComputedStyle(inner).clipPath).toContain('polygon(');
+
+    style.remove();
   });
 });

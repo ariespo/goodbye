@@ -170,7 +170,9 @@ describe('ActionPanel', () => {
     expect(timeoutSpy.mock.calls.filter(([, delay]) => delay === 220)).toHaveLength(1);
 
     act(() => vi.advanceTimersByTime(219));
-    expect(screen.getByRole('dialog', { name: '调查' })).toHaveClass('is-closing');
+    expect(screen.getByTestId('pixel-modal-backdrop')).toHaveClass('is-closing');
+    expect(screen.getByTestId('pixel-modal-backdrop')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('pixel-modal-backdrop')).toHaveAttribute('inert');
     expect(screen.getByText('检查窗台')).toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(1));

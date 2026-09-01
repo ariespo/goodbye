@@ -69,6 +69,29 @@ describe('Penpot PC UI overlay assets', () => {
 })
 
 describe('first-batch PC modal CSS contracts', () => {
+  it('gives modal frames complete double rails outside the scaled HUD namespace', () => {
+    const css = readFileSync(globalStylesPath, 'utf8')
+    const modalLayers = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers')
+    const modalLayer = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer')
+    const modalUnderlay = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--underlay')
+    const modalOuter = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--outer')
+    const modalGap = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--gap')
+    const modalInner = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--inner')
+    const modalFill = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers > .pixel-frame-layer--fill')
+    const modalFrame = cssBlock(css, '.world-pixel-frame-modal')
+
+    expect(modalLayers).toContain('position: absolute')
+    expect(modalLayers).toContain('inset: 0')
+    expect(modalLayer).toContain('position: absolute')
+    expect(modalLayer).toContain('clip-path: polygon(')
+    expect(modalUnderlay).toContain('inset: -3px')
+    expect(modalOuter).toContain('inset: 0')
+    expect(modalGap).toContain('inset: 4px')
+    expect(modalInner).toContain('inset: 8px')
+    expect(modalFill).toContain('inset: 12px')
+    expect(modalFrame).toContain('overflow: visible')
+  })
+
   it('keeps first-batch HUD modals opaque, stepped, fixed-width, and monochrome on interaction', () => {
     const css = readFileSync(globalStylesPath, 'utf8')
 

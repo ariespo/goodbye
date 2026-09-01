@@ -119,7 +119,9 @@ describe('ConfirmModal', () => {
 
     fireEvent.keyDown(window, { key: 'Escape' });
 
-    expect(screen.getByRole('dialog', { name: '作出最终选择' })).toHaveClass('is-closing');
+    const closingConfirmation = document.querySelector('.confirm-modal-shell.is-closing');
+    expect(closingConfirmation).toHaveAttribute('aria-hidden', 'true');
+    expect(closingConfirmation).toHaveAttribute('inert');
     expect(useGameStore.getState().ui.showConclusion).toBe(true);
   });
 

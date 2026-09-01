@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
@@ -64,6 +64,7 @@ export function ActionBar() {
   const [wheelOpen, setWheelOpen] = useState(false);
   const [wheelMounted, setWheelMounted] = useState(false);
   const [freeInputOpen, setFreeInputOpen] = useState(false);
+  const operationHubRef = useRef<HTMLButtonElement | null>(null);
   const [observeGlowDone, setObserveGlowDone] = useState(
     () => window.localStorage.getItem('farewell.observe-glow.done') === 'true',
   );
@@ -97,6 +98,7 @@ export function ActionBar() {
 
   const activate = (action: WheelAction) => {
     if (!availability[action.id]) return;
+    operationHubRef.current?.focus();
     setWheelOpen(false);
     if (action.id === 'free') {
       setFreeInputOpen(true);
@@ -188,7 +190,7 @@ export function ActionBar() {
             })}
           </div>
         )}
-        <button type="button" className="operation-hub" aria-label="操作" aria-expanded={wheelOpen} onClick={toggleWheel}>
+        <button ref={operationHubRef} type="button" className="operation-hub" aria-label="操作" aria-expanded={wheelOpen} onClick={toggleWheel}>
           <svg
             className="operation-hub__frame"
             data-operation-hub-frame="true"

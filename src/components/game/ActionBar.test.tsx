@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Scene } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
 import { ActionBar } from './ActionBar';
+import { ClueModal } from './ClueModal';
 
 const loopMocks = vi.hoisted(() => ({ performAction: vi.fn(), sendMessage: vi.fn() }));
 
@@ -186,6 +187,41 @@ describe('ActionBar PC operation wheel', () => {
     act(() => vi.advanceTimersByTime(360));
     expect(screen.queryByRole('menu', { name: '操作轮盘' })).toBeNull();
     vi.useRealTimers();
+  });
+
+  it('returns focus to the persistent operation hub after keyboard-opening and closing a real modal', () => {
+    vi.useFakeTimers();
+    useGameStore.setState(state => ({
+      game: { ...state.game, currentScene: playableScene, sceneComplete: true, isWaitingForAI: false },
+      ui: { ...state.ui, showClues: false },
+    }));
+
+    render(
+      <div className="game-canvas">
+        <div className="hud-design-canvas">
+          <ActionBar />
+          <ClueModal />
+        </div>
+      </div>,
+    );
+
+    const hub = screen.getByRole('button', { name: '操作' });
+    hub.focus();
+    fireEvent.keyDown(hub, { key: 'Enter' });
+    fireEvent.click(hub);
+    const clueSector = screen.getByRole('menuitem', { name: '线索' });
+    clueSector.focus();
+    fireEvent.keyDown(clueSector, { key: 'Enter' });
+
+    expect(screen.getByRole('dialog', { name: '线索' })).not.toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '关闭线索' }));
+    act(() => vi.advanceTimersByTime(320));
+    expect(screen.queryByRole('menu', { name: '操作轮盘' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭线索' }));
+    expect(document.activeElement).toBe(hub);
+    act(() => vi.advanceTimersByTime(220));
+    expect(screen.queryByRole('dialog', { name: '线索' })).toBeNull();
   });
 
   it('removes sector transforms, animation and stagger when reduced motion is requested', () => {

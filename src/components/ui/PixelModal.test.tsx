@@ -15,17 +15,21 @@ import {
   PixelModalStatus,
 } from './PixelModal';
 
-function Harness({ open, onClose, closeBlocked = false }: {
+function Harness({ open, onClose, closeBlocked = false, onAction }: {
   open: boolean;
   onClose: () => void;
   closeBlocked?: boolean;
+  onAction?: () => void;
 }) {
   return (
     <>
       <button type="button">打开</button>
       <PixelModalShell open={open} onClose={onClose} labelledBy="modal-title" closeBlocked={closeBlocked}>
         <PixelModalHeader titleId="modal-title" title="标题" meta="META" onClose={onClose} closeLabel="关闭" />
-        <PixelModalContent>正文</PixelModalContent>
+        <PixelModalContent>
+          正文
+          {onAction && <PixelModalAction onClick={onAction}>执行</PixelModalAction>}
+        </PixelModalContent>
         <PixelModalFooter>底部</PixelModalFooter>
       </PixelModalShell>
     </>
@@ -70,10 +74,48 @@ describe('PixelModal', () => {
     const { rerender } = render(<Harness open onClose={vi.fn()} />);
 
     rerender(<Harness open={false} onClose={vi.fn()} />);
-    expect(screen.getByRole('dialog')).toHaveClass('is-closing');
+    expect(screen.getByTestId('pixel-modal-backdrop')).toHaveClass('is-closing');
 
     act(() => vi.advanceTimersByTime(220));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('makes the closing paint inert immediately and removes it only after 220ms', () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const onAction = vi.fn();
+    const { rerender } = render(<Harness open={false} onClose={onClose} onAction={onAction} />);
+    const trigger = screen.getByRole('button', { name: '打开' });
+    trigger.focus();
+    rerender(<Harness open onClose={onClose} onAction={onAction} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    rerender(<Harness open={false} onClose={onClose} onAction={onAction} />);
+
+    const closingShell = screen.getByTestId('pixel-modal-backdrop');
+    expect(closingShell).toHaveClass('is-closing');
+    expect(closingShell).toHaveAttribute('aria-hidden', 'true');
+    expect(closingShell).toHaveAttribute('inert');
+    expect(trigger).toHaveFocus();
+
+    fireEvent.click(closingShell);
+    fireEvent.click(closingShell.querySelector('.pixel-modal-close') as HTMLElement);
+    fireEvent.click(closingShell.querySelector('.pixel-modal-action') as HTMLElement);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onAction).not.toHaveBeenCalled();
+
+    act(() => vi.advanceTimersByTime(219));
+    expect(screen.getByTestId('pixel-modal-backdrop')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByTestId('pixel-modal-backdrop')).toBeNull();
+  });
+
+  it('declares closing shells and frames non-interactive in the shared CSS layer', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+
+    expect(styles).toMatch(/\.pixel-modal-shell\.is-closing\s*\{[^}]*pointer-events:\s*none/);
+    expect(styles).toMatch(/\.pixel-modal-shell\.is-closing\s+\.pixel-modal-frame\s*\{[^}]*pointer-events:\s*none/);
   });
 
   it('does not close when a nested confirmation blocks the shell', () => {

@@ -16,7 +16,12 @@ const pixelModalIconSrc = {
 
 type PixelModalIconName = keyof typeof pixelModalIconSrc;
 
-const PixelModalCloseContext = createContext<(() => void) | null>(null);
+type PixelModalInteractionContextValue = {
+  requestClose: () => void;
+  interactive: boolean;
+};
+
+const PixelModalCloseContext = createContext<PixelModalInteractionContextValue | null>(null);
 
 const focusableSelector = [
   'a[href]',
@@ -61,9 +66,9 @@ export function PixelModalShell({
       return;
     }
 
+    previousFocusRef.current?.focus();
     const timer = window.setTimeout(() => {
       setRendered(false);
-      previousFocusRef.current?.focus();
     }, CLOSE_MS);
     return () => window.clearTimeout(timer);
   }, [open]);
@@ -89,7 +94,7 @@ export function PixelModalShell({
   if (!rendered) return null;
 
   const requestClose = () => {
-    if (!closeBlocked) onClose();
+    if (open && !closeBlocked) onClose();
   };
 
   const trapFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -126,6 +131,8 @@ export function PixelModalShell({
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
+      aria-hidden={!open ? 'true' : undefined}
+      inert={!open}
       tabIndex={-1}
       data-testid="pixel-modal-backdrop"
       onKeyDown={trapFocus}
@@ -133,7 +140,7 @@ export function PixelModalShell({
         if (event.target === event.currentTarget) requestClose();
       }}
     >
-      <PixelModalCloseContext.Provider value={requestClose}>
+      <PixelModalCloseContext.Provider value={{ requestClose, interactive: open }}>
         <PixelFrame variant="modal" className="pixel-modal-frame" contentClassName="pixel-modal-frame-content">
           {children}
         </PixelFrame>
@@ -159,7 +166,7 @@ export function PixelModalHeader({
   onClose,
   closeLabel = '关闭',
 }: PixelModalHeaderProps) {
-  const requestShellClose = useContext(PixelModalCloseContext);
+  const modalInteraction = useContext(PixelModalCloseContext);
   const resolvedIconSrc = iconSrc && (pixelModalIconSrc[iconSrc as PixelModalIconName] ?? iconSrc);
 
   return (
@@ -169,7 +176,13 @@ export function PixelModalHeader({
         <h2 id={titleId} className="pixel-modal-title">{title}</h2>
         {meta && <p className="pixel-modal-meta">{meta}</p>}
       </div>
-      <button type="button" className="pixel-modal-close" onClick={requestShellClose ?? onClose} aria-label={closeLabel}>
+      <button
+        type="button"
+        className="pixel-modal-close"
+        onClick={modalInteraction?.requestClose ?? onClose}
+        aria-label={closeLabel}
+        disabled={modalInteraction ? !modalInteraction.interactive : false}
+      >
         <img className="pixel-modal-close-icon" src={pixelModalIconSrc.close} alt="" />
       </button>
     </header>
@@ -194,14 +207,18 @@ export function PixelModalAction({
   icon,
   children,
   className = '',
+  disabled = false,
   type = 'button',
   ...rest
 }: PixelModalActionProps) {
+  const modalInteraction = useContext(PixelModalCloseContext);
+  const interactionDisabled = disabled || (modalInteraction ? !modalInteraction.interactive : false);
   return (
     <button
       type={type}
       className={`pixel-modal-action ${className}`}
       data-active={active}
+      disabled={interactionDisabled}
       {...rest}
     >
       {icon && <span className="pixel-modal-action-icon" aria-hidden="true">{icon}</span>}
@@ -226,13 +243,15 @@ export function PixelModalListItem({
   type = 'button',
   ...rest
 }: PixelModalListItemProps) {
+  const modalInteraction = useContext(PixelModalCloseContext);
+  const interactionDisabled = disabled || (modalInteraction ? !modalInteraction.interactive : false);
   return (
     <button
       type={type}
       className={`pixel-modal-list-item ${className}`}
       data-selected={selected}
-      data-disabled={disabled}
-      disabled={disabled}
+      data-disabled={interactionDisabled}
+      disabled={interactionDisabled}
       {...rest}
     >
       {children}
