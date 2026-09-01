@@ -93,6 +93,17 @@ export function MapModal() {
   const lacksStamina = !!estimate && gameStatus.stamina < estimate.staminaCost;
   const isOnlyRumored = !selectedPresentation.canTravel;
   const travelUnavailable = isCurrentLocation || isOnlyRumored || lacksStamina || isWaitingForAI || isTyping || isTraveling;
+  const travelLabel = isTraveling
+    ? '移动中'
+    : isCurrentLocation
+      ? '已经抵达'
+      : isOnlyRumored
+        ? '需要确认位置'
+        : lacksStamina
+          ? '体力不足'
+          : isWaitingForAI || isTyping
+            ? '当前演出尚未结束'
+            : '前往此处';
 
   const closeMap = () => actions.toggleModal('map');
 
@@ -321,10 +332,10 @@ export function MapModal() {
           onClick={handleTravel}
           active={!travelUnavailable}
           className="map-travel-button"
-          aria-label="前往此处"
+          aria-label={travelLabel}
           icon={<GameIcon name="play" size={16} />}
         >
-          {isTraveling ? '移动中' : '前往此处'}
+          {travelLabel}
         </PixelModalAction>
       </PixelModalFooter>
     </PixelModalShell>
