@@ -4356,30 +4356,30 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 
 /* Keep the pre-existing portrait map behavior after the PC board moved to
  * shared modal primitives; these rules intentionally reset fixed HUD values. */
-@media (max-width: 800px) {
-  .hud-design-canvas .map-modal-shell.pixel-modal-shell {
+@media (max-width: 700px) {
+  .map-modal-shell.pixel-modal-shell {
     align-items: stretch !important;
     justify-content: stretch !important;
-    padding: var(--mobile-safe-top) var(--mobile-safe-right) var(--mobile-safe-bottom) var(--mobile-safe-left) !important;
+    padding: var(--mobile-safe-top, 10px) var(--mobile-safe-right, 10px) var(--mobile-safe-bottom, 10px) var(--mobile-safe-left, 10px) !important;
   }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-frame {
+  .map-modal-shell .pixel-modal-frame {
     position: relative;
     top: auto;
     left: auto;
     width: 100%;
     height: auto;
     min-height: 0;
-    max-height: calc(100dvh - var(--mobile-safe-top) - var(--mobile-safe-bottom));
+    max-height: calc(100dvh - var(--mobile-safe-top, 10px) - var(--mobile-safe-bottom, 10px));
     overflow-y: auto;
   }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-frame-content {
+  .map-modal-shell .pixel-modal-frame-content {
     height: auto;
     max-height: none;
   }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-header {
+  .map-modal-shell .pixel-modal-header {
     min-height: 0;
     height: auto;
     gap: 14px;
@@ -4387,27 +4387,27 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     border-bottom-width: 2px;
   }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-header-icon {
+  .map-modal-shell .pixel-modal-header-icon {
     width: 24px;
     height: 24px;
   }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-title { font-size: 24px; }
+  .map-modal-shell .pixel-modal-title { font-size: 24px; }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-close {
+  .map-modal-shell .pixel-modal-close {
     position: static;
     width: 32px;
     height: 32px;
   }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-content.map-modal-content {
+  .map-modal-shell .pixel-modal-content.map-modal-content {
     height: auto;
     flex: 0 0 auto;
     overflow: visible !important;
     padding: 0 14px;
   }
 
-  .hud-design-canvas .map-modal-shell .map-modal-map {
+  .map-modal-shell .map-modal-map {
     width: auto;
     height: min(46vh, 330px);
     margin-top: 12px;
@@ -4416,14 +4416,14 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     border-width: 2px;
   }
 
-  .hud-design-canvas .map-modal-shell .map-modal-map .map-canvas {
+  .map-modal-shell .map-modal-map .map-canvas {
     width: 640px;
     min-width: 640px;
     height: 299px;
     min-height: 299px;
   }
 
-  .hud-design-canvas .map-modal-shell .pixel-modal-footer.map-modal-footer {
+  .map-modal-shell .pixel-modal-footer.map-modal-footer {
     position: relative;
     display: block;
     height: auto;
@@ -4432,16 +4432,16 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     padding: 14px 14px 112px;
   }
 
-  .hud-design-canvas .map-modal-shell .map-modal-info-copy { width: auto; }
+  .map-modal-shell .map-modal-info-copy { width: auto; }
 
-  .hud-design-canvas .map-modal-shell .map-travel-meta {
+  .map-modal-shell .map-travel-meta {
     top: auto;
     right: 14px;
     bottom: 68px;
     left: 14px;
   }
 
-  .hud-design-canvas .pixel-modal-action.map-travel-button {
+  .pixel-modal-action.map-travel-button {
     top: auto;
     right: 14px;
     bottom: 12px;

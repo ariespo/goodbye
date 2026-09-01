@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   DEFAULT_LOCATION_ID,
@@ -46,8 +47,45 @@ const MAP_LOCATION_POSITIONS: Record<string, { x: number; y: number }> = {
   'observation-deck': { x: 86, y: 42 },
 };
 
+const MOBILE_MAP_MEDIA_QUERY = '(max-width: 700px)';
+
 function getMapPosition(location: { id: string; x: number; y: number }) {
   return MAP_LOCATION_POSITIONS[location.id] ?? { x: location.x, y: location.y };
+}
+
+function useNarrowMapViewport() {
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(MOBILE_MAP_MEDIA_QUERY).matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    const query = window.matchMedia(MOBILE_MAP_MEDIA_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsNarrow(event.matches);
+    setIsNarrow(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  return isNarrow;
+}
+
+function useMapPortalTarget(isNarrow: boolean) {
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isNarrow || typeof document === 'undefined') {
+      setPortalTarget(null);
+      return;
+    }
+
+    setPortalTarget(document.querySelector<HTMLElement>('.game-canvas') ?? document.body);
+  }, [isNarrow]);
+
+  return portalTarget;
 }
 
 export function MapModal() {
@@ -64,6 +102,8 @@ export function MapModal() {
   const [selectedLocationId, setSelectedLocationId] = useState(currentLocationId);
   const [isTraveling, setIsTraveling] = useState(false);
   const mapViewportRef = useRef<HTMLDivElement>(null);
+  const isNarrowMapViewport = useNarrowMapViewport();
+  const mapPortalTarget = useMapPortalTarget(isNarrowMapViewport);
 
   useEffect(() => {
     if (showMap) setSelectedLocationId(currentLocationId);
@@ -197,7 +237,7 @@ export function MapModal() {
     closeMap();
   };
 
-  return (
+  const dialog = (
     <PixelModalShell
       open={showMap}
       onClose={closeMap}
@@ -340,6 +380,11 @@ export function MapModal() {
       </PixelModalFooter>
     </PixelModalShell>
   );
+
+  const fallbackPortalTarget = typeof document === 'undefined' ? null : document.body;
+  const portalTarget = mapPortalTarget ?? fallbackPortalTarget;
+
+  return isNarrowMapViewport && portalTarget ? createPortal(dialog, portalTarget) : dialog;
 }
 
 const locationIconIndex: Record<LocationIconKey, number> = {
