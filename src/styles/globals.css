@@ -4017,6 +4017,12 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 
 /* Confirmations use the same opaque stepped frame as the three HUD boards,
  * but stay deliberately compact so the pending decision remains the focus. */
+.confirm-modal-isolation {
+  position: absolute;
+  z-index: 300;
+  inset: 0;
+}
+
 .confirm-modal-shell.pixel-modal-shell {
   z-index: 300;
   padding: 0;
@@ -4117,6 +4123,52 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   }
 
   .confirm-modal-shell .pixel-modal-frame-content { max-height: calc(100dvh - 36px); }
+
+  .confirm-modal-shell .pixel-modal-header {
+    min-height: 76px;
+    height: 76px;
+    gap: 10px;
+    padding: 0 18px 0 22px;
+  }
+
+  .confirm-modal-shell .pixel-modal-header::after {
+    right: 18px;
+    left: 22px;
+  }
+
+  .confirm-modal-shell .pixel-modal-header-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .confirm-modal-shell .pixel-modal-header-copy { padding-right: 42px; }
+  .confirm-modal-shell .pixel-modal-title { font-size: 18px; letter-spacing: .08em; }
+  .confirm-modal-shell .pixel-modal-meta { display: none; }
+
+  .confirm-modal-shell .pixel-modal-close {
+    top: 22px;
+    right: 18px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .confirm-modal-shell .pixel-modal-content.confirm-modal-content { padding: 14px 22px; }
+  .confirm-modal-content p { font-size: 16px; }
+
+  .confirm-modal-shell .pixel-modal-footer.confirm-modal-footer {
+    min-height: 70px;
+    height: auto;
+    gap: 8px;
+    padding: 10px 18px;
+  }
+
+  .confirm-modal-shell .pixel-modal-action {
+    min-width: 0;
+    min-height: 42px;
+    flex: 1 1 0;
+    padding-inline: 8px;
+    font-size: 16px;
+  }
 }
 
 /* Clue index is a PC HUD board: keep this scoped so the portrait rules above
