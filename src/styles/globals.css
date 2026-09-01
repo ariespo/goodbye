@@ -4021,6 +4021,11 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   position: absolute;
   z-index: 300;
   inset: 0;
+  pointer-events: none;
+}
+
+.confirm-modal-isolation .confirm-modal-shell.pixel-modal-shell {
+  pointer-events: auto;
 }
 
 .confirm-modal-shell.pixel-modal-shell {

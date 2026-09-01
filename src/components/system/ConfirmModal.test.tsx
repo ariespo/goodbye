@@ -131,4 +131,11 @@ describe('ConfirmModal', () => {
     expect(styles).toMatch(/@media\s*\(max-width:\s*700px\)[\s\S]*\.confirm-modal-shell\s+\.pixel-modal-meta\s*\{[^}]*display:\s*none;/);
     expect(styles).toMatch(/@media\s*\(max-width:\s*700px\)[\s\S]*\.confirm-modal-shell\s+\.pixel-modal-close\s*\{[^}]*right:\s*18px;[^}]*width:\s*32px;[^}]*height:\s*32px;/);
   });
+
+  it('leaves the closed confirmation wrapper out of hit testing while its open shell remains interactive', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+
+    expect(styles).toMatch(/\.confirm-modal-isolation\s*\{[^}]*pointer-events:\s*none;/);
+    expect(styles).toMatch(/\.confirm-modal-isolation\s+\.confirm-modal-shell\.pixel-modal-shell\s*\{[^}]*pointer-events:\s*auto;/);
+  });
 });
