@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -125,6 +127,16 @@ describe('PixelModal', () => {
     const closeIcon = closeButton.querySelector('img');
     expect(closeButton.textContent).toBe('');
     expect(closeIcon).toHaveAttribute('src', expect.stringContaining('assets/ui/penpot/pc/icon-modal-close.svg'));
+  });
+
+  it('inverts the external close SVG against the light hover and active backgrounds', () => {
+    render(<Harness open onClose={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '关闭' }).querySelector('.pixel-modal-close-icon')).not.toBeNull();
+
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+    expect(styles).toMatch(/\.pixel-modal-close:hover,\s*\.pixel-modal-close:active\s*\{[^}]*background:\s*#f2f2f0/);
+    expect(styles).toMatch(/\.pixel-modal-close:hover\s+\.pixel-modal-close-icon,\s*\.pixel-modal-close:active\s+\.pixel-modal-close-icon\s*\{[^}]*filter:\s*invert\(1\)/);
   });
 
   it('exposes active action and list item states as presentation-only data attributes', () => {
