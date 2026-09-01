@@ -12,7 +12,6 @@ export function SaveModal() {
   const [mode, setMode] = useState<SaveModalMode>('manage');
   const [saveName, setSaveName] = useState('');
   const [busy, setBusy] = useState(false);
-  const showTitle = useGameStore(state => state.ui.showTitle);
   const actions = useGameStore(state => state.actions);
 
   const loadSaves = useCallback(async () => setSaves(await getSaves()), []);
@@ -76,20 +75,8 @@ export function SaveModal() {
     }
   };
 
-  // 标题页不显示局内悬浮存档按钮；仅局内显示
   if (!isOpen) {
-    if (showTitle) return null;
-    return (
-      <button
-        type="button"
-        onClick={() => handleOpen('manage')}
-        data-cursor="pointer"
-        aria-label="存档"
-        className="save-trigger absolute left-5 top-5 z-20 flex h-10 w-10 items-center justify-center"
-      >
-        <GameIcon name="save" size={19} />
-      </button>
-    );
+    return null;
   }
 
   return (

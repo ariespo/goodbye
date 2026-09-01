@@ -5,7 +5,6 @@ import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
 import { getCycleMetaOptions, handleCycleMetaOption } from '../../utils/cycleLoop';
 import { shouldShowChoiceMenu } from './choiceMenuVisibility';
-import { UserInput } from './UserInput';
 
 const TEXT_MAIN = '#e2ded6';
 const TEXT_DIM = '#8a8580';
@@ -57,7 +56,6 @@ export function ChoiceMenu() {
           onClick={() => { void handleCycleMetaOption(option); }}
         />
       ))}
-      <UserInput embedded />
       {options.length > 0 && <RerollBtn disabled={isWaitingForAI} onClick={() => reroll()} />}
     </div>
   );

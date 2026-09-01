@@ -2643,6 +2643,366 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   .conclusion-footer button { margin-left: auto; }
 }
 
+/* ── Measured 1672 × 941 HUD canvas ─────────────────────────── */
+.hud-viewport {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hud-design-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  color: #f4f4f0;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.hud-design-canvas .pc-status-bar {
+  top: 7px;
+  right: auto;
+  left: calc(50% - 826px);
+  width: 1652px;
+  height: 84px;
+  gap: 22px;
+  pointer-events: auto;
+}
+
+.hud-design-canvas .pc-status-bar__menu {
+  width: 105px;
+  height: 84px;
+  flex: 0 0 105px;
+  padding: 4px;
+  isolation: isolate;
+}
+
+.hud-design-canvas .pc-status-bar__menu::before,
+.hud-design-canvas .pc-status-bar__rail::before {
+  inset: 4px;
+  background-color: #050505;
+  background-image: url('/assets/ui/noise-film.png');
+  background-size: 96px 96px;
+}
+
+.hud-design-canvas .pc-status-bar__menu img {
+  width: 54px;
+  height: 54px;
+}
+
+.hud-design-canvas .pc-status-bar__rail {
+  width: 1525px;
+  height: 84px;
+  flex: 0 0 1525px;
+  grid-template-columns: 304px 278px 328px 319px 296px;
+  isolation: isolate;
+}
+
+.hud-design-canvas .pc-status-cell {
+  grid-template-columns: 52px auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 20px;
+  border-right-width: 4px;
+  font-size: 27px;
+}
+
+.hud-design-canvas .pc-status-cell__icon {
+  width: 48px;
+  height: 48px;
+}
+
+.hud-design-canvas .pc-status-cell__label {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.hud-design-canvas .pc-status-cell strong {
+  font-size: 25px;
+}
+
+.hud-design-canvas .pc-status-cell.is-compact {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.hud-design-canvas .archive-menu {
+  top: 103px;
+  left: calc(50% - 826px);
+  width: 300px;
+  pointer-events: auto;
+}
+
+.hud-design-canvas .operation-dock {
+  left: calc(50% - 836px);
+  bottom: 13px;
+  width: 112px;
+  height: 112px;
+}
+
+.hud-design-canvas .operation-dock.is-open,
+.hud-design-canvas .operation-dock.is-closing {
+  width: 500px;
+  height: 500px;
+}
+
+.hud-design-canvas .operation-wheel {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 500px;
+  height: 500px;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.hud-design-canvas .operation-wheel__sector {
+  position: static;
+  cursor: pointer;
+  outline: none;
+  filter: none;
+  clip-path: none;
+  transform-origin: 220px 253px;
+}
+
+.hud-design-canvas .operation-wheel__sector path {
+  fill: #050505;
+  stroke: #f4f4f0;
+  stroke-width: 4px;
+  stroke-linejoin: miter;
+}
+
+.hud-design-canvas .operation-wheel__sector:hover:not(.is-disabled) path,
+.hud-design-canvas .operation-wheel__sector:focus-visible path {
+  fill: #171717;
+}
+
+.hud-design-canvas .operation-wheel__icon {
+  width: 56px;
+  height: 56px;
+  filter: invert(1);
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.hud-design-canvas .operation-wheel__content {
+  display: flex;
+  width: 130px;
+  height: 110px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.hud-design-canvas .operation-wheel__labels {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  width: 500px;
+  height: 500px;
+  pointer-events: none;
+}
+
+.hud-design-canvas .operation-wheel__overlay-content {
+  position: absolute;
+  display: flex;
+  width: 130px;
+  height: 110px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: normal;
+}
+
+.hud-design-canvas .operation-wheel__overlay-content.is-disabled {
+  opacity: 0.5;
+}
+
+.hud-design-canvas .operation-wheel__label {
+  color: #f4f4f0;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace;
+  font-size: 27px;
+  letter-spacing: 2px;
+  pointer-events: none;
+}
+
+.hud-design-canvas .operation-wheel__sector.is-disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.hud-design-canvas .operation-wheel__outlines {
+  fill: none;
+  stroke: #f4f4f0;
+  stroke-width: 4px;
+  stroke-linejoin: miter;
+  pointer-events: none;
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-hub,
+.hud-design-canvas .operation-dock.is-closing .operation-hub {
+  top: 189px;
+  bottom: auto;
+  left: 156px;
+  width: 128px;
+  height: 128px;
+  padding: 0;
+  border: 4px solid #f4f4f0;
+  border-radius: 50%;
+  background: #050505;
+  clip-path: none;
+  color: #f4f4f0;
+  pointer-events: auto;
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-hub::before,
+.hud-design-canvas .operation-dock.is-closing .operation-hub::before {
+  display: none;
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-hub img,
+.hud-design-canvas .operation-dock.is-closing .operation-hub img {
+  width: 104px;
+  height: 104px;
+  filter: invert(1);
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-hub span,
+.hud-design-canvas .operation-dock.is-closing .operation-hub span {
+  display: none;
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-wheel__sector {
+  animation: hudWheelSectorIn 180ms steps(4, end) both;
+}
+
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__sector {
+  animation: hudWheelSectorOut 180ms steps(4, end) both;
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-wheel__overlay-content {
+  animation: hudWheelLabelIn 150ms steps(3, end) both;
+}
+
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__overlay-content {
+  animation: hudWheelLabelOut 120ms steps(3, end) both;
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-wheel__sector--investigate,
+.hud-design-canvas .operation-dock.is-open .operation-wheel__overlay-content:nth-child(2) { animation-delay: 28ms; }
+.hud-design-canvas .operation-dock.is-open .operation-wheel__sector--actions,
+.hud-design-canvas .operation-dock.is-open .operation-wheel__overlay-content:nth-child(3) { animation-delay: 56ms; }
+.hud-design-canvas .operation-dock.is-open .operation-wheel__sector--clues,
+.hud-design-canvas .operation-dock.is-open .operation-wheel__overlay-content:nth-child(4) { animation-delay: 84ms; }
+.hud-design-canvas .operation-dock.is-open .operation-wheel__sector--map,
+.hud-design-canvas .operation-dock.is-open .operation-wheel__overlay-content:nth-child(5) { animation-delay: 112ms; }
+
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__sector--observe,
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__overlay-content:nth-child(1) { animation-delay: 112ms; }
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__sector--investigate,
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__overlay-content:nth-child(2) { animation-delay: 84ms; }
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__sector--actions,
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__overlay-content:nth-child(3) { animation-delay: 56ms; }
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__sector--clues,
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__overlay-content:nth-child(4) { animation-delay: 28ms; }
+
+@keyframes hudWheelSectorIn {
+  from { opacity: 0; transform: scale(0.08) rotate(-10deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+@keyframes hudWheelSectorOut {
+  from { opacity: 1; transform: scale(1) rotate(0); }
+  to { opacity: 0; transform: scale(0.08) rotate(-10deg); }
+}
+
+@keyframes hudWheelLabelIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.35); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes hudWheelLabelOut {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(0.35); }
+}
+
+.hud-design-canvas .dialogue-panel {
+  right: auto !important;
+  bottom: 14px !important;
+  left: calc(50% + 133px) !important;
+  width: 936px !important;
+  max-width: none !important;
+  transform: translateX(-50%) !important;
+  pointer-events: auto;
+}
+
+.hud-design-canvas .dialogue-panel-main {
+  min-height: 151px !important;
+  height: 151px !important;
+  max-height: 151px !important;
+}
+
+.hud-design-canvas .world-pixel-frame-dialogue {
+  min-height: 151px;
+  height: 151px;
+  padding: 5px !important;
+  background: #f4f4f0 !important;
+  box-shadow: 0 0 0 3px #050505, 0 0 0 6px #f4f4f0, 7px 7px 0 rgba(0, 0, 0, 0.76) !important;
+}
+
+.hud-design-canvas .dialogue-frame-content {
+  height: 141px !important;
+  padding: 23px 34px 20px !important;
+  border: 3px solid #050505;
+  box-shadow: inset 0 0 0 2px #f4f4f0;
+  background-color: #050505 !important;
+  box-sizing: border-box;
+}
+
+.hud-design-canvas .dialogue-text {
+  color: #f4f4f0 !important;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace !important;
+  font-size: 34px !important;
+  line-height: 1.46 !important;
+}
+
+.hud-design-canvas .dialogue-controls-row {
+  justify-content: center;
+  gap: 26px;
+  margin-top: 9px !important;
+}
+
+.hud-design-canvas .dialogue-control-button {
+  width: 253px;
+  min-width: 253px;
+  height: 68px;
+  min-height: 68px;
+  justify-content: center;
+  border: 4px solid #f4f4f0 !important;
+  outline: 3px solid #050505;
+  outline-offset: -7px;
+  background: #050505 !important;
+  color: #f4f4f0 !important;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, calc(100% - 8px) 4px, 100% 4px, 100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) 100%, 8px 100%, 8px calc(100% - 4px), 0 calc(100% - 4px), 0 8px, 4px 8px, 4px 0);
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace !important;
+  font-size: 27px !important;
+}
+
+.hud-design-canvas .dialogue-control-button:hover {
+  background: #f4f4f0 !important;
+  color: #050505 !important;
+}
+
+@media (max-width: 800px) {
+  .hud-viewport { display: block; }
+}
+
 @media (max-height: 620px) and (orientation: landscape) {
   .conclusion-header { min-height: 72px; padding-block: 9px; }
   .conclusion-header__seal { width: 42px; height: 42px; flex-basis: 42px; font-size: 21px; }
@@ -2654,4 +3014,800 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 @media (prefers-reduced-motion: reduce) {
   .conclusion-route-card,
   .conclusion-choice-card { transition: none; }
+}
+
+/* ── Penpot PC HUD v2: black-and-white low-resolution suspense UI ── */
+.pc-status-bar {
+  position: absolute;
+  z-index: 42;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  height: 92px;
+  gap: 12px;
+  color: #f2f2f0;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.pc-status-bar__menu,
+.pc-status-bar__rail {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  background: #f2f2f0;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, calc(100% - 8px) 4px, 100% 4px, 100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) 100%, 8px 100%, 8px calc(100% - 4px), 0 calc(100% - 4px), 0 8px, 4px 8px, 4px 0);
+  pointer-events: auto;
+}
+
+.pc-status-bar__menu {
+  display: grid;
+  width: 112px;
+  flex: 0 0 112px;
+  place-items: center;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.pc-status-bar__menu::before,
+.pc-status-bar__rail::before {
+  position: absolute;
+  inset: 4px;
+  z-index: -1;
+  background-color: rgba(5, 5, 5, 0.96);
+  background-image: url('/assets/ui/noise-film.png');
+  background-size: 96px 96px;
+  content: '';
+}
+
+.pc-status-bar__menu img { width: 48px; height: 48px; filter: invert(1); image-rendering: pixelated; }
+.pc-status-bar__menu:hover::before,
+.pc-status-bar__menu[aria-expanded='true']::before { background-color: #f2f2f0; }
+.pc-status-bar__menu:hover img,
+.pc-status-bar__menu[aria-expanded='true'] img { filter: none; }
+
+.pc-status-bar__rail {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1.15fr 1.35fr 1.25fr 1.25fr 0.9fr;
+  padding: 4px;
+}
+
+.pc-status-cell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 52px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 24px;
+  border-right: 4px solid #f2f2f0;
+  font-size: clamp(17px, 1.45vw, 29px);
+  white-space: nowrap;
+}
+
+.pc-status-cell:last-child { border-right: 0; }
+.pc-status-cell__icon { width: 44px; height: 44px; object-fit: contain; filter: invert(1); image-rendering: pixelated; }
+.pc-status-cell__label { color: #f2f2f0; font-weight: 700; letter-spacing: 0.08em; }
+.pc-status-cell strong { overflow: hidden; color: #f2f2f0; font-weight: 400; text-overflow: ellipsis; }
+.pc-status-cell.is-compact { grid-template-columns: 46px minmax(0, 1fr); }
+.pc-status-cell.is-compact .pc-status-cell__label { display: none; }
+
+.archive-menu {
+  position: absolute;
+  z-index: 70;
+  top: 110px;
+  left: 16px;
+  display: grid;
+  width: 300px;
+  padding: 8px;
+  border: 4px solid #f2f2f0;
+  outline: 4px solid #050505;
+  background-color: rgba(5, 5, 5, 0.98);
+  background-image: url('/assets/ui/noise-film.png');
+  color: #f2f2f0;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.72);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, calc(100% - 12px) 6px, 100% 6px, 100% 100%, 12px 100%, 12px calc(100% - 6px), 0 calc(100% - 6px));
+}
+
+.archive-menu__title { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 14px; border-bottom: 2px solid #565654; }
+.archive-menu__title span { font-size: 19px; letter-spacing: 0.16em; }
+.archive-menu__title small { color: #8a8a88; font-size: 13px; }
+.archive-menu__item { display: flex; min-height: 52px; align-items: center; gap: 15px; padding: 8px 14px; border: 0; border-bottom: 2px solid #252525; background: #050505; color: #d8d8d4; cursor: pointer; font-size: 19px; letter-spacing: 0.12em; text-align: left; }
+.archive-menu__item:hover { background: #f2f2f0; color: #050505; }
+
+.mobile-status-panel { display: none; }
+
+.operation-dock {
+  position: absolute;
+  z-index: 40;
+  left: 18px;
+  bottom: 18px;
+  width: 112px;
+  height: 112px;
+  pointer-events: none;
+}
+
+.operation-dock.is-open { width: 500px; height: 500px; }
+.operation-wheel { position: absolute; inset: 0; pointer-events: none; }
+
+.operation-hub {
+  position: absolute;
+  isolation: isolate;
+  z-index: 15;
+  left: 14px;
+  bottom: 14px;
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  padding: 8px 8px 5px;
+  border: 0;
+  background: #f2f2f0;
+  color: #f2f2f0;
+  clip-path: polygon(12px 0, calc(100% - 8px) 0, calc(100% - 8px) 4px, 100% 4px, 100% calc(100% - 12px), calc(100% - 4px) calc(100% - 12px), calc(100% - 4px) 100%, 8px 100%, 8px calc(100% - 4px), 0 calc(100% - 4px), 0 12px, 4px 12px, 4px 0);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.operation-hub::before { position: absolute; inset: 4px; z-index: -1; background: #050505; content: ''; }
+.operation-hub img { width: 54px; height: 54px; filter: invert(1); image-rendering: pixelated; }
+.operation-hub span { margin-top: -5px; font-size: 16px; letter-spacing: 0.12em; }
+.operation-hub:hover::before,
+.operation-hub[aria-expanded='true']::before { background: #f2f2f0; }
+.operation-hub:hover,
+.operation-hub[aria-expanded='true'] { color: #050505; }
+.operation-hub:hover img,
+.operation-hub[aria-expanded='true'] img { filter: none; }
+
+.operation-dock.is-open .operation-hub {
+  left: 142px;
+  bottom: 116px;
+  width: 112px;
+  height: 112px;
+  border: 4px solid #f2f2f0;
+  background: #050505;
+  color: #f2f2f0;
+  clip-path: polygon(25% 0, 75% 0, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0 75%, 0 25%);
+  transition: left 130ms steps(3, end), bottom 130ms steps(3, end), width 130ms steps(3, end), height 130ms steps(3, end);
+}
+
+.operation-dock.is-open .operation-hub::before { display: none; }
+.operation-dock.is-open .operation-hub img { width: 62px; height: 62px; filter: invert(1); }
+
+.operation-wheel__sector {
+  position: absolute;
+  inset: 20px 70px 20px 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f2f2f0;
+  filter: drop-shadow(2px 0 0 #f2f2f0) drop-shadow(-2px 0 0 #f2f2f0) drop-shadow(0 2px 0 #f2f2f0) drop-shadow(0 -2px 0 #f2f2f0);
+  cursor: pointer;
+  pointer-events: auto;
+  transform-origin: 46% 66%;
+  animation: wheelSectorIn 130ms steps(3, end) both;
+}
+
+.operation-wheel__sector-face { position: absolute; inset: 0; display: block; background-color: #050505; background-image: url('/assets/ui/noise-film.png'); }
+.operation-wheel__sector img { width: 52px; height: 52px; object-fit: contain; image-rendering: pixelated; }
+.operation-wheel__sector-face > img,
+.operation-wheel__sector-face > span { position: absolute; z-index: 2; transform: translate(-50%, -50%); }
+.operation-wheel__sector-face > span { font-size: 21px; letter-spacing: 0.12em; white-space: nowrap; }
+.operation-wheel__sector:not(.is-primary) img { filter: invert(1); }
+.operation-wheel__sector:hover:not(:disabled) .operation-wheel__sector-face,
+.operation-wheel__sector.is-primary .operation-wheel__sector-face { background: #f2f2f0; color: #050505; }
+.operation-wheel__sector:hover:not(:disabled) img,
+.operation-wheel__sector.is-primary img { filter: none; }
+.operation-wheel__sector:disabled { cursor: not-allowed; opacity: 0.28; }
+
+.operation-wheel__sector--observe { clip-path: polygon(10% 5%, 29% 42%, 42% 62%, 34% 73%, 27% 88%, 4% 72%, 0 42%); }
+.operation-wheel__sector--investigate { clip-path: polygon(10% 5%, 45% 0, 63% 18%, 51% 45%, 42% 62%, 29% 42%); animation-delay: 25ms; }
+.operation-wheel__sector--actions { clip-path: polygon(63% 18%, 91% 29%, 100% 55%, 64% 57%, 42% 62%, 51% 45%); animation-delay: 50ms; }
+.operation-wheel__sector--clues { clip-path: polygon(100% 55%, 94% 82%, 72% 97%, 52% 76%, 42% 62%, 64% 57%); animation-delay: 75ms; }
+.operation-wheel__sector--map { clip-path: polygon(72% 97%, 43% 100%, 27% 88%, 34% 73%, 42% 62%, 52% 76%); animation-delay: 100ms; }
+
+.operation-wheel__sector--observe .operation-wheel__sector-face > img { left: 15%; top: 53%; }
+.operation-wheel__sector--observe .operation-wheel__sector-face > span { left: 16%; top: 65%; }
+.operation-wheel__sector--investigate .operation-wheel__sector-face > img { left: 40%; top: 21%; }
+.operation-wheel__sector--investigate .operation-wheel__sector-face > span { left: 41%; top: 34%; }
+.operation-wheel__sector--actions .operation-wheel__sector-face > img { left: 72%; top: 37%; }
+.operation-wheel__sector--actions .operation-wheel__sector-face > span { left: 75%; top: 49%; }
+.operation-wheel__sector--clues .operation-wheel__sector-face > img { left: 75%; top: 69%; }
+.operation-wheel__sector--clues .operation-wheel__sector-face > span { left: 73%; top: 81%; }
+.operation-wheel__sector--map .operation-wheel__sector-face > img { left: 47%; top: 83%; }
+.operation-wheel__sector--map .operation-wheel__sector-face > span { left: 47%; top: 93%; }
+
+.mobile-action-strip { display: none; }
+
+@keyframes wheelSectorIn {
+  from { opacity: 0; transform: scale(0.82) translate(-8px, 10px); }
+  to { opacity: 1; transform: scale(1) translate(0, 0); }
+}
+
+/* Dialogue and playback frames share the Penpot stepped silhouette. */
+.game-canvas .dialogue-panel { left: 60%; bottom: 18px; width: min(58vw, 1080px); }
+.game-canvas .dialogue-panel-main { min-height: 150px !important; max-height: min(28vh, 260px) !important; }
+.game-canvas .world-pixel-frame-dialogue {
+  min-height: 150px;
+  padding: 5px !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: #f2f2f0 !important;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.72) !important;
+  clip-path: polygon(10px 0, calc(100% - 8px) 0, calc(100% - 8px) 5px, 100% 5px, 100% calc(100% - 10px), calc(100% - 5px) calc(100% - 10px), calc(100% - 5px) 100%, 10px 100%, 10px calc(100% - 5px), 0 calc(100% - 5px), 0 10px, 5px 10px, 5px 0);
+}
+.game-canvas .dialogue-frame-content { border: 3px solid #050505; background-color: #050505 !important; background-image: url('/assets/ui/noise-film.png') !important; }
+.game-canvas .dialogue-text { font-size: clamp(24px, 2vw, 38px) !important; line-height: 1.46 !important; }
+.game-canvas .dialogue-controls-row { justify-content: center; margin-top: 14px; }
+.game-canvas .dialogue-control-button { min-width: 230px; min-height: 66px; justify-content: center; border: 0 !important; background: #f2f2f0 !important; color: #050505 !important; clip-path: polygon(8px 0, calc(100% - 8px) 0, calc(100% - 8px) 5px, 100% 5px, 100% calc(100% - 8px), calc(100% - 5px) calc(100% - 8px), calc(100% - 5px) 100%, 8px 100%, 8px calc(100% - 5px), 0 calc(100% - 5px), 0 8px, 5px 8px, 5px 0); font-size: 22px !important; }
+.game-canvas .dialogue-control-button:hover { background: #050505 !important; color: #f2f2f0 !important; outline: 4px solid #f2f2f0; }
+
+@media (max-width: 800px) {
+  .pc-status-bar { display: none; }
+  .mobile-status-panel { position: absolute; z-index: 45; top: var(--mobile-safe-top, 8px); left: var(--mobile-safe-left, 10px); display: grid; gap: 6px; color: #f2f2f0; }
+  .mobile-status-panel__buttons { display: flex; gap: 6px; }
+  .mobile-status-panel__buttons button { display: grid; width: 42px; height: 42px; place-items: center; border: 2px solid #f2f2f0; background: #050505; color: #f2f2f0; }
+  .mobile-status-panel__buttons img { width: 24px; height: 24px; }
+  .mobile-status-panel__readout { display: grid; grid-template-columns: repeat(2, auto); gap: 4px 12px; padding: 8px; border: 2px solid #f2f2f0; background: #050505; font-size: 12px; }
+  .archive-menu { position: fixed; top: 58px; left: 10px; width: min(300px, calc(100vw - 20px)); }
+  .operation-dock { display: none; }
+  .mobile-action-strip { position: absolute; z-index: 40; right: 8px; bottom: var(--mobile-safe-bottom, 8px); left: 8px; display: flex; gap: 5px; overflow-x: auto; }
+  .mobile-action-strip button { display: grid; min-width: 58px; height: 48px; grid-template-columns: 22px auto; align-items: center; gap: 4px; padding: 4px 7px; border: 2px solid #aaa9a3; background: #050505; color: #f2f2f0; }
+  .mobile-action-strip button:disabled { opacity: 0.35; }
+  .mobile-action-strip img { width: 22px; height: 22px; }
+  .game-canvas .dialogue-panel { left: 50%; bottom: calc(var(--mobile-safe-bottom, 8px) + 58px); width: calc(100vw - 20px); }
+  .game-canvas .dialogue-panel-main { min-height: var(--dialogue-panel-min-height, 120px) !important; max-height: var(--dialogue-panel-max-height, 200px) !important; }
+  .game-canvas .dialogue-text { font-size: 17px !important; }
+  .game-canvas .dialogue-control-button { min-width: 0; min-height: 36px; font-size: 13px !important; }
+}
+
+/* Final specificity layer for the measured HUD. Keep this after legacy rules. */
+.game-canvas .hud-design-canvas .world-pixel-frame-dialogue {
+  min-height: 151px;
+  height: 151px;
+  padding: 5px !important;
+  background: #f4f4f0 !important;
+  box-shadow: 0 0 0 3px #050505, 0 0 0 6px #f4f4f0, 7px 7px 0 rgba(0, 0, 0, 0.76) !important;
+}
+
+.game-canvas .hud-design-canvas .dialogue-frame-content {
+  height: 141px !important;
+  padding: 23px 34px 20px !important;
+  border: 3px solid #050505;
+  box-shadow: inset 0 0 0 2px #f4f4f0;
+  background-color: #050505 !important;
+}
+
+.game-canvas .hud-design-canvas .dialogue-text {
+  color: #f4f4f0 !important;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace !important;
+  font-size: 34px !important;
+}
+
+.game-canvas .hud-design-canvas .dialogue-controls-row {
+  justify-content: flex-start;
+  gap: 26px;
+  margin-top: 9px;
+  padding-left: 141px;
+  box-sizing: border-box;
+}
+
+.game-canvas .hud-design-canvas .dialogue-control-button {
+  width: 253px;
+  min-width: 253px;
+  height: 68px;
+  min-height: 68px;
+  border: 4px solid #f4f4f0 !important;
+  outline: 3px solid #050505;
+  outline-offset: -7px;
+  background: #050505 !important;
+  color: #f4f4f0 !important;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace !important;
+  font-size: 27px !important;
+}
+
+.game-canvas .hud-design-canvas .dialogue-control-button:hover {
+  background: #f4f4f0 !important;
+  color: #050505 !important;
+}
+
+/* ── Reference frame pass: stepped white rails with a black exterior keyline.
+ * The black keyline keeps every HUD control legible over both black and white scenes. */
+.game-canvas .hud-design-canvas .pc-status-bar__menu,
+.game-canvas .hud-design-canvas .pc-status-bar__rail,
+.game-canvas .hud-design-canvas .operation-hub,
+.game-canvas .hud-design-canvas .dialogue-control-button {
+  filter:
+    drop-shadow(2px 0 0 #050505)
+    drop-shadow(-2px 0 0 #050505)
+    drop-shadow(0 2px 0 #050505)
+    drop-shadow(0 -2px 0 #050505) !important;
+}
+
+.game-canvas .hud-design-canvas .pc-status-bar__menu,
+.game-canvas .hud-design-canvas .pc-status-bar__rail {
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 10px) 0,
+    calc(100% - 10px) 3px,
+    calc(100% - 4px) 3px,
+    calc(100% - 4px) 8px,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 3px),
+    calc(100% - 10px) calc(100% - 3px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    10px calc(100% - 3px),
+    4px calc(100% - 3px),
+    4px calc(100% - 8px),
+    0 calc(100% - 8px),
+    0 8px,
+    4px 8px,
+    4px 3px,
+    10px 3px
+  );
+}
+
+.game-canvas .hud-design-canvas .world-pixel-frame-dialogue {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  filter:
+    drop-shadow(3px 0 0 #050505)
+    drop-shadow(-3px 0 0 #050505)
+    drop-shadow(0 3px 0 #050505)
+    drop-shadow(0 -3px 0 #050505)
+    drop-shadow(7px 7px 0 rgba(5, 5, 5, 0.76));
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 10px) 0,
+    calc(100% - 10px) 3px,
+    calc(100% - 4px) 3px,
+    calc(100% - 4px) 9px,
+    100% 9px,
+    100% calc(100% - 9px),
+    calc(100% - 4px) calc(100% - 9px),
+    calc(100% - 4px) calc(100% - 3px),
+    calc(100% - 10px) calc(100% - 3px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    10px calc(100% - 3px),
+    4px calc(100% - 3px),
+    4px calc(100% - 9px),
+    0 calc(100% - 9px),
+    0 9px,
+    4px 9px,
+    4px 3px,
+    10px 3px
+  );
+}
+
+.game-canvas .hud-design-canvas .dialogue-frame-content {
+  border: 3px solid #050505 !important;
+  box-shadow: inset 0 0 0 2px #f4f4f0 !important;
+  clip-path: polygon(
+    7px 0,
+    calc(100% - 7px) 0,
+    calc(100% - 7px) 3px,
+    100% 3px,
+    100% calc(100% - 3px),
+    calc(100% - 7px) calc(100% - 3px),
+    calc(100% - 7px) 100%,
+    7px 100%,
+    7px calc(100% - 3px),
+    0 calc(100% - 3px),
+    0 3px,
+    7px 3px
+  );
+}
+
+.game-canvas .hud-design-canvas .dialogue-control-button,
+.game-canvas .hud-design-canvas .operation-hub:not([aria-expanded='true']) {
+  isolation: isolate;
+  clip-path: polygon(
+    9px 0,
+    calc(100% - 9px) 0,
+    calc(100% - 9px) 3px,
+    calc(100% - 4px) 3px,
+    calc(100% - 4px) 8px,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 3px),
+    calc(100% - 9px) calc(100% - 3px),
+    calc(100% - 9px) 100%,
+    9px 100%,
+    9px calc(100% - 3px),
+    4px calc(100% - 3px),
+    4px calc(100% - 8px),
+    0 calc(100% - 8px),
+    0 8px,
+    4px 8px,
+    4px 3px,
+    9px 3px
+  );
+}
+
+/* ── HUD reference correction: explicit stepped layers, never shadow-built rails. ── */
+.hud-design-canvas .pixel-frame-layers {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.hud-design-canvas .pixel-frame-layer {
+  position: absolute;
+  display: block;
+  background: #050505;
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 10px) 0,
+    calc(100% - 10px) 3px,
+    calc(100% - 4px) 3px,
+    calc(100% - 4px) 8px,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 3px),
+    calc(100% - 10px) calc(100% - 3px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    10px calc(100% - 3px),
+    4px calc(100% - 3px),
+    4px calc(100% - 8px),
+    0 calc(100% - 8px),
+    0 8px,
+    4px 8px,
+    4px 3px,
+    10px 3px
+  );
+}
+
+.hud-design-canvas .pixel-frame-layer--underlay { inset: -3px; background: #050505; }
+.hud-design-canvas .pixel-frame-layer--outer { inset: 0; background: #f4f4f0; }
+.hud-design-canvas .pixel-frame-layer--gap { inset: 4px; background: #050505; }
+.hud-design-canvas .pixel-frame-layer--inner { inset: 8px; background: #f4f4f0; }
+.hud-design-canvas .pixel-frame-layer--fill { inset: 12px; background: #050505; }
+.hud-design-canvas .pixel-frame-layers.is-single .pixel-frame-layer--fill { inset: 4px; }
+
+.game-canvas .hud-design-canvas .world-pixel-frame,
+.game-canvas .hud-design-canvas .world-pixel-frame-dialogue {
+  overflow: visible;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  clip-path: none !important;
+}
+
+.game-canvas .hud-design-canvas .world-pixel-frame::before,
+.game-canvas .hud-design-canvas .world-pixel-frame::after {
+  content: none !important;
+}
+
+.game-canvas .hud-design-canvas .world-pixel-frame-dialogue .pixel-frame-content,
+.game-canvas .hud-design-canvas .dialogue-frame-content {
+  position: relative;
+  z-index: 1;
+  width: 100% !important;
+  height: 151px !important;
+  border: 0 !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  clip-path: none !important;
+}
+
+.game-canvas .hud-design-canvas .pc-status-bar__menu,
+.game-canvas .hud-design-canvas .pc-status-bar__rail,
+.game-canvas .hud-design-canvas .dialogue-control-button {
+  isolation: isolate;
+  overflow: visible;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  clip-path: none !important;
+}
+
+.game-canvas .hud-design-canvas .pc-status-bar__menu::before,
+.game-canvas .hud-design-canvas .pc-status-bar__menu::after,
+.game-canvas .hud-design-canvas .pc-status-bar__rail::before,
+.game-canvas .hud-design-canvas .pc-status-bar__rail::after {
+  content: none !important;
+}
+
+.game-canvas .hud-design-canvas .pc-status-bar__menu > img,
+.game-canvas .hud-design-canvas .pc-status-cell,
+.game-canvas .hud-design-canvas .dialogue-control-button__content {
+  position: relative;
+  z-index: 1;
+}
+
+.game-canvas .hud-design-canvas .dialogue-control-button__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.game-canvas .hud-design-canvas .dialogue-control-button:hover .pixel-frame-layer--fill,
+.game-canvas .hud-design-canvas .dialogue-control-button[data-active='true'] .pixel-frame-layer--fill,
+.game-canvas .hud-design-canvas .pc-status-bar__menu:hover .pixel-frame-layer--fill,
+.game-canvas .hud-design-canvas .pc-status-bar__menu[aria-expanded='true'] .pixel-frame-layer--fill {
+  background: #f4f4f0;
+}
+
+/* The hub uses one SVG coordinate system, so its housing and the annular sectors share a center. */
+.game-canvas .hud-design-canvas .operation-hub,
+.game-canvas .hud-design-canvas .operation-hub:not([aria-expanded='true']) {
+  isolation: isolate;
+  overflow: visible;
+  width: 104px;
+  height: 104px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #f4f4f0;
+  filter: none !important;
+  clip-path: none !important;
+}
+
+.game-canvas .hud-design-canvas .operation-hub::before { content: none !important; }
+
+.game-canvas .hud-design-canvas .operation-hub__frame {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.game-canvas .hud-design-canvas .operation-hub__underlay {
+  fill: #050505;
+  stroke: #050505;
+  stroke-width: 10px;
+  stroke-linejoin: miter;
+}
+
+.game-canvas .hud-design-canvas .operation-hub [data-operation-hub-rail='outer'] {
+  fill: #050505;
+  stroke: #f4f4f0;
+  stroke-width: 4px;
+  stroke-linejoin: miter;
+}
+
+.game-canvas .hud-design-canvas .operation-hub [data-operation-hub-rail='inner'] {
+  fill: none;
+  stroke: #f4f4f0;
+  stroke-width: 3px;
+  stroke-linejoin: miter;
+}
+
+.game-canvas .hud-design-canvas .operation-hub__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: inherit;
+}
+
+.game-canvas .hud-design-canvas .operation-hub__content > img {
+  width: 58px;
+  height: 58px;
+  filter: invert(1);
+  image-rendering: pixelated;
+}
+
+.game-canvas .hud-design-canvas .operation-hub__content > span {
+  margin-top: -5px;
+  font-size: 16px;
+  letter-spacing: 0.12em;
+}
+
+.game-canvas .hud-design-canvas .operation-dock.is-open .operation-hub,
+.game-canvas .hud-design-canvas .operation-dock.is-closing .operation-hub {
+  top: 189px;
+  right: auto;
+  bottom: auto;
+  left: 156px;
+  width: 128px;
+  height: 128px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  clip-path: none;
+}
+
+.game-canvas .hud-design-canvas .operation-dock.is-open .operation-hub__content > img,
+.game-canvas .hud-design-canvas .operation-dock.is-closing .operation-hub__content > img {
+  display: block;
+  width: 76px;
+  height: 76px;
+  filter: invert(1);
+}
+
+.game-canvas .hud-design-canvas .operation-dock.is-open .operation-hub__content,
+.game-canvas .hud-design-canvas .operation-dock.is-closing .operation-hub__content {
+  display: grid !important;
+}
+
+.game-canvas .hud-design-canvas .operation-dock.is-open .operation-hub__content > span,
+.game-canvas .hud-design-canvas .operation-dock.is-closing .operation-hub__content > span {
+  display: block;
+  margin-top: -7px;
+  font-size: 19px;
+}
+
+.game-canvas .hud-design-canvas .operation-wheel__sector {
+  position: static;
+  inset: auto;
+  filter: none !important;
+  clip-path: none !important;
+  transform-origin: 220px 253px;
+}
+
+/* Six-sector wheel: compact labels keep every action inside its own annular slice. */
+.game-canvas .hud-design-canvas .operation-wheel__overlay-content {
+  width: 112px;
+  height: 98px;
+  gap: 5px;
+}
+
+.game-canvas .hud-design-canvas .operation-wheel__icon {
+  width: 48px;
+  height: 48px;
+}
+
+.game-canvas .hud-design-canvas .operation-wheel__label {
+  font-size: 24px;
+}
+
+.hud-design-canvas .operation-dock.is-open .operation-wheel__sector--free,
+.hud-design-canvas .operation-dock.is-open .operation-wheel__overlay-content:nth-child(6) {
+  animation-delay: 140ms;
+}
+
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__sector--free,
+.hud-design-canvas .operation-dock.is-closing .operation-wheel__overlay-content:nth-child(6) {
+  animation-delay: 0ms;
+}
+
+/* Dialogue pages are capacity-bounded; scrolling is never part of playback. */
+.game-canvas .hud-design-canvas .dialogue-frame-content,
+.game-canvas .hud-design-canvas .pixel-scroll-blue {
+  overflow: hidden !important;
+  scrollbar-width: none;
+}
+
+.game-canvas .hud-design-canvas .dialogue-frame-content::-webkit-scrollbar,
+.game-canvas .hud-design-canvas .pixel-scroll-blue::-webkit-scrollbar {
+  display: none;
+}
+
+.game-canvas .hud-design-canvas .dialogue-text-measurer {
+  z-index: -1;
+  margin: 0;
+  padding: 0;
+}
+
+/* Free action is a wheel-owned modal, using the same stepped frame language as the HUD. */
+.hud-design-canvas .free-action-dialog {
+  position: absolute;
+  z-index: 85;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  padding-bottom: 178px;
+  pointer-events: auto;
+}
+
+.hud-design-canvas .free-action-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.42);
+  cursor: pointer;
+}
+
+.game-canvas .hud-design-canvas .free-action-dialog__panel {
+  position: relative;
+  width: 760px;
+  min-height: 248px;
+  padding: 22px 26px 24px !important;
+  color: #f4f4f0;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace;
+  animation: freeActionIn 120ms steps(3, end) both;
+}
+
+.game-canvas .hud-design-canvas .free-action-dialog__panel > .pixel-frame-content {
+  z-index: 1;
+  display: grid;
+  gap: 16px;
+}
+
+.hud-design-canvas .free-action-dialog__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 9px;
+  border-bottom: 3px solid #f4f4f0;
+}
+
+.hud-design-canvas .free-action-dialog__title > span {
+  font-size: 30px;
+  letter-spacing: 0.18em;
+}
+
+.hud-design-canvas .free-action-dialog__title > small {
+  color: #9a9a96;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+}
+
+.hud-design-canvas .free-action-dialog textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: none;
+  padding: 12px 14px;
+  border: 3px solid #f4f4f0;
+  outline: 3px solid #050505;
+  background: #050505;
+  color: #f4f4f0;
+  font: 24px/1.45 "RenOuFangSong 16", "MuzaiPixel", monospace;
+  caret-color: #f4f4f0;
+}
+
+.hud-design-canvas .free-action-dialog textarea::placeholder { color: #777773; }
+
+.hud-design-canvas .free-action-dialog__controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+}
+
+.hud-design-canvas .free-action-dialog__controls > button {
+  position: relative;
+  isolation: isolate;
+  width: 154px;
+  height: 54px;
+  border: 0;
+  background: transparent;
+  color: #f4f4f0;
+  font: 21px "RenOuFangSong 16", "MuzaiPixel", monospace;
+  cursor: pointer;
+}
+
+.hud-design-canvas .free-action-dialog__controls > button > span:not(.pixel-frame-layers) {
+  position: relative;
+  z-index: 1;
+}
+
+.hud-design-canvas .free-action-dialog__controls > button:hover .pixel-frame-layer--fill {
+  background: #f4f4f0;
+}
+
+.hud-design-canvas .free-action-dialog__controls > button:hover { color: #050505; }
+.hud-design-canvas .free-action-dialog__controls > button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+@keyframes freeActionIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }

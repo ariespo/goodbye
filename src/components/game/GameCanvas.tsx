@@ -7,7 +7,6 @@ import { StatusPanel } from './StatusPanel';
 import { ActionBar } from './ActionBar';
 import { MoodOverlay } from './MoodOverlay';
 import { MapModal } from './MapModal';
-import { UserInput } from './UserInput';
 import { ActionPanel } from './ActionPanel';
 import { ClueModal } from './ClueModal';
 import { EndingPlayer } from './EndingPlayer';
@@ -24,6 +23,7 @@ import { KnowledgeUpdateOverlay } from './KnowledgeUpdateOverlay';
 import { CharacterSprite } from './CharacterSprite';
 import { ConclusionModal } from './ConclusionModal';
 import { LoadingOverlay } from '../system/LoadingOverlay';
+import { HudViewport } from './HudViewport';
 import { parseOpeningStoryline } from '../../engine/opening-storyline';
 import { rebuildSceneFromChat } from '../../utils/sceneFromChat';
 
@@ -72,9 +72,7 @@ export function GameCanvas() {
 
       <InvestigationHotspots />
       <CharacterSprite />
-      <DialogueBox />
       <ChoiceMenu />
-      <UserInput />
       <ActionPanel />
       <ClueModal />
       <CharacterProfileModal />
@@ -82,12 +80,15 @@ export function GameCanvas() {
       <EndingPlayer />
       <CycleResetWatcher />
       {showEndingEditor && <Suspense fallback={null}><EndingEditor /></Suspense>}
-      <StatusPanel />
       <ClueDiscoveryOverlay />
       <KnowledgeUpdateOverlay />
       <GameplayGuide />
       <ApiGuideCard />
-      <ActionBar />
+      <HudViewport>
+        <DialogueBox />
+        <StatusPanel />
+        <ActionBar />
+      </HudViewport>
       <MapModal />
       <LoadingOverlay />
     </div>

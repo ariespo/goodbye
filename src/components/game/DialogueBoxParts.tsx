@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { assetUrl } from '../../utils/assetUrl';
-import { PixelFrame } from '../ui/PixelFrame';
+import { PixelFrame, PixelFrameRails } from '../ui/PixelFrame';
 
 export const DIALOGUE_TEXT_MAIN = '#d8d4cc';
 export const DIALOGUE_TEXT_DIM = '#7a756e';
@@ -44,7 +43,7 @@ export function PixelPanel({
         <PixelFrame
           variant="dialogue"
           className="h-full w-full"
-          contentClassName="dialogue-frame-content pixel-scroll-blue h-full w-full overflow-y-auto"
+          contentClassName="dialogue-frame-content pixel-scroll-blue h-full w-full overflow-hidden"
           contentStyle={{ padding: 'var(--dialogue-panel-padding, 20px 28px 18px 28px)' }}
         >
           {children}
@@ -95,7 +94,6 @@ export function PixelIconBtn({
 }) {
   const [hovered, setHovered] = useState(false);
 
-  const state = active ? 'active' : hovered ? 'hover' : 'normal';
   const color = active || hovered ? DIALOGUE_ACCENT : DIALOGUE_TEXT_DIM;
 
   return (
@@ -104,23 +102,22 @@ export function PixelIconBtn({
       data-active={active ? 'true' : 'false'}
       className="dialogue-control-button flex min-h-[42px] items-center gap-1.5 select-none px-3 transition-[filter,transform] duration-100"
       style={{
-        backgroundImage: `url(${assetUrl(`assets/ui/dialogue-control-${state}.png`)})`,
-        backgroundRepeat: 'no-repeat',
-        backgroundSize: '100% 100%',
         color,
         fontSize: '16px',
         fontFamily: '"MuzaiPixel", monospace',
         letterSpacing: '0.08em',
         imageRendering: 'pixelated',
-        filter: hovered || active ? 'drop-shadow(0 0 9px rgba(107,143,196,0.28))' : 'drop-shadow(2px 2px 0 rgba(0,0,0,0.35))',
         transform: hovered ? 'translate(1px, 0)' : 'translate(0, 0)',
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onClick}
     >
-      {icon}
-      {label}
+      <PixelFrameRails />
+      <span className="dialogue-control-button__content">
+        {icon}
+        {label}
+      </span>
     </button>
   );
 }

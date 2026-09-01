@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" shape-rendering="crispEdges">
+  <style>
+    .panel{fill:#050505;stroke:#f2f2f0;stroke-width:4;stroke-linejoin:miter}
+    .inner{fill:none;stroke:#f2f2f0;stroke-width:4;stroke-linejoin:miter}
+    .detail{fill:#8a8a88}.icon{fill:#f2f2f0}.line{stroke:#f2f2f0;stroke-width:4}
+    .text{fill:#f2f2f0;font-family:'RenOuFangSong 16','人偶仿宋'}
+    .status{font-size:34px}.dialogue{font-size:40px}.control-label{font-size:34px}.hub-label{font-size:28px}
+  </style>
+  <rect id="base-background" width="1920" height="1080" fill="none"/>
+
+  <g id="TopBar">
+    <path id="MenuFrame" class="panel" d="M12 20H20V12H124V20H132V96H124V104H20V96H12Z"/>
+    <path class="inner" d="M20 24H24V20H120V24H124V92H120V96H24V92H20Z"/>
+    <path id="menu-icon" class="icon" d="M44 36H100V44H44ZM44 56H100V64H44ZM44 76H100V84H44Z"/>
+
+    <path id="TopBarFrame" class="panel" d="M152 20H160V12H1900V20H1908V96H1900V104H160V96H152Z"/>
+    <path class="inner" d="M160 24H164V20H1896V24H1900V92H1896V96H164V92H160Z"/>
+    <g id="status-time"><path class="icon" d="M188 28H216V32H228V40H236V52H240V72H236V84H228V92H216V96H188V92H176V84H168V72H164V52H168V40H176V32H188ZM192 40V64L216 80L224 68L204 56V40Z"/><text class="text status" x="256" y="72">时间 08:00</text></g>
+    <path class="line" d="M504 28V88"/>
+    <g id="status-location"><path class="icon" d="M548 28H576V32H588V40H596V52H600V68H596V80H588V88H580V100H544V88H536V80H528V68H524V52H528V40H536V32H548ZM552 44H568V48H576V64H572V72H548V68H544V52H548V48H552Z"/><text class="text status" x="620" y="72">地点 公寓</text></g>
+    <path class="line" d="M824 28V88"/>
+    <g id="status-stamina"><path class="icon" d="M868 32H884V40H900V32H916V36H928V44H936V68H928V80H916V88H904V96H880V88H868V80H856V68H848V44H856V36H868Z"/><text class="text status" x="956" y="72">体力 100/100</text></g>
+    <path class="line" d="M1196 28V88"/>
+    <g id="status-sanity"><path class="icon" d="M1240 28H1268V32H1280V40H1288V52H1292V64H1288V80H1276V88H1268V100H1256V88H1244V84H1232V76H1224V60H1228V44H1236V36H1240ZM1248 40H1256V52H1248ZM1264 48H1272V60H1264ZM1244 64H1252V76H1244ZM1260 68H1272V80H1260Z"/><text class="text status" x="1312" y="72">理智 70/100</text></g>
+    <path class="line" d="M1564 28V88"/>
+    <g id="status-loop"><path class="icon" d="M1612 32H1644V36H1656V44H1664V52H1668V64H1656V56H1648V52H1612V56H1600V68H1588V52H1592V44H1600V36H1612ZM1588 68H1600V76H1608V80H1644V76H1656V64H1668V80H1664V88H1656V96H1612V92H1600V84H1592V76H1588Z"/><text class="text status" x="1688" y="72">循环 1</text></g>
+    <g class="detail" opacity=".55"><rect x="172" y="88" width="4" height="4"/><rect x="492" y="88" width="8" height="4"/><rect x="812" y="88" width="4" height="4"/><rect x="1180" y="88" width="8" height="4"/><rect x="1548" y="88" width="4" height="4"/></g>
+  </g>
+
+  <g id="OperationHubClosed" data-grid="4">
+    <path class="panel" d="M180 756H192V744H312V756H324V884H312V896H192V884H180Z"/>
+    <circle class="panel" cx="252" cy="824" r="76"/>
+    <path class="inner" d="M216 760H284L264 804H240ZM288 768L316 796L272 808L256 792ZM308 812V860L268 840V816ZM304 868L276 896L264 852L280 836ZM284 888H216L236 844H260ZM212 880L184 852L228 840L244 856ZM196 836V788L236 808V832ZM200 780L228 752L240 796L224 812Z"/>
+    <text class="text hub-label" x="224" y="928">操作</text>
+  </g>
+
+  <g id="Dialogue">
+    <path id="DialogueFrame" class="panel" d="M568 796H1640V804H1648V948H1640V956H568V948H560V804H568Z"/>
+    <path class="inner" d="M580 808H1628V816H1636V936H1628V944H580V936H572V816H580Z"/>
+    <text class="text dialogue" x="608" y="864">脑袋好沉……</text>
+    <text class="text dialogue" x="608" y="916">要快点清醒过来……</text>
+    <path class="icon" d="M1572 844H1588V856H1600V868H1612V884H1600V896H1588V908H1572Z"/>
+    <g class="detail" opacity=".5"><rect x="592" y="820" width="4" height="4"/><rect x="1608" y="924" width="8" height="4"/><rect x="604" y="932" width="4" height="4"/></g>
+  </g>
+
+  <g id="Playback">
+    <path class="panel" d="M732 984H740V976H1012V984H1020V1048H1012V1056H740V1048H732Z"/>
+    <path class="icon" d="M784 992H804V1040H784ZM820 992H840V1040H820Z"/><text class="text control-label" x="868" y="1032">暂停</text>
+    <path class="panel" d="M1052 984H1060V976H1332V984H1340V1048H1332V1056H1060V1048H1052Z"/>
+    <path class="icon" d="M1096 992H1112V1000H1124V1008H1136V1024H1124V1032H1112V1040H1096ZM1140 992H1156V1000H1168V1008H1180V1024H1168V1032H1156V1040H1140Z"/><text class="text control-label" x="1200" y="1032">快速</text>
+  </g>
+</svg>

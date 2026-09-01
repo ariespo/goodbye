@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo, useLayoutEffect } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { playSfx } from '../../utils/sfx';
 import { useTypewriter } from '../../hooks/useTypewriter';
@@ -25,6 +25,7 @@ import { getBackgroundById, resolveBackgroundForTime } from '../../data/backgrou
 import { resolveCharacterSprite } from '../../utils/characterAssets';
 import { assetUrl } from '../../utils/assetUrl';
 import { prefetchImages } from '../../utils/assetManager';
+import { paginateDialogueText, resolveDialogueAdvance } from './dialoguePagination';
 
 /* ── 像素风对话框 ── */
 
@@ -79,7 +80,49 @@ export function DialogueBox() {
   const displaySpeaker = applyMacros(playerFacingSpeaker, userName, characterName, dialogueMacros);
   const displayText = applyMacros(currentLine?.text || '', userName, characterName, dialogueMacros);
 
-  const { displayedText, isComplete, skip } = useTypewriter(displayText, typingSpeed, true);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [dialoguePages, setDialoguePages] = useState<string[]>([displayText]);
+  const [dialoguePageIndex, setDialoguePageIndex] = useState(0);
+  const activePageIndex = Math.min(dialoguePageIndex, Math.max(0, dialoguePages.length - 1));
+  const activePageText = dialoguePages[activePageIndex] ?? displayText;
+  const hasNextPage = activePageIndex < dialoguePages.length - 1;
+  const { displayedText, isComplete, skip } = useTypewriter(activePageText, typingSpeed, true);
+
+  useLayoutEffect(() => {
+    const measureNode = measureRef.current;
+    const frame = measureNode?.parentElement;
+    if (!measureNode || !frame) return;
+
+    const repaginate = () => {
+      const style = window.getComputedStyle(frame);
+      const availableWidth = frame.clientWidth
+        - Number.parseFloat(style.paddingLeft || '0')
+        - Number.parseFloat(style.paddingRight || '0');
+      const availableHeight = frame.clientHeight
+        - Number.parseFloat(style.paddingTop || '0')
+        - Number.parseFloat(style.paddingBottom || '0');
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
+      measureNode.style.width = `${availableWidth}px`;
+      const nextPages = paginateDialogueText(displayText, candidate => {
+        measureNode.textContent = candidate || ' ';
+        return measureNode.scrollHeight <= availableHeight + 1;
+      });
+      measureNode.textContent = '';
+      setDialoguePages(previous => (
+        previous.length === nextPages.length && previous.every((page, index) => page === nextPages[index])
+          ? previous
+          : nextPages
+      ));
+      setDialoguePageIndex(0);
+    };
+
+    repaginate();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(repaginate);
+    observer?.observe(frame);
+    void document.fonts?.ready.then(repaginate);
+    return () => observer?.disconnect();
+  }, [displayText, currentLineIndex, currentScene?.id]);
 
   useEffect(() => {
     const nextLine = currentScene?.lines[currentLineIndex + 1];
@@ -123,38 +166,48 @@ export function DialogueBox() {
 
   /* ── 场景完成检测 ── */
   useEffect(() => {
-    if (isComplete && isLastLine && currentScene) {
+    if (isComplete && !hasNextPage && isLastLine && currentScene) {
       setSceneComplete(true);
     }
-  }, [isComplete, isLastLine, currentScene, setSceneComplete]);
+  }, [isComplete, hasNextPage, isLastLine, currentScene, setSceneComplete]);
 
   /* ── 台词知识事件提交 ── */
   useEffect(() => {
-    if (!isComplete || !currentLine?.knowledgeEvents?.length || !currentScene
+    if (!isComplete || hasNextPage || !currentLine?.knowledgeEvents?.length || !currentScene
       || currentScene.knowledgeAlreadyCommitted) return;
     commitKnowledgeEvents(currentLine.knowledgeEvents, `${currentScene.id}:${currentLineIndex}`, committedKnowledgeRef.current);
-  }, [currentLine, currentLineIndex, currentScene, isComplete]);
+  }, [currentLine, currentLineIndex, currentScene, isComplete, hasNextPage]);
 
   const handleAdvance = useCallback(() => {
     if (!currentScene) return;
-    if (!isComplete) { skip(); return; }
+    const advance = resolveDialogueAdvance({
+      pageComplete: isComplete,
+      hasNextPage,
+      hasNextLine: currentLineIndex < currentScene.lines.length - 1,
+    });
+    if (advance === 'finish-page') { skip(); return; }
+    if (advance === 'next-page') {
+      setDialoguePageIndex(activePageIndex + 1);
+      return;
+    }
     if (!minimumHoldReady) return;
     if (requiresIdentityConfirmation) {
       setIdentityPromptOpen(true);
       return;
     }
-    if (currentLineIndex < currentScene.lines.length - 1) {
+    if (advance === 'next-line') {
       setCurrentLineIndex(currentLineIndex + 1);
     }
-  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, requiresIdentityConfirmation, skip, setCurrentLineIndex]);
+  }, [activePageIndex, currentScene, currentLineIndex, hasNextPage, isComplete, minimumHoldReady, requiresIdentityConfirmation, skip, setCurrentLineIndex]);
 
   /* ── 自动模式推进 ── */
   useEffect(() => {
-    if (autoMode && isComplete && minimumHoldReady && currentLine && !isLastLine && !requiresIdentityConfirmation) {
+    const canAutoAdvance = hasNextPage || !isLastLine;
+    if (autoMode && isComplete && minimumHoldReady && currentLine && canAutoAdvance && !requiresIdentityConfirmation) {
       autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
     }
     return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
-  }, [autoMode, isComplete, minimumHoldReady, currentLine, isLastLine, handleAdvance, autoIntervalMs, requiresIdentityConfirmation]);
+  }, [autoMode, isComplete, minimumHoldReady, currentLine, hasNextPage, isLastLine, handleAdvance, autoIntervalMs, requiresIdentityConfirmation]);
 
   const handleStartOrAdvance = useCallback(() => {
     if (!advanceHintDone) {
@@ -201,12 +254,15 @@ export function DialogueBox() {
       setCurrentLineIndex(currentScene.lines.length - 1);
     } else if (!isComplete) {
       skip();
+    } else if (hasNextPage) {
+      setDialoguePageIndex(activePageIndex + 1);
     }
-  }, [currentScene, currentLineIndex, isComplete, minimumHoldReady, settings?.playerIdentityConfirmed, skip, setCurrentLineIndex]);
+  }, [activePageIndex, currentScene, currentLineIndex, hasNextPage, isComplete, minimumHoldReady, settings?.playerIdentityConfirmed, skip, setCurrentLineIndex]);
 
   /* ── 重头回看：回到第一句，恢复首帧状态 ── */
   const handleRestart = useCallback(() => {
     if (!currentScene || currentScene.lines.length === 0) return;
+    setDialoguePageIndex(0);
     setCurrentLineIndex(0);
     setSceneComplete(false);
     const firstLine = currentScene.lines[0];
@@ -277,7 +333,7 @@ export function DialogueBox() {
     return () => window.removeEventListener('farewell:advance-dialogue', onStageAdvance);
   }, [handleStartOrAdvance]);
 
-  const showNextArrow = isComplete && !isLastLine;
+  const showNextArrow = isComplete && (hasNextPage || !isLastLine);
   const isNarrator = currentLine?.speaker === '旁白';
   const showSpeaker = !isNarrator && displaySpeaker;
 
@@ -365,6 +421,25 @@ export function DialogueBox() {
           </span>
         )}
       </div>
+      <div
+        ref={measureRef}
+        className={`dialogue-text dialogue-text-measurer whitespace-pre-wrap ${emotionTextClass(currentLine.emotion)}`}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          top: 0,
+          left: 0,
+          height: 'auto',
+          maxHeight: 'none',
+          overflow: 'visible',
+          fontSize: '33px',
+          lineHeight: 1.8,
+          fontFamily: '"MuzaiPixel", "LXGW WenKai", serif',
+          ...emotionTextStyle(currentLine.emotion),
+        }}
+      />
       {!advanceHintDone && isComplete && (
         <span
           className="pointer-events-none absolute bottom-2 right-3 select-none"
