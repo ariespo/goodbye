@@ -164,7 +164,10 @@ describe('ActionPanel', () => {
     }));
 
     render(<ActionPanel />);
+    const timeoutSpy = vi.spyOn(window, 'setTimeout');
     act(() => useGameStore.getState().actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null }));
+
+    expect(timeoutSpy.mock.calls.filter(([, delay]) => delay === 220)).toHaveLength(1);
 
     act(() => vi.advanceTimersByTime(219));
     expect(screen.getByRole('dialog', { name: '调查' })).toHaveClass('is-closing');
@@ -172,6 +175,7 @@ describe('ActionPanel', () => {
 
     act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByRole('dialog', { name: '调查' })).toBeNull();
+    timeoutSpy.mockRestore();
     vi.useRealTimers();
   });
 

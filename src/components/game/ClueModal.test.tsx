@@ -168,17 +168,26 @@ describe('ClueModal', () => {
   it('anchors the PC clue board to the approved 1420 by 700 HUD geometry', () => {
     const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
 
-    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s+\.pixel-modal-frame\s*\{[^}]*width:\s*1420px;[^}]*height:\s*700px;/);
+    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s*>\s*\.pixel-modal-frame\s*\{[^}]*width:\s*1420px;[^}]*height:\s*700px;/);
+    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\.pixel-modal-shell\s*\{[^}]*pointer-events:\s*auto;/);
+    expect(styles).not.toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s+\.pixel-modal-frame\s*\{/);
+  });
+
+  it('keeps the nested deletion confirmation at its own compact geometry', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+
+    expect(styles).toMatch(/\.confirm-modal-shell\s*>\s*\.pixel-modal-frame\s*\{[^}]*width:\s*560px;[^}]*height:\s*310px;/);
+    expect(styles).not.toMatch(/\.clue-modal-shell\s+\.pixel-modal-frame\s*\{/);
   });
 
   it('keeps the approved PC clue index as a full-width single-column composition', () => {
     const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
 
-    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s+\.pixel-modal-header\s*\{[^}]*height:\s*135px;/);
-    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s+\.pixel-modal-content\.clue-modal-content\s*\{[^}]*padding:\s*30px 42px 30px 50px;/);
+    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s*>\s*\.pixel-modal-frame\s*>\s*\.pixel-modal-frame-content\s*>\s*\.pixel-modal-header\s*\{[^}]*height:\s*135px;/);
+    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s*>\s*\.pixel-modal-frame\s*>\s*\.pixel-modal-frame-content\s*>\s*\.pixel-modal-content\.clue-modal-content\s*\{[^}]*padding:\s*30px 42px 30px 50px;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-list\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);[^}]*grid-auto-rows:\s*minmax\(106px, auto\);[^}]*gap:\s*16px;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-card\s*\{[^}]*min-height:\s*106px;/);
-    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s+\.pixel-modal-footer\.clue-modal-footer\s*\{[^}]*height:\s*155px;[^}]*padding:\s*21px 42px 0 50px;/);
+    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s*>\s*\.pixel-modal-frame\s*>\s*\.pixel-modal-frame-content\s*>\s*\.pixel-modal-footer\.clue-modal-footer\s*\{[^}]*height:\s*155px;[^}]*padding:\s*21px 42px 0 50px;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.pixel-modal-action\.clue-infer-button\s*\{[^}]*width:\s*298px;[^}]*height:\s*76px;/);
   });
 });

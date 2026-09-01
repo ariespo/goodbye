@@ -19,6 +19,8 @@ export function HudViewport({ children }: { children: ReactNode }) {
         style={{
           width: `${layout.virtualWidth}px`,
           height: `${layout.virtualHeight}px`,
+          left: `${layout.offsetX}px`,
+          top: `${layout.offsetY}px`,
           transform: `scale(${layout.scale})`,
         }}
       >

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Scene } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
@@ -184,5 +186,16 @@ describe('ActionBar PC operation wheel', () => {
     act(() => vi.advanceTimersByTime(360));
     expect(screen.queryByRole('menu', { name: '操作轮盘' })).toBeNull();
     vi.useRealTimers();
+  });
+
+  it('removes sector transforms, animation and stagger when reduced motion is requested', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+    const reducedMotion = styles.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{([\s\S]*?)\n\}/g)?.join('\n') ?? '';
+
+    expect(reducedMotion).toMatch(/\.hud-design-canvas\s+\.operation-dock\.is-open\s+\.operation-wheel__sector/);
+    expect(reducedMotion).toMatch(/\.hud-design-canvas\s+\.operation-wheel__overlay-content/);
+    expect(reducedMotion).toMatch(/animation:\s*none\s*!important/);
+    expect(reducedMotion).toMatch(/animation-delay:\s*0ms\s*!important/);
+    expect(reducedMotion).toMatch(/transform:\s*none\s*!important/);
   });
 });

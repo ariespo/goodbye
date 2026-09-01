@@ -92,10 +92,10 @@ describe('first-batch PC modal CSS contracts', () => {
     const deleteHover = cssBlock(css, '.hud-design-canvas .clue-delete-button:hover,\n.hud-design-canvas .clue-delete-button:focus-visible')
     const organize = cssBlock(css, '.hud-design-canvas .action-panel .clue-organize-btn')
     const actionScroll = cssBlock(css, '.hud-design-canvas .action-panel .pixel-modal-content.action-panel-content.pixel-scroll-blue')
-    const mapFrame = cssBlock(css, '.hud-design-canvas .map-modal-shell .pixel-modal-frame-content')
-    const clueFrame = cssBlock(css, '.hud-design-canvas .clue-modal-shell .pixel-modal-frame-content')
+    const mapFrame = cssBlock(css, '.hud-design-canvas .map-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content')
+    const clueFrame = cssBlock(css, '.hud-design-canvas .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content')
     const narrowClueShell = cssBlock(css, '.clue-modal-shell.pixel-modal-shell')
-    const narrowClueFrame = cssBlock(css, '.clue-modal-shell .pixel-modal-frame')
+    const narrowClueFrame = cssBlock(css, '.clue-modal-shell > .pixel-modal-frame')
 
     expect(deleteHover).toContain('border-color: #f2f2f0')
     expect(deleteHover).toContain('box-shadow: none')

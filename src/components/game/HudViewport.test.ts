@@ -7,22 +7,28 @@ describe('calculateHudLayout', () => {
       scale: 1,
       virtualWidth: 1672,
       virtualHeight: 941,
+      offsetX: 0,
+      offsetY: 0,
     });
   });
 
-  it('uses one width-limited scale and expands only the virtual safe height at 1469×1268', () => {
+  it('keeps one fixed design canvas and centers it inside the 1469×1268 safe area', () => {
     const layout = calculateHudLayout(1469, 1268);
 
     expect(layout.scale).toBeCloseTo(1469 / 1672, 8);
-    expect(layout.virtualWidth).toBeCloseTo(1672, 8);
-    expect(layout.virtualHeight).toBeCloseTo(1268 / (1469 / 1672), 8);
+    expect(layout.virtualWidth).toBe(1672);
+    expect(layout.virtualHeight).toBe(941);
+    expect(layout.offsetX).toBeCloseTo(0, 8);
+    expect(layout.offsetY).toBeCloseTo((1268 - 941 * (1469 / 1672)) / 2, 8);
   });
 
-  it('uses one height-limited scale and expands only the virtual safe width in a wide viewport', () => {
+  it('keeps one fixed design canvas and centers it inside a wide safe area', () => {
     const layout = calculateHudLayout(1920, 800);
 
     expect(layout.scale).toBeCloseTo(800 / 941, 8);
-    expect(layout.virtualWidth).toBeCloseTo(1920 / (800 / 941), 8);
-    expect(layout.virtualHeight).toBeCloseTo(941, 8);
+    expect(layout.virtualWidth).toBe(1672);
+    expect(layout.virtualHeight).toBe(941);
+    expect(layout.offsetX).toBeCloseTo((1920 - 1672 * (800 / 941)) / 2, 8);
+    expect(layout.offsetY).toBeCloseTo(0, 8);
   });
 });

@@ -3506,6 +3506,17 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 .hud-design-canvas .pixel-frame-layer--fill { inset: 12px; background: #050505; }
 .hud-design-canvas .pixel-frame-layers.is-single .pixel-frame-layer--fill { inset: 4px; }
 
+.world-pixel-frame-modal > .pixel-frame-layers {
+  z-index: 2;
+  overflow: visible;
+}
+
+.world-pixel-frame-modal > .pixel-modal-frame-content {
+  position: relative;
+  z-index: 3;
+  clip-path: inset(12px);
+}
+
 .game-canvas .hud-design-canvas .world-pixel-frame,
 .game-canvas .hud-design-canvas .world-pixel-frame-dialogue {
   overflow: visible;
@@ -3714,6 +3725,20 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 .hud-design-canvas .operation-dock.is-closing .operation-wheel__sector--free,
 .hud-design-canvas .operation-dock.is-closing .operation-wheel__overlay-content:nth-child(6) {
   animation-delay: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-design-canvas .operation-dock.is-open .operation-wheel__sector,
+  .hud-design-canvas .operation-dock.is-closing .operation-wheel__sector {
+    animation: none !important;
+    animation-delay: 0ms !important;
+    transform: none !important;
+  }
+
+  .hud-design-canvas .operation-wheel__overlay-content {
+    animation: none !important;
+    animation-delay: 0ms !important;
+  }
 }
 
 /* Dialogue pages are capacity-bounded; scrolling is never part of playback. */
@@ -4034,13 +4059,13 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   background: rgba(5, 5, 5, .88);
 }
 
-.confirm-modal-shell .pixel-modal-frame {
+.confirm-modal-shell > .pixel-modal-frame {
   width: 560px;
   height: 310px;
   max-height: none;
 }
 
-.confirm-modal-shell .pixel-modal-frame-content {
+.confirm-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content {
   height: 100%;
   max-height: none;
   background: #050505;
@@ -4120,14 +4145,14 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     padding: 18px;
   }
 
-  .confirm-modal-shell .pixel-modal-frame {
+  .confirm-modal-shell > .pixel-modal-frame {
     width: min(560px, 100%);
     height: auto;
     min-height: 280px;
     max-height: calc(100dvh - 36px);
   }
 
-  .confirm-modal-shell .pixel-modal-frame-content { max-height: calc(100dvh - 36px); }
+  .confirm-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content { max-height: calc(100dvh - 36px); }
 
   .confirm-modal-shell .pixel-modal-header {
     min-height: 76px;
@@ -4182,9 +4207,10 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   z-index: 245;
   padding: 0;
   background: rgba(5, 5, 5, .88);
+  pointer-events: auto;
 }
 
-.hud-design-canvas .clue-modal-shell .pixel-modal-frame {
+.hud-design-canvas .clue-modal-shell > .pixel-modal-frame {
   position: absolute;
   top: 135px;
   left: 110px;
@@ -4193,25 +4219,25 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   max-height: none;
 }
 
-.hud-design-canvas .clue-modal-shell .pixel-modal-frame-content {
+.hud-design-canvas .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content {
   height: 100%;
   max-height: none;
   background: #050505;
 }
 
-.hud-design-canvas .clue-modal-shell .pixel-modal-header {
+.hud-design-canvas .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content > .pixel-modal-header {
   min-height: 135px;
   height: 135px;
   padding: 28px 50px;
   border-bottom-width: 3px;
 }
 
-.hud-design-canvas .clue-modal-shell .pixel-modal-header-icon {
+.hud-design-canvas .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content > .pixel-modal-header .pixel-modal-header-icon {
   width: 34px;
   height: 34px;
 }
 
-.hud-design-canvas .clue-modal-shell .pixel-modal-content.clue-modal-content {
+.hud-design-canvas .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content > .pixel-modal-content.clue-modal-content {
   overflow: hidden !important;
   padding: 30px 42px 30px 50px;
   background: #050505;
@@ -4332,7 +4358,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   transition: none;
 }
 
-.hud-design-canvas .clue-modal-shell .pixel-modal-footer.clue-modal-footer {
+.hud-design-canvas .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content > .pixel-modal-footer.clue-modal-footer {
   min-height: 155px;
   height: 155px;
   align-items: flex-start;
@@ -4407,7 +4433,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     padding: var(--mobile-safe-top, 10px) var(--mobile-safe-right, 10px) var(--mobile-safe-bottom, 10px) var(--mobile-safe-left, 10px) !important;
   }
 
-  .clue-modal-shell .pixel-modal-frame {
+  .clue-modal-shell > .pixel-modal-frame {
     position: relative;
     top: auto;
     left: auto;
@@ -4417,12 +4443,12 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     max-height: calc(100dvh - var(--mobile-safe-top, 10px) - var(--mobile-safe-bottom, 10px));
   }
 
-  .clue-modal-shell .pixel-modal-frame-content {
+  .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content {
     height: 100%;
     max-height: none;
   }
 
-  .clue-modal-shell .pixel-modal-content.clue-modal-content {
+  .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content > .pixel-modal-content.clue-modal-content {
     padding: 14px;
   }
 
@@ -4431,7 +4457,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     gap: 12px;
   }
 
-  .clue-modal-shell .pixel-modal-footer.clue-modal-footer {
+  .clue-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content > .pixel-modal-footer.clue-modal-footer {
     min-height: 112px;
     height: auto;
     align-items: stretch;
@@ -4457,7 +4483,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   pointer-events: none;
 }
 
-.hud-design-canvas .action-panel .pixel-modal-frame {
+.hud-design-canvas .action-panel > .pixel-modal-frame {
   position: absolute;
   top: 135px;
   left: 390px;
@@ -4467,7 +4493,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   pointer-events: auto;
 }
 
-.hud-design-canvas .action-panel .pixel-modal-frame-content {
+.hud-design-canvas .action-panel > .pixel-modal-frame > .pixel-modal-frame-content {
   height: 100%;
   max-height: none;
   background: #050505;
@@ -4750,13 +4776,13 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     background: transparent;
   }
 
-  .action-panel .pixel-modal-frame {
+  .action-panel > .pixel-modal-frame {
     position: static;
     width: 100% !important;
     max-height: calc(100dvh - 150px) !important;
   }
 
-  .action-panel .pixel-modal-frame-content {
+  .action-panel > .pixel-modal-frame > .pixel-modal-frame-content {
     max-height: calc(100dvh - 150px) !important;
   }
 }
@@ -4770,7 +4796,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   pointer-events: auto;
 }
 
-.hud-design-canvas .map-modal-shell .pixel-modal-frame {
+.hud-design-canvas .map-modal-shell > .pixel-modal-frame {
   position: absolute;
   top: 122px;
   left: 90px;
@@ -4779,7 +4805,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   max-height: none;
 }
 
-.hud-design-canvas .map-modal-shell .pixel-modal-frame-content {
+.hud-design-canvas .map-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content {
   height: 100%;
   max-height: none;
   background: #050505;
@@ -4926,7 +4952,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     padding: var(--mobile-safe-top, 10px) var(--mobile-safe-right, 10px) var(--mobile-safe-bottom, 10px) var(--mobile-safe-left, 10px) !important;
   }
 
-  .map-modal-shell .pixel-modal-frame {
+  .map-modal-shell > .pixel-modal-frame {
     position: relative;
     top: auto;
     left: auto;
@@ -4937,7 +4963,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     overflow-y: auto;
   }
 
-  .map-modal-shell .pixel-modal-frame-content {
+  .map-modal-shell > .pixel-modal-frame > .pixel-modal-frame-content {
     height: auto;
     max-height: none;
   }

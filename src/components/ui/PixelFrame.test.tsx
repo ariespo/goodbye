@@ -45,4 +45,15 @@ describe('PixelFrame stepped rails', () => {
     expect(modalRule).toContain('100% calc(100% - 9px)');
     expect(modalRule).toContain('0 calc(100% - 9px)');
   });
+
+  it('keeps opaque modal content inside both visible rails on light and dark stages', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+    const modalLayers = styles.match(/\.world-pixel-frame-modal\s*>\s*\.pixel-frame-layers\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+    const modalContent = styles.match(/\.world-pixel-frame-modal\s*>\s*\.pixel-modal-frame-content\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+
+    expect(modalLayers).toContain('z-index: 2');
+    expect(modalLayers).toContain('overflow: visible');
+    expect(modalContent).toContain('z-index: 3');
+    expect(modalContent).toContain('clip-path: inset(12px)');
+  });
 });

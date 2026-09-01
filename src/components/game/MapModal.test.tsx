@@ -168,11 +168,11 @@ describe('MapModal', () => {
   it('anchors the desktop board to the approved map geometry', () => {
     const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
 
-    expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\s+\.pixel-modal-frame\s*\{[^}]*top:\s*122px;[^}]*left:\s*90px;[^}]*width:\s*1460px;[^}]*height:\s*738px;/);
+    expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\s*>\s*\.pixel-modal-frame\s*\{[^}]*top:\s*122px;[^}]*left:\s*90px;[^}]*width:\s*1460px;[^}]*height:\s*738px;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\s+\.map-modal-map\s*\{[^}]*width:\s*1354px;[^}]*height:\s*385px;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\.pixel-modal-shell\s*\{[^}]*pointer-events:\s*auto;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\s+\.pixel-modal-header\s*\{[^}]*gap:\s*20px;[^}]*padding:\s*28px 56px 28px 50px;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\s+\.pixel-modal-close\s*\{[^}]*top:\s*43px;[^}]*right:\s*56px;[^}]*width:\s*44px;[^}]*height:\s*44px;/);
-    expect(styles).toMatch(/@media \(max-width: 700px\)[\s\S]*\.map-modal-shell\s+\.pixel-modal-frame\s*\{[^}]*position:\s*relative;[^}]*top:\s*auto;[^}]*left:\s*auto;[^}]*width:\s*100%/);
+    expect(styles).toMatch(/@media \(max-width: 700px\)[\s\S]*\.map-modal-shell\s*>\s*\.pixel-modal-frame\s*\{[^}]*position:\s*relative;[^}]*top:\s*auto;[^}]*left:\s*auto;[^}]*width:\s*100%/);
   });
 });

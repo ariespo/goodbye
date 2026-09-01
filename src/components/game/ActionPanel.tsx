@@ -34,7 +34,6 @@ type ActionPanelPayload = {
   selectedIndex: number | null;
 };
 
-const CLOSE_MS = 220;
 const MOBILE_ACTION_MEDIA_QUERY = '(max-width: 700px)';
 
 function useNarrowActionViewport() {
@@ -94,11 +93,7 @@ export function ActionPanel() {
   useEffect(() => {
     if (actionPanel.visible) {
       setLastVisiblePayload({ ...actionPanel });
-      return;
     }
-
-    const timer = window.setTimeout(() => setLastVisiblePayload(null), CLOSE_MS);
-    return () => window.clearTimeout(timer);
   }, [actionPanel]);
 
   useEffect(() => {

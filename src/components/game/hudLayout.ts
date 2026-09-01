@@ -5,6 +5,8 @@ export type HudLayout = {
   scale: number;
   virtualWidth: number;
   virtualHeight: number;
+  offsetX: number;
+  offsetY: number;
 };
 
 export function calculateHudLayout(viewportWidth: number, viewportHeight: number): HudLayout {
@@ -14,7 +16,9 @@ export function calculateHudLayout(viewportWidth: number, viewportHeight: number
 
   return {
     scale,
-    virtualWidth: safeWidth / scale,
-    virtualHeight: safeHeight / scale,
+    virtualWidth: HUD_DESIGN_WIDTH,
+    virtualHeight: HUD_DESIGN_HEIGHT,
+    offsetX: (safeWidth - HUD_DESIGN_WIDTH * scale) / 2,
+    offsetY: (safeHeight - HUD_DESIGN_HEIGHT * scale) / 2,
   };
 }
