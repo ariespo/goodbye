@@ -4210,6 +4210,282 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   box-shadow: none;
 }
 
+/* Investigation and action retain their compact shape. Every PC measurement
+ * below is in the shared 1672×941 HUD space and corresponds to BOARD_ACTIONS. */
+.hud-design-canvas .action-panel.pixel-modal-shell {
+  z-index: 245;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.hud-design-canvas .action-panel .pixel-modal-frame {
+  position: absolute;
+  top: 135px;
+  left: 390px;
+  width: 860px;
+  height: 650px;
+  max-height: none;
+  pointer-events: auto;
+}
+
+.hud-design-canvas .action-panel .pixel-modal-frame-content {
+  height: 100%;
+  max-height: none;
+  background: #050505;
+}
+
+.hud-design-canvas .action-panel .pixel-modal-header {
+  min-height: 135px;
+  height: 135px;
+  padding: 28px 22px 20px 44px;
+  border-bottom-width: 3px;
+}
+
+.hud-design-canvas .action-panel .pixel-modal-header-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.hud-design-canvas .action-panel .pixel-modal-content.action-panel-content {
+  overflow-y: auto;
+  padding: 30px 22px 32px 44px;
+  background: #050505;
+}
+
+.hud-design-canvas .action-panel-list {
+  display: grid;
+  gap: 16px;
+}
+
+.hud-design-canvas .action-panel-card {
+  position: relative;
+  min-height: 110px;
+}
+
+.hud-design-canvas .action-panel .pixel-modal-list-item.action-panel-item {
+  min-height: 110px;
+  padding: 16px 86px 16px 16px;
+  gap: 20px;
+  border-width: 3px;
+  background: #050505;
+  color: #f2f2f0;
+}
+
+.hud-design-canvas .action-panel .pixel-modal-list-item.action-panel-item:hover,
+.hud-design-canvas .action-panel .pixel-modal-list-item.action-panel-item:focus-visible {
+  background: #f2f2f0;
+  color: #050505;
+}
+
+.hud-design-canvas .action-panel-item-icon {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid currentColor;
+  background: #050505;
+  color: #f2f2f0;
+}
+
+.hud-design-canvas .action-panel-item:hover .action-panel-item-icon,
+.hud-design-canvas .action-panel-item:focus-visible .action-panel-item-icon {
+  background: #050505;
+  color: #f2f2f0;
+}
+
+.hud-design-canvas .action-panel-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 13px;
+}
+
+.hud-design-canvas .action-panel-item-title {
+  color: currentColor;
+  font: 700 20px/1.2 "RenOuFangSong 16", "LXGW WenKai", monospace;
+  letter-spacing: .08em;
+}
+
+.hud-design-canvas .action-panel-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.hud-design-canvas .pixel-modal-status.action-panel-meta-chip {
+  min-height: 21px;
+  border-color: currentColor;
+  padding: 3px 6px;
+  background: transparent;
+  color: currentColor;
+  font-size: 11px;
+}
+
+.hud-design-canvas .action-panel-item-index {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  color: currentColor;
+  font: 16px/1 "JetBrains Mono", monospace;
+  letter-spacing: .08em;
+}
+
+.hud-design-canvas .action-panel-item-viewer {
+  position: absolute;
+  z-index: 1;
+  top: 35px;
+  left: 33px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hud-design-canvas .action-panel-item-viewer img {
+  max-width: 34px;
+  max-height: 34px;
+  filter: grayscale(1) contrast(1.2);
+}
+
+.hud-design-canvas .action-panel-scene-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 62px;
+  padding: 9px 12px;
+  border: 2px solid #f2f2f0;
+  background: #050505;
+}
+
+.hud-design-canvas .action-panel-scene-items > span {
+  margin-right: 8px;
+  color: #b9b9b4;
+  font: 11px/1 "JetBrains Mono", monospace;
+  letter-spacing: .12em;
+}
+
+.hud-design-canvas .action-panel-scene-items button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 2px solid #f2f2f0;
+  background: #050505;
+  cursor: pointer;
+}
+
+.hud-design-canvas .action-panel-scene-items button:hover,
+.hud-design-canvas .action-panel-scene-items button:focus-visible {
+  background: #f2f2f0;
+}
+
+.hud-design-canvas .action-panel-scene-items img {
+  max-width: 30px;
+  max-height: 30px;
+  filter: grayscale(1) contrast(1.2);
+}
+
+.hud-design-canvas .action-panel-observe-copy {
+  color: #f2f2f0;
+  white-space: pre-wrap;
+  font: 18px/1.75 "RenOuFangSong 16", "LXGW WenKai", monospace;
+}
+
+.hud-design-canvas .action-panel-candidates {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.hud-design-canvas .action-panel .clue-candidate-card.action-panel-candidate {
+  min-height: 74px;
+  padding: 12px 16px;
+  border: 2px solid #f2f2f0;
+  background: #050505;
+  color: #f2f2f0;
+  box-shadow: none;
+  transform: none;
+}
+
+.hud-design-canvas .action-panel .clue-candidate-card.action-panel-candidate.is-organized {
+  border-color: #686863;
+  background: #050505;
+  color: #888884 !important;
+  opacity: 1;
+}
+
+.hud-design-canvas .action-panel-candidate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.hud-design-canvas .action-panel .observe-marker {
+  color: currentColor;
+  font: 700 14px/1 "RenOuFangSong 16", monospace;
+  letter-spacing: .12em;
+  text-shadow: none;
+}
+
+.hud-design-canvas .action-panel .clue-organize-btn {
+  min-height: 34px;
+  border-color: #f2f2f0;
+  background: #050505;
+  color: #f2f2f0;
+  box-shadow: none;
+}
+
+.hud-design-canvas .action-panel .clue-organize-btn:hover:not(:disabled),
+.hud-design-canvas .action-panel .clue-organize-btn:focus-visible {
+  background: #f2f2f0;
+  color: #050505;
+  box-shadow: none;
+  transform: none;
+}
+
+.hud-design-canvas .action-panel .clue-organize-btn.is-done {
+  border-color: #686863;
+  background: #050505;
+  color: #888884;
+}
+
+.hud-design-canvas .action-panel-candidate-description {
+  color: currentColor;
+  font: 16px/1.55 "RenOuFangSong 16", "LXGW WenKai", monospace;
+}
+
+/* This bridge preserves the existing narrow-screen floating panel behavior;
+ * only the PC HUD branch above is newly measured. */
+@media (max-width: 700px) {
+  .action-panel.pixel-modal-shell {
+    inset: auto !important;
+    left: var(--mobile-safe-left) !important;
+    right: var(--mobile-safe-right) !important;
+    top: calc(var(--mobile-safe-top) + 64px) !important;
+    bottom: auto !important;
+    display: block;
+    padding: 0 !important;
+    background: transparent;
+  }
+
+  .action-panel .pixel-modal-frame {
+    position: static;
+    width: 100% !important;
+    max-height: calc(100dvh - 150px) !important;
+  }
+
+  .action-panel .pixel-modal-frame-content {
+    max-height: calc(100dvh - 150px) !important;
+  }
+}
+
 /* Map is a PC HUD board. These measured coordinates match BOARD_MAP while the
  * generic PixelModal rules continue to serve portrait and mobile layouts. */
 .hud-design-canvas .map-modal-shell.pixel-modal-shell {
