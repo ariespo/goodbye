@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -32,5 +34,15 @@ describe('PixelFrame stepped rails', () => {
     expect(frame?.querySelectorAll('[data-pixel-frame-rail]')).toHaveLength(2);
     expect(frame).toHaveClass('world-pixel-frame-modal');
     expect(frame).toHaveStyle({ backgroundColor: '#050505' });
+  });
+
+  it('uses the corrected nine-pixel stepped modal corners', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+    const modalRule = styles.match(/\.world-pixel-frame-modal\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+
+    expect(modalRule).toContain('calc(100% - 4px) 9px');
+    expect(modalRule).toContain('100% 9px');
+    expect(modalRule).toContain('100% calc(100% - 9px)');
+    expect(modalRule).toContain('0 calc(100% - 9px)');
   });
 });
