@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
@@ -26,6 +27,51 @@ type PanelItemData = {
   style?: string;
 };
 
+type ActionPanelPayload = {
+  visible: boolean;
+  type: 'observe' | 'investigate' | 'act' | null;
+  content: string;
+  selectedIndex: number | null;
+};
+
+const CLOSE_MS = 220;
+const MOBILE_ACTION_MEDIA_QUERY = '(max-width: 700px)';
+
+function useNarrowActionViewport() {
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(MOBILE_ACTION_MEDIA_QUERY).matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    const query = window.matchMedia(MOBILE_ACTION_MEDIA_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsNarrow(event.matches);
+    setIsNarrow(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  return isNarrow;
+}
+
+function useActionPanelPortalTarget(isNarrow: boolean) {
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isNarrow || typeof document === 'undefined') {
+      setPortalTarget(null);
+      return;
+    }
+
+    setPortalTarget(document.querySelector<HTMLElement>('.game-canvas') ?? document.body);
+  }, [isNarrow]);
+
+  return portalTarget;
+}
+
 export function ActionPanel() {
   const actionPanel = useGameStore(state => state.game.actionPanel);
   const currentScene = useGameStore(state => state.game.currentScene);
@@ -38,39 +84,60 @@ export function ActionPanel() {
   const addNotification = useGameStore(state => state.actions.addNotification);
   const background = useGameStore(state => state.game.currentState.background);
   const [viewingItem, setViewingItem] = useState<ItemAsset | null>(null);
+  const [lastVisiblePayload, setLastVisiblePayload] = useState<ActionPanelPayload | null>(
+    () => actionPanel.visible ? { ...actionPanel } : null,
+  );
   const { performAction } = useGameLoop();
+  const isNarrowActionViewport = useNarrowActionViewport();
+  const actionPanelPortalTarget = useActionPanelPortalTarget(isNarrowActionViewport);
+
+  useEffect(() => {
+    if (actionPanel.visible) {
+      setLastVisiblePayload({ ...actionPanel });
+      return;
+    }
+
+    const timer = window.setTimeout(() => setLastVisiblePayload(null), CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [actionPanel]);
+
+  useEffect(() => {
+    if (!actionPanel.visible) setViewingItem(null);
+  }, [actionPanel.visible]);
+
+  const panel = actionPanel.visible ? actionPanel : lastVisiblePayload ?? actionPanel;
 
   const handleClose = () => {
     setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
   };
 
   const handleSelectItem = (index: number) => {
-    if (actionPanel.type === 'investigate' && currentScene?.investigateItems) {
+    if (panel.type === 'investigate' && currentScene?.investigateItems) {
       performAction('investigate', index);
-    } else if (actionPanel.type === 'act' && currentScene?.actionItems) {
+    } else if (panel.type === 'act' && currentScene?.actionItems) {
       performAction('actions', index);
     }
   };
 
-  const title = actionPanel.type === 'observe'
+  const title = panel.type === 'observe'
     ? '观察'
-    : actionPanel.type === 'investigate'
+    : panel.type === 'investigate'
       ? '调查'
-      : actionPanel.type === 'act'
+      : panel.type === 'act'
         ? '行动'
         : '操作';
-  const isListType = actionPanel.type === 'investigate' || actionPanel.type === 'act';
-  const items = actionPanel.type === 'investigate'
+  const isListType = panel.type === 'investigate' || panel.type === 'act';
+  const items = panel.type === 'investigate'
     ? currentScene?.investigateItems ?? []
-    : actionPanel.type === 'act'
+    : panel.type === 'act'
       ? currentScene?.actionItems ?? []
       : [];
-  const meta = actionPanel.type === 'observe'
+  const meta = panel.type === 'observe'
     ? 'OBSERVATION LOG'
     : `AVAILABLE INTERACTIONS / ${items.length}`;
-  const headerIcon = actionPanel.type === 'act' ? 'action' : 'investigate';
+  const headerIcon = panel.type === 'act' ? 'action' : 'investigate';
   const organizedClues: OrganizedClue[] = Array.isArray(variables.organizedClues) ? variables.organizedClues : [];
-  const sceneItems = actionPanel.type === 'investigate' ? getItemsForBackground(background) : [];
+  const sceneItems = panel.type === 'investigate' ? getItemsForBackground(background) : [];
 
   const handleOrganizeClue = (candidate: ClueCandidate) => {
     if (organizedClues.length >= 6) {
@@ -103,9 +170,8 @@ export function ActionPanel() {
     addNotification({ type: 'success', message: `整理成功：已记录「${nextClue.title}」`, duration: 2800 });
   };
 
-  return (
-    <>
-      <PixelModalShell
+  const dialog = (
+    <PixelModalShell
         open={actionPanel.visible}
         onClose={handleClose}
         labelledBy="action-panel-title"
@@ -123,7 +189,7 @@ export function ActionPanel() {
         <PixelModalContent className="action-panel-content pixel-scroll-blue">
           {isListType ? (
             <div className="action-panel-list">
-              {actionPanel.type === 'investigate' && sceneItems.length > 0 && (
+              {panel.type === 'investigate' && sceneItems.length > 0 && (
                 <SceneItemShelf items={sceneItems} onOpen={setViewingItem} />
               )}
               {items.map((item, index) => (
@@ -131,32 +197,42 @@ export function ActionPanel() {
                   key={`${index}-${item.desc}`}
                   index={index}
                   item={item}
-                  linkedItem={actionPanel.type === 'investigate' ? findItemForInvestigation(item.desc, background) : undefined}
+                  linkedItem={panel.type === 'investigate' ? findItemForInvestigation(item.desc, background) : undefined}
                   onOpenItem={setViewingItem}
                   onClick={() => handleSelectItem(index)}
+                  actionType={panel.type === 'act' ? 'act' : 'investigate'}
                 />
               ))}
             </div>
           ) : (
             <ObserveContent
-              text={actionPanel.content}
+              text={panel.content}
               organizedClues={organizedClues}
               onOrganize={handleOrganizeClue}
             />
           )}
         </PixelModalContent>
-      </PixelModalShell>
+    </PixelModalShell>
+  );
+
+  const fallbackPortalTarget = typeof document === 'undefined' ? null : document.body;
+  const portalTarget = actionPanelPortalTarget ?? fallbackPortalTarget;
+
+  return (
+    <>
+      {isNarrowActionViewport && portalTarget ? createPortal(dialog, portalTarget) : dialog}
       {viewingItem && <ItemViewer item={viewingItem} onClose={() => setViewingItem(null)} />}
     </>
   );
 }
 
-function ActionPanelItem({ index, item, linkedItem, onOpenItem, onClick }: {
+function ActionPanelItem({ index, item, linkedItem, onOpenItem, onClick, actionType }: {
   index: number;
   item: PanelItemData;
   linkedItem?: ItemAsset;
   onOpenItem: (item: ItemAsset) => void;
   onClick: () => void;
+  actionType: 'investigate' | 'act';
 }) {
   return (
     <div className="action-panel-card">
@@ -164,10 +240,10 @@ function ActionPanelItem({ index, item, linkedItem, onOpenItem, onClick }: {
         data-cursor="pointer"
         className="action-panel-item"
         onClick={onClick}
-        aria-label={`执行调查 ${item.desc}`}
+        aria-label={`执行${actionType === 'act' ? '行动' : '调查'} ${item.desc}`}
       >
         <span className="action-panel-item-icon" aria-hidden="true">
-          <GameIcon name="investigate" size={26} />
+          <GameIcon name={actionType === 'act' ? 'action' : 'investigate'} size={26} />
         </span>
         <span className="action-panel-item-copy">
           <span className="action-panel-item-title">{item.desc}</span>
