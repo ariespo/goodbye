@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -69,5 +71,11 @@ describe('ClueModal', () => {
 
     expect(screen.getByRole('dialog', { name: '线索' })).toBeInTheDocument();
     expect(useGameStore.getState().ui.showClues).toBe(true);
+  });
+
+  it('anchors the PC clue board to the approved 1420 by 700 HUD geometry', () => {
+    const styles = readFileSync(resolve(__dirname, '../../styles/globals.css'), 'utf8');
+
+    expect(styles).toMatch(/\.hud-design-canvas\s+\.clue-modal-shell\s+\.pixel-modal-frame\s*\{[^}]*width:\s*1420px;[^}]*height:\s*700px;/);
   });
 });
