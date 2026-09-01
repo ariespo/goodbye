@@ -1,0 +1,102 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  PixelModalAction,
+  PixelModalContent,
+  PixelModalFooter,
+  PixelModalHeader,
+  PixelModalListItem,
+  PixelModalShell,
+  PixelModalStatus,
+} from './PixelModal';
+
+function Harness({ open, onClose, closeBlocked = false }: {
+  open: boolean;
+  onClose: () => void;
+  closeBlocked?: boolean;
+}) {
+  return (
+    <>
+      <button type="button">打开</button>
+      <PixelModalShell open={open} onClose={onClose} labelledBy="modal-title" closeBlocked={closeBlocked}>
+        <PixelModalHeader titleId="modal-title" title="标题" meta="META" onClose={onClose} closeLabel="关闭" />
+        <PixelModalContent>正文</PixelModalContent>
+        <PixelModalFooter>底部</PixelModalFooter>
+      </PixelModalShell>
+    </>
+  );
+}
+
+describe('PixelModal', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('closes from Escape and restores focus to the trigger', () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const { rerender } = render(<Harness open={false} onClose={onClose} />);
+    const trigger = screen.getByRole('button', { name: '打开' });
+    trigger.focus();
+
+    rerender(<Harness open onClose={onClose} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(<Harness open={false} onClose={onClose} />);
+    act(() => vi.advanceTimersByTime(220));
+    expect(trigger).toHaveFocus();
+  });
+
+  it('only closes from the backdrop itself', () => {
+    const onClose = vi.fn();
+    render(<Harness open onClose={onClose} />);
+
+    fireEvent.click(screen.getByText('正文'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('pixel-modal-backdrop'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the shell mounted for the stepped close animation', () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<Harness open onClose={vi.fn()} />);
+
+    rerender(<Harness open={false} onClose={vi.fn()} />);
+    expect(screen.getByRole('dialog')).toHaveClass('is-closing');
+
+    act(() => vi.advanceTimersByTime(220));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not close when a nested confirmation blocks the shell', () => {
+    const onClose = vi.fn();
+    render(<Harness open onClose={onClose} closeBlocked />);
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('pixel-modal-backdrop'));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('exposes active action and list item states as presentation-only data attributes', () => {
+    render(
+      <>
+        <PixelModalAction active icon={<svg aria-label="行动图标" />}>执行</PixelModalAction>
+        <PixelModalStatus>可用</PixelModalStatus>
+        <PixelModalListItem selected>选中</PixelModalListItem>
+        <PixelModalListItem disabled>禁用</PixelModalListItem>
+      </>,
+    );
+
+    expect(screen.getByRole('button', { name: /执行/ })).toHaveAttribute('data-active', 'true');
+    expect(screen.getByText('可用')).toHaveClass('pixel-modal-status');
+    expect(screen.getByText('选中')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByText('禁用')).toHaveAttribute('data-disabled', 'true');
+  });
+});

@@ -3837,3 +3837,176 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   from { opacity: 0; transform: translateY(18px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+@layer components {
+  .pixel-modal-shell {
+    position: absolute;
+    z-index: 90;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 48px;
+    background: rgba(5, 5, 5, .78);
+    color: #f2f2f0;
+  }
+
+  .pixel-modal-shell.is-compact { padding: 72px 140px; }
+
+  .pixel-modal-frame {
+    width: min(1120px, 100%);
+    max-height: 100%;
+    clip-path: polygon(9px 0, calc(100% - 9px) 0, calc(100% - 9px) 3px, calc(100% - 4px) 3px, calc(100% - 4px) 9px, 100% 9px, 100% calc(100% - 9px), calc(100% - 4px) calc(100% - 9px), calc(100% - 4px) calc(100% - 4px), calc(100% - 9px) calc(100% - 4px), calc(100% - 9px) 100%, 9px 100%, 9px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 9px), 0 calc(100% - 9px), 0 9px, 4px 9px, 4px 4px, 9px 4px);
+  }
+
+  .pixel-modal-shell.is-compact .pixel-modal-frame { width: min(760px, 100%); }
+
+  .pixel-modal-frame-content {
+    display: flex;
+    max-height: min(760px, calc(100vh - 96px));
+    flex-direction: column;
+    overflow: hidden;
+    background-color: #050505;
+  }
+
+  .pixel-modal-header,
+  .pixel-modal-footer {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    border-color: #f2f2f0;
+    border-style: solid;
+    background: #050505;
+  }
+
+  .pixel-modal-header {
+    min-height: 72px;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom-width: 2px;
+  }
+
+  .pixel-modal-header-icon {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+  }
+
+  .pixel-modal-header-copy { min-width: 0; flex: 1; }
+
+  .pixel-modal-title {
+    margin: 0;
+    color: #f2f2f0;
+    font: 700 24px/1 "RenOuFangSong 16", "LXGW WenKai", monospace;
+    letter-spacing: .14em;
+  }
+
+  .pixel-modal-meta {
+    margin: 5px 0 0;
+    color: #b9b9b4;
+    font: 12px/1 "JetBrains Mono", monospace;
+    letter-spacing: .14em;
+  }
+
+  .pixel-modal-close {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 2px solid #f2f2f0;
+    background: #050505;
+    color: #f2f2f0;
+    cursor: pointer;
+    font: 24px/1 monospace;
+  }
+
+  .pixel-modal-close:hover { background: #f2f2f0; color: #050505; }
+  .pixel-modal-close:active { transform: translate(2px, 2px); }
+
+  .pixel-modal-content {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 18px;
+    background: #050505;
+  }
+
+  .pixel-modal-footer {
+    min-height: 64px;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top-width: 2px;
+  }
+
+  .pixel-modal-action,
+  .pixel-modal-list-item {
+    border: 2px solid #f2f2f0;
+    background: #050505;
+    color: #f2f2f0;
+    cursor: pointer;
+    image-rendering: pixelated;
+  }
+
+  .pixel-modal-action {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font: 700 14px/1 "RenOuFangSong 16", "LXGW WenKai", monospace;
+    letter-spacing: .1em;
+  }
+
+  .pixel-modal-action-icon { display: inline-grid; width: 20px; height: 20px; place-items: center; }
+  .pixel-modal-action-icon > svg { width: 100%; height: 100%; fill: currentColor; shape-rendering: crispEdges; }
+  .pixel-modal-action[data-active='true'], .pixel-modal-action:hover:not(:disabled) { background: #f2f2f0; color: #050505; }
+  .pixel-modal-action:active:not(:disabled) { transform: translate(2px, 2px); }
+  .pixel-modal-action:disabled, .pixel-modal-list-item:disabled { cursor: not-allowed; opacity: .42; }
+
+  .pixel-modal-status {
+    display: inline-flex;
+    min-height: 24px;
+    align-items: center;
+    border: 1px solid #f2f2f0;
+    padding: 2px 7px;
+    background: #050505;
+    color: #f2f2f0;
+    font: 11px/1 "JetBrains Mono", monospace;
+    letter-spacing: .1em;
+  }
+
+  .pixel-modal-list-item {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    padding: 10px 12px;
+    text-align: left;
+  }
+
+  .pixel-modal-list-item:hover:not(:disabled), .pixel-modal-list-item[data-selected='true'] { background: #f2f2f0; color: #050505; }
+  .pixel-modal-list-item[data-disabled='true'] { border-color: #686863; }
+
+  .pixel-modal-shell.is-open .pixel-modal-frame {
+    animation: pixelModalIn 200ms steps(4, end) both;
+  }
+
+  .pixel-modal-shell.is-closing .pixel-modal-frame {
+    animation: pixelModalOut 220ms steps(4, end) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pixel-modal-shell .pixel-modal-frame { animation: none !important; }
+  }
+}
+
+@keyframes pixelModalIn {
+  from { opacity: 0; transform: translateY(24px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pixelModalOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(24px) scale(.96); }
+}
