@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { assetUrl } from '../../utils/assetUrl';
 
-type PixelFrameVariant = 'panel' | 'dialogue' | 'button';
+type PixelFrameVariant = 'panel' | 'dialogue' | 'button' | 'modal';
 
 interface PixelFrameProps {
   children: ReactNode;
@@ -36,16 +36,23 @@ export function PixelFrame({
   contentStyle,
   onClick,
 }: PixelFrameProps) {
+  const isDoubleRail = variant === 'dialogue' || variant === 'modal';
+  const backgroundColor = variant === 'modal'
+    ? '#050505'
+    : variant === 'dialogue'
+      ? 'rgba(9, 9, 9, 0.94)'
+      : 'rgba(12, 12, 12, 0.93)';
+
   return (
     <div
       className={`world-pixel-frame world-pixel-frame-${variant} relative ${className}`}
       onClick={onClick}
       style={{
-        backgroundColor: variant === 'dialogue' ? 'rgba(9, 9, 9, 0.94)' : 'rgba(12, 12, 12, 0.93)',
+        backgroundColor,
         ...style,
       }}
     >
-      <PixelFrameRails double={variant === 'dialogue'} />
+      <PixelFrameRails double={isDoubleRail} />
 
       <div
         data-pixel-frame-content="true"

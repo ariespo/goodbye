@@ -989,6 +989,32 @@
   min-height: 178px;
 }
 
+.world-pixel-frame-modal {
+  image-rendering: pixelated;
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 10px) 0,
+    calc(100% - 10px) 3px,
+    calc(100% - 4px) 3px,
+    calc(100% - 4px) 8px,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 3px),
+    calc(100% - 10px) calc(100% - 3px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    10px calc(100% - 3px),
+    4px calc(100% - 3px),
+    4px calc(100% - 8px),
+    0 calc(100% - 8px),
+    0 8px,
+    4px 8px,
+    4px 3px,
+    10px 3px
+  );
+}
+
 .dialogue-frame-content.has-dialogue-portrait {
   /* 为右侧立绘预留文本避让宽度 */
   padding-right: clamp(178px, 23vw, 252px) !important;
