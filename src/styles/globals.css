@@ -4355,6 +4355,9 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   min-height: 76px;
   justify-content: center;
   border-width: 3px;
+  box-shadow: none;
+  filter: none;
+  text-shadow: none;
 }
 
 .hud-design-canvas .pixel-modal-action.clue-infer-button[data-ready='false'] {
@@ -4369,6 +4372,21 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   background: #f2f2f0;
   color: #050505;
   box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.hud-design-canvas .pixel-modal-action.clue-infer-button:active:not(:disabled) {
+  box-shadow: none;
+  filter: none;
+  transform: translate(2px, 2px);
+}
+
+.hud-design-canvas .pixel-modal-action.clue-infer-button[data-ready='true'] .clue-infer-icon {
+  animation: none;
+  color: currentColor;
+  filter: none;
+  transform: none;
 }
 
 /* Investigation and action retain their compact shape. Every PC measurement
@@ -4603,9 +4621,11 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   padding: 12px 16px;
   border: 2px solid #f2f2f0;
   background: #050505;
+  background-image: none;
   color: #f2f2f0;
   box-shadow: none;
   transform: none;
+  transition: none;
 }
 
 .hud-design-canvas .action-panel .clue-candidate-card.action-panel-candidate.is-organized {
@@ -4817,6 +4837,18 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   justify-content: center;
   border-width: 3px;
   font-size: 24px;
+}
+
+.hud-design-canvas .pixel-modal-action.map-travel-button:hover:not(:disabled) {
+  border-color: #f2f2f0 !important;
+  box-shadow: none !important;
+  filter: none;
+  transform: none;
+}
+
+.hud-design-canvas .pixel-modal-action.map-travel-button:active:not(:disabled) {
+  box-shadow: none !important;
+  filter: none;
 }
 
 .hud-design-canvas .pixel-modal-action.map-travel-button:disabled {

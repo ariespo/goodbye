@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const assetDir = join(process.cwd(), 'public/assets/ui/penpot/pc')
+const globalStylesPath = join(process.cwd(), 'src/styles/globals.css')
 
 function load(name: string) {
   return readFileSync(join(assetDir, name), 'utf8')
@@ -54,5 +55,25 @@ describe('Penpot PC UI overlay assets', () => {
     expect(svg).toContain('.dialogue{font-size:40px}')
     expect(svg).toContain('体力 100/100')
     expect(svg).toContain('理智 70/100')
+  })
+})
+
+describe('first-batch PC modal CSS contracts', () => {
+  it('keeps first-batch HUD modals opaque, stepped, fixed-width, and monochrome on interaction', () => {
+    const css = readFileSync(globalStylesPath, 'utf8')
+
+    expect(css).toMatch(/\.pixel-modal-frame-content[\s\S]*background(?:-color)?:\s*#050505/)
+    expect(css).toMatch(/pixelModalIn[\s\S]*steps\(4, end\)/)
+    expect(css).toMatch(/prefers-reduced-motion/)
+
+    for (const selector of ['action-panel', 'clue-modal', 'map-modal']) {
+      expect(css).not.toMatch(new RegExp(`\\.hud-design-canvas \\.${selector}[^}]*\\d+vw`))
+    }
+
+    // These namespace-local rules must outrank the legacy blue/gold controls
+    // without disturbing the portrait layout that still uses the old classes.
+    expect(css).toMatch(/\.hud-design-canvas \.pixel-modal-action\.map-travel-button:hover:not\(:disabled\)\s*\{[^}]*border-color:\s*#f2f2f0\s*!important;/)
+    expect(css).toMatch(/\.hud-design-canvas \.pixel-modal-action\.clue-infer-button\s*\{[^}]*box-shadow:\s*none;/)
+    expect(css).toMatch(/\.hud-design-canvas \.action-panel \.clue-candidate-card\.action-panel-candidate\s*\{[^}]*background-image:\s*none;/)
   })
 })
