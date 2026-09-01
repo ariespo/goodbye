@@ -9,6 +9,16 @@ function load(name: string) {
   return readFileSync(join(assetDir, name), 'utf8')
 }
 
+function cssBlock(css: string, selector: string) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = css.match(new RegExp(`(^|\\n)\\s*${escapedSelector}\\s*\\{`))
+  if (!match || match.index === undefined) return ''
+  const start = match.index + match[0].lastIndexOf(selector)
+
+  const end = css.indexOf('}', start)
+  return css.slice(start, end + 1)
+}
+
 describe('Penpot PC UI overlay assets', () => {
   const states = ['pc-wheel-closed.svg', 'pc-wheel-open.svg']
 
@@ -75,5 +85,35 @@ describe('first-batch PC modal CSS contracts', () => {
     expect(css).toMatch(/\.hud-design-canvas \.pixel-modal-action\.map-travel-button:hover:not\(:disabled\)\s*\{[^}]*border-color:\s*#f2f2f0\s*!important;/)
     expect(css).toMatch(/\.hud-design-canvas \.pixel-modal-action\.clue-infer-button\s*\{[^}]*box-shadow:\s*none;/)
     expect(css).toMatch(/\.hud-design-canvas \.action-panel \.clue-candidate-card\.action-panel-candidate\s*\{[^}]*background-image:\s*none;/)
+  })
+
+  it('contains each PC legacy-style override in its own non-greedy rule block', () => {
+    const css = readFileSync(globalStylesPath, 'utf8')
+    const deleteHover = cssBlock(css, '.hud-design-canvas .clue-delete-button:hover,\n.hud-design-canvas .clue-delete-button:focus-visible')
+    const organize = cssBlock(css, '.hud-design-canvas .action-panel .clue-organize-btn')
+    const actionScroll = cssBlock(css, '.hud-design-canvas .action-panel .pixel-modal-content.action-panel-content.pixel-scroll-blue')
+    const mapFrame = cssBlock(css, '.hud-design-canvas .map-modal-shell .pixel-modal-frame-content')
+    const clueFrame = cssBlock(css, '.hud-design-canvas .clue-modal-shell .pixel-modal-frame-content')
+    const narrowClueShell = cssBlock(css, '.clue-modal-shell.pixel-modal-shell')
+    const narrowClueFrame = cssBlock(css, '.clue-modal-shell .pixel-modal-frame')
+
+    expect(deleteHover).toContain('border-color: #f2f2f0')
+    expect(deleteHover).toContain('box-shadow: none')
+    expect(deleteHover).toContain('transform: none')
+    expect(deleteHover).toContain('transition: none')
+    expect(organize).toContain('border-color: #f2f2f0')
+    expect(organize).toContain('background: #050505')
+    expect(organize).toContain('box-shadow: none')
+    expect(actionScroll).toContain('overflow-y: auto !important')
+
+    for (const block of [mapFrame, clueFrame]) {
+      expect(block).toContain('background: #050505')
+      expect(block).not.toMatch(/(?:gradient|rgba|transparent|\d+vw)/)
+    }
+
+    expect(narrowClueShell).toContain('align-items: stretch !important')
+    expect(narrowClueShell).toContain('padding: var(--mobile-safe-top, 10px)')
+    expect(narrowClueFrame).toContain('width: 100%')
+    expect(narrowClueFrame).toContain('max-height: calc(100dvh - var(--mobile-safe-top, 10px) - var(--mobile-safe-bottom, 10px))')
   })
 })

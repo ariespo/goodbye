@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { GameIcon } from '../ui/GameIcon';
@@ -14,6 +15,43 @@ import {
   PixelModalShell,
 } from '../ui/PixelModal';
 
+const MOBILE_CLUE_MEDIA_QUERY = '(max-width: 700px)';
+
+function useNarrowClueViewport() {
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(MOBILE_CLUE_MEDIA_QUERY).matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    const query = window.matchMedia(MOBILE_CLUE_MEDIA_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsNarrow(event.matches);
+    setIsNarrow(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  return isNarrow;
+}
+
+function useCluePortalTarget(isNarrow: boolean) {
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isNarrow || typeof document === 'undefined') {
+      setPortalTarget(null);
+      return;
+    }
+
+    setPortalTarget(document.querySelector<HTMLElement>('.game-canvas') ?? document.body);
+  }, [isNarrow]);
+
+  return portalTarget;
+}
+
 export function ClueModal() {
   const showClues = useGameStore(state => state.ui.showClues);
   const variables = useGameStore(state => state.tavern.variables);
@@ -25,6 +63,8 @@ export function ClueModal() {
   const { sendMessage } = useGameLoop();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const isNarrowClueViewport = useNarrowClueViewport();
+  const cluePortalTarget = useCluePortalTarget(isNarrowClueViewport);
 
   const clues = useMemo<OrganizedClue[]>(
     () => Array.isArray(variables.organizedClues) ? variables.organizedClues : [],
@@ -81,7 +121,7 @@ ${clueText}
     sendMessage(prompt);
   };
 
-  return (
+  const dialog = (
     <PixelModalShell
       open={showClues}
       onClose={close}
@@ -169,4 +209,9 @@ ${clueText}
       />
     </PixelModalShell>
   );
+
+  const fallbackPortalTarget = typeof document === 'undefined' ? null : document.body;
+  const portalTarget = cluePortalTarget ?? fallbackPortalTarget;
+
+  return isNarrowClueViewport && portalTarget ? createPortal(dialog, portalTarget) : dialog;
 }

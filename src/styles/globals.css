@@ -4316,13 +4316,20 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   border: 2px solid #f2f2f0;
   background: #050505;
   color: #f2f2f0;
+  box-shadow: none;
   cursor: pointer;
+  transform: none;
+  transition: none;
 }
 
 .hud-design-canvas .clue-delete-button:hover,
 .hud-design-canvas .clue-delete-button:focus-visible {
+  border-color: #f2f2f0;
   background: #f2f2f0;
+  box-shadow: none;
   color: #050505;
+  transform: none;
+  transition: none;
 }
 
 .hud-design-canvas .clue-modal-shell .pixel-modal-footer.clue-modal-footer {
@@ -4387,6 +4394,58 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   color: currentColor;
   filter: none;
   transform: none;
+}
+
+/* The clue board stays a single component instance. At the portrait
+ * breakpoint it is portaled out of the scaled HUD, then this bridge restores
+ * the ordinary game-canvas coordinate system without touching legacy cards. */
+@media (max-width: 700px) {
+  .clue-modal-shell.pixel-modal-shell {
+    z-index: 245;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+    padding: var(--mobile-safe-top, 10px) var(--mobile-safe-right, 10px) var(--mobile-safe-bottom, 10px) var(--mobile-safe-left, 10px) !important;
+  }
+
+  .clue-modal-shell .pixel-modal-frame {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    height: calc(100dvh - var(--mobile-safe-top, 10px) - var(--mobile-safe-bottom, 10px));
+    min-height: 0;
+    max-height: calc(100dvh - var(--mobile-safe-top, 10px) - var(--mobile-safe-bottom, 10px));
+  }
+
+  .clue-modal-shell .pixel-modal-frame-content {
+    height: 100%;
+    max-height: none;
+  }
+
+  .clue-modal-shell .pixel-modal-content.clue-modal-content {
+    padding: 14px;
+  }
+
+  .clue-modal-shell .clue-modal-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .clue-modal-shell .pixel-modal-footer.clue-modal-footer {
+    min-height: 112px;
+    height: auto;
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px 14px;
+  }
+
+  .clue-modal-shell .pixel-modal-action.clue-infer-button {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    font-size: 16px;
+  }
 }
 
 /* Investigation and action retain their compact shape. Every PC measurement

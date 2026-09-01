@@ -2,12 +2,48 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrganizedClue } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
 import { ClueModal } from './ClueModal';
+
+function mockMatchMedia(initialMatches: boolean) {
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const originalMatchMedia = window.matchMedia;
+  const query = {
+    matches: initialMatches,
+    media: '(max-width: 700px)',
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn((_event: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener)),
+    removeEventListener: vi.fn((_event: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener)),
+    dispatchEvent: vi.fn(),
+  } as MediaQueryList;
+
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => query) });
+
+  return {
+    query,
+    change(matches: boolean) {
+      (query as { matches: boolean }).matches = matches;
+      act(() => listeners.forEach(listener => listener({ matches } as MediaQueryListEvent)));
+    },
+    restore() {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });
+    },
+  };
+}
+
+function renderCluesInGameCanvas() {
+  return render(
+    <div className="game-canvas">
+      <div className="hud-design-canvas"><ClueModal /></div>
+    </div>,
+  );
+}
 
 const loopMocks = vi.hoisted(() => ({ sendMessage: vi.fn() }));
 
@@ -22,9 +58,12 @@ const clues: OrganizedClue[] = [
 
 describe('ClueModal', () => {
   const initialState = useGameStore.getState();
+  let media: ReturnType<typeof mockMatchMedia> | null = null;
 
   afterEach(() => {
     cleanup();
+    media?.restore();
+    media = null;
     loopMocks.sendMessage.mockReset();
     useGameStore.setState(initialState, true);
   });
@@ -71,6 +110,59 @@ describe('ClueModal', () => {
 
     expect(screen.getByRole('dialog', { name: '线索' })).toBeInTheDocument();
     expect(useGameStore.getState().ui.showClues).toBe(true);
+  });
+
+  it('portals the single clue dialog outside the scaled HUD canvas at the narrow breakpoint', () => {
+    media = mockMatchMedia(true);
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showClues: true },
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, organizedClues: clues } },
+    }));
+
+    const { container } = renderCluesInGameCanvas();
+    const hud = container.querySelector('.hud-design-canvas') as HTMLElement;
+    const dialog = screen.getByRole('dialog', { name: '线索' });
+
+    expect(dialog.parentElement).toHaveClass('game-canvas');
+    expect(hud).not.toContainElement(dialog);
+    expect(screen.getAllByRole('dialog', { name: '线索' })).toHaveLength(1);
+  });
+
+  it('preserves selected clues across narrow and desktop portal transitions', () => {
+    media = mockMatchMedia(false);
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showClues: true },
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, organizedClues: clues } },
+    }));
+
+    const { container } = renderCluesInGameCanvas();
+    const hud = container.querySelector('.hud-design-canvas') as HTMLElement;
+
+    fireEvent.click(screen.getByRole('button', { name: '选择线索：湿透的信' }));
+    expect(screen.getByRole('button', { name: '取消选择线索：湿透的信' })).toBeInTheDocument();
+    expect(within(hud).getByRole('dialog', { name: '线索' })).toBeInTheDocument();
+
+    media.change(true);
+    expect(hud).not.toContainElement(screen.getByRole('dialog', { name: '线索' }));
+    expect(screen.getByRole('dialog', { name: '线索' }).parentElement).toHaveClass('game-canvas');
+    expect(screen.getByRole('button', { name: '取消选择线索：湿透的信' })).toBeInTheDocument();
+    expect(screen.getAllByRole('dialog', { name: '线索' })).toHaveLength(1);
+
+    media.change(false);
+    expect(within(hud).getByRole('dialog', { name: '线索' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消选择线索：湿透的信' })).toBeInTheDocument();
+    expect(screen.getAllByRole('dialog', { name: '线索' })).toHaveLength(1);
+  });
+
+  it('removes its media-query listener when unmounted', () => {
+    media = mockMatchMedia(false);
+    useGameStore.setState(state => ({ ui: { ...state.ui, showClues: true } }));
+
+    const { unmount } = renderCluesInGameCanvas();
+
+    expect(media.query.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+    unmount();
+    expect(media.query.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function));
   });
 
   it('anchors the PC clue board to the approved 1420 by 700 HUD geometry', () => {
