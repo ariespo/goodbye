@@ -73,8 +73,6 @@ export function GameCanvas() {
       <InvestigationHotspots />
       <CharacterSprite />
       <ChoiceMenu />
-      <ActionPanel />
-      <ClueModal />
       <CharacterProfileModal />
       <ConclusionModal />
       <EndingPlayer />
@@ -88,8 +86,10 @@ export function GameCanvas() {
         <DialogueBox />
         <StatusPanel />
         <ActionBar />
+        <ActionPanel />
+        <ClueModal />
+        <MapModal />
       </HudViewport>
-      <MapModal />
       <LoadingOverlay />
     </div>
   );
