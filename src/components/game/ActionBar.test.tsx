@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -110,6 +111,29 @@ describe('ActionBar PC operation wheel', () => {
       expect(sector.tagName.toLowerCase()).toBe('g');
       expect(sector.querySelector('path[data-wheel-sector]')).not.toBeNull();
     }
+  });
+
+  it('exposes matching hover and press state for the sector artwork and routes wheel audio', () => {
+    useGameStore.setState(state => ({
+      game: { ...state.game, currentScene: playableScene, sceneComplete: true, isWaitingForAI: false },
+    }));
+
+    render(<ActionBar />);
+    fireEvent.click(screen.getByRole('button', { name: '操作' }));
+
+    const sector = screen.getByRole('menuitem', { name: '调查' });
+    const overlay = document.querySelector('.operation-wheel__overlay-content[data-action-id="investigate"]');
+    expect(sector).toHaveAttribute('data-sfx', 'ui-click');
+
+    fireEvent.pointerEnter(sector);
+    expect(sector).toHaveClass('is-interacting');
+    expect(overlay).toHaveClass('is-interacting');
+
+    fireEvent.pointerDown(sector);
+    expect(sector).toHaveClass('is-pressed');
+    expect(overlay).toHaveClass('is-pressed');
+    fireEvent.pointerUp(sector);
+    expect(sector).not.toHaveClass('is-pressed');
   });
 
   it('opens free input from the wheel and confirms the trimmed player action', () => {

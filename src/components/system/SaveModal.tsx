@@ -5,6 +5,7 @@ import { GameIcon } from '../ui/GameIcon';
 import type { SaveSlot } from '../../sillytavern/types';
 import { buildSaveSlotPayload, loadGameFromSave } from '../../utils/gameSession';
 import type { SaveModalMode } from './saveModalEvents';
+import { PixelModalContent, PixelModalHeader, PixelModalShell } from '../ui/PixelModal';
 
 export function SaveModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -75,37 +76,27 @@ export function SaveModal() {
     }
   };
 
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div
-      className="save-modal-shell fixed inset-0 z-[250] flex items-center justify-center px-4"
-      onClick={() => !busy && setIsOpen(false)}
+    <PixelModalShell
+      open={isOpen}
+      onClose={() => !busy && setIsOpen(false)}
+      closeBlocked={busy}
+      labelledBy="save-modal-title"
+      className="save-modal-shell"
     >
-      <div
-        className="save-modal relative animate-[scaleIn_0.35s_ease-out]"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="save-modal-header mb-5 flex items-center justify-between pb-3">
-          <div>
-            <h2 className="save-modal-title">{mode === 'load' ? '读取存档' : '存档管理'}</h2>
-            <div className="save-modal-subtitle">{mode === 'load' ? 'SELECT MEMORY SLOT' : 'MEMORY SLOT ARCHIVE'}</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsOpen(false)}
-            data-cursor="pointer"
-            className="pixel-close-button flex h-9 w-9 items-center justify-center"
-            disabled={busy}
-          >
-            <GameIcon name="close" size={15} />
-          </button>
-        </div>
+      <div className="save-modal">
+        <PixelModalHeader
+          titleId="save-modal-title"
+          title={mode === 'load' ? '读取存档' : '存档管理'}
+          meta={mode === 'load' ? 'SELECT MEMORY SLOT' : 'MEMORY SLOT ARCHIVE'}
+          iconSrc="clue"
+          onClose={() => setIsOpen(false)}
+          closeLabel="关闭存档"
+        />
 
-        {mode === 'manage' && (
-          <div className="save-modal-form mb-5 flex gap-3">
+        <PixelModalContent className="save-modal-content">
+          {mode === 'manage' && (
+          <div className="save-modal-form">
             <input
               type="text"
               value={saveName}
@@ -123,13 +114,13 @@ export function SaveModal() {
               <GameIcon name="save" size={15} /> 保存
             </button>
           </div>
-        )}
+          )}
 
         {mode === 'load' && (
           <p className="settings-help mb-4">选择一份记忆残片以继续轮回。将恢复变量、体力/理智、对话、回合历史与结局进度。</p>
         )}
 
-        <div className="save-modal-body pixel-scroll-blue space-y-2 overflow-y-auto pr-2">
+        <div className="save-modal-body pixel-scroll-blue">
           {saves.length === 0 ? (
             <div className="save-empty">暂无存档</div>
           ) : (
@@ -196,7 +187,8 @@ export function SaveModal() {
             ))
           )}
         </div>
+        </PixelModalContent>
       </div>
-    </div>
+    </PixelModalShell>
   );
 }

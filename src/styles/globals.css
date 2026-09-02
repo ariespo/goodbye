@@ -2788,8 +2788,23 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 }
 
 .hud-design-canvas .operation-wheel__sector:hover:not(.is-disabled) path,
-.hud-design-canvas .operation-wheel__sector:focus-visible path {
-  fill: #171717;
+.hud-design-canvas .operation-wheel__sector:focus-visible path,
+.hud-design-canvas .operation-wheel__sector.is-interacting path {
+  fill: #f4f4f0;
+  stroke: #050505;
+  stroke-width: 6px;
+}
+
+.hud-design-canvas .operation-wheel__sector.is-interacting {
+  animation: none !important;
+  transform: translate(4px, -4px);
+  filter: drop-shadow(-6px 6px 0 #050505) !important;
+  transition: transform 80ms steps(2, end), filter 80ms steps(2, end);
+}
+
+.hud-design-canvas .operation-wheel__sector.is-pressed {
+  transform: translate(1px, -1px) scale(.97);
+  filter: none !important;
 }
 
 .hud-design-canvas .operation-wheel__icon {
@@ -2835,6 +2850,24 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 
 .hud-design-canvas .operation-wheel__overlay-content.is-disabled {
   opacity: 0.5;
+}
+
+.hud-design-canvas .operation-wheel__overlay-content.is-interacting {
+  animation: none !important;
+  transform: translate(calc(-50% + 4px), calc(-50% - 4px));
+}
+
+.hud-design-canvas .operation-wheel__overlay-content.is-interacting .operation-wheel__icon {
+  filter: none;
+}
+
+.hud-design-canvas .operation-wheel__overlay-content.is-interacting .operation-wheel__label {
+  color: #050505;
+  text-shadow: none;
+}
+
+.hud-design-canvas .operation-wheel__overlay-content.is-pressed {
+  transform: translate(calc(-50% + 1px), calc(-50% - 1px)) scale(.97);
 }
 
 .hud-design-canvas .operation-wheel__label {
@@ -4216,6 +4249,262 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   .identity-modal-title { font-size: 25px; }
   .identity-modal-shell .pixel-modal-content.identity-modal-content { gap: 22px; padding: 22px 28px; }
   .identity-modal-footer.pixel-modal-footer { min-height: 78px; padding: 12px 28px 16px; }
+}
+
+/* Unified archive, character and configuration surfaces. These components
+ * live outside the scaled HUD but use the same opaque black/white double rails. */
+.character-profile-shell.pixel-modal-shell,
+.save-modal-shell.pixel-modal-shell,
+.settings-modal-shell.pixel-modal-shell,
+.api-setup-shell.pixel-modal-shell {
+  padding: 20px;
+  background: rgba(5, 5, 5, .9);
+  pointer-events: auto;
+}
+
+.character-profile-shell.pixel-modal-shell { z-index: 240; }
+.save-modal-shell.pixel-modal-shell { z-index: 250; }
+.settings-modal-shell.pixel-modal-shell { z-index: 200; }
+.api-setup-shell.pixel-modal-shell { z-index: 300; }
+
+.character-profile-shell > .pixel-modal-frame { width: 1080px; height: 720px; }
+.save-modal-shell > .pixel-modal-frame { width: 700px; height: 620px; }
+.settings-modal-shell > .pixel-modal-frame { width: 900px; height: 760px; }
+.api-setup-shell > .pixel-modal-frame { width: 720px; height: min(790px, calc(100dvh - 40px)); }
+
+.character-profile-shell > .pixel-modal-frame,
+.save-modal-shell > .pixel-modal-frame,
+.settings-modal-shell > .pixel-modal-frame,
+.api-setup-shell > .pixel-modal-frame {
+  max-width: calc(100vw - 40px);
+  max-height: calc(100dvh - 40px);
+}
+
+.character-profile-shell .pixel-modal-frame-content,
+.save-modal-shell .pixel-modal-frame-content,
+.settings-modal-shell .pixel-modal-frame-content,
+.api-setup-shell .pixel-modal-frame-content {
+  height: 100%;
+  max-height: none;
+  background: #050505;
+  color: #f2f2f0;
+  font-family: "RenOuFangSong 16", "MuzaiPixel", monospace;
+}
+
+/* Character archive */
+.character-profile-modal {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: 300px 1fr;
+  overflow: hidden;
+  background: #050505;
+}
+
+.character-profile-list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 26px 20px;
+  border-right: 3px solid #f2f2f0;
+  background: #050505;
+}
+
+.character-profile-list-header {
+  flex: 0 0 auto;
+  margin-bottom: 18px;
+  padding: 0 4px 16px;
+  border-bottom: 3px solid #f2f2f0;
+}
+
+.character-profile-list-header h2 {
+  margin: 0;
+  color: #f2f2f0;
+  font-size: 28px;
+  letter-spacing: .18em;
+}
+
+.character-profile-list-header div,
+.character-profile-eyebrow,
+.character-profile-facts-title {
+  margin-top: 7px;
+  color: #b9b9b4;
+  font: 12px/1 "JetBrains Mono", monospace;
+  letter-spacing: .16em;
+}
+
+.character-profile-list-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.character-profile-list-item {
+  display: flex;
+  width: 100%;
+  min-height: 78px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 3px solid #f2f2f0;
+  background: #050505;
+  color: #f2f2f0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.character-profile-list-item:hover,
+.character-profile-list-item[aria-pressed='true'] { background: #f2f2f0; color: #050505; }
+.character-profile-list-item:active { transform: translate(2px, 2px); }
+.character-profile-list-thumb { width: 52px; height: 58px; flex: 0 0 auto; overflow: hidden; border: 2px solid currentColor; background: #050505; }
+.character-profile-list-item strong { display: block; overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.character-profile-list-item small { display: block; margin-top: 5px; overflow: hidden; font: 11px/1 "JetBrains Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
+
+.character-profile-detail { position: relative; min-width: 0; overflow: hidden; background: #050505; }
+.character-profile-close { position: absolute; z-index: 20; top: 24px; right: 24px; }
+.character-profile-portrait { position: absolute; inset: 0 auto 0 0; width: 43%; overflow: hidden; border-right: 2px solid #f2f2f0; opacity: .78; filter: grayscale(1) contrast(1.15); }
+.character-profile-copy { position: relative; z-index: 2; display: flex; height: 100%; margin-left: 43%; flex-direction: column; justify-content: center; overflow-y: auto; padding: 70px 44px 40px; background: #050505; }
+.character-profile-copy h3 { margin: 12px 0 0; color: #f2f2f0; font-size: 42px; letter-spacing: .12em; }
+.character-profile-subtitle { margin-top: 10px; color: #f2f2f0; font-size: 16px; letter-spacing: .08em; }
+.character-profile-divider { width: 96px; height: 3px; margin: 24px 0; background: #f2f2f0; }
+.character-profile-description { margin: 0; color: #d0d0cb; font-size: 17px; line-height: 1.85; }
+.character-profile-facts { display: grid; gap: 8px; margin-top: 26px; }
+.character-profile-fact { display: flex; align-items: flex-start; gap: 10px; border: 2px solid #f2f2f0; padding: 9px 12px; background: #050505; color: #f2f2f0; font-size: 14px; }
+
+/* Save archive */
+.save-modal { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; padding: 0; border: 0; outline: 0; background: #050505; box-shadow: none; }
+.save-modal-content.pixel-modal-content { display: flex; min-height: 0; flex-direction: column; gap: 18px; padding: 22px 26px 26px; overflow: hidden; }
+.save-modal-form { display: flex; flex: 0 0 auto; gap: 12px; margin: 0; }
+.save-modal-body { min-height: 0; max-height: none; flex: 1 1 auto; overflow-y: auto; padding-right: 5px; }
+.save-slot { min-height: 86px; margin-bottom: 9px; border: 3px solid #f2f2f0; padding: 10px 12px; background: #050505 !important; color: #f2f2f0; }
+.save-slot:hover { background: #f2f2f0 !important; color: #050505; }
+.save-slot-thumb { border: 2px solid currentColor; filter: grayscale(1) contrast(1.15); }
+.save-slot-name { color: currentColor; font-size: 18px; letter-spacing: .08em; }
+.save-slot-time { color: currentColor; font-family: "JetBrains Mono", monospace; }
+.save-empty { display: grid; min-height: 320px; place-items: center; border: 3px dashed #777773; color: #b9b9b4; font-size: 20px; letter-spacing: .12em; }
+
+/* Settings and opening API setup share form controls and selection language. */
+.settings-modal { display: flex; width: 100%; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; border: 0; outline: 0; background: #050505; box-shadow: none; }
+.settings-modal-body { min-height: 0; max-height: none; flex: 1 1 auto; overflow-y: auto; padding: 22px 26px; }
+.settings-modal-footer.pixel-modal-footer { padding: 12px 22px; }
+.settings-tabs { display: grid; flex: 0 0 auto; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 0; border-bottom: 3px solid #f2f2f0; }
+.settings-tabs button { min-height: 58px; border: 0; border-right: 2px solid #f2f2f0; background: #050505; color: #f2f2f0; font: 16px/1 "RenOuFangSong 16", monospace; }
+.settings-tabs button:last-child { border-right: 0; }
+.settings-tabs button:hover,
+.settings-tabs button.is-active { background: #f2f2f0; color: #050505; }
+.settings-section { border: 3px solid #f2f2f0; background: #050505; color: #f2f2f0; box-shadow: none; }
+.settings-section-title,
+.settings-label,
+.settings-value,
+.settings-help,
+.settings-section-hint,
+.settings-footer-hint { color: #f2f2f0; }
+
+.settings-input,
+.api-input-frame {
+  min-height: 46px;
+  border: 3px solid #f2f2f0;
+  border-radius: 0;
+  outline: 0;
+  background: #050505 !important;
+  color: #f2f2f0 !important;
+  box-shadow: none !important;
+}
+
+.settings-input:focus,
+.api-input-frame:focus-within { background: #f2f2f0 !important; color: #050505 !important; }
+.api-input-frame:focus-within .api-setup-input { color: #050505; }
+.api-input-frame { display: block; height: 50px; padding: 0 13px; }
+.api-setup-input { width: 100%; height: 100%; border: 0; outline: 0; background: transparent; color: #f2f2f0; font: 14px "JetBrains Mono", monospace; }
+.api-setup-input::placeholder { color: #777773; }
+.api-input-field { display: block; }
+.api-setup-label { display: block; margin-bottom: 7px; color: #d0d0cb; font: 12px/1 "JetBrains Mono", monospace; letter-spacing: .14em; }
+
+.settings-btn,
+.save-action-btn,
+.settings-chip,
+.settings-mode-card,
+.advanced-tool-card,
+.api-setup-button,
+.api-provider-button {
+  border: 3px solid #f2f2f0 !important;
+  border-radius: 0 !important;
+  background: #050505 !important;
+  background-image: none !important;
+  color: #f2f2f0 !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+.settings-btn:hover:not(:disabled),
+.save-action-btn:hover:not(:disabled),
+.settings-chip:hover:not(:disabled),
+.settings-chip.is-active,
+.settings-mode-card:hover:not(:disabled),
+.settings-mode-card.is-active,
+.advanced-tool-card:hover:not(:disabled),
+.api-setup-button:hover:not(:disabled),
+.api-provider-button:hover:not(:disabled),
+.api-provider-button.is-active {
+  background: #f2f2f0 !important;
+  color: #050505 !important;
+}
+
+.settings-btn:active:not(:disabled),
+.save-action-btn:active:not(:disabled),
+.settings-chip:active:not(:disabled),
+.api-setup-button:active:not(:disabled),
+.api-provider-button:active:not(:disabled) { transform: translate(2px, 2px); }
+.save-action-btn.is-danger { border-style: dashed !important; color: #f2f2f0 !important; }
+.settings-check input { accent-color: #f2f2f0; }
+.settings-range { accent-color: #f2f2f0; filter: grayscale(1) contrast(2); }
+
+.api-setup-modal { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; background: #050505; }
+.api-setup-header { flex: 0 0 auto; padding: 22px 28px 18px; border-bottom: 3px solid #f2f2f0; }
+.api-setup-heading { display: flex; align-items: center; gap: 14px; }
+.api-setup-heading h2 { margin: 0; color: #f2f2f0; font-size: 28px; letter-spacing: .16em; }
+.api-setup-heading h2 + div { margin-top: 6px; color: #b9b9b4; font: 11px/1 "JetBrains Mono", monospace; letter-spacing: .18em; }
+.api-setup-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 3px solid #f2f2f0; color: #f2f2f0; }
+.api-setup-header p { margin: 14px 0 0; color: #d0d0cb; font-size: 13px; line-height: 1.7; }
+.api-setup-content.pixel-modal-content { display: flex; flex-direction: column; gap: 18px; padding: 20px 28px; }
+.api-provider-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.api-provider-button { min-height: 78px; padding: 10px 13px; cursor: pointer; text-align: left; }
+.api-provider-short { font: 11px/1 "JetBrains Mono", monospace; letter-spacing: .15em; }
+.api-provider-name { margin-top: 6px; font-size: 17px; letter-spacing: .08em; }
+.api-provider-model { margin-top: 5px; overflow: hidden; font: 11px/1 "JetBrains Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
+.api-setup-button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; cursor: pointer; font: 16px "RenOuFangSong 16", monospace; letter-spacing: .1em; }
+.api-fetch-button { flex: 0 0 auto; }
+.api-setup-actions.pixel-modal-footer { padding: 12px 28px; }
+
+@media (max-width: 700px) {
+  .character-profile-shell.pixel-modal-shell,
+  .save-modal-shell.pixel-modal-shell,
+  .settings-modal-shell.pixel-modal-shell,
+  .api-setup-shell.pixel-modal-shell { padding: 10px; }
+
+  .character-profile-shell > .pixel-modal-frame,
+  .save-modal-shell > .pixel-modal-frame,
+  .settings-modal-shell > .pixel-modal-frame,
+  .api-setup-shell > .pixel-modal-frame { width: 100%; height: calc(100dvh - 20px); max-width: none; max-height: none; }
+
+  .character-profile-modal { display: flex; flex-direction: column; }
+  .character-profile-list { flex: 0 0 auto; padding: 12px; border-right: 0; border-bottom: 3px solid #f2f2f0; }
+  .character-profile-list-header { margin-bottom: 10px; padding-bottom: 10px; }
+  .character-profile-list-scroll { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; }
+  .character-profile-list-item { width: 180px; min-width: 180px; margin: 0; }
+  .character-profile-detail { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .character-profile-portrait { width: 42%; opacity: .32; }
+  .character-profile-copy { margin-left: 0; padding: 58px 20px 28px; background: rgba(5, 5, 5, .76); }
+  .character-profile-copy h3 { font-size: 32px; }
+  .settings-tabs button { min-height: 48px; font-size: 13px; }
+  .settings-tabs button svg { display: none; }
+  .settings-modal-body { padding: 14px 12px; }
+  .settings-modal-footer.pixel-modal-footer { align-items: stretch; flex-direction: column; }
+  .api-setup-header { padding: 16px 18px; }
+  .api-setup-content.pixel-modal-content { padding: 16px 18px; }
+  .api-setup-actions.pixel-modal-footer { padding: 10px 18px; }
 }
 
 @keyframes pixelModalIn {

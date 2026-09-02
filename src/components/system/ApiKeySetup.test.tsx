@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
@@ -79,5 +80,19 @@ describe('ApiKeySetup', () => {
       api: { baseUrl: 'https://api.example.test/v1', apiKey: 'new-key', model: 'model-b' },
     });
     expect(useGameStore.getState().tavern.settings?.api.model).toBe('model-b');
+  });
+
+  it('uses the shared monochrome double-rail modal instead of the legacy gold setup frame', () => {
+    useGameStore.setState(state => ({
+      tavern: { ...state.tavern, settings: settings() },
+      ui: { ...state.ui, introPlayed: true, showTitle: true },
+    }));
+
+    render(<ApiKeySetup />);
+    const dialog = screen.getByRole('dialog', { name: '配置 AI 接口' });
+    expect(dialog).toHaveClass('pixel-modal-shell', 'api-setup-shell');
+    expect(dialog.querySelectorAll('[data-pixel-frame-rail]')).toHaveLength(2);
+    expect(dialog.querySelector('.clean-modal-frame-gold')).toBeNull();
+    expect(screen.getByRole('button', { name: 'OpenAI' })).toHaveAttribute('aria-pressed', 'false');
   });
 });

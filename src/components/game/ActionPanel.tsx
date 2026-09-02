@@ -246,8 +246,6 @@ function ActionPanelItem({ index, item, linkedItem, onOpenItem, onClick, actionT
             <MetaChip label="耗时" value={item.time ?? '--'} />
             <MetaChip label="体力" value={`-${item.stamina ?? 0}`} />
             <MetaChip label="理智" value={`-${item.sanity ?? 0}`} />
-            {'suspect' in item && item.suspect && <MetaChip label="关联" value={item.suspect} />}
-            {'style' in item && item.style && <MetaChip label="方式" value={item.style} />}
           </span>
         </span>
         <span className="action-panel-item-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>

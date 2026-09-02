@@ -7,6 +7,7 @@ import type { AppSettings } from '../../sillytavern/types';
 import type { CSSProperties } from 'react';
 import { applyFontFamily, FONT_OPTIONS, getFontStack } from '../../utils/fonts';
 import { setSfxVolume } from '../../utils/sfx';
+import { PixelModalFooter, PixelModalHeader, PixelModalShell } from '../ui/PixelModal';
 
 const PRESET_PROVIDERS = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -208,32 +209,24 @@ export function SettingsModal() {
     else toggleModal(tool);
   };
 
-  if (!showSettings || !draft) return null;
+  if (!draft) return null;
 
   return (
-    <div
-      className="settings-modal-shell fixed inset-0 z-[200] flex items-center justify-center px-4"
-      onClick={() => toggleModal('settings')}
+    <PixelModalShell
+      open={showSettings}
+      onClose={() => toggleModal('settings')}
+      labelledBy="settings-modal-title"
+      className="settings-modal-shell"
     >
-      <div
-        className="settings-modal relative w-[740px] max-h-[88vh] overflow-hidden animate-[scaleIn_0.35s_ease-out]"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="settings-modal-header flex items-center justify-between px-6 py-4">
-          <div>
-            <h2 className="settings-modal-title">设置</h2>
-            <div className="settings-modal-subtitle">SYSTEM CONFIG</div>
-          </div>
-          <button
-            type="button"
-            aria-label="关闭设置"
-            data-cursor="pointer"
-            onClick={() => toggleModal('settings')}
-            className="pixel-close-button flex h-9 w-9 items-center justify-center"
-          >
-            <GameIcon name="close" size={15} />
-          </button>
-        </div>
+      <div className="settings-modal">
+        <PixelModalHeader
+          titleId="settings-modal-title"
+          title="设置"
+          meta="SYSTEM CONFIG"
+          iconSrc="action"
+          onClose={() => toggleModal('settings')}
+          closeLabel="关闭设置"
+        />
 
         <nav className="settings-tabs" aria-label="设置分类">
           {SETTINGS_TABS.map(tab => (
@@ -430,7 +423,7 @@ export function SettingsModal() {
           )}
         </div>
 
-        <div className="settings-modal-footer flex items-center justify-between gap-3 px-6 py-4">
+        <PixelModalFooter className="settings-modal-footer">
           <span className="settings-footer-hint">更改将在保存后生效</span>
           <div className="flex gap-3">
             <button
@@ -450,9 +443,9 @@ export function SettingsModal() {
               保存
             </button>
           </div>
-        </div>
+        </PixelModalFooter>
       </div>
-    </div>
+    </PixelModalShell>
   );
 }
 

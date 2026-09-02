@@ -64,6 +64,8 @@ export function ActionBar() {
   const [wheelOpen, setWheelOpen] = useState(false);
   const [wheelMounted, setWheelMounted] = useState(false);
   const [freeInputOpen, setFreeInputOpen] = useState(false);
+  const [interactingAction, setInteractingAction] = useState<WheelAction['id'] | null>(null);
+  const [pressedAction, setPressedAction] = useState<WheelAction['id'] | null>(null);
   const operationHubRef = useRef<HTMLButtonElement | null>(null);
   const [observeGlowDone, setObserveGlowDone] = useState(
     () => window.localStorage.getItem('farewell.observe-glow.done') === 'true',
@@ -98,6 +100,8 @@ export function ActionBar() {
 
   const activate = (action: WheelAction) => {
     if (!availability[action.id]) return;
+    setInteractingAction(null);
+    setPressedAction(null);
     operationHubRef.current?.focus();
     setWheelOpen(false);
     if (action.id === 'free') {
@@ -141,8 +145,21 @@ export function ActionBar() {
                   aria-label={action.label}
                   aria-disabled={disabled}
                   tabIndex={disabled ? -1 : 0}
-                  className={`operation-wheel__sector operation-wheel__sector--${action.id} ${index === 0 ? 'is-primary' : ''} ${disabled ? 'is-disabled' : ''} ${action.id === 'observe' && !observeGlowDone && availability.observe ? 'guide-breathe' : ''}`}
+                  className={`operation-wheel__sector operation-wheel__sector--${action.id} ${index === 0 ? 'is-primary' : ''} ${disabled ? 'is-disabled' : ''} ${interactingAction === action.id ? 'is-interacting' : ''} ${pressedAction === action.id ? 'is-pressed' : ''} ${action.id === 'observe' && !observeGlowDone && availability.observe ? 'guide-breathe' : ''}`}
                   data-action-id={action.id}
+                  data-sfx="ui-click"
+                  onPointerEnter={() => !disabled && setInteractingAction(action.id)}
+                  onPointerLeave={() => {
+                    setInteractingAction(current => current === action.id ? null : current);
+                    setPressedAction(current => current === action.id ? null : current);
+                  }}
+                  onPointerDown={() => !disabled && setPressedAction(action.id)}
+                  onPointerUp={() => setPressedAction(current => current === action.id ? null : current)}
+                  onFocus={() => !disabled && setInteractingAction(action.id)}
+                  onBlur={() => {
+                    setInteractingAction(current => current === action.id ? null : current);
+                    setPressedAction(current => current === action.id ? null : current);
+                  }}
                   onClick={() => activate(action)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -180,7 +197,8 @@ export function ActionBar() {
               return (
                 <div
                   key={action.id}
-                  className={`operation-wheel__overlay-content ${index === 0 ? 'is-primary' : ''} ${availability[action.id] ? '' : 'is-disabled'}`}
+                  data-action-id={action.id}
+                  className={`operation-wheel__overlay-content ${index === 0 ? 'is-primary' : ''} ${availability[action.id] ? '' : 'is-disabled'} ${interactingAction === action.id ? 'is-interacting' : ''} ${pressedAction === action.id ? 'is-pressed' : ''}`}
                   style={{ left: contentPoint.x, top: contentPoint.y }}
                 >
                   <img className="operation-wheel__icon" src={iconPath(action.icon)} alt="" />

@@ -91,6 +91,10 @@ describe('ActionPanel', () => {
     const dialog = screen.getByRole('dialog', { name: '调查' });
     expect(dialog).toHaveClass('pixel-modal-shell', 'is-compact');
     expect(screen.getByText('AVAILABLE INTERACTIONS / 1')).toBeInTheDocument();
+    expect(screen.queryByText(/关联/)).toBeNull();
+    expect(screen.queryByText(/方式/)).toBeNull();
+    expect(screen.queryByText(/未知/)).toBeNull();
+    expect(screen.queryByText(/现实/)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /检查窗台/ }));
     expect(loopMocks.performAction).toHaveBeenCalledWith('investigate', 0);
@@ -148,6 +152,8 @@ describe('ActionPanel', () => {
     }));
 
     render(<ActionPanel />);
+    expect(screen.queryByText(/方式/)).toBeNull();
+    expect(screen.queryByText(/现实/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '执行行动 推开窗户' }));
 
     expect(loopMocks.performAction).toHaveBeenCalledWith('actions', 0);
