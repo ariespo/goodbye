@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useGameStore } from '../../stores/gameStore';
@@ -60,5 +60,36 @@ describe('OpeningVideo handoff', () => {
     expect(preload?.getAttribute('src')).toBe('/assets/video/title-loop-009.mp4');
     expect(preload?.preload).toBe('auto');
     expect(preload?.muted).toBe(true);
+  });
+
+  it('keeps the click-to-start prompt when a user playback retry is still blocked', async () => {
+    vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValue(new Error('autoplay blocked'));
+
+    render(<OpeningVideo onEnded={() => undefined} />);
+
+    const startControl = await screen.findByRole('button', { name: '播放开场动画' });
+    fireEvent.click(startControl);
+
+    await waitFor(() => {
+      expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('点击任意处开始')).toBeTruthy();
+      expect(screen.getByRole('button', { name: '播放开场动画' })).toBeTruthy();
+    });
+  });
+
+  it('lets keyboard users start a blocked opening with Enter', async () => {
+    vi.mocked(HTMLMediaElement.prototype.play)
+      .mockRejectedValueOnce(new Error('autoplay blocked'))
+      .mockResolvedValueOnce(undefined);
+
+    render(<OpeningVideo onEnded={() => undefined} />);
+
+    const startControl = await screen.findByRole('button', { name: '播放开场动画' });
+    fireEvent.keyDown(startControl, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText('点击任意处开始')).toBeNull();
+    });
   });
 });

@@ -53,15 +53,19 @@ export function OpeningVideo({ onEnded }: OpeningVideoProps) {
     };
   }, [finishPlayback, isDone]);
 
-  const handleClick = () => {
+  const handleClick = async () => {
     if (isDone) return;
     const video = videoRef.current;
     if (!video) return;
 
     if (needsInteraction) {
       // 首次交互：开始播放（有声）
-      video.play().catch(() => {});
-      setNeedsInteraction(false);
+      try {
+        await video.play();
+        setNeedsInteraction(false);
+      } catch {
+        setNeedsInteraction(true);
+      }
       return;
     }
 
@@ -73,7 +77,15 @@ export function OpeningVideo({ onEnded }: OpeningVideoProps) {
   return (
     <div
       className="fixed inset-0 z-[1001] flex items-center justify-center overflow-hidden bg-black"
-      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      aria-label={needsInteraction ? '播放开场动画' : '跳过开场动画'}
+      onClick={() => void handleClick()}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        void handleClick();
+      }}
     >
       <video
         ref={videoRef}

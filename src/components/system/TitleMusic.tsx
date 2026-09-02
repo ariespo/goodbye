@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
 
@@ -6,7 +6,7 @@ export function TitleMusic() {
   const titleRevealed = useGameStore(state => state.ui.titleRevealed);
   const musicVolume = useGameStore(state => state.tavern.settings?.musicVolume ?? 0.5);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const blockedRef = useRef(false);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
 
   useEffect(() => {
     if (!titleRevealed) return;
@@ -16,15 +16,17 @@ export function TitleMusic() {
     audio.loop = true;
     audio.volume = volume;
     audioRef.current = audio;
-    blockedRef.current = false;
+    setPlaybackBlocked(false);
+    let active = true;
 
     audio.play().then(() => {
-      blockedRef.current = false;
+      if (active) setPlaybackBlocked(false);
     }).catch(() => {
-      blockedRef.current = true;
+      if (active) setPlaybackBlocked(true);
     });
 
     return () => {
+      active = false;
       audio.pause();
       audioRef.current = null;
     };
@@ -37,24 +39,27 @@ export function TitleMusic() {
   }, [musicVolume]);
 
   useEffect(() => {
-    if (!titleRevealed || !blockedRef.current) return;
+    if (!titleRevealed || !playbackBlocked) return;
 
     const resume = () => {
       const audio = audioRef.current;
-      if (!audio || !blockedRef.current) return;
+      if (!audio) return;
+      setPlaybackBlocked(false);
       audio.play().then(() => {
-        blockedRef.current = false;
-      }).catch(() => {});
+        setPlaybackBlocked(false);
+      }).catch(() => {
+        setPlaybackBlocked(true);
+      });
     };
 
-    document.addEventListener('click', resume, { once: true });
-    document.addEventListener('keydown', resume, { once: true });
+    document.addEventListener('click', resume);
+    document.addEventListener('keydown', resume);
 
     return () => {
       document.removeEventListener('click', resume);
       document.removeEventListener('keydown', resume);
     };
-  }, [titleRevealed]);
+  }, [playbackBlocked, titleRevealed]);
 
   return null;
 }
