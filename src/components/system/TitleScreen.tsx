@@ -175,12 +175,16 @@ export function TitleScreen() {
 
     <div className="title-screen fixed inset-0 z-[50] flex flex-col items-center justify-center overflow-hidden" style={{ background: '#050506' }}>
 
-      <div
-
-        className="absolute inset-0 bg-cover bg-center"
-
-        style={{ backgroundImage: `url(${assetUrl('assets/title/title-bg-v2.png')})` }}
-
+      <video
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover"
+        src={assetUrl('assets/video/title-loop-009.mp4')}
+        poster={assetUrl('assets/title/title-bg-v2.png')}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
       />
 
       <FullScreenGrain />

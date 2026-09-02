@@ -3,7 +3,6 @@ import { useGameStore } from './stores/gameStore';
 import { initializeDatabase, getSettings, getLorebooks, getPresets, getChats, saveChat, savePreset, saveSettings } from './sillytavern/database';
 import { GameCanvas } from './components/game/GameCanvas';
 import { CustomCursor } from './components/system/CustomCursor';
-import { IntroAnimation } from './components/system/IntroAnimation';
 import { OpeningVideo } from './components/system/OpeningVideo';
 import { TitleScreen } from './components/system/TitleScreen';
 import { TitleMusic } from './components/system/TitleMusic';
@@ -179,7 +178,6 @@ function App() {
     <div className={`relative w-full h-full overflow-hidden bg-bg-primary ${showTitle ? '' : 'world-horror-theme'}`}>
       <CustomCursor />
       <AudioSystem />
-      <IntroAnimation />
       <NotificationToast />
       <TurnRecoveryBar />
       {showTitle && <TitleMusic />}

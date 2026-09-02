@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { assetUrl } from '../../utils/assetUrl';
+import { useGameStore } from '../../stores/gameStore';
 
 interface OpeningVideoProps {
   onEnded: () => void;
@@ -10,6 +11,15 @@ export function OpeningVideo({ onEnded }: OpeningVideoProps) {
   const [canPlay, setCanPlay] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const [needsInteraction, setNeedsInteraction] = useState(false);
+  const setIntroPlayed = useGameStore(state => state.actions.setIntroPlayed);
+  const setTitleRevealed = useGameStore(state => state.actions.setTitleRevealed);
+
+  const finishPlayback = useCallback(() => {
+    setIsDone(true);
+    setIntroPlayed(true);
+    setTitleRevealed(true);
+    onEnded();
+  }, [onEnded, setIntroPlayed, setTitleRevealed]);
 
   useEffect(() => {
     if (isDone) return;
@@ -17,10 +27,7 @@ export function OpeningVideo({ onEnded }: OpeningVideoProps) {
     if (!video) return;
 
     const handleCanPlayThrough = () => setCanPlay(true);
-    const handleEnded = () => {
-      setIsDone(true);
-      onEnded();
-    };
+    const handleEnded = () => finishPlayback();
 
     video.addEventListener('canplaythrough', handleCanPlayThrough);
     video.addEventListener('ended', handleEnded);
@@ -41,7 +48,7 @@ export function OpeningVideo({ onEnded }: OpeningVideoProps) {
       video.removeEventListener('canplaythrough', handleCanPlayThrough);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [isDone, onEnded]);
+  }, [finishPlayback, isDone]);
 
   const handleClick = () => {
     if (isDone) return;
@@ -57,8 +64,7 @@ export function OpeningVideo({ onEnded }: OpeningVideoProps) {
 
     // 播放中：跳过视频
     video.pause();
-    setIsDone(true);
-    onEnded();
+    finishPlayback();
   };
 
   return (
@@ -68,12 +74,19 @@ export function OpeningVideo({ onEnded }: OpeningVideoProps) {
     >
       <video
         ref={videoRef}
-        className="h-full w-full object-contain"
-        src={assetUrl('assets/video/opening.mp4')}
+        className="h-full w-full object-cover"
+        src={assetUrl('assets/video/opening-014.mp4')}
         playsInline
         autoPlay
         muted={false}
         controls={false}
+      />
+      <video
+        aria-hidden="true"
+        className="hidden"
+        src={assetUrl('assets/video/title-loop-009.mp4')}
+        preload="auto"
+        muted
       />
       {canPlay && !needsInteraction && (
         <div className="absolute bottom-8 text-[10px] text-white/20 tracking-[0.3em] animate-pulse">
