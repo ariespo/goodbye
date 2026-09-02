@@ -989,6 +989,183 @@
   min-height: 178px;
 }
 
+/* ── 标题页：监控定格方案（1672 × 941 虚拟画布） ───────────────────── */
+.title-surveillance-viewport {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 360ms steps(6, end), transform 360ms steps(6, end);
+}
+
+.title-surveillance-viewport.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.title-surveillance-canvas {
+  position: absolute;
+  overflow: visible;
+  color: #f2f2f0;
+  image-rendering: pixelated;
+}
+
+.title-monitor-status-art {
+  position: absolute;
+  top: 74px;
+  left: 42px;
+  width: 1588px;
+  height: 46px;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  image-rendering: pixelated;
+  filter: drop-shadow(2px 2px 0 #050505);
+}
+
+.title-surveillance-lockup {
+  position: absolute;
+  top: 270px;
+  left: 490px;
+  width: 680px;
+  height: 290px;
+  pointer-events: none;
+}
+
+.title-surveillance-lockup img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  image-rendering: pixelated;
+  filter: drop-shadow(3px 3px 0 #050505);
+}
+
+.title-viewfinder-corner {
+  position: absolute;
+  width: 98px;
+  height: 86px;
+  border-color: #f2f2f0;
+  pointer-events: none;
+  filter: drop-shadow(3px 3px 0 #050505);
+}
+
+.title-viewfinder-corner.is-top-left { top: 152px; left: 52px; border-top: 7px solid; border-left: 7px solid; }
+.title-viewfinder-corner.is-top-right { top: 152px; right: 52px; border-top: 7px solid; border-right: 7px solid; }
+.title-viewfinder-corner.is-bottom-left { bottom: 116px; left: 52px; border-bottom: 7px solid; border-left: 7px solid; }
+.title-viewfinder-corner.is-bottom-right { right: 52px; bottom: 116px; border-right: 7px solid; border-bottom: 7px solid; }
+
+.title-surveillance-menu {
+  position: absolute;
+  top: 700px;
+  left: 260px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+  width: 1140px;
+  height: 108px;
+}
+
+.title-screen .title-surveillance-menu .title-button {
+  width: 360px !important;
+  height: 108px !important;
+  color: #f2f2f0;
+  font: 32px/1 "RenOuFangSong 16", "MuzaiPixel", monospace !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.18em !important;
+  transform: none;
+  transition: transform 90ms steps(2, end), filter 90ms steps(2, end);
+}
+
+.title-screen .title-surveillance-menu .title-button-face {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  background: #f2f2f0;
+  box-shadow: 6px 6px 0 #050505;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, calc(100% - 8px) 4px, 100% 4px, 100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) 100%, 8px 100%, 8px calc(100% - 4px), 0 calc(100% - 4px), 0 8px, 4px 8px, 4px 0);
+}
+
+.title-screen .title-surveillance-menu .title-button-face::before {
+  position: absolute;
+  inset: 5px;
+  content: "";
+  background-color: #050505;
+  background-image: url('/assets/ui/noise-film.png'), url('/assets/ui/scanline.png');
+  box-shadow: inset 0 0 0 3px #f2f2f0, inset 0 0 0 8px #050505, inset 0 0 0 10px #f2f2f0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px, 6px 6px);
+}
+
+.title-screen .title-surveillance-menu .title-button-label {
+  position: relative;
+  z-index: 2;
+  gap: 24px;
+  color: #f2f2f0;
+  text-shadow: 2px 2px 0 #050505;
+}
+
+.title-screen .title-surveillance-menu .title-button-label svg {
+  width: 34px;
+  height: 34px;
+}
+
+.title-screen .title-surveillance-menu .title-button-sweep {
+  z-index: 1;
+  inset-block: 12px;
+  width: 84px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.title-screen .title-surveillance-menu .title-button:hover,
+.title-screen .title-surveillance-menu .title-button:focus-visible,
+.title-screen .title-surveillance-menu .title-button[data-hovered='true'] {
+  transform: translate(3px, 3px);
+  filter: brightness(1.08);
+}
+
+.title-screen .title-surveillance-menu .title-button:hover .title-button-face::before,
+.title-screen .title-surveillance-menu .title-button:focus-visible .title-button-face::before,
+.title-screen .title-surveillance-menu .title-button[data-hovered='true'] .title-button-face::before {
+  background: #f2f2f0;
+  box-shadow: inset 0 0 0 3px #050505, inset 0 0 0 8px #f2f2f0, inset 0 0 0 10px #050505;
+}
+
+.title-screen .title-surveillance-menu .title-button:hover .title-button-label,
+.title-screen .title-surveillance-menu .title-button:focus-visible .title-button-label,
+.title-screen .title-surveillance-menu .title-button[data-hovered='true'] .title-button-label {
+  color: #050505;
+  text-shadow: none;
+}
+
+.title-screen .title-surveillance-menu .title-button:hover .title-button-label svg,
+.title-screen .title-surveillance-menu .title-button:focus-visible .title-button-label svg,
+.title-screen .title-surveillance-menu .title-button[data-hovered='true'] .title-button-label svg {
+  filter: none;
+}
+
+.title-screen .title-surveillance-menu .title-button:active,
+.title-screen .title-surveillance-menu .title-button[data-pressed='true'] {
+  transform: translate(7px, 7px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-surveillance-viewport,
+  .title-screen .title-surveillance-menu .title-button {
+    transition: none;
+  }
+}
+
 .world-pixel-frame-modal {
   isolation: isolate;
   overflow: visible;
