@@ -69,6 +69,20 @@ describe('Penpot PC UI overlay assets', () => {
 })
 
 describe('first-batch PC modal CSS contracts', () => {
+  it('keeps the blocking identity prompt interactive and monochrome inside the inert HUD canvas', () => {
+    const css = readFileSync(globalStylesPath, 'utf8')
+    const shell = cssBlock(css, '.identity-modal-shell.pixel-modal-shell')
+    const frame = cssBlock(css, '.identity-modal-shell > .pixel-modal-frame')
+    const input = cssBlock(css, '.identity-modal-input')
+
+    expect(shell).toContain('pointer-events: auto')
+    expect(shell).toContain('background: rgba(5, 5, 5')
+    expect(frame).toContain('width: 640px')
+    expect(input).toContain('background: #050505')
+    expect(input).toContain('color: #f2f2f0')
+    expect([shell, frame, input].join('\n')).not.toMatch(/#6b8fc4|#779cd0|#182335|\d+vw/)
+  })
+
   it('gives modal frames complete double rails outside the scaled HUD namespace', () => {
     const css = readFileSync(globalStylesPath, 'utf8')
     const modalLayers = cssBlock(css, '.world-pixel-frame-modal > .pixel-frame-layers')

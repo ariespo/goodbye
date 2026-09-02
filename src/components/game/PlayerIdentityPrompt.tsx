@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { saveSettings } from '../../sillytavern/database';
 import { useGameStore } from '../../stores/gameStore';
 import { persistActiveChat } from '../../utils/chatPersistence';
+import {
+  PixelModalAction,
+  PixelModalContent,
+  PixelModalFooter,
+  PixelModalShell,
+} from '../ui/PixelModal';
 
 export function PlayerIdentityPrompt({ open, onConfirmed }: {
   open: boolean;
@@ -59,61 +65,76 @@ export function PlayerIdentityPrompt({ open, onConfirmed }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/90 px-4">
-      <div className="clean-modal-frame clean-modal-frame-blue w-full max-w-[520px] px-9 py-8 text-[#d8d4cc]">
-        <div className="mb-7 text-center">
-          <div className="font-serif-cn text-[25px] tracking-[0.18em]">你的名字是</div>
-          <div className="mt-2 font-mono text-[11px] tracking-[0.22em] text-[#686b73]">REMEMBER WHO YOU ARE</div>
-        </div>
+    <PixelModalShell
+      open
+      onClose={() => undefined}
+      labelledBy="identity-modal-title"
+      compact
+      closeBlocked
+      className="identity-modal-shell"
+    >
+      <form
+        className="identity-modal-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void confirm();
+        }}
+      >
+        <header className="identity-modal-header">
+          <h2 id="identity-modal-title" className="identity-modal-title">身份确认</h2>
+          <p className="identity-modal-meta">REMEMBER WHO YOU ARE</p>
+        </header>
 
-        <label className="block">
-          <span className="mb-2 block font-mono text-[12px] tracking-[0.15em] text-[#888a91]">姓名</span>
-          <input
-            autoFocus
-            value={name}
-            maxLength={20}
-            onChange={event => setName(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && gender) void confirm();
-            }}
-            className="h-12 w-full border-2 border-[#343944] bg-[#0f1115] px-4 text-center font-serif-cn text-[20px] tracking-[0.12em] text-[#eeeae2] outline-none focus:border-[#6b8fc4]"
-            placeholder="输入你的名字"
-          />
-        </label>
+        <PixelModalContent className="identity-modal-content">
+          <label className="identity-modal-field">
+            <span className="identity-modal-label">你的名字是</span>
+            <input
+              autoFocus
+              value={name}
+              maxLength={20}
+              onChange={event => setName(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && gender) {
+                  event.preventDefault();
+                  void confirm();
+                }
+              }}
+              className="identity-modal-input"
+              placeholder="输入你的名字"
+            />
+          </label>
 
-        <div className="mt-6">
-          <div className="mb-2 font-mono text-[12px] tracking-[0.15em] text-[#888a91]">性别</div>
-          <div className="grid grid-cols-2 gap-3">
-            {([
-              ['male', '男'],
-              ['female', '女'],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={gender === value}
-                onClick={() => setGender(value)}
-                className={`h-12 border-2 font-serif-cn text-[17px] tracking-[0.18em] transition-colors ${
-                  gender === value
-                    ? 'border-[#779cd0] bg-[#182335] text-[#f0ece4]'
-                    : 'border-[#30333a] bg-[#111318] text-[#777982] hover:border-[#555b67]'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+          <fieldset className="identity-modal-gender">
+            <legend className="identity-modal-label">选择性别</legend>
+            <div className="identity-modal-gender-options">
+              {([
+                ['male', '男'],
+                ['female', '女'],
+              ] as const).map(([value, label]) => (
+                <PixelModalAction
+                  key={value}
+                  active={gender === value}
+                  aria-pressed={gender === value}
+                  onClick={() => setGender(value)}
+                  className="identity-modal-gender-button"
+                >
+                  {label}
+                </PixelModalAction>
+              ))}
+            </div>
+          </fieldset>
+        </PixelModalContent>
 
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void confirm()}
-          className="mt-8 h-12 w-full border-2 border-[#8ba4c8] bg-[#d8d4cc] font-serif-cn text-[18px] tracking-[0.16em] text-[#101216] disabled:opacity-50"
-        >
-          {saving ? '记忆确认中……' : '就是这个！'}
-        </button>
-      </div>
-    </div>
+        <PixelModalFooter className="identity-modal-footer">
+          <PixelModalAction
+            type="submit"
+            disabled={saving}
+            className="identity-modal-confirm"
+          >
+            {saving ? '记忆确认中……' : '确认身份'}
+          </PixelModalAction>
+        </PixelModalFooter>
+      </form>
+    </PixelModalShell>
   );
 }
