@@ -26,6 +26,30 @@ import { resolveCharacterSprite } from '../../utils/characterAssets';
 import { assetUrl } from '../../utils/assetUrl';
 import { prefetchImages } from '../../utils/assetManager';
 import { paginateDialogueText, resolveDialogueAdvance } from './dialoguePagination';
+const PREFETCH_LOOKAHEAD = 2;
+
+function collectLineVisualAssetUrls(
+  line: { background?: string | null; character?: string | null; },
+  gameTime: Date,
+): string[] {
+  const urls: string[] = [];
+  if (line.background) {
+    const resolved = resolveBackgroundForTime(line.background, gameTime);
+    const background = getBackgroundById(resolved)?.file ?? resolved;
+    urls.push(background.startsWith('http')
+      ? background
+      : assetUrl(`assets/backgrounds/${background}${background.includes('.') ? '' : '.png'}`));
+  }
+
+  if (line.character) {
+    const portrait = resolveCharacterSprite(line.character);
+    urls.push(portrait.startsWith('http')
+      ? portrait
+      : assetUrl(`assets/characters/${portrait}`));
+  }
+
+  return urls;
+}
 
 /* ── 像素风对话框 ── */
 
@@ -125,21 +149,14 @@ export function DialogueBox() {
   }, [displayText, currentLineIndex, currentScene?.id]);
 
   useEffect(() => {
-    const nextLine = currentScene?.lines[currentLineIndex + 1];
-    if (!nextLine) return;
+    if (!currentScene) return;
     const urls: string[] = [];
-    if (nextLine.background) {
-      const resolved = resolveBackgroundForTime(nextLine.background, gameTime);
-      const background = getBackgroundById(resolved)?.file ?? resolved;
-      urls.push(background.startsWith('http')
-        ? background
-        : assetUrl(`assets/backgrounds/${background}${background.includes('.') ? '' : '.png'}`));
+    for (let offset = 1; offset <= PREFETCH_LOOKAHEAD; offset += 1) {
+      const line = currentScene.lines[currentLineIndex + offset];
+      if (!line) break;
+      urls.push(...collectLineVisualAssetUrls(line, gameTime));
     }
-    if (nextLine.character) {
-      const portrait = resolveCharacterSprite(nextLine.character);
-      urls.push(portrait.startsWith('http') ? portrait : assetUrl(`assets/characters/${portrait}`));
-    }
-    prefetchImages(urls);
+    if (urls.length) prefetchImages(urls);
   }, [currentLineIndex, currentScene, gameTime]);
 
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
