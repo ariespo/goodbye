@@ -267,7 +267,7 @@ export function CharacterSprite() {
 
     <div
 
-      className="character-sprite absolute bottom-[10%] left-[5%] z-10 bg-contain bg-bottom bg-no-repeat transition-all duration-500 ease-out"
+      className="character-sprite absolute bottom-[10%] left-[5%] z-10 bg-contain bg-bottom bg-no-repeat"
       data-stage-layer
       data-emotion={mood}
       key={`${character}-${mood}`}
