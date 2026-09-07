@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import type { Mood, Scene, SceneLine } from '../../sillytavern/types';
 
 import { assetUrl } from '../../utils/assetUrl';
 
@@ -72,21 +73,91 @@ import {
 
 
 
+const RETAINED_SPEAKER_LOOKAHEAD = 3;
+const CHARACTER_ASSET_IDENTITIES = [
+  'chen-huihui',
+  'detective-a',
+  'detective-b',
+  'liu-renguang',
+  'old-man',
+  'fumi',
+  'touko',
+] as const;
+
+interface StageCharacterPresentation {
+  character: string;
+  mood: Mood;
+  isSpeaking: boolean;
+}
+
+function characterIdentity(character: string): string {
+  const normalized = resolveCharacterSprite(character).toLowerCase();
+  return CHARACTER_ASSET_IDENTITIES.find(identity =>
+    normalized === identity || normalized.startsWith(`${identity}-`),
+  ) ?? normalized;
+}
+
+function allowedPresentationForLine(
+  line: SceneLine,
+  scene: Scene,
+  variables: Record<string, unknown>,
+) {
+  return resolveAllowedCharacterPresentation(line, scene, variables);
+}
+
+function resolveStageCharacterPresentation(
+  scene: Scene,
+  currentLineIndex: number,
+  variables: Record<string, unknown>,
+): StageCharacterPresentation | null {
+  const currentLine = scene.lines[currentLineIndex];
+  if (!currentLine) return null;
+
+  const current = allowedPresentationForLine(currentLine, scene, variables);
+  if (current.character) {
+    return { character: current.character, mood: current.emotion, isSpeaking: true };
+  }
+  if (currentLine.speaker.trim() !== '旁白') return null;
+
+  const earliestCandidate = Math.max(0, currentLineIndex - RETAINED_SPEAKER_LOOKAHEAD);
+  for (let priorIndex = currentLineIndex - 1; priorIndex >= earliestCandidate; priorIndex -= 1) {
+    const prior = allowedPresentationForLine(scene.lines[priorIndex], scene, variables);
+    if (!prior.character) continue;
+
+    const priorIdentity = characterIdentity(prior.character);
+    const returnLimit = Math.min(scene.lines.length - 1, priorIndex + RETAINED_SPEAKER_LOOKAHEAD);
+    const returnsSoon = scene.lines
+      .slice(currentLineIndex + 1, returnLimit + 1)
+      .some(line => {
+        const future = allowedPresentationForLine(line, scene, variables);
+        return future.character && characterIdentity(future.character) === priorIdentity;
+      });
+
+    return returnsSoon
+      ? { character: prior.character, mood: prior.emotion, isSpeaking: false }
+      : null;
+  }
+
+  return null;
+}
+
 export function CharacterSprite() {
 
   const storedCharacter = useGameStore(state => state.game.currentState.character);
   const storedMood = useGameStore(state => state.game.currentState.mood);
   const currentScene = useGameStore(state => state.game.currentScene);
+  const currentLineIndex = useGameStore(state => state.game.currentLineIndex);
   const variables = useGameStore(state => state.tavern.variables);
   const currentLine = useGameStore(state => {
     const scene = state.game.currentScene;
     return scene?.lines[state.game.currentLineIndex];
   });
-  const allowedPresentation = currentLine && currentScene
-    ? resolveAllowedCharacterPresentation(currentLine, currentScene, variables)
+  const stagePresentation = currentScene
+    ? resolveStageCharacterPresentation(currentScene, currentLineIndex, variables)
     : null;
-  const character = allowedPresentation?.character ?? storedCharacter;
-  const mood = allowedPresentation?.emotion ?? storedMood;
+  const character = stagePresentation?.character ?? (!currentLine ? storedCharacter : null);
+  const mood = stagePresentation?.mood ?? storedMood;
+  const isSpeaking = stagePresentation?.isSpeaking ?? false;
   const previousMoodRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -267,31 +338,41 @@ export function CharacterSprite() {
 
     <div
 
-      className="character-sprite absolute bottom-[10%] left-[5%] z-10 bg-contain bg-bottom bg-no-repeat"
+      className="character-sprite absolute bottom-[10%] left-[5%] z-10"
       data-stage-layer
       data-emotion={mood}
+      data-speaking={isSpeaking}
       key={`${character}-${mood}`}
 
       style={{
         width: `min(${size.width}px, 34vw)`,
         aspectRatio: `${size.width} / ${size.height}`,
-        backgroundImage: animationClip ? undefined : `url(${src})`,
         filter: 'grayscale(100%) contrast(120%)',
         imageRendering: 'pixelated',
       }}
 
     >
-      {animationClip && (
-        <CharacterAnimationPlayer
-          key={`${sprite}:${mood}:${currentLine?.animation ?? 'idle'}:${currentLine?.speaker ?? ''}`}
-          clip={animationClip}
-          fallbackSrc={fallbackSrc}
-          tailBlink={tailBlink}
-          stopAfterCycle={stopAfterCycle}
-          className="h-full w-full"
-          style={{ imageRendering: 'pixelated' }}
-        />
-      )}
+      <div
+        className="character-sprite-visual relative h-full w-full bg-contain bg-bottom bg-no-repeat"
+        data-character-dim-overlay={isSpeaking ? undefined : true}
+        style={{
+          backgroundImage: animationClip ? undefined : `url(${src})`,
+          filter: isSpeaking ? undefined : 'brightness(45%)',
+          imageRendering: 'pixelated',
+        }}
+      >
+        {animationClip && (
+          <CharacterAnimationPlayer
+            key={`${sprite}:${mood}:${currentLine?.animation ?? 'idle'}:${currentLine?.speaker ?? ''}`}
+            clip={animationClip}
+            fallbackSrc={fallbackSrc}
+            tailBlink={tailBlink}
+            stopAfterCycle={stopAfterCycle}
+            className="h-full w-full"
+            style={{ imageRendering: 'pixelated' }}
+          />
+        )}
+      </div>
     </div>
 
   );

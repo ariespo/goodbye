@@ -57,7 +57,6 @@ export function CharacterAnimationPlayer({
   );
 
   useEffect(() => {
-    setSheetFailed(false);
     completedRef.current = false;
     setHeld(false);
     setTailBlinkClosed(false);
@@ -156,6 +155,7 @@ export function CharacterAnimationPlayer({
 
   useEffect(() => {
     let cancelled = false;
+    setSheetFailed(false);
     setLoadedAssetKey(null);
     const sources = [
       clip.src,
@@ -221,7 +221,9 @@ export function CharacterAnimationPlayer({
                 ? STANDARD_CHARACTER_CANVAS.width
                 : clip.frames * STANDARD_CHARACTER_CANVAS.width}
           height={STANDARD_CHARACTER_CANVAS.height}
-          preserveAspectRatio={displaysFrameFile ? 'xMidYMax meet' : 'xMinYMin meet'}
+          preserveAspectRatio={!assetsReady || sheetFailed || displaysFrameFile
+            ? 'xMidYMax meet'
+            : 'xMinYMin meet'}
           style={{ imageRendering: 'pixelated' }}
         />
       </svg>
