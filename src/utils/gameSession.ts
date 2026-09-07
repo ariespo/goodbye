@@ -18,8 +18,12 @@ import { invalidatePreplans } from '../agents/mystery';
 import { resolveSceneEnvironment } from './sceneEnvironment';
 import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
 
-const OPENING_ASSISTANT_CONTENT =
-  `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:暴雨第五天，文穗已出门，联系不上</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
+export const OPENING_ASSISTANT_CONTENT =
+  `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:暴雨第五天，文穗临时不去学校且暂时联系不上</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
+
+function parseOpeningAssistantContent(): ParsedContent {
+  return parseChunk(createParseState(), OPENING_ASSISTANT_CONTENT, { strict: true }).parsed;
+}
 
 export function createDefaultGameStatus(): GameStatus {
   return {
@@ -188,6 +192,7 @@ export async function startNewGame(): Promise<void> {
       ...s.api,
       isStreaming: false,
       streamBuffer: '',
+      parsedContent: parseOpeningAssistantContent(),
       error: null,
       abortController: null,
     },
@@ -277,7 +282,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
   const maintext = lastAssistant?.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim()
     || OPENING_STORYLINE;
-  const scene = maintextToScene(maintext);
+  const scene = maintext === OPENING_STORYLINE ? parseOpeningStoryline() : maintextToScene(maintext);
   const lineIndex = Math.max(
     0,
     Math.min(save.gameState?.currentLineIndex ?? 0, Math.max(0, scene.lines.length - 1)),

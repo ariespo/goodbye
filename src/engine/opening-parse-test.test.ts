@@ -8,7 +8,7 @@ describe('opening storyline parse', () => {
     expect(scene.lines.length).toBeGreaterThan(0);
     expect(scene.observe).toBeTruthy();
     expect(scene.investigateItems?.length).toBeGreaterThan(0);
-    expect(scene.actionItems).toHaveLength(7);
+    expect(scene.actionItems).toHaveLength(5);
   });
 
   it('pauses the black-screen prologue for player identity confirmation', () => {
@@ -21,7 +21,7 @@ describe('opening storyline parse', () => {
     expect(scene.lines[identityIndex + 1]?.text).toBe('对了，我是{{user}}。');
   });
 
-  it('introduces Touko and the old man before unlocking their profiles', () => {
+  it('introduces Touko while leaving the old man for player-directed investigation', () => {
     const scene = parseOpeningStoryline();
     const toukoFirstLine = scene.lines.findIndex((line) => line.speaker === 'touko');
     const oldManFirstLine = scene.lines.findIndex((line) => line.speaker === 'old-man');
@@ -33,23 +33,13 @@ describe('opening storyline parse', () => {
     );
 
     expect(toukoFirstLine).toBeGreaterThan(-1);
-    expect(oldManFirstLine).toBeGreaterThan(toukoFirstLine);
+    expect(oldManFirstLine).toBe(-1);
     expect(toukoUnlockLine).toBeGreaterThan(toukoFirstLine);
-    expect(oldManUnlockLine).toBeGreaterThan(oldManFirstLine);
+    expect(oldManUnlockLine).toBe(-1);
 
     expect(scene.lines[toukoUnlockLine]?.text).toContain('灯织');
     expect(scene.lines[toukoUnlockLine]?.text).toContain('商住楼');
-    expect(scene.lines[oldManUnlockLine]?.text).toContain('周大爷');
-    expect(scene.lines[oldManUnlockLine]?.text).toContain('旧楼');
-
-    const oldManGreeting = scene.lines.find((line) =>
-      line.text.includes('这么早就出门？雨大，走慢些。'),
-    );
-    expect(oldManGreeting).toMatchObject({
-      speaker: 'old-man',
-      emotion: 'happy',
-      character: 'old-man-happy.png',
-    });
+    expect(scene.actionItems?.some(item => item.desc.includes('周大爷'))).toBe(true);
   });
 
   it('keeps Fumi physically absent while recalling her ordinary morning voice', () => {
@@ -63,11 +53,50 @@ describe('opening storyline parse', () => {
     expect(scene.lines.some((line) => line.text.includes('那里没有人'))).toBe(true);
   });
 
-  it('keeps Touko restrained instead of cycling through showcase emotions', () => {
+  it('uses Touko to establish a credible contact without preloading a mystery answer', () => {
     const toukoLines = parseOpeningStoryline().lines.filter((line) => line.speaker === 'touko');
 
-    expect(toukoLines.map((line) => line.emotion)).toEqual(['calm', 'calm', 'sad', 'calm']);
+    expect(toukoLines.length).toBeGreaterThanOrEqual(3);
+    expect(toukoLines.every((line) => line.emotion === 'calm')).toBe(true);
     expect(toukoLines.some((line) => ['happy', 'angry', 'insane'].includes(line.emotion))).toBe(false);
-    expect(toukoLines.find((line) => line.emotion === 'sad')?.text).toContain('没有回我的消息');
+    expect(toukoLines.some((line) => line.text.includes('饭盒'))).toBe(true);
+    expect(toukoLines.some((line) => line.text.includes('山里'))).toBe(false);
+  });
+
+  it('hands control to the player at home with grounded investigation directions', () => {
+    const scene = parseOpeningStoryline();
+    const actionText = scene.actionItems?.map(item => item.desc).join('\n') ?? '';
+
+    expect(scene.lines.at(-1)?.background).toBe('home-day');
+    expect(actionText).toContain('中学');
+    expect(actionText).toContain('便利店');
+    expect(actionText).toContain('灯织');
+    expect(actionText).toContain('周大爷');
+    expect(scene.actionItems?.some(item => /拨打.*文穗.*电话/.test(item.desc))).toBe(true);
+  });
+
+  it('presents room evidence without turning observations into conclusions', () => {
+    const observe = parseOpeningStoryline().observe ?? '';
+
+    expect(observe).toContain('绿色围裙');
+    expect(observe).toContain('药瓶');
+    expect(observe).not.toContain('她今天不是去学校');
+    expect(observe).not.toContain('好像有人重新涂过');
+    expect(observe).not.toContain('周大爷在楼下');
+  });
+
+  it('does not claim the 06:50 message knew about the later leave call', () => {
+    const scene = parseOpeningStoryline();
+    const departureMessage = scene.lines.find(line => line.text.includes('我先出门了'))?.text ?? '';
+
+    expect(departureMessage).toMatch(/^“我先出门了，今天不去学校。晚饭不用等我，回来再跟你说。☀️”$/);
+    expect(departureMessage).not.toMatch(/请假|老师|学校.{0,8}(?:知道|说过)|电话/);
+  });
+
+  it('keeps the returned lunchbox as characterization rather than a case lead', () => {
+    const scene = parseOpeningStoryline();
+
+    expect(scene.investigateItems?.some(item => item.desc.includes('饭盒'))).toBe(false);
+    expect(scene.observe).not.toContain('厨房纸还是干的');
   });
 });
