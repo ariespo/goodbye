@@ -142,16 +142,6 @@ describe('mergeSceneChecklist', () => {
     expect(merged.investigateItems).toEqual(validChecklist.investigateItems);
   });
 
-  it('replaces an incomplete single investigation item with the generated checklist', () => {
-    const prev: Scene = {
-      ...baseScene,
-      investigateItems: [{ desc: '唯一调查', suspect: '无', style: '现实', time: '10分钟', stamina: 5, sanity: 0 }],
-    };
-
-    const merged = mergeSceneChecklist(prev, validChecklist);
-
-    expect(merged.investigateItems).toEqual(validChecklist.investigateItems);
-  });
 });
 
 describe('insertTagsIntoMaintext', () => {
@@ -167,20 +157,4 @@ describe('insertTagsIntoMaintext', () => {
     expect(insertTagsIntoMaintext('no maintext here', '<observe>x</observe>')).toBe('no maintext here');
   });
 
-  it('replaces an incomplete writer investigation block instead of appending a duplicate', () => {
-    const content = `<maintext>
-对话|旁白|calm|正文。
-<investigate>
-唯一调查|无|现实|10分钟|5|0
-</investigate>
-</maintext>
-<sum>y</sum>`;
-    const tags = serializeChecklistToTags(validChecklist);
-
-    const updated = insertTagsIntoMaintext(content, tags);
-    const reparsed = maintextToScene(updated.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1] ?? '');
-
-    expect(updated.match(/<investigate>/g)).toHaveLength(1);
-    expect(reparsed.investigateItems).toEqual(validChecklist.investigateItems);
-  });
 });

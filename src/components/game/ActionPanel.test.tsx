@@ -142,6 +142,28 @@ describe('ActionPanel', () => {
     ]);
   });
 
+  it('offers each unmarked observation paragraph as a separate clue candidate', () => {
+    useGameStore.setState(state => ({
+      game: {
+        ...state.game,
+        actionPanel: {
+          visible: true,
+          type: 'observe',
+          content: '纸条背面露出一截猫尾巴。\n\n文穗的房门开着一条缝。\n\n床头柜上的药瓶标签已经模糊。',
+          selectedIndex: null,
+        },
+      },
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, organizedClues: [] } },
+    }));
+
+    render(<ActionPanel />);
+
+    expect(screen.getAllByRole('button', { name: /^整理线索：/ })).toHaveLength(3);
+    expect(screen.getByRole('button', { name: '整理线索：纸条背面露出一截猫尾巴。' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '整理线索：文穗的房门开着一条缝。' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '整理线索：床头柜上的药瓶标签已经模糊。' })).toBeInTheDocument();
+  });
+
   it('executes action routes with an action-specific accessible label', () => {
     useGameStore.setState(state => ({
       game: {

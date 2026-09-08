@@ -349,8 +349,15 @@ function parseObserveClues(text: string): ClueCandidate[] {
   const markerPattern = /\[(发现|發現|异常|異常|线索|線索)\]/g;
   const matches = Array.from(normalized.matchAll(markerPattern));
   if (matches.length === 0) {
-    const fallback = normalized.trim();
-    return fallback ? [{ marker: '[发现]', title: makeClueTitle(fallback), description: fallback }] : [];
+    return normalized
+      .split(/\n\s*\n/)
+      .map(paragraph => paragraph.trim())
+      .filter(Boolean)
+      .map(description => ({
+        marker: '[发现]',
+        title: makeClueTitle(description),
+        description,
+      }));
   }
   return matches.map((match, index) => {
     const start = (match.index ?? 0) + match[0].length;

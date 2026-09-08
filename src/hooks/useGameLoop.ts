@@ -716,13 +716,13 @@ export function useGameLoop() {
 
         // 写手未输出完整清单时，异步补全场景清单；不阻塞正文播放，失败静默（performAction 有 LLM fallback）
         const needChecklist = preparedTurn && activeChat
-          && (!parsed.observe || (parsed.investigateItems?.length ?? 0) < 2 || !parsed.actionItems?.length);
+          && (!parsed.observe || !parsed.investigateItems?.length || !parsed.actionItems?.length);
         if (needChecklist) {
           const token = assistantMessage.id;
           checklistTokenRef.current = token;
           const existing = {
             hasObserve: !!parsed.observe,
-            hasInvestigate: (parsed.investigateItems?.length ?? 0) >= 2,
+            hasInvestigate: !!parsed.investigateItems?.length,
             hasAction: !!parsed.actionItems?.length,
           };
           const writerScenePart = {
@@ -748,20 +748,14 @@ export function useGameLoop() {
             if (!chat || lastAssistant?.id !== token) return;
 
             const current = state.game.currentScene;
-            let mergedScene = current;
             if (current) {
               const merged = mergeSceneChecklist({ ...current, ...writerScenePart }, checklist);
-              mergedScene = merged;
               // 不走 setCurrentScene：它会重置播放进度，这里只补 currentScene 字段
               useGameStore.setState(s => ({ game: { ...s.game, currentScene: merged } }));
             }
 
             // 回写标签到 </maintext> 前，重载时 rebuildSceneFromChat 才能反解还原
-            const tags = serializeChecklistToTags({
-              observe: mergedScene?.observe ?? checklist.observe,
-              investigateItems: mergedScene?.investigateItems ?? checklist.investigateItems,
-              actionItems: mergedScene?.actionItems ?? checklist.actionItems,
-            }, existing);
+            const tags = serializeChecklistToTags(checklist, existing);
             const updatedContent = insertTagsIntoMaintext(lastAssistant.content, tags);
             if (updatedContent !== lastAssistant.content) {
               const updatedMessages = chat.messages.map(m => (m.id === token ? { ...m, content: updatedContent } : m));
