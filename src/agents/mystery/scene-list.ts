@@ -147,15 +147,36 @@ export function mergeSceneChecklist(prev: Scene, checklist: SceneChecklist): Sce
   return {
     ...prev,
     observe: prev.observe || checklist.observe,
-    investigateItems: prev.investigateItems?.length ? prev.investigateItems : checklist.investigateItems,
+    investigateItems: (prev.investigateItems?.length ?? 0) >= 2
+      ? prev.investigateItems
+      : checklist.investigateItems,
     actionItems: prev.actionItems?.length ? prev.actionItems : checklist.actionItems,
   };
 }
 
-/** 把补全标签插入 assistant 消息 content 的 </maintext> 之前，保证重载反解可见 */
+/** 把补全标签写入 assistant 消息；已有同类标签时覆盖，保证重载反解使用新清单。 */
 export function insertTagsIntoMaintext(content: string, tags: string): string {
   if (!tags.trim()) return content;
-  const closeIndex = content.lastIndexOf('</maintext>');
-  if (closeIndex < 0) return content;
-  return `${content.slice(0, closeIndex)}\n${tags}\n${content.slice(closeIndex)}`;
+  if (!content.includes('</maintext>')) return content;
+
+  const blocks = tags.match(/<(observe|investigate|action)>[\s\S]*?<\/\1>/g) ?? [];
+  let updated = content;
+  const additions: string[] = [];
+
+  for (const block of blocks) {
+    const tag = block.match(/^<(observe|investigate|action)>/)?.[1];
+    if (!tag) continue;
+    const closeIndex = updated.lastIndexOf('</maintext>');
+    const maintext = updated.slice(0, closeIndex);
+    const existingBlock = new RegExp(`<${tag}>[\\s\\S]*?<\\/${tag}>`);
+    if (existingBlock.test(maintext)) {
+      updated = `${maintext.replace(existingBlock, block)}${updated.slice(closeIndex)}`;
+    } else {
+      additions.push(block);
+    }
+  }
+
+  if (additions.length === 0) return updated;
+  const closeIndex = updated.lastIndexOf('</maintext>');
+  return `${updated.slice(0, closeIndex)}\n${additions.join('\n')}\n${updated.slice(closeIndex)}`;
 }

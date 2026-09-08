@@ -89,7 +89,7 @@ describe('opening storyline parse', () => {
     const scene = parseOpeningStoryline();
     const departureMessage = scene.lines.find(line => line.text.includes('我先出门了'))?.text ?? '';
 
-    expect(departureMessage).toMatch(/^“我先出门了，今天不去学校。晚饭不用等我，回来再跟你说。☀️”$/);
+    expect(departureMessage).toMatch(/^“我先出门了，今天不去学校。晚饭不用等我，回来再跟你说。”$/);
     expect(departureMessage).not.toMatch(/请假|老师|学校.{0,8}(?:知道|说过)|电话/);
   });
 
