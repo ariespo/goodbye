@@ -3,6 +3,7 @@ import type { ValidationError } from '../../sillytavern/output-protocol';
 import { LOOP_PACING_CONTRACT } from './loop-contract';
 import { buildDoNotRepeatBlock, buildProtocolDoNotRepeatBlock } from './repair-task';
 import { DEFAULT_FORMAT_PROMPT } from '../../sillytavern/types';
+import { buildAssertionSources, extractNarrativeFields } from './fact-assertion-review';
 
 export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 
@@ -203,13 +204,24 @@ export function buildNarrativeFactCriticUserPrompt(
   packet: WriterPacket,
   narrative: string,
 ): string {
+  const narrativeFields = extractNarrativeFields(narrative);
+  const assertionSources = buildAssertionSources(packet, narrativeFields);
   return `请复核已经生成的正文，而不是导演计划。authorizedBackgroundFacts 是已确认的开局前生活史，允许正文自然提及；approvedBackgroundFactProposals 只有在正文逐字出现 evidenceText 时才视为实际呈现。不得把一般生活史误判成案件事实，也不得允许生活史补出当日行踪、精确时间、购买记录、证据或隐藏身份。
 只检查正文是否严格服从 WriterPacket：
 - 是否出现 authorizedFacts/playerKnownFacts 未提供的证据细节、精确时间、号码、记录操作、动机、死因或时间线；
 - 是否让 stance=lies-about 的角色自白、说漏嘴、互相指认、默认承认，或让旁白把沉默/反应解释成答案；
 - 是否违反 characterPerformances、情绪禁演或玩家当前称呼权限。
 authorizedFacts 中的 text 就是本回合可直接呈现的授权内容；delivery=narration/object/environment 规定呈现渠道，不代表还要另找证据才能表达。不得把已授权 confirmation 本身判为越权，只检查正文是否超出 text 或用了错误渠道。
-不要因为措辞风格或没有复述全部事实而拒绝。只返回既定 FactReview JSON。
+逐项审查 NarrativeFields 中每个字段的每个实质命题，包括 maintext、每个 option、summary、hint、observation、investigate 与 action。reviewedFields 必须逐字列出全部字段名；每个非空字段至少列出一项 assertion，不能用顶层 approved 代替逐项审查。
+supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quote 中逐字引用该来源 text 的非空片段。真实 sourceId 或真实但无关的来源片段不等于语义支持；你必须实际比较 proposition 与来源，不能用关键词、相同时间或来源存在本身推断蕴含关系。unsupported/contradicted 必须如实标记，即使顶层可能获准也不能省略。
+问题标为 question，明确带“可能/也许”等不确定性的假设标为 hypothesis，普通当下动作标为 ordinary-present；这三类通常不需要事实引用。否定性考勤、登录、删除、未出现、未到场等仍是事实命题，不能自动视为安全。本次拨号无人接听只说明本次没有接听，不能推成登录、阅读、删除或此前去向。
+不要因为措辞风格或没有复述全部事实而拒绝。返回带 assertionAudit 的 narrative FactReview JSON。
+
+[NarrativeFields]
+${jsonBlock(narrativeFields)}
+
+[AssertionSources]
+${jsonBlock(assertionSources)}
 
 [WriterPacket]
 ${jsonBlock(packet)}
@@ -250,7 +262,7 @@ ${jsonBlock(review)}`;
   }
 
   return `上一版可播放场景未通过事实或角色审查。请在保留原剧情构思的前提下做最小范围修复，并只输出项目规定标签。
-必须逐条落实 corrections；删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
+必须逐条落实 corrections；精确时间、记录细节、物证细节和因果陈述只能保留 WriterPacket 的 authorizedFacts、playerKnownFacts、continuityContext.publicContinuity、authorizedBackgroundFacts 或 authorizedActionOutcomes 实际支持的有限内容。authorizedActionOutcomes 可作为事实来源，但不得补写其 text 未包含的死因、责任或过程。approvedBackgroundFactProposals 只有在其 evidenceText 已经逐字出现在被拒正文的实际 maintext 演出中时才可继续保留，不得由选项、摘要、提示或调查列表激活。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
 事实纠错优先于保留原构思：即使已批准 plan 中含同样的无依据推断，也必须同步纠正台词、旁白、hint、sum 与选项前提，改成授权证据实际支持的有限结论；不要在后文换个措辞恢复已删除的断言。
 如果 violations 同时包含文风重复，只改写被点名的句子、意象或动作模板，不得借此改动剧情节点。
 stance=lies-about 的角色只能明确否认、质疑证据或普通拒答；不得用台词、沉默、眼神、动作或旁白形成半自白。

@@ -9,10 +9,16 @@ import {
   FACT_CRITIC_SYSTEM_PROMPT,
   buildWriterSystemPrompt,
 } from './prompts';
-import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
+import { NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import { mergeRepairResiduals } from './repair-task';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 import type { ValidationError } from '../../sillytavern/output-protocol';
+import {
+  buildAssertionSources,
+  extractNarrativeFields,
+  validateAssertionAudit,
+  type AssertionAudit,
+} from './fact-assertion-review';
 
 export interface NarrativeRepairFailure {
   draft: string;
@@ -171,7 +177,13 @@ function reviewNarrativeSentence(
     }];
   }
   const habitMatch = narrative.match(HISTORICAL_HABIT);
-  if (habitMatch && (packet.authorizedBackgroundFacts?.length ?? 0) === 0) {
+  const habitAuthorized = (packet.authorizedBackgroundFacts ?? []).some(fact => {
+    const sameSubject = ['文穗', '女孩', '她'].some(subject => narrative.includes(subject) && fact.text.includes(subject));
+    const sameHabit = [/(?:来|同行|一起)/, /(?:买|结账)/, /(?:照顾|关心)/, /(?:打招呼|认识|见)/]
+      .some(pattern => pattern.test(narrative) && pattern.test(fact.text));
+    return sameSubject && sameHabit;
+  });
+  if (habitMatch && !habitAuthorized) {
     return [{
       code: 'ungrounded-past-claim',
       message: `正文出现了无固定生活史或已接受软设定来源的习惯性旧经历。完整违规句：${narrative.trim()}。`,
@@ -194,9 +206,6 @@ function reviewNarrativeSentence(
   if (/现在|此刻|眼下|当场/.test(narrative)
     && !/今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}/.test(narrative)) return [];
   if (authorizedText.includes(match[0])) return [];
-  const caseAuthorization = [...packet.authorizedFacts, ...packet.playerKnownFacts]
-    .some(fact => /今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买|付款|离开|去往|行踪/.test(fact.text));
-  if (caseAuthorization) return [];
   return [{
     code: 'ungrounded-past-claim',
     message: `正文补写了未获授权的既往来访、购买或去向。完整违规句：${narrative.trim()}。匹配片段“${match[0]}”只是定位，不代表整句的其余断言已获授权。`,
@@ -223,8 +232,7 @@ export function sanitizeNarrativeFactReview(
   review: FactReview,
   packet: Pick<WriterPacket, 'authorizedFacts'>,
 ): FactReview {
-  const hasAuthorizedConfirmation = packet.authorizedFacts.some(fact => fact.level === 'confirmation');
-  const authorizedIds = new Set(packet.authorizedFacts.map(fact => fact.id));
+  void packet;
   const explicitlySaysNoViolation = (value: string) => (
     /不构成违规|并非违规|无需修正|(?:未发现|没有发现|不存在|无)(?:任何|潜在)?违规|故不违规|已获授权.*(?:符合|不违规)/
       .test(value)
@@ -236,26 +244,10 @@ export function sanitizeNarrativeFactReview(
         || normalized.includes('未体现主动撒谎')
         || normalized.includes('必须主动撒谎'));
   };
-  const falselyRejectsAuthorizedConfirmation = (value: string) => (
-    hasAuthorizedConfirmation
-    && /player[_-]?agency(?:[_-]?override|[_-]?violation)?|premature[_-]?confirmation|player[_-]?assertion[_-]?as[_-]?fact|玩家.*直接转化为世界事实|把已授权.?confirmation|已授权.*confirmation.*(?:越权|违规)|confirmation.*(?:未授权|越权)/i
-      .test(value)
-  );
-  const falselyDemandsNewEvidenceForAuthorizedConfirmation = (
-    violation: FactReview['violations'][number],
-    value: string,
-  ) => (
-    hasAuthorizedConfirmation
-    && (!violation.factId || authorizedIds.has(violation.factId))
-    && /未提供任何?新增证据|未提供新的可呈现证据|推迟至后续回合|no[_-]?new[_-]?evidence|既有线索与新增 confirmation/i
-      .test(value)
-  );
   const violations = review.violations.filter(violation => {
     const value = `${violation.code} ${violation.factId ?? ''} ${violation.message}`;
     return !explicitlySaysNoViolation(violation.message)
-      && !isFalseMandatoryLyingClaim(value)
-      && !falselyRejectsAuthorizedConfirmation(value)
-      && !falselyDemandsNewEvidenceForAuthorizedConfirmation(violation, value);
+      && !isFalseMandatoryLyingClaim(value);
   });
   const corrections = violations.length === 0 ? [] : review.corrections.filter(correction => (
     !explicitlySaysNoViolation(correction)
@@ -294,7 +286,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     `${options.api.baseUrl}|${options.api.model}`,
     [...messages],
     { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
-    FACT_REVIEW_RESPONSE_FORMAT,
+    NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT,
     raw => {
       const parsed = extractJson(raw) as Partial<FactReview> | null;
       if (!parsed || typeof parsed.approved !== 'boolean'
@@ -304,7 +296,20 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       return parsed as FactReview;
     },
   );
-  return sanitizeNarrativeFactReview(value, options.packet);
+  const narrativeFields = extractNarrativeFields(options.narrative);
+  const auditReview = validateAssertionAudit(
+    value.assertionAudit as AssertionAudit,
+    buildAssertionSources(options.packet, narrativeFields),
+    narrativeFields,
+  );
+  const sanitized = sanitizeNarrativeFactReview(value, options.packet);
+  const violations = [...sanitized.violations, ...auditReview.violations];
+  return {
+    approved: violations.length === 0,
+    violations,
+    corrections: [...sanitized.corrections, ...auditReview.corrections],
+    assertionAudit: value.assertionAudit,
+  };
 }
 
 export async function repairNarrativeAgainstWriterPacket(options: {

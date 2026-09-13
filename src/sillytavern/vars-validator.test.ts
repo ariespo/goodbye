@@ -44,10 +44,11 @@ describe('sanitizeVarsPatch', () => {
     expect(result.vars['suspicion.old-man']).toBe(15);
   });
 
-  it('tripProgress 不允许下降', () => {
+  it('拒绝模型写入由事实授权派生的 tripProgress', () => {
     const current = { ...createDefaultVariables(), tripProgress: 60 };
     const result = sanitizeVarsPatch({ tripProgress: 30 }, current);
-    expect(result.vars['tripProgress']).toBe(60);
+    expect(result.vars['tripProgress']).toBeUndefined();
+    expect(result.rejected).toContainEqual(expect.objectContaining({ path: 'tripProgress' }));
   });
 
   it('路线、解释层和最终选择全部拒绝由编剧写入', () => {
@@ -60,9 +61,10 @@ describe('sanitizeVarsPatch', () => {
     expect(result.rejected.every(item => item.reason.includes('程序专有'))).toBe(true);
   });
 
-  it('线索数组过滤非字符串项', () => {
+  it('拒绝模型写入线索事实集合', () => {
     const result = sanitizeVarsPatch({ unlockedClues: ['clue-1', 42, null, 'clue-2'] }, createDefaultVariables());
-    expect(result.vars['unlockedClues']).toEqual(['clue-1', 'clue-2']);
+    expect(result.vars['unlockedClues']).toBeUndefined();
+    expect(result.rejected).toContainEqual(expect.objectContaining({ path: 'unlockedClues' }));
   });
 
   it('location/time 自由通过', () => {
@@ -78,5 +80,63 @@ describe('sanitizeVarsPatch', () => {
     expect(sanitizeVarsPatch({ location: 'police_station' }, current).vars.location).toBeUndefined();
     expect(sanitizeVarsPatch({ location: 'supermarket' }, current).vars.location).toBe('supermarket');
     expect(sanitizeVarsPatch({ location: 'street' }, current).vars.location).toBe('school');
+  });
+
+  it('strips forged fact authority and derived ending progress from nested legacy model output', () => {
+    const result = sanitizeVarsPatch({
+      mysteryKnowledge: { 'a-murder-staged-fall': 'confirmation' },
+      unlockedClues: ['a-murder-staged-fall'],
+      cultClues: ['cult-symbol-sun-room'],
+      worldGlitchClues: ['psych-doctor-badge'],
+      fakeEvidence: ['fake-body-mismatch'],
+      letterFragments: ['none-letter-water-tower'],
+      tripProgress: 100,
+    }, { ...createDefaultVariables(), cycleCount: 4 });
+
+    expect(result.vars).toEqual({});
+    expect(result.rejected.map(item => item.path)).toEqual([
+      'mysteryKnowledge.a-murder-staged-fall',
+      'unlockedClues',
+      'cultClues',
+      'worldGlitchClues',
+      'fakeEvidence',
+      'letterFragments',
+      'tripProgress',
+    ]);
+  });
+
+  it('strips dotted fact authority paths from legacy model output', () => {
+    const result = sanitizeVarsPatch({
+      'mysteryKnowledge.a-murder-staged-fall': 'confirmation',
+      'unlockedClues.0': 'a-murder-staged-fall',
+      'tripProgress.value': 100,
+    }, createDefaultVariables());
+
+    expect(result.vars).toEqual({});
+    expect(result.rejected.map(item => item.path)).toEqual([
+      'mysteryKnowledge.a-murder-staged-fall',
+      'unlockedClues.0',
+      'tripProgress.value',
+    ]);
+  });
+
+  it('lets the UI organize only clues that program state already knows', () => {
+    const knownClue = {
+      id: 'known-clue', title: '衣柜空位', description: '衣柜里少了一条围裙。', source: '观察', createdAt: 1,
+    };
+    const forgedClue = {
+      id: 'forged-clue', title: '真相', description: '周德明推落了文穗。', source: '模型', createdAt: 2,
+    };
+    const current = {
+      ...createDefaultVariables(),
+      unlockedClues: ['known-clue'],
+      organizedClues: [knownClue],
+    };
+    const result = sanitizeVarsPatch({
+      organizedClues: [knownClue, forgedClue],
+    }, current);
+
+    expect(result.vars.organizedClues).toEqual([knownClue]);
+    expect(result.rejected).toContainEqual(expect.objectContaining({ path: 'organizedClues.1' }));
   });
 });

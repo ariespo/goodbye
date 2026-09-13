@@ -550,18 +550,19 @@ describe('mystery orchestrator', () => {
     expect(complete).toHaveBeenCalledTimes(2);
   });
 
-  it('does not require optional insane performance after confirmation', async () => {
-    const falsePositive = JSON.stringify({
+  it('does not let an unrelated confirmation phrase pardon a critic violation', async () => {
+    const rejected = JSON.stringify({
       approved: false,
       violations: [{
         code: 'character_performance_violation', factId: 'F009',
         message: '计划已 confirmation，但未体现confirmation后的空洞专注。',
       }],
-      corrections: [],
+      corrections: ['修复 F009 的角色表现越权。'],
     });
     const complete = vi.fn()
       .mockResolvedValueOnce(JSON.stringify(validPlan))
-      .mockResolvedValueOnce(falsePositive)
+      .mockResolvedValueOnce(rejected)
+      .mockResolvedValueOnce(JSON.stringify(validPlan))
       .mockResolvedValueOnce(approvedFactReview);
     const result = await prepareMysteryTurn({
       mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
@@ -569,7 +570,8 @@ describe('mystery orchestrator', () => {
       presentationContext: { location: 'home' }, complete,
     });
     expect(result.semanticReview?.approved).toBe(true);
-    expect(result.directorAttempts).toBe(1);
+    expect(result.directorAttempts).toBe(2);
+    expect(String(complete.mock.calls[2]?.[0]?.[1]?.content)).toContain('character_performance_violation');
   });
 
   it('falls back when a proxy wraps response_format rejection as successful text', async () => {

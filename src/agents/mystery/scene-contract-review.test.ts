@@ -188,4 +188,20 @@ describe('deterministic narrative scene contract review', () => {
     });
     expect(reviewDirectorPlan(repaired, followUpBrief).approved).toBe(true);
   });
+
+  it('rejects an unknown plan destination while allowing the transient street scene', () => {
+    const unknownPlan = {
+      ...plan(),
+      beats: [{ ...plan().beats[0]!, locationId: 'police_station' }],
+    };
+    const streetPlan = {
+      ...plan(),
+      beats: [{ ...plan().beats[0]!, locationId: 'street' }],
+    };
+    const followUpBrief = { ...brief(), sceneContract: undefined };
+
+    expect(reviewDirectorPlan(unknownPlan, followUpBrief, { currentLocation: 'school' }).violations)
+      .toContainEqual(expect.objectContaining({ code: 'scene-contract-violation' }));
+    expect(reviewDirectorPlan(streetPlan, followUpBrief, { currentLocation: 'school' }).approved).toBe(true);
+  });
 });

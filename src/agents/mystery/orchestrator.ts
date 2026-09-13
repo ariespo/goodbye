@@ -141,7 +141,7 @@ function sanitizeFactReview(
   brief?: MysteryBrief,
   turnContext?: Record<string, unknown>,
 ): FactReview {
-  const isFalseKnowledgeEventCoupling = (value: string) => {
+  const isFalseKnowledgeEventCoupling = (violation: FactReview['violations'][number], value: string) => {
     const normalized = value.toLowerCase();
     const mentionsCaseFact = /\bf\d{3}\b/.test(normalized) || normalized.includes('案件事实') || normalized.includes('revelation');
     const requiresKnowledgeEvent = normalized.includes('knowledgeevent')
@@ -149,7 +149,9 @@ function sanitizeFactReview(
       || normalized.includes('认知事件');
     const treatsDiscoveriesAsFactGate = normalized.includes('alloweddiscoveries')
       || normalized.includes('allowed discoveries');
-    return mentionsCaseFact && (requiresKnowledgeEvent || treatsDiscoveriesAsFactGate);
+    const isExactPlannedFact = !!violation.factId
+      && plan?.revelations.some(item => item.factId === violation.factId) === true;
+    return isExactPlannedFact && mentionsCaseFact && (requiresKnowledgeEvent || treatsDiscoveriesAsFactGate);
   };
   const isFalseMandatoryLyingClaim = (value: string) => {
     const normalized = value.toLowerCase();
@@ -170,11 +172,6 @@ function sanitizeFactReview(
   const flagsUnusedRedHerring = (value: string) => (
     /red[_-]?herring/i.test(value) || /红鲱鱼|误导线索/.test(value)
   ) && /计划未使用|未保留|未引入|排除在玩家体验之外/.test(value);
-  const falselyRequiresOptionalPerformance = (value: string) => (
-    value.includes('未体现confirmation后的空洞专注')
-    || value.includes('未体现 confirmation 后的空洞专注')
-    || value.includes('未出现确认后的insane')
-  );
   const falselyPredictsUnplannedInsane = (value: string) => {
     const planText = JSON.stringify(plan ?? {});
     return /可能触发.*insane|may trigger.*insane/i.test(value)
@@ -185,10 +182,12 @@ function sanitizeFactReview(
     const revelation = violation.factId ? plan?.revelations.find(item => item.factId === violation.factId) : undefined;
     return !!revelation && revelation.delivery !== 'dialogue';
   };
-  const falselyRejectsAuthorizedConfirmation = (value: string) => {
+  const falselyRejectsAuthorizedConfirmation = (violation: FactReview['violations'][number], value: string) => {
     if (!brief?.revealBudget.allowConfirmation || brief.routeMode === 'exploratory') return false;
+    const isExactAuthorizedConfirmation = !!violation.factId
+      && plan?.revelations.some(item => item.factId === violation.factId && item.level === 'confirmation') === true;
     return /player[_-]?agency(?:[_-]?override|[_-]?violation)?|premature[_-]?confirmation|player[_-]?assertion[_-]?as[_-]?fact|玩家.*直接转化为世界事实/i.test(value)
-      && !!plan?.revelations.some(item => item.level === 'confirmation');
+      && isExactAuthorizedConfirmation;
   };
   const falselyClaimsMissingAuthorizedRevealText = (violation: FactReview['violations'][number], value: string) => (
     !!violation.factId
@@ -209,14 +208,18 @@ function sanitizeFactReview(
     if (!violation.factId || !/forbidden[_-]?reveal|当前地点无法取得|location/i.test(value)) return false;
     return !!brief?.playerKnownFacts.some(fact => fact.id === violation.factId);
   };
-  const falselyRequiresKnowledgeEventForCaseFact = (value: string) => {
+  const falselyRequiresKnowledgeEventForCaseFact = (violation: FactReview['violations'][number], value: string) => {
     if (!brief?.revealBudget.allowConfirmation || brief.routeMode === 'exploratory') return false;
+    const isExactAuthorizedConfirmation = !!violation.factId
+      && plan?.revelations.some(item => item.factId === violation.factId && item.level === 'confirmation') === true;
     return /knowledgeevent|knowledge event|具体观察|支撑该结论/i.test(value)
-      && !!plan?.revelations.some(item => item.level === 'confirmation');
+      && isExactAuthorizedConfirmation;
   };
-  const falselyRejectsLayerJump = (value: string) => (
+  const falselyRejectsLayerJump = (violation: FactReview['violations'][number], value: string) => (
     /单回合.*(?:atmosphere|hint).*confirmation|层级递进|revelation_level_exceeds_budget/i.test(value)
     && !!brief?.revealBudget.allowConfirmation
+    && !!violation.factId
+    && plan?.revelations.some(item => item.factId === violation.factId && item.level === 'confirmation') === true
   );
   const falselyRejectsOrderedAuthorizedConfirmations = (violation: FactReview['violations'][number], value: string) => {
     if (!violation.factId || !brief?.revealBudget.allowConfirmation) return false;
@@ -230,19 +233,10 @@ function sanitizeFactReview(
     && violation.factId === brief.saturationPivot.factId
     && /reveal[_-]?level|npc[_-]?knowledge|层级|授权/.test(value)
   );
-  const falselyRequiresInsightForAllowedPerformance = (value: string) => (
-    /character[_-]?performance/i.test(value)
-    && /未申请.*insight|不能作为行为证据|可能暗示未授权性格/.test(value)
-  );
   const falselyAppliesDiscoveryEvidenceStandardToFact = (violation: FactReview['violations'][number], value: string) => (
     !!violation.factId
     && /evidence[_-]?standard|具体呈现|证据标准/.test(value)
     && !!plan?.revelations.some(item => item.factId === violation.factId)
-  );
-  const falselyQuestionsCycleAfterRouteLock = (value: string) => (
-    /cycle[_-]?count|前三个重复日|小于 4/.test(value)
-    && brief?.routeMode !== 'exploratory'
-    && !!brief?.revealBudget.allowConfirmation
   );
   const falselyTreatsDailyRoleAsHiddenKnowledge = (value: string) => (
     /character[_-]?performance/i.test(value)
@@ -256,35 +250,31 @@ function sanitizeFactReview(
   };
   const violations = review.violations.filter(violation => {
     const value = `${violation.code} ${violation.factId ?? ''} ${violation.message}`;
-    return !isFalseKnowledgeEventCoupling(value)
+    return !isFalseKnowledgeEventCoupling(violation, value)
       && !isFalseMandatoryLyingClaim(value)
       && !explicitlySaysNoViolation(value)
       && !selfContradictoryApproval(value)
       && !falselyCountsFollowupIntentsAsReveals(value)
       && !flagsUnusedRedHerring(value)
-      && !falselyRequiresOptionalPerformance(value)
       && !falselyPredictsUnplannedInsane(value)
       && !falselyRequiresNpcForNonDialogue(violation, value)
-      && !falselyRejectsAuthorizedConfirmation(value)
+      && !falselyRejectsAuthorizedConfirmation(violation, value)
       && !falselyClaimsMissingAuthorizedRevealText(violation, value)
       && !falselyDemandsNewEvidenceForAuthorizedConfirmation(violation, value)
       && !falselyFlagsUnusedHypotheticalRedHerring(value)
       && !falselyTreatsKnownFactAsLocationLocked(violation, value)
-      && !falselyRequiresKnowledgeEventForCaseFact(value)
-      && !falselyRejectsLayerJump(value)
+      && !falselyRequiresKnowledgeEventForCaseFact(violation, value)
+      && !falselyRejectsLayerJump(violation, value)
       && !falselyRejectsOrderedAuthorizedConfirmations(violation, value)
       && !duplicatesDeterministicPivotReview(value)
       && !rejudgesAuthorizedPivot(violation, value)
-      && !falselyRequiresInsightForAllowedPerformance(value)
       && !falselyAppliesDiscoveryEvidenceStandardToFact(violation, value)
-      && !falselyQuestionsCycleAfterRouteLock(value)
       && !falselyTreatsDailyRoleAsHiddenKnowledge(value)
       && !falselyDemandsMissingPivot(value);
   });
-  const corrections = violations.length === 0 ? [] : review.corrections.filter(correction => (
-    !isFalseKnowledgeEventCoupling(correction)
-    && !explicitlySaysNoViolation(correction)
-  ));
+  const corrections = violations.length === 0
+    ? []
+    : review.corrections.filter(correction => !explicitlySaysNoViolation(correction));
   return { approved: violations.length === 0, violations, corrections };
 }
 

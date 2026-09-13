@@ -146,6 +146,49 @@ export const FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
+const narrativeAssertionSchema: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['field', 'quote', 'proposition', 'status', 'citations', 'reason'],
+  properties: {
+    field: { type: 'string' },
+    quote: { type: 'string' },
+    proposition: { type: 'string' },
+    status: {
+      type: 'string',
+      enum: ['supported', 'unsupported', 'contradicted', 'question', 'hypothesis', 'ordinary-present'],
+    },
+    citations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['sourceId', 'quote'],
+        properties: { sourceId: { type: 'string' }, quote: { type: 'string' } },
+      },
+    },
+    reason: { type: 'string' },
+  },
+};
+
+export const NARRATIVE_FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['approved', 'violations', 'corrections', 'assertionAudit'],
+  properties: {
+    ...(FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>),
+    assertionAudit: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['reviewedFields', 'assertions'],
+      properties: {
+        reviewedFields: { type: 'array', items: { type: 'string' } },
+        assertions: { type: 'array', items: narrativeAssertionSchema },
+      },
+    },
+  },
+};
+
 export const SCENE_CHECKLIST_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -199,4 +242,13 @@ export const DIRECTOR_PLAN_RESPONSE_FORMAT: ResponseFormat = {
 export const FACT_REVIEW_RESPONSE_FORMAT: ResponseFormat = {
   type: 'json_schema',
   json_schema: { name: 'fact_review', strict: true, schema: FACT_REVIEW_JSON_SCHEMA },
+};
+
+export const NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT: ResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'narrative_fact_review',
+    strict: true,
+    schema: NARRATIVE_FACT_REVIEW_JSON_SCHEMA,
+  },
 };

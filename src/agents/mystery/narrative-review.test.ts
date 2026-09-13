@@ -12,6 +12,21 @@ const disclosedMorningMessage = {
   continuityContext: { publicContinuity: [{ id: 'opening-message-0650', text: '今早06:50文穗发来聊天消息：“我先出门了，今天不去学校。晚饭不用等我，回来再跟你说。”这是她自述的安排，尚未核实学校请假或她的去向。' }] },
 };
 
+const completeEmptyAuthority = {
+  authorizedFacts: [],
+  playerKnownFacts: [],
+  authorizedKnowledgeEvents: [],
+  authorizedBackgroundFacts: [],
+  approvedBackgroundFactProposals: [],
+} as unknown as WriterPacket;
+
+function ordinaryAudit(field: string, quote: string, status: 'question' | 'hypothesis' | 'ordinary-present') {
+  return {
+    reviewedFields: [field],
+    assertions: [{ field, quote, proposition: quote, status, citations: [], reason: '没有陈述新的案件事实。' }],
+  };
+}
+
 describe('deterministic final narrative review', () => {
   it.each([
     '她今早发消息说今天不去学校，电话打不通，衣柜里有一处不自然的空缺。',
@@ -120,6 +135,19 @@ describe('deterministic final narrative review', () => {
     }, '旁白|玩家保存着自己的旧收据。')).toEqual([]);
   });
 
+  it('does not let an unrelated authorized fact pardon an invented evidence category', () => {
+    const violations = reviewNarrativeDeterministically({
+      authorizedFacts: [{
+        id: 'shared-apron-missing', level: 'hint', text: '衣柜里少了一条围裙。', delivery: 'object',
+      }],
+      playerKnownFacts: [],
+    }, '旁白|收银台下的监控记录已经被覆盖。');
+
+    expect(violations).toEqual([
+      expect.objectContaining({ code: 'ungrounded-evidence-detail' }),
+    ]);
+  });
+
   it('sends disclosed opening continuity and the complete draft to the actual fact review request', async () => {
     const packet = {
       ...emptyAuthority,
@@ -135,7 +163,19 @@ describe('deterministic final narrative review', () => {
       preset: null, packet, narrative,
       complete: async messages => {
         request = messages.map(message => message.content).join('\n');
-        return JSON.stringify({ approved: true, violations: [], corrections: [] });
+        return JSON.stringify({
+          approved: true,
+          violations: [],
+          corrections: [],
+          assertionAudit: {
+            reviewedFields: ['maintext'],
+            assertions: [{
+              field: 'maintext', quote: narrative, proposition: '06:50文穗发来消息', status: 'supported',
+              citations: [{ sourceId: 'public-event:opening-message', quote: '今早06:50文穗发来消息。' }],
+              reason: '公开开局事件直接支持。',
+            }],
+          },
+        });
       },
     });
     expect(review.approved).toBe(true);
@@ -168,7 +208,7 @@ describe('deterministic final narrative review', () => {
     }, '陈慧慧|“以前文穗不是经常跟你一起来吗？”')).toEqual([]);
   });
 
-  it('drops narrative critic false-positives for lies-about denials and authorized confirmation', async () => {
+  it('does not let an authorized confirmation pardon an unrelated critic violation', async () => {
     const packet = {
       authorizedFacts: [{
         id: 'a-murder-staged-fall',
@@ -203,18 +243,33 @@ describe('deterministic final narrative review', () => {
           },
         ],
         corrections: ['lies-about 角色必须主动撒谎。', '删除确认。', '删除未授权时间线。'],
+        assertionAudit: {
+          reviewedFields: ['maintext'],
+          assertions: [{
+            field: 'maintext',
+            quote: '楼梯扶手上的擦痕与已知线索闭合：这是伪装成意外的推落。',
+            proposition: '这是伪装成意外的推落',
+            status: 'supported',
+            citations: [{
+              sourceId: 'fact:a-murder-staged-fall:confirmation',
+              quote: '这是伪装成意外的推落',
+            }],
+            reason: '逐项匹配授权确认。',
+          }],
+        },
       }),
     });
 
     expect(review.approved).toBe(false);
-    expect(review.violations).toEqual([
+    expect(review.violations).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'unknown-fact', message: '正文出现未授权时间线。' }),
-    ]);
+      expect.objectContaining({ code: 'unknown-fact', message: expect.stringContaining('premature-confirmation') }),
+    ]));
     expect(review.corrections).toContain('删除未授权时间线。');
     expect(review.corrections).not.toContain('lies-about 角色必须主动撒谎。');
   });
 
-  it('approves when the narrative critic only reports authorized-confirmation false positives', async () => {
+  it('approves an authorized confirmation through an exact assertion citation', async () => {
     const packet = {
       authorizedFacts: [{
         id: 'a-murder-staged-fall',
@@ -231,16 +286,148 @@ describe('deterministic final narrative review', () => {
       packet,
       narrative: '<maintext>旁白|这是伪装成意外的推落。</maintext>',
       complete: async () => JSON.stringify({
-        approved: false,
-        violations: [{
-          code: 'unknown-fact',
-          factId: 'a-murder-staged-fall',
-          message: '未提供任何新增证据，把已授权 confirmation 判为越权。',
-        }],
-        corrections: ['推迟至后续回合。'],
+        approved: true,
+        violations: [],
+        corrections: [],
+        assertionAudit: {
+          reviewedFields: ['maintext'],
+          assertions: [{
+            field: 'maintext', quote: '旁白|这是伪装成意外的推落。', proposition: '这是伪装成意外的推落',
+            status: 'supported',
+            citations: [{ sourceId: 'fact:a-murder-staged-fall:confirmation', quote: '这是伪装成意外的推落。' }],
+            reason: '授权 confirmation 逐项支持。',
+          }],
+        },
       }),
     });
 
-    expect(review).toEqual({ approved: true, violations: [], corrections: [] });
+    expect(review.approved).toBe(true);
+    expect(review.assertionAudit?.assertions).toHaveLength(1);
+  });
+
+  it('rejects a blanket live approval with no assertion audit', async () => {
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' },
+      preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
+      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [] }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-assertion-audit' }));
+  });
+
+  it.each([
+    ['ordinary handover', '<maintext>对话|店员|calm|她把一杯水递给你。</maintext>',
+      ordinaryAudit('maintext', '她把一杯水递给你。', 'ordinary-present')],
+    ['explicit hypothesis', '<maintext>对话|旁白|calm|也许她只是临时改变了安排。</maintext>',
+      ordinaryAudit('maintext', '也许她只是临时改变了安排。', 'hypothesis')],
+    ['open question', '<maintext>对话|旁白|calm|她今天到过学校吗？</maintext>',
+      ordinaryAudit('maintext', '她今天到过学校吗？', 'question')],
+  ])('approves a complete permissive semantic audit: %s', async (_name, narrative, assertionAudit) => {
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority, narrative,
+      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+    });
+
+    expect(review.approved).toBe(true);
+  });
+
+  it('approves an actual no-reply outcome without turning it into a login or whereabouts claim', async () => {
+    const packet = {
+      ...completeEmptyAuthority,
+      authorizedActionOutcomes: [{ id: 'call:fumi', text: '这次拨号持续响铃，但没有人接听。' }],
+    } as WriterPacket;
+    const narrative = '<maintext>对话|旁白|calm|这次拨号没有人接听。</maintext>';
+    const assertionAudit = {
+      reviewedFields: ['maintext'],
+      assertions: [{
+        field: 'maintext', quote: '这次拨号没有人接听。', proposition: '本次拨号无人接听', status: 'supported',
+        citations: [{ sourceId: 'action-outcome:call:fumi', quote: '没有人接听' }], reason: '本次行动结果直接支持。',
+      }],
+    };
+
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative,
+      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+    });
+    expect(review.approved).toBe(true);
+  });
+
+  it.each([
+    ['no login record', '没有她的登录记录。', '没有登录记录'],
+    ['negative attendance', '她今天没有到校。', '她未到校'],
+    ['note-time drift', '那张没有日期的便条写于06:50。', '便条写于06:50'],
+  ])('blocks an unsupported semantic assertion: %s', async (_name, claim, proposition) => {
+    const narrative = `<maintext>对话|旁白|calm|${claim}</maintext>`;
+    const assertionAudit = {
+      reviewedFields: ['maintext'],
+      assertions: [{
+        field: 'maintext', quote: claim, proposition, status: 'unsupported',
+        citations: [{ sourceId: 'public-event:opening-message-0650', quote: '06:50' }],
+        reason: '消息时间不支持这项命题。',
+      }],
+    };
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: disclosedMorningMessage as unknown as WriterPacket, narrative,
+      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'unsupported-assertion' }));
+  });
+
+  it('blocks unsupported claims found only in option, summary, observation and checklist fields', async () => {
+    const narrative = [
+      '<maintext>对话|旁白|calm|雨还在下。</maintext>',
+      '<option>沿她已经走过的河岸追赶</option>',
+      '<sum>目标已经前往机场。</sum>',
+      '<observe>桌上放着一把属于她的储物柜钥匙。</observe>',
+      '<investigate>检查她租住的秘密仓库|无|现实|30分钟|5|0</investigate>',
+      '<action>按她留下的密码打开储物柜|现实|10分钟|1|0</action>',
+    ].join('\n');
+    const assertions = [
+      ['maintext', '雨还在下。', 'ordinary-present'],
+      ['option:0', '沿她已经走过的河岸追赶', 'unsupported'],
+      ['summary', '目标已经前往机场。', 'unsupported'],
+      ['observation', '桌上放着一把属于她的储物柜钥匙。', 'unsupported'],
+      ['investigate:0', '检查她租住的秘密仓库|无|现实|30分钟|5|0', 'unsupported'],
+      ['action:0', '按她留下的密码打开储物柜|现实|10分钟|1|0', 'unsupported'],
+    ].map(([field, quote, status]) => ({
+      field, quote, proposition: quote, status, citations: [], reason: status === 'unsupported' ? '没有来源。' : '当下天气。',
+    }));
+    const assertionAudit = {
+      reviewedFields: ['maintext', 'option:0', 'summary', 'observation', 'investigate:0', 'action:0'],
+      assertions,
+    };
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority, narrative,
+      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations.filter(item => item.code === 'unsupported-assertion')).toHaveLength(5);
+  });
+
+  it('requests the narrative assertion schema rather than the plan fact-review schema', async () => {
+    let responseName = '';
+    const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
+    await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
+      complete: async (_messages, options) => {
+        const format = options?.responseFormat;
+        responseName = format?.type === 'json_schema' ? format.json_schema.name : '';
+        return JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit });
+      },
+    });
+
+    expect(responseName).toBe('narrative_fact_review');
   });
 });

@@ -13,6 +13,16 @@ export {
 } from './prompts';
 export { buildWriterPacket, reviewDirectorPlan } from './review';
 export {
+  buildAssertionSources,
+  extractNarrativeFields,
+  validateAssertionAudit,
+} from './fact-assertion-review';
+export type {
+  AssertionAudit,
+  AssertionSource,
+  NarrativeAssertion,
+} from './fact-assertion-review';
+export {
   buildDirectorRepairTask,
   buildDoNotRepeatBlock,
   formatProtocolErrorResidual,

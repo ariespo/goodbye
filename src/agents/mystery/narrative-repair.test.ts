@@ -41,6 +41,36 @@ describe('narrative repair strategy', () => {
     expect(prompt).not.toContain('请从头重写完整场景');
   });
 
+  it('retains projected action outcomes and the field audit in a fact repair packet', () => {
+    const sourcePacket = {
+      ...packet,
+      authorizedActionOutcomes: [{ id: 'death-news', text: '电话明确告知文穗已经死亡。' }],
+    } as WriterPacket;
+    const review: FactReview = {
+      approved: false,
+      violations: [{ code: 'unsupported-assertion', message: 'option:1 补写了未授权死因。' }],
+      corrections: ['删除死因，只保留死讯。'],
+      assertionAudit: {
+        reviewedFields: ['maintext', 'option:1'],
+        assertions: [{
+          field: 'option:1', quote: '追问坠楼原因', proposition: '文穗死于坠楼', status: 'unsupported',
+          citations: [], reason: '获准行动结果只包含死讯。',
+        }],
+      },
+    };
+
+    const prompt = buildNarrativeRepairPrompt(
+      sourcePacket,
+      '<maintext>电话明确告知文穗已经死亡。</maintext><option>追问坠楼原因</option>',
+      review,
+    );
+
+    expect(prompt).toContain('authorizedActionOutcomes 可作为事实来源');
+    expect(prompt).toContain('"id":"death-news"');
+    expect(prompt).toContain('"reviewedFields"');
+    expect(prompt).toContain('"option:1"');
+  });
+
   it('does not classify mixed fact and style violations as style-only', () => {
     const review: FactReview = {
       approved: false,

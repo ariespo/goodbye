@@ -240,7 +240,11 @@ export type FactReviewViolationCode =
   | 'repeated-imagery'
   | 'style-template-repetition'
   | 'unknown-background-fact'
-  | 'soft-canon-violation';
+  | 'soft-canon-violation'
+  | 'incomplete-assertion-audit'
+  | 'invalid-assertion-citation'
+  | 'unsupported-assertion'
+  | 'contradicted-assertion';
 
 export interface FactReviewViolation {
   code: FactReviewViolationCode;
@@ -252,6 +256,7 @@ export interface FactReview {
   approved: boolean;
   violations: FactReviewViolation[];
   corrections: string[];
+  assertionAudit?: import('./fact-assertion-review').AssertionAudit;
 }
 
 export interface WriterFact {
@@ -269,6 +274,7 @@ export interface WriterPacket {
   playerKnownFacts: ProjectedFact[];
   authorizedFacts: WriterFact[];
   authorizedKnowledgeEvents: Array<{ eventId: string; evidence: string }>;
+  authorizedActionOutcomes?: Array<{ id: string; text: string; speakerIds?: string[] }>;
   authorizedBackgroundFacts: BackgroundFactRecord[];
   approvedBackgroundFactProposals: BackgroundFactProposal[];
   forbiddenInstructions: string[];

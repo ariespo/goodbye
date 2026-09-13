@@ -1,5 +1,5 @@
 import { getVariablePath } from './vars-merger';
-import type { DynamicRecord } from './types';
+import type { DynamicRecord, OrganizedClue } from './types';
 import { resolveRegisteredLocation } from '../data/locations';
 
 /** 数值字段规则: [最小值, 最大值, 单回合最大变化幅度] */
@@ -24,18 +24,8 @@ const NUMERIC_RULES: Record<string, NumericRule> = {
   'investigation.science': { min: 0, max: 100, maxDelta: 25 },
 };
 
-/** 字符串数组字段(合并时去重并集,LLM 无法删除已有条目) */
-const STRING_ARRAY_KEYS = new Set([
-  'unlockedClues',
-  'organizedClues',
-  'cultClues',
-  'worldGlitchClues',
-  'fakeEvidence',
-  'letterFragments',
-]);
-
 /** 自由写入字段 */
-const FREE_KEYS = new Set(['location', 'time', 'mysteryKnowledge']);
+const FREE_KEYS = new Set(['location', 'time']);
 
 /** 程序专有字段: LLM 输出中一律剥除(由轮回结算/程序逻辑维护) */
 const PROGRAM_OWNED_KEYS = new Set([
@@ -51,6 +41,13 @@ const PROGRAM_OWNED_KEYS = new Set([
   'overlay',
   'finalChoice',
   'loopSuspicionStart',
+  'mysteryKnowledge',
+  'unlockedClues',
+  'cultClues',
+  'worldGlitchClues',
+  'fakeEvidence',
+  'letterFragments',
+  'tripProgress',
 ]);
 
 export interface SanitizeResult {
@@ -73,6 +70,27 @@ function flatten(patch: DynamicRecord, prefix = '', out: DynamicRecord = {}): Dy
     }
   }
   return out;
+}
+
+function isOrganizedClue(value: unknown): value is OrganizedClue {
+  if (!value || typeof value !== 'object') return false;
+  const clue = value as Partial<OrganizedClue>;
+  const keys = Object.keys(value);
+  return keys.length === 5
+    && keys.every(key => ['id', 'title', 'description', 'source', 'createdAt'].includes(key))
+    && typeof clue.id === 'string'
+    && typeof clue.title === 'string'
+    && typeof clue.description === 'string'
+    && typeof clue.source === 'string'
+    && typeof clue.createdAt === 'number';
+}
+
+function sameOrganizedClue(left: OrganizedClue, right: OrganizedClue): boolean {
+  return left.id === right.id
+    && left.title === right.title
+    && left.description === right.description
+    && left.source === right.source
+    && left.createdAt === right.createdAt;
 }
 
 /**
@@ -120,12 +138,25 @@ export function sanitizeVarsPatch(
       vars[path] = result;
       continue;
     }
-    if (STRING_ARRAY_KEYS.has(path)) {
+    if (path === 'organizedClues') {
       if (!Array.isArray(value)) {
-        rejected.push({ path, reason: '必须是字符串数组' });
+        rejected.push({ path, reason: '必须是线索数组' });
         continue;
       }
-      vars[path] = value.filter(item => typeof item === 'string');
+      const existing = getVariablePath(current, path);
+      const existingById = new Map(
+        (Array.isArray(existing) ? existing : [])
+          .filter(isOrganizedClue)
+          .map(item => [item.id, item] as const),
+      );
+      vars[path] = value.flatMap((item, index) => {
+        if (isOrganizedClue(item)) {
+          const known = existingById.get(item.id);
+          if (known && sameOrganizedClue(item, known)) return [item];
+        }
+        rejected.push({ path: `${path}.${index}`, reason: '模型只能保留已经由界面整理的线索' });
+        return [];
+      });
       continue;
     }
     if (path === 'location') {

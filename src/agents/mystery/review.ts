@@ -14,6 +14,7 @@ import type {
   MysteryBrief,
   WriterPacket,
 } from './types';
+import { resolveRegisteredLocation } from '../../data/locations';
 
 function impliesConfession(description: string): boolean {
   if (/没有否认|不再(?:否认|反驳)|低头沉默|默认(?:承认)?/.test(description)) return true;
@@ -237,6 +238,17 @@ export function reviewDirectorPlan(
   turnContext?: Record<string, unknown>,
 ): FactReview {
   const violations: FactReviewViolation[] = [];
+  const currentLocation = typeof turnContext?.currentLocation === 'string'
+    ? turnContext.currentLocation
+    : 'home';
+  for (const beat of plan.beats) {
+    if (beat.locationId && !resolveRegisteredLocation(beat.locationId, currentLocation).accepted) {
+      violations.push({
+        code: 'scene-contract-violation',
+        message: `beat ${beat.id} 使用了未注册地点 ${beat.locationId}；必须保留当前地图锚点或使用已注册地点。`,
+      });
+    }
+  }
   const forbiddenNpcIds = new Set(brief.sceneContract?.forbiddenNpcIds ?? []);
   const visitedLocations = new Set(plan.beats.map(beat => beat.locationId).filter(Boolean));
   for (const locationId of visitedLocations) {
