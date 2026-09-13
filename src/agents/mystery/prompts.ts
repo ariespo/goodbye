@@ -212,7 +212,7 @@ export function buildNarrativeFactCriticUserPrompt(
 - 是否让 stance=lies-about 的角色自白、说漏嘴、互相指认、默认承认，或让旁白把沉默/反应解释成答案；
 - 是否违反 characterPerformances、情绪禁演或玩家当前称呼权限。
 authorizedFacts 中的 text 就是本回合可直接呈现的授权内容；delivery=narration/object/environment 规定呈现渠道，不代表还要另找证据才能表达。不得把已授权 confirmation 本身判为越权，只检查正文是否超出 text 或用了错误渠道。
-逐项审查 NarrativeFields 中每个字段的每个实质命题，包括 maintext、每个 option、summary、hint、observation、investigate 与 action。reviewedFields 必须逐字列出全部字段名；每个非空字段至少列出一项 assertion，不能用顶层 approved 代替逐项审查。
+逐项审查 NarrativeFields 中每个字段的每个实质命题，包括 maintext、每个 option、summary、hint、observation、investigate 与 action。reviewedFields 必须逐字列出全部字段名；每个可见句子都必须由 assertion.quote 覆盖，同一行有多个句子时也要全部枚举，普通当下动作也不能省略。场景、音乐、镜头、效果、动作与认知等纯控制指令不算可见句子。不能用顶层 approved 代替逐项审查。
 supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quote 中逐字引用该来源 text 的非空片段。真实 sourceId 或真实但无关的来源片段不等于语义支持；你必须实际比较 proposition 与来源，不能用关键词、相同时间或来源存在本身推断蕴含关系。unsupported/contradicted 必须如实标记，即使顶层可能获准也不能省略。
 问题标为 question，明确带“可能/也许”等不确定性的假设标为 hypothesis，普通当下动作标为 ordinary-present；这三类通常不需要事实引用。否定性考勤、登录、删除、未出现、未到场等仍是事实命题，不能自动视为安全。本次拨号无人接听只说明本次没有接听，不能推成登录、阅读、删除或此前去向。
 不要因为措辞风格或没有复述全部事实而拒绝。返回带 assertionAudit 的 narrative FactReview JSON。

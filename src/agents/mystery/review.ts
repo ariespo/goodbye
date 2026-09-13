@@ -4,8 +4,10 @@ import { isRevealAtMost } from './reveal-level';
 import { isAllowedKnowledgeDiscovery } from '../../data/playerKnowledge';
 import {
   FIXED_BACKGROUND_FACTS,
+  FIXED_NPC_BACKGROUND_COGNITION,
   reviewBackgroundFactProposal,
   type BackgroundFactRecord,
+  type NpcFactCognition,
 } from '../../data/backgroundHistory';
 import type {
   DirectorPlan,
@@ -230,6 +232,19 @@ function expressibleBackgroundFactIds(turnContext?: Record<string, unknown>): Se
       ? [(item as { factId: string }).factId]
       : []
   )));
+}
+
+function selectedBackgroundCognition(turnContext?: Record<string, unknown>): NpcFactCognition[] {
+  const memoryContext = turnContext?.memoryContext;
+  if (!memoryContext || typeof memoryContext !== 'object') return [];
+  const cognition = (memoryContext as { backgroundCognition?: unknown }).backgroundCognition;
+  if (!Array.isArray(cognition)) return [];
+  return cognition.filter((item): item is NpcFactCognition => (
+    !!item && typeof item === 'object'
+    && typeof (item as NpcFactCognition).npcId === 'string'
+    && typeof (item as NpcFactCognition).factId === 'string'
+    && (item as NpcFactCognition).expressibleUnderCover === true
+  ));
 }
 
 export function reviewDirectorPlan(
@@ -607,6 +622,18 @@ export function buildWriterPacket(
     || expressibleBackgroundFactIds(turnContext).has(fact.factId)
     || (usedBackgroundIds.has(fact.factId) && fact.privacy !== 'investigative')
   ));
+  const authorizedBackgroundIds = new Set(authorizedBackgroundFacts.map(fact => fact.factId));
+  const backgroundSpeakerIds = new Map<string, Set<string>>();
+  for (const cognition of [...FIXED_NPC_BACKGROUND_COGNITION, ...selectedBackgroundCognition(turnContext)]) {
+    if (!cognition.expressibleUnderCover || !authorizedBackgroundIds.has(cognition.factId)) continue;
+    const speakers = backgroundSpeakerIds.get(cognition.factId) ?? new Set<string>();
+    speakers.add(cognition.npcId);
+    backgroundSpeakerIds.set(cognition.factId, speakers);
+  }
+  const authorizedBackgroundSpeakers = [...backgroundSpeakerIds].map(([factId, speakerIds]) => ({
+    factId,
+    speakerIds: [...speakerIds],
+  }));
   return {
     plan: safePlan,
     playerKnownFacts: brief.playerKnownFacts,
@@ -624,6 +651,7 @@ export function buildWriterPacket(
     }),
     authorizedKnowledgeEvents,
     authorizedBackgroundFacts,
+    authorizedBackgroundSpeakers,
     approvedBackgroundFactProposals: backgroundFactProposals,
     forbiddenInstructions: [
       '只能使用 authorizedFacts 中的事实及其给定措辞层级。',

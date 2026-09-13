@@ -4,6 +4,8 @@ import {
   reviewNarrativeAgainstWriterPacket,
   reviewNarrativeDeterministically,
 } from './narrative-review';
+import { buildAssertionSources, extractNarrativeFields } from './fact-assertion-review';
+import { FIXED_BACKGROUND_FACTS, reviewBackgroundFactProposal } from '../../data/backgroundHistory';
 import type { WriterPacket } from './types';
 
 const emptyAuthority = { authorizedFacts: [], playerKnownFacts: [] };
@@ -208,6 +210,78 @@ describe('deterministic final narrative review', () => {
     }, '陈慧慧|“以前文穗不是经常跟你一起来吗？”')).toEqual([]);
   });
 
+  it('allows the fixed supermarket history as a limited second-person paraphrase', () => {
+    const supermarketRegulars = FIXED_BACKGROUND_FACTS.find(
+      fact => fact.factId === 'bg:supermarket-regulars',
+    )!;
+    expect(reviewNarrativeDeterministically({
+      ...emptyAuthority,
+      authorizedBackgroundFacts: [supermarketRegulars],
+    }, '<maintext>对话|chen-huihui|calm|你以前经常来这里。</maintext>')).toEqual([]);
+  });
+
+  it('allows an approved soft-history proposal only after exact playable evidence activates its source', () => {
+    const proposal = {
+      proposalId: 'coffee', text: '玩家以前常来买无糖咖啡。',
+      characterIds: ['player', 'chen-huihui'], locationIds: ['supermarket'],
+      knowerIds: ['chen-huihui'], evidenceText: '你以前常来买无糖咖啡。',
+    };
+    const narrative = '<maintext>对话|chen-huihui|calm|你以前常来买无糖咖啡。</maintext>';
+    const packet = {
+      ...completeEmptyAuthority,
+      approvedBackgroundFactProposals: [proposal],
+    };
+
+    expect(reviewBackgroundFactProposal(proposal).approved).toBe(true);
+    expect(buildAssertionSources(packet, extractNarrativeFields(narrative)).filter(
+      source => source.id === 'background-proposal:coffee',
+    )).toHaveLength(1);
+    expect(reviewNarrativeDeterministically(packet, narrative)).toEqual([]);
+  });
+
+  it.each([
+    [
+      'absent proposal',
+      completeEmptyAuthority,
+      '<maintext>对话|chen-huihui|calm|你以前常来买无糖咖啡。</maintext>',
+    ],
+    [
+      'mismatched evidence',
+      {
+        ...completeEmptyAuthority,
+        approvedBackgroundFactProposals: [{
+          proposalId: 'coffee', text: '玩家以前常来买无糖咖啡。', characterIds: ['player', 'chen-huihui'],
+          locationIds: ['supermarket'], knowerIds: ['chen-huihui'], evidenceText: '你以前常来买无糖咖啡。',
+        }],
+      },
+      '<maintext>对话|chen-huihui|calm|你以前常来买咖啡。</maintext>',
+    ],
+    [
+      'option-only evidence',
+      {
+        ...completeEmptyAuthority,
+        approvedBackgroundFactProposals: [{
+          proposalId: 'coffee', text: '玩家以前常来买无糖咖啡。', characterIds: ['player', 'chen-huihui'],
+          locationIds: ['supermarket'], knowerIds: ['chen-huihui'], evidenceText: '你以前常来买无糖咖啡。',
+        }],
+      },
+      '<maintext>对话|旁白|calm|你看着柜台。</maintext><option>你以前常来买无糖咖啡。</option>',
+    ],
+    [
+      'nested observation evidence',
+      {
+        ...completeEmptyAuthority,
+        approvedBackgroundFactProposals: [{
+          proposalId: 'coffee', text: '玩家以前常来买无糖咖啡。', characterIds: ['player', 'chen-huihui'],
+          locationIds: ['supermarket'], knowerIds: ['chen-huihui'], evidenceText: '你以前常来买无糖咖啡。',
+        }],
+      },
+      '<maintext>对话|旁白|calm|你看着柜台。\n<observe>你以前常来买无糖咖啡。</observe></maintext>',
+    ],
+  ])('does not let %s activate soft history during the deterministic precheck', (_name, packet, narrative) => {
+    expect(reviewNarrativeDeterministically(packet, narrative)).not.toEqual([]);
+  });
+
   it('does not let an authorized confirmation pardon an unrelated critic violation', async () => {
     const packet = {
       authorizedFacts: [{
@@ -318,6 +392,26 @@ describe('deterministic final narrative review', () => {
     expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-assertion-audit' }));
   });
 
+  it('rejects a live audit that covers rain but omits a second material sentence', async () => {
+    const narrative = [
+      '<maintext>',
+      '对话|旁白|calm|雨还在下。',
+      '对话|旁白|calm|她没有到校。',
+      '</maintext>',
+    ].join('\n');
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority, narrative,
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [],
+        assertionAudit: ordinaryAudit('maintext', '雨还在下。', 'ordinary-present'),
+      }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-assertion-audit' }));
+  });
+
   it.each([
     ['ordinary handover', '<maintext>对话|店员|calm|她把一杯水递给你。</maintext>',
       ordinaryAudit('maintext', '她把一杯水递给你。', 'ordinary-present')],
@@ -416,12 +510,14 @@ describe('deterministic final narrative review', () => {
 
   it('requests the narrative assertion schema rather than the plan fact-review schema', async () => {
     let responseName = '';
+    let request = '';
     const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
     await reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority,
       narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
-      complete: async (_messages, options) => {
+      complete: async (messages, options) => {
+        request = messages[1]?.content ?? '';
         const format = options?.responseFormat;
         responseName = format?.type === 'json_schema' ? format.json_schema.name : '';
         return JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit });
@@ -429,5 +525,6 @@ describe('deterministic final narrative review', () => {
     });
 
     expect(responseName).toBe('narrative_fact_review');
+    expect(request).toContain('每个可见句子都必须由 assertion.quote 覆盖');
   });
 });

@@ -146,17 +146,27 @@ const NEGATED_HISTORY_RESULT = /(?:未|没有|并未|无法|不能)(?:提供|得
 
 export function reviewNarrativeDeterministically(
   packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>
-    & Partial<Pick<WriterPacket, 'authorizedBackgroundFacts' | 'authorizedKnowledgeEvents'>>
+    & Partial<Pick<WriterPacket,
+      'authorizedBackgroundFacts'
+      | 'authorizedKnowledgeEvents'
+      | 'authorizedActionOutcomes'
+      | 'approvedBackgroundFactProposals'>>
     & { continuityContext?: Record<string, unknown> },
   narrative: string,
 ): FactReviewViolation[] {
+  const fields = extractNarrativeFields(narrative);
+  const backgroundSourceTexts = buildAssertionSources(packet as WriterPacket, fields)
+    .filter(source => source.kind === 'background')
+    .map(source => source.text);
   // A question in another line must not pardon an asserted, invented answer.
-  return narrative.split(/[。！？\n]/).flatMap(sentence => reviewNarrativeSentence(packet, sentence));
+  return narrative.split(/[。！？\n]/)
+    .flatMap(sentence => reviewNarrativeSentence(packet, sentence, backgroundSourceTexts));
 }
 
 function reviewNarrativeSentence(
   packet: Parameters<typeof reviewNarrativeDeterministically>[0],
   narrative: string,
+  backgroundSourceTexts: string[],
 ): FactReviewViolation[] {
   const evidenceMatch = narrative.match(UNAUTHORIZED_EVIDENCE_DETAIL);
   const publicContinuity = packet.continuityContext?.publicContinuity;
@@ -166,7 +176,7 @@ function reviewNarrativeSentence(
   const authorizedText = [
     ...packet.authorizedFacts.map(fact => fact.text),
     ...packet.playerKnownFacts.map(fact => fact.text),
-    ...(packet.authorizedBackgroundFacts ?? []).map(fact => fact.text),
+    ...backgroundSourceTexts,
     ...(packet.authorizedKnowledgeEvents ?? []).map(event => event.evidence),
     ...publicTexts,
   ].join('\n');
@@ -177,10 +187,20 @@ function reviewNarrativeSentence(
     }];
   }
   const habitMatch = narrative.match(HISTORICAL_HABIT);
-  const habitAuthorized = (packet.authorizedBackgroundFacts ?? []).some(fact => {
-    const sameSubject = ['文穗', '女孩', '她'].some(subject => narrative.includes(subject) && fact.text.includes(subject));
-    const sameHabit = [/(?:来|同行|一起)/, /(?:买|结账)/, /(?:照顾|关心)/, /(?:打招呼|认识|见)/]
-      .some(pattern => pattern.test(narrative) && pattern.test(fact.text));
+  const habitAuthorized = backgroundSourceTexts.some(sourceText => {
+    const sameSubject = [
+      ['文穗', '文穗'], ['女孩', '女孩'], ['她', '文穗'], ['你', '玩家'], ['玩家', '玩家'],
+    ].some(([narrativeSubject, sourceSubject]) => (
+      narrative.includes(narrativeSubject) && sourceText.includes(sourceSubject)
+    ));
+    const sameHabit = [
+      [/(?:来|去|同行|一起)/, /(?:来|去|同行|一起)/],
+      [/(?:买|结账)/, /(?:买|结账)/],
+      [/(?:照顾|关心)/, /(?:照顾|关心)/],
+      [/(?:打招呼|认识|见)/, /(?:打招呼|认识|见)/],
+    ].some(([narrativePattern, sourcePattern]) => (
+      narrativePattern.test(narrative) && sourcePattern.test(sourceText)
+    ));
     return sameSubject && sameHabit;
   });
   if (habitMatch && !habitAuthorized) {

@@ -7,6 +7,10 @@ import {
   type AssertionSource,
 } from './fact-assertion-review';
 import type { WriterPacket } from './types';
+import { buildMysteryBrief } from './brief';
+import { buildWriterPacket } from './review';
+import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
+import type { DirectorPlan, TruthContext } from './types';
 
 const deliveryFields = { maintext: '店员说清晨六点半前后有白色配送车送面包牛奶。' };
 const publicMessageSources: AssertionSource[] = [{
@@ -140,6 +144,78 @@ describe('validateAssertionAudit', () => {
     expect(validateAssertionAudit(audit as AssertionAudit, publicMessageSources, fields).approved).toBe(false);
   });
 
+  it.each([
+    ['a later line', '对话|旁白|calm|雨还在下。\n对话|旁白|calm|她没有到校。'],
+    ['a later sentence on the same line', '对话|旁白|calm|雨还在下。她没有到校。'],
+  ])('rejects an audit that omits material prose from %s', (_name, maintext) => {
+    const result = validateAssertionAudit({
+      reviewedFields: ['maintext'],
+      assertions: [{
+        field: 'maintext', quote: '雨还在下。', proposition: '雨还在下', status: 'ordinary-present',
+        citations: [], reason: '普通当下环境。',
+      }],
+    }, [], { maintext });
+
+    expect(result.approved).toBe(false);
+    expect(result.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-assertion-audit' }));
+  });
+
+  it('accepts exact quote spans whose union covers all visible prose', () => {
+    const fields = { maintext: '对话|旁白|calm|雨还在下。\n对话|旁白|calm|她没有到校。' };
+    const audit: AssertionAudit = {
+      reviewedFields: ['maintext'],
+      assertions: [
+        {
+          field: 'maintext', quote: '雨还在下。', proposition: '雨还在下', status: 'ordinary-present',
+          citations: [], reason: '普通当下环境。',
+        },
+        {
+          field: 'maintext', quote: '她没有到校。', proposition: '她没有到校', status: 'unsupported',
+          citations: [], reason: '没有考勤来源。',
+        },
+      ],
+    };
+
+    const result = validateAssertionAudit(audit, [], fields);
+    expect(result.violations).not.toContainEqual(expect.objectContaining({ code: 'incomplete-assertion-audit' }));
+    expect(result.violations).toContainEqual(expect.objectContaining({ code: 'unsupported-assertion' }));
+  });
+
+  it('ignores protocol prefixes, control-only lines, punctuation and whitespace for coverage', () => {
+    const fields = {
+      maintext: [
+        '场景|home', '音乐|rain', '镜头|close', '效果|flash', '动作|player|idle', '认知|meet:clerk',
+        '对话|旁白|calm|“雨还在下。”',
+      ].join('\n'),
+    };
+    const audit: AssertionAudit = {
+      reviewedFields: ['maintext'],
+      assertions: [{
+        field: 'maintext', quote: '雨还在下', proposition: '雨还在下', status: 'ordinary-present',
+        citations: [], reason: '普通当下环境。',
+      }],
+    };
+
+    expect(validateAssertionAudit(audit, [], fields).approved).toBe(true);
+  });
+
+  it('ignores a real item directive but audits an unrecognized pipe suffix that remains visible', () => {
+    const audit: AssertionAudit = {
+      reviewedFields: ['maintext'],
+      assertions: [{
+        field: 'maintext', quote: '雨还在下。', proposition: '雨还在下', status: 'ordinary-present',
+        citations: [], reason: '普通当下环境。',
+      }],
+    };
+
+    expect(validateAssertionAudit(audit, [], {
+      maintext: '对话|旁白|calm|雨还在下。|opening-mug',
+    }).approved).toBe(true);
+    expect(validateAssertionAudit(audit, [], {
+      maintext: '对话|旁白|calm|雨还在下。|她没有到校。',
+    }).approved).toBe(false);
+  });
+
   it('rejects a dialogue fact delivered by a different speaker', () => {
     const fields = { maintext: '对话|old-man|calm|文穗今早买过牛奶。' };
     const sources: AssertionSource[] = [{
@@ -256,5 +332,73 @@ describe('buildAssertionSources', () => {
       requiredEvidenceText: '你以前总买无糖咖啡。',
       speakerIds: ['npc-a'],
     }));
+  });
+
+  it('uses projected NPC cognition as background speakers instead of fact subjects', () => {
+    const family = {
+      factId: 'bg:player-fumi-family',
+      text: '玩家与文穗长期共同生活；两人并非血亲，却将彼此视作家人，并且非常在乎对方。',
+      characterIds: ['player', 'fumi'], locationIds: ['home'], level: 'fixed', privacy: 'personal',
+      timeScope: 'pre-game', source: 'author', createdTurn: 0,
+    };
+    const cognitionPacket = {
+      ...packet,
+      authorizedBackgroundFacts: [family],
+      authorizedBackgroundSpeakers: [{ factId: family.factId, speakerIds: ['touko'] }],
+    } as unknown as WriterPacket;
+    const fields = { maintext: '对话|touko|calm|你和文穗把彼此当作家人。' };
+    const source = buildAssertionSources(cognitionPacket, fields)
+      .find(item => item.id === 'background:bg:player-fumi-family')!;
+
+    expect(source.speakerIds).toEqual(['touko']);
+    expect(validateAssertionAudit({
+      reviewedFields: ['maintext'],
+      assertions: [{
+        field: 'maintext', quote: '你和文穗把彼此当作家人。', proposition: '玩家与文穗视彼此为家人',
+        status: 'supported', citations: [{ sourceId: source.id, quote: '将彼此视作家人' }],
+        reason: '获准背景认知支持。',
+      }],
+    }, [source], fields).approved).toBe(true);
+
+    expect(validateAssertionAudit({
+      reviewedFields: ['maintext'],
+      assertions: [{
+        field: 'maintext', quote: '你和文穗把彼此当作家人。', proposition: '玩家与文穗视彼此为家人',
+        status: 'supported', citations: [{ sourceId: source.id, quote: '将彼此视作家人' }],
+        reason: '背景事实的主体不能自动成为讲述者。',
+      }],
+    }, [source], { maintext: '对话|player|calm|你和文穗把彼此当作家人。' }).approved).toBe(false);
+  });
+
+  it('builds the speaker projection from expressible NPC cognition', () => {
+    const family = {
+      factId: 'bg:player-fumi-family',
+      text: '玩家与文穗长期共同生活；两人并非血亲，却将彼此视作家人，并且非常在乎对方。',
+      characterIds: ['player', 'fumi'], locationIds: ['home'], level: 'fixed' as const, privacy: 'personal' as const,
+      timeScope: 'pre-game' as const, source: 'author' as const, createdTurn: 0,
+    };
+    const context: TruthContext = {
+      cycleCount: 2, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [],
+      playerKnowledge: {}, suspicion: {}, activeNpcIds: ['touko'],
+    };
+    const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context);
+    const plan: DirectorPlan = {
+      turnGoal: '谈及家人', tone: '平静',
+      beats: [{
+        id: 'family', purpose: '谈及长期关系', description: '东子提到玩家与文穗长期把彼此视为家人。',
+        speakerIds: ['touko'], sourceBackgroundFactIds: [family.factId],
+      }],
+      revelations: [], optionIntents: [], assetRequests: [],
+    };
+    const writerPacket = buildWriterPacket(plan, brief, {
+      memoryContext: { selectedIds: [family.factId], backgroundFacts: [family] },
+    });
+
+    expect(writerPacket.authorizedBackgroundSpeakers).toContainEqual({
+      factId: family.factId,
+      speakerIds: expect.arrayContaining(['fumi', 'touko']),
+    });
+    expect(writerPacket.authorizedBackgroundSpeakers?.find(item => item.factId === family.factId)?.speakerIds)
+      .not.toContain('player');
   });
 });

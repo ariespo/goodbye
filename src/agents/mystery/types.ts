@@ -275,7 +275,9 @@ export interface WriterPacket {
   authorizedFacts: WriterFact[];
   authorizedKnowledgeEvents: Array<{ eventId: string; evidence: string }>;
   authorizedActionOutcomes?: Array<{ id: string; text: string; speakerIds?: string[] }>;
+  resolvedAction?: import('../../engine/action-resolution').ResolvedActionOutcome;
   authorizedBackgroundFacts: BackgroundFactRecord[];
+  authorizedBackgroundSpeakers?: Array<{ factId: string; speakerIds: string[] }>;
   approvedBackgroundFactProposals: BackgroundFactProposal[];
   forbiddenInstructions: string[];
   playerPresentation: PlayerKnowledgeBrief;

@@ -1,4 +1,5 @@
 import { reviewBackgroundFactProposal } from '../../data/backgroundHistory';
+import { getItemByReference } from '../../data/itemAssets';
 import type { FactReview, RevealLevel, WriterPacket } from './types';
 
 export interface AssertionSource {
@@ -109,6 +110,9 @@ export function buildAssertionSources(
   const continuity = packet.continuityContext && typeof packet.continuityContext === 'object'
     ? packet.continuityContext
     : {};
+  const backgroundSpeakers = new Map(
+    (packet.authorizedBackgroundSpeakers ?? []).map(item => [item.factId, item.speakerIds] as const),
+  );
   const sources: AssertionSource[] = [
     ...(packet.authorizedFacts ?? []).map(fact => ({
       id: `fact:${fact.id}:${fact.level}`,
@@ -137,7 +141,7 @@ export function buildAssertionSources(
       kind: 'background' as const,
       text: fact.text,
       factId: fact.factId,
-      speakerIds: [...fact.characterIds],
+      speakerIds: [...(backgroundSpeakers.get(fact.factId) ?? [])],
     })),
     ...(packet.authorizedKnowledgeEvents ?? []).map(event => ({
       id: `accepted-event:${event.eventId}`,
@@ -182,14 +186,85 @@ function isNarrator(speaker: string): boolean {
   return /^(?:旁白|narrator)$/i.test(speaker);
 }
 
+const CONTROL_ONLY_LINE_TYPES = new Set([
+  '场景', 'scene', '音乐', 'bgm', 'music', '镜头', 'camera', '效果', 'effect',
+  '动作', 'animation', '认知', 'knowledge', '身份确认', 'identity-prompt',
+]);
+
+function isCoveragePunctuation(value: string): boolean {
+  return /[\s\p{P}]/u.test(value);
+}
+
+function markMaterialRange(mask: boolean[], text: string, start: number, end: number): void {
+  for (let index = start; index < end; index += 1) {
+    if (!isCoveragePunctuation(text[index] ?? '')) mask[index] = true;
+  }
+}
+
+function materialCoverageMask(field: string, text: string): boolean[] {
+  const mask = Array.from({ length: text.length }, () => false);
+  if (field !== 'maintext') {
+    markMaterialRange(mask, text, 0, text.length);
+    return mask;
+  }
+
+  for (const match of text.matchAll(/[^\r\n]+/g)) {
+    const rawLine = match[0];
+    const lineStart = match.index ?? 0;
+    const leading = rawLine.length - rawLine.trimStart().length;
+    const trailing = rawLine.length - rawLine.trimEnd().length;
+    const start = lineStart + leading;
+    const end = lineStart + rawLine.length - trailing;
+    const line = text.slice(start, end);
+    const head = line.split(/[|｜]/, 1)[0]?.trim().toLowerCase() ?? '';
+    if (CONTROL_ONLY_LINE_TYPES.has(head)) continue;
+    if (['对话', 'dialog', 'dialogue'].includes(head)) {
+      const separators = [...line.matchAll(/[|｜]/g)].map(item => item.index ?? -1);
+      if (separators.length < 3) continue;
+      const contentStart = start + separators[2] + 1;
+      const itemCandidate = separators.length >= 4
+        ? line.slice(separators[separators.length - 1] + 1).trim()
+        : '';
+      const contentEnd = itemCandidate && getItemByReference(itemCandidate)
+        ? start + separators[separators.length - 1]
+        : end;
+      markMaterialRange(mask, text, contentStart, contentEnd);
+      continue;
+    }
+    markMaterialRange(mask, text, start, end);
+  }
+  return mask;
+}
+
+function assertionCoverageMask(fieldText: string, assertions: NarrativeAssertion[]): boolean[] {
+  const mask = Array.from({ length: fieldText.length }, () => false);
+  for (const assertion of assertions) {
+    const quote = typeof assertion?.quote === 'string' ? assertion.quote.trim() : '';
+    if (!quote) continue;
+    let offset = 0;
+    while (offset <= fieldText.length - quote.length) {
+      const index = fieldText.indexOf(quote, offset);
+      if (index < 0) break;
+      for (let cursor = index; cursor < index + quote.length; cursor += 1) mask[cursor] = true;
+      offset = index + Math.max(1, quote.length);
+    }
+  }
+  return mask;
+}
+
 export function validateAssertionAudit(
   audit: AssertionAudit,
   sources: AssertionSource[],
   narrativeFields: Record<string, string>,
 ): FactReview {
   const violations: FactReview['violations'] = [];
+  const materialMasks = new Map(
+    Object.entries(narrativeFields).map(([field, value]) => [field, materialCoverageMask(field, value)]),
+  );
   const materialFields = Object.entries(narrativeFields)
-    .filter(([, value]) => typeof value === 'string' && value.trim())
+    .filter(([field, value]) => typeof value === 'string'
+      && value.trim()
+      && materialMasks.get(field)?.some(Boolean))
     .map(([field]) => field);
   const reviewedFields = Array.isArray(audit?.reviewedFields)
     ? audit.reviewedFields.filter((field): field is string => typeof field === 'string' && !!field.trim())
@@ -211,10 +286,20 @@ export function validateAssertionAudit(
   }
 
   for (const field of materialFields) {
-    if (reviewed.has(field) && !assertions.some(assertion => assertion?.field === field)) {
+    const fieldAssertions = assertions.filter(assertion => assertion?.field === field);
+    if (reviewed.has(field) && fieldAssertions.length === 0) {
       violations.push({
         code: 'incomplete-assertion-audit',
         message: `已声明审查字段 ${field}，但没有列出该字段的任何具体断言。`,
+      });
+      continue;
+    }
+    const required = materialMasks.get(field) ?? [];
+    const covered = assertionCoverageMask(narrativeFields[field] ?? '', fieldAssertions);
+    if (required.some((isRequired, index) => isRequired && !covered[index])) {
+      violations.push({
+        code: 'incomplete-assertion-audit',
+        message: `字段 ${field} 的 assertion.quote 合集没有覆盖全部可播放文字。`,
       });
     }
   }
