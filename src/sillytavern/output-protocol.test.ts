@@ -89,6 +89,18 @@ B</option>
       .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'ESCAPED_INSTRUCTION_NEWLINE' })]));
   });
 
+  it('rejects literal escaped newlines embedded in ordinary dialogue text', () => {
+    const maintext = '对话|旁白|calm|雨没有停。\\n手机也没有响。';
+    expect(protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'ESCAPED_DIALOGUE_NEWLINE' })]));
+  });
+
+  it('keeps escaped JSON and Windows path backslashes valid in dialogue', () => {
+    const maintext = String.raw`对话|旁白|calm|路径 C:\\new\\file.json`;
+    expect(protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext }))
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'ESCAPED_DIALOGUE_NEWLINE' })]));
+  });
+
   it('repairs a missing maintext close only when complete option and sum tags prove the boundary', () => {
     const malformed = `<maintext>\n场景|room.jpg\n对话|少女|calm|你好。\n<option>A\nB</option>\n<sum>完成</sum>`;
     const repaired = repairRecoverableOutput(malformed);

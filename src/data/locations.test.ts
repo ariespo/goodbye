@@ -7,6 +7,7 @@ import {
   getLocationBackground,
   getLocationById,
   normalizeLocationId,
+  resolveRegisteredLocation,
 } from './locations';
 
 describe('location catalog', () => {
@@ -18,6 +19,16 @@ describe('location catalog', () => {
   it('falls back to the player apartment for an unknown saved location', () => {
     expect(normalizeLocationId(undefined)).toBe('home');
     expect(normalizeLocationId('missing-location')).toBe('home');
+  });
+
+  it('resolves registered destinations and rejects unknown ids without moving the anchor', () => {
+    expect(resolveRegisteredLocation('supermarket', 'school')).toEqual({ locationId: 'supermarket', accepted: true });
+    expect(resolveRegisteredLocation('police_station', 'school')).toEqual({ locationId: 'school', accepted: false });
+    expect(resolveRegisteredLocation(42, 'school')).toEqual({ locationId: 'school', accepted: false });
+  });
+
+  it('anchors the transient street scene to the current registered location', () => {
+    expect(resolveRegisteredLocation('street', 'school')).toEqual({ locationId: 'school', sceneId: 'street', accepted: true });
   });
 
   it('does not charge travel within the current location', () => {

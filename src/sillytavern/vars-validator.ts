@@ -1,5 +1,6 @@
 import { getVariablePath } from './vars-merger';
 import type { DynamicRecord } from './types';
+import { resolveRegisteredLocation } from '../data/locations';
 
 /** 数值字段规则: [最小值, 最大值, 单回合最大变化幅度] */
 type NumericRule = { min: number; max: number; maxDelta: number; noDecrease?: boolean };
@@ -125,6 +126,18 @@ export function sanitizeVarsPatch(
         continue;
       }
       vars[path] = value.filter(item => typeof item === 'string');
+      continue;
+    }
+    if (path === 'location') {
+      const currentId = typeof getVariablePath(current, 'location') === 'string'
+        ? String(getVariablePath(current, 'location'))
+        : 'home';
+      const resolved = resolveRegisteredLocation(value, currentId);
+      if (!resolved.accepted) {
+        rejected.push({ path, reason: '位置不在已注册地点中' });
+        continue;
+      }
+      vars[path] = resolved.locationId;
       continue;
     }
     if (FREE_KEYS.has(path)) {

@@ -72,4 +72,11 @@ describe('sanitizeVarsPatch', () => {
     );
     expect(result.rejected).toHaveLength(0);
   });
+
+  it('rejects unknown location mutations while accepting registered and street locations', () => {
+    const current = { ...createDefaultVariables(), location: 'school' };
+    expect(sanitizeVarsPatch({ location: 'police_station' }, current).vars.location).toBeUndefined();
+    expect(sanitizeVarsPatch({ location: 'supermarket' }, current).vars.location).toBe('supermarket');
+    expect(sanitizeVarsPatch({ location: 'street' }, current).vars.location).toBe('school');
+  });
 });

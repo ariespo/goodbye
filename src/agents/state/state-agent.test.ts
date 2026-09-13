@@ -4,6 +4,30 @@ import { projectWritableState, validateStateAgentResponse } from './state-agent'
 import { buildStateEvidenceAuthority } from './state-evidence';
 
 describe('validateStateAgentResponse', () => {
+  it('rejects unknown location mutations while preserving the registered anchor', () => {
+    const current = { ...createDefaultVariables(), location: 'school' };
+    const result = validateStateAgentResponse({
+      patch: { location: 'police_station' },
+      evidence: [{ path: 'location', quote: '你前往派出所' }],
+    }, current, '你前往派出所。');
+    expect(result.vars.location).toBeUndefined();
+    expect(result.rejected.some(item => item.path === 'location')).toBe(true);
+  });
+
+  it('accepts registered destinations and anchors street scenes to the current location', () => {
+    const current = { ...createDefaultVariables(), location: 'school' };
+    const destination = validateStateAgentResponse({
+      patch: { location: 'supermarket' },
+      evidence: [{ path: 'location', quote: '你前往便利店' }],
+    }, current, '你前往便利店。');
+    expect(destination.vars.location).toBe('supermarket');
+    const street = validateStateAgentResponse({
+      patch: { location: 'street' },
+      evidence: [{ path: 'location', quote: '你走到街上' }],
+    }, current, '你走到街上。');
+    expect(street.vars.location).toBe('school');
+  });
+
   it('does not award suspicion for a player guess without program authority', () => {
     const result = validateStateAgentResponse({
       patch: { suspicion: { 'old-man': 10 } },

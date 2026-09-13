@@ -93,4 +93,28 @@ describe('settleGameTransaction', () => {
       .toBeGreaterThan(input.gameStatus.time.getTime());
     expect(settleGameTransaction(input).gameStatus.time.getTime()).toBe(input.gameStatus.time.getTime());
   });
+
+  it('preserves the current registered location when a caller proposes an unknown destination', () => {
+    const result = settleGameTransaction({
+      variables: { ...createDefaultVariables(), location: 'school', time: '2024-09-09T10:00:00' },
+      gameStatus: status({ time: new Date('2024-09-09T10:00:00') }),
+      variablePatch: { location: 'police_station' },
+    });
+    expect(result.variables.location).toBe('school');
+  });
+
+  it('accepts registered destinations and anchors street scenes to the current map location', () => {
+    const moved = settleGameTransaction({
+      variables: { ...createDefaultVariables(), location: 'school', time: '2024-09-09T10:00:00' },
+      gameStatus: status({ time: new Date('2024-09-09T10:00:00') }),
+      variablePatch: { location: 'supermarket' },
+    });
+    expect(moved.variables.location).toBe('supermarket');
+    const street = settleGameTransaction({
+      variables: { ...createDefaultVariables(), location: 'school', time: '2024-09-09T10:00:00' },
+      gameStatus: status({ time: new Date('2024-09-09T10:00:00') }),
+      variablePatch: { location: 'street' },
+    });
+    expect(street.variables.location).toBe('school');
+  });
 });

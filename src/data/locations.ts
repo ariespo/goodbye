@@ -33,6 +33,12 @@ export interface TravelEstimate {
 
 export const DEFAULT_LOCATION_ID = 'home';
 
+export interface RegisteredLocationResolution {
+  locationId: string;
+  sceneId?: 'street';
+  accepted: boolean;
+}
+
 export const gameLocations: GameLocation[] = [
   {
     id: 'home',
@@ -161,6 +167,22 @@ export function getLocationById(id: unknown): GameLocation | undefined {
 
 export function normalizeLocationId(id: unknown): string {
   return getLocationById(id)?.id ?? DEFAULT_LOCATION_ID;
+}
+
+/**
+ * Resolve a proposed location against the registered story map. The transient
+ * `street` scene is anchored to the caller's current registered map location.
+ * Unknown proposals are rejected while retaining that anchor.
+ */
+export function resolveRegisteredLocation(
+  id: unknown,
+  currentId: string,
+): RegisteredLocationResolution {
+  const current = getLocationById(currentId)?.id ?? DEFAULT_LOCATION_ID;
+  if (id === 'street') return { locationId: current, sceneId: 'street', accepted: true };
+  const registered = getLocationById(id);
+  if (registered) return { locationId: registered.id, accepted: true };
+  return { locationId: current, accepted: false };
 }
 
 export function estimateTravel(fromId: string, toId: string): TravelEstimate | null {

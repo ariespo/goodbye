@@ -69,8 +69,17 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
 
   function validate(rawText: string, parsed: ParsedContent): ValidationError[] {
     const errors: ValidationError[] = [];
-    if (/\\(?:r\\n|n)(?:对话|场景|音乐|认知|dialogue|scene)\|/u.test(parsed.maintext ?? '')) {
+    if (/(^|[^\\])\\(?:r\\n|n)(?:对话|场景|音乐|认知|dialogue|scene)\|/u.test(parsed.maintext ?? '')) {
       errors.push({ code: 'ESCAPED_INSTRUCTION_NEWLINE', message: '指令之间必须使用真实换行，不能把字面量\\n和下一条指令写进台词。', tag: 'maintext' });
+    }
+    const dialogueEscape = (parsed.maintext ?? '').split(/\r?\n/).some(line => {
+      const type = line.split('|')[0]?.trim().toLowerCase();
+      if (!['对话', 'dialog', 'dialogue'].includes(type)) return false;
+      const text = line.split('|').slice(3).join('|');
+      return /(^|[^\\])\\(?:n|r)(?![A-Za-z0-9_])/u.test(text);
+    });
+    if (dialogueEscape) {
+      errors.push({ code: 'ESCAPED_DIALOGUE_NEWLINE', message: '对话中包含未渲染的字面量\\n或\\r，请使用真实换行。', tag: 'maintext' });
     }
 
     // 1. 必填标签检查

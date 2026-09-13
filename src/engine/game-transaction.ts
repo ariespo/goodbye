@@ -5,6 +5,7 @@ import { checkCycleFailure, type CycleResetReason } from '../utils/cycleLoop';
 import { advanceClock, clampTimeCost, laterTime } from './game-clock';
 import { checkScheduledEvents } from './scheduled-events';
 import { hasDeliveredDeathNews } from './narrative-contract';
+import { getLocationById, resolveRegisteredLocation } from '../data/locations';
 
 export interface GameResourceCosts {
   timeMinutes?: number;
@@ -69,7 +70,21 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
   const requestedTime = typeof patch.time === 'string' ? patch.time : null;
   delete patch.time;
 
+  // Location is a registered-map ingress. Preserve a valid current anchor when
+  // callers propose an unknown destination; old invalid saves recover to home.
+  const currentLocation = typeof input.variables.location === 'string'
+    ? input.variables.location
+    : 'home';
+  const locationResolution = resolveRegisteredLocation(patch.location, currentLocation);
+  if (patch.location !== undefined) {
+    if (locationResolution.accepted) patch.location = locationResolution.locationId;
+    else delete patch.location;
+  }
+
   let variables = mergeVariables(input.variables, patch);
+  if (!getLocationById(variables.location)) {
+    variables = { ...variables, location: resolveRegisteredLocation(undefined, currentLocation).locationId };
+  }
   const staminaBeforeCost = finiteStatus(variables.stamina, input.gameStatus.stamina, 0, 120);
   const sanityBeforeCost = finiteStatus(variables.sanity, input.gameStatus.sanity, 0, 100);
   const stamina = Math.max(0, staminaBeforeCost - finiteNonNegative(input.costs?.stamina));
