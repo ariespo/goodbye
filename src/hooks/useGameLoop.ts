@@ -565,7 +565,16 @@ export function useGameLoop() {
           }, {
             api: resolveAnalysisApi(settings),
             preset: activePreset,
-          }).then(checklist => {
+          }).then(async checklist => {
+            const tags = serializeChecklistToTags(checklist, existing);
+            if (!tags.trim() || checklistTokenRef.current !== token) return;
+            const checklistReview = await reviewNarrativeAgainstWriterPacket({
+              api: resolveAnalysisApi(settings),
+              preset: activePreset,
+              packet: preparedTurn.writerPacket,
+              narrative: tags,
+            });
+            if (!checklistReview.approved) return;
             // 竞态防护：下一回合/重roll/切会话已发生则丢弃
             if (checklistTokenRef.current !== token) return;
             const state = useGameStore.getState();
@@ -581,11 +590,20 @@ export function useGameLoop() {
             }
 
             // 回写标签到 </maintext> 前，重载时 rebuildSceneFromChat 才能反解还原
-            const tags = serializeChecklistToTags(checklist, existing);
             const updatedContent = insertTagsIntoMaintext(lastAssistant.content, tags);
             if (updatedContent !== lastAssistant.content) {
               const updatedMessages = chat.messages.map(m => (m.id === token ? { ...m, content: updatedContent } : m));
-              void persistActiveChat({ messages: updatedMessages });
+              await persistActiveChat({ messages: updatedMessages }, {
+                assertCurrent: () => {
+                  const latest = useGameStore.getState();
+                  const latestChat = latest.tavern.chats.find(item => item.id === latest.tavern.activeChatId);
+                  const latestAssistant = latestChat
+                    ? [...latestChat.messages].reverse().find(message => message.role === 'assistant') : null;
+                  if (checklistTokenRef.current !== token || latestChat?.id !== chat.id || latestAssistant?.id !== token) {
+                    throw new DOMException('场景清单已失效', 'AbortError');
+                  }
+                },
+              });
             }
           }).catch(error => {
             console.warn('[scene-list] 场景清单补全失败:', error);
