@@ -141,6 +141,20 @@ B</option>
     }
   });
 
+  it('ends Windows path masking at Chinese closing quotes', () => {
+    const cases = [
+      { text: String.raw`他说“C:\r.txt”\nNPC随后离开。`, valid: false },
+      { text: String.raw`他说‘C:\new\file.json’\rNPC随后离开。`, valid: false },
+      { text: String.raw`他说“C:\r.txt”后离开。`, valid: true },
+      { text: String.raw`他说‘C:\new\file.json’后离开。`, valid: true },
+    ];
+    for (const { text, valid } of cases) {
+      const maintext = `对话|旁白|calm|${text}`;
+      const errors = protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext });
+      expect(errors.some(error => error.code === 'ESCAPED_DIALOGUE_NEWLINE')).toBe(!valid);
+    }
+  });
+
   it('repairs a missing maintext close only when complete option and sum tags prove the boundary', () => {
     const malformed = `<maintext>\n场景|room.jpg\n对话|少女|calm|你好。\n<option>A\nB</option>\n<sum>完成</sum>`;
     const repaired = repairRecoverableOutput(malformed);
