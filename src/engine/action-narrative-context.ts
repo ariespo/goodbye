@@ -2,6 +2,7 @@ import type { NarrativeSceneContract } from '../agents/mystery/types';
 import { getCanonicalBackgroundId } from '../data/backgroundAssets';
 import { addMinutes, estimateTravel, getLocationBackground, getLocationById } from '../data/locations';
 import type { Scene } from '../sillytavern/types';
+import type { ResolvedActionOutcome } from './action-resolution';
 
 export interface ActionNarrativeContext {
   locationId: string;
@@ -237,6 +238,48 @@ ${identityFlow}
     },
     directive,
     sceneContract,
+  };
+}
+
+/**
+ * Turn a parsed proposal into a Writer-safe scene contract only after the
+ * immutable action outcome proves that the destination was reached.
+ */
+export function resolveExecutedActionNarrativeContext(
+  proposed: ActionNarrativeContext | null,
+  resolution: ResolvedActionOutcome,
+): ActionNarrativeContext | null {
+  if (!proposed || resolution.endLocationId !== proposed.locationId) return null;
+  const location = getLocationById(proposed.locationId);
+  const arrivalTime = new Date(resolution.endTime);
+  if (!location || Number.isNaN(arrivalTime.getTime())) return null;
+
+  const background = getLocationBackground(location, arrivalTime);
+  const travelledToDestination = resolution.startLocationId !== proposed.locationId;
+  const enRouteNpcIds = travelledToDestination ? [...proposed.enRouteNpcIds] : [];
+  const directive = background === proposed.background
+    ? proposed.directive
+    : proposed.directive.split(proposed.background).join(background);
+  const staminaSpent = Math.max(
+    0,
+    resolution.resources.before.stamina - resolution.resources.after.stamina,
+  );
+
+  return {
+    ...proposed,
+    background,
+    enRouteNpcIds,
+    costs: {
+      timeMinutes: resolution.executedMinutes,
+      ...(staminaSpent > 0 ? { stamina: staminaSpent } : {}),
+    },
+    directive,
+    sceneContract: {
+      ...proposed.sceneContract,
+      destinationBackground: background,
+      requiredEnRouteNpcIds: enRouteNpcIds,
+      directive,
+    },
   };
 }
 

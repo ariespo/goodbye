@@ -3,8 +3,10 @@ import type { Scene } from '../sillytavern/types';
 import {
   actionNarrativeContextError,
   applyActionNarrativeKnowledgeFallback,
+  resolveExecutedActionNarrativeContext,
   resolveActionNarrativeContext,
 } from './action-narrative-context';
+import { resolveAction } from './action-resolution';
 
 const morning = new Date('2025-09-09T08:00:00');
 
@@ -197,5 +199,59 @@ describe('action narrative context semantic planning', () => {
     expect(resolveActionNarrativeContext('便利店的小票上写了什么？', morning, 5)).toBeNull();
     expect(resolveActionNarrativeContext('我不去便利店，先留在这里', morning, 5)).toBeNull();
     expect(resolveActionNarrativeContext('检查自己的身体状况', morning, 5)).toBeNull();
+  });
+});
+
+describe('executed action narrative context', () => {
+  it('does not construct a destination scene while travel is still incomplete', () => {
+    const proposed = resolveActionNarrativeContext('前往便利店询问店员', morning, 0, {
+      currentLocationId: 'home', enRouteEncounterRoll: 0.1,
+    });
+    const resolution = resolveAction({
+      id: 'interrupted-trip', cycleCount: 1, startTime: '2024-09-09T08:00:00',
+      currentLocationId: 'home', stamina: 100, sanity: 70,
+      steps: [{ id: 'ask', kind: 'inquiry', scope: 'normal', locationId: 'supermarket', completionSourceIds: [] }],
+      nextBoundary: { id: 'appointment', at: '2024-09-09T08:08:00' },
+    });
+
+    expect(resolution.endLocationId).toBe('home');
+    expect(resolveExecutedActionNarrativeContext(proposed, resolution)).toBeNull();
+  });
+
+  it('rebuilds the proposed scene from the real arrival clock and charged resources', () => {
+    const proposed = resolveActionNarrativeContext('前往便利店询问店员', morning, 0, {
+      currentLocationId: 'home', enRouteEncounterRoll: 0.1,
+    });
+    const resolution = resolveAction({
+      id: 'arrived-trip', cycleCount: 1, startTime: '2024-09-09T08:00:00',
+      currentLocationId: 'home', stamina: 100, sanity: 70,
+      steps: [{ id: 'ask', kind: 'inquiry', scope: 'normal', locationId: 'supermarket', completionSourceIds: [] }],
+      nextBoundary: { id: 'appointment', at: '2024-09-09T08:20:00' },
+    });
+
+    const executed = resolveExecutedActionNarrativeContext(proposed, resolution);
+    expect(executed).toMatchObject({
+      locationId: 'supermarket',
+      background: 'supermarket-day',
+      costs: { timeMinutes: 20, stamina: 6 },
+      enRouteNpcIds: ['detective-a'],
+    });
+    expect(executed?.sceneContract.destinationBackground).toBe('supermarket-day');
+    expect(executed?.sceneContract.requiredEnRouteNpcIds).toEqual(['detective-a']);
+  });
+
+  it('uses the executed end time when selecting the destination background', () => {
+    const proposed = resolveActionNarrativeContext('回到家里休息一段时间', new Date('2024-09-09T17:50:00'), 0, {
+      currentLocationId: 'school', enRouteEncounterRoll: 1,
+    });
+    const resolution = resolveAction({
+      id: 'return-home', cycleCount: 1, startTime: '2024-09-09T17:50:00',
+      currentLocationId: 'school', stamina: 100, sanity: 70,
+      steps: [{ id: 'return', kind: 'travel', scope: 'short', locationId: 'home', completionSourceIds: [] }],
+    });
+
+    expect(resolveExecutedActionNarrativeContext(proposed, resolution)).toMatchObject({
+      locationId: 'home', background: 'home-night', costs: { timeMinutes: 10, stamina: 4 },
+    });
   });
 });

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { checkScheduledEvents, buildScheduledDirectives, DEATH_NEWS_TIME } from './scheduled-events';
+import {
+  checkScheduledEvents,
+  buildScheduledDirectives,
+  DEATH_NEWS_TIME,
+  nextScheduledBoundary,
+} from './scheduled-events';
 
 describe('checkScheduledEvents', () => {
   it('跨过16点触发死讯pending', () => {
@@ -36,5 +41,55 @@ describe('buildScheduledDirectives', () => {
   });
   it('未置位返回空数组', () => {
     expect(buildScheduledDirectives({})).toEqual([]);
+  });
+});
+
+describe('nextScheduledBoundary', () => {
+  it('returns death news before midnight when it has not been delivered', () => {
+    expect(nextScheduledBoundary('2024-09-09T15:30:00', {})).toEqual({
+      id: 'death-news', at: '2024-09-09T16:00:00',
+    });
+  });
+
+  it('returns the current clock for death news that is already pending or overdue', () => {
+    expect(nextScheduledBoundary('2024-09-09T16:10:00', { deathNews: 'pending' })).toEqual({
+      id: 'death-news', at: '2024-09-09T16:10:00',
+    });
+    expect(nextScheduledBoundary('2024-09-09T16:10:00', {})).toEqual({
+      id: 'death-news', at: '2024-09-09T16:10:00',
+    });
+  });
+
+  it('uses midnight after death news has been delivered', () => {
+    expect(nextScheduledBoundary('2024-09-09T20:00:00', { deathNews: 'delivered' })).toEqual({
+      id: 'midnight', at: '2024-09-10T00:00:00',
+    });
+  });
+
+  it('returns midnight at the current clock when reset is already due', () => {
+    expect(nextScheduledBoundary('2024-09-10T00:00:00', { deathNews: 'delivered' })).toEqual({
+      id: 'midnight', at: '2024-09-10T00:00:00',
+    });
+  });
+
+  it('accepts validated commitment boundaries without importing memory internals', () => {
+    expect(nextScheduledBoundary('2024-09-09T10:00:00', {}, [
+      { id: 'commitment:noon', at: '2024-09-09T12:00:00' },
+      { id: 'commitment:late', at: '2024-09-09T18:00:00' },
+    ])).toEqual({ id: 'commitment:noon', at: '2024-09-09T12:00:00' });
+  });
+
+  it('normalizes an overdue commitment to now and resolves ties deterministically', () => {
+    expect(nextScheduledBoundary('2024-09-09T16:00:00', {}, [
+      { id: 'commitment:overdue', at: '2024-09-09T15:00:00' },
+      { id: 'commitment:exact', at: '2024-09-09T16:00:00' },
+    ])).toEqual({ id: 'death-news', at: '2024-09-09T16:00:00' });
+  });
+
+  it('rejects malformed clocks instead of allowing work past an unknown boundary', () => {
+    expect(() => nextScheduledBoundary('not-a-time', {})).toThrow(/clock/i);
+    expect(() => nextScheduledBoundary('2024-09-09T10:00:00', {}, [
+      { id: 'commitment:bad', at: 'not-a-time' },
+    ])).toThrow(/clock/i);
   });
 });
