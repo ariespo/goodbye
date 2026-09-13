@@ -101,6 +101,18 @@ B</option>
       .not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'ESCAPED_DIALOGUE_NEWLINE' })]));
   });
 
+  it('rejects a literal newline escape before an NPC token in ordinary dialogue', () => {
+    const maintext = String.raw`对话|旁白|calm|NPC说：\nNPC随后离开。`;
+    expect(protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'ESCAPED_DIALOGUE_NEWLINE' })]));
+  });
+
+  it('keeps Windows paths containing n or r segments valid', () => {
+    const maintext = String.raw`对话|旁白|calm|日志 C:\n\file.json 与 C:\r.txt 已保存。`;
+    expect(protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext }))
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ code: 'ESCAPED_DIALOGUE_NEWLINE' })]));
+  });
+
   it('repairs a missing maintext close only when complete option and sum tags prove the boundary', () => {
     const malformed = `<maintext>\n场景|room.jpg\n对话|少女|calm|你好。\n<option>A\nB</option>\n<sum>完成</sum>`;
     const repaired = repairRecoverableOutput(malformed);

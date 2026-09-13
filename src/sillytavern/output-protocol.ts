@@ -30,6 +30,31 @@ export interface OutputRepairResult {
   repairedTags: string[];
 }
 
+function windowsPathRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const pathPattern = /(?:^|[\s("'【])([A-Za-z]:\\[^\s|"'【】<>，。！？；：]+)/gu;
+  for (const match of text.matchAll(pathPattern)) {
+    const value = match[1];
+    if (!value || match.index === undefined) continue;
+    const start = match.index + match[0].length - value.length;
+    ranges.push([start, start + value.length]);
+  }
+  return ranges;
+}
+
+function hasDialogueEscapeArtifact(text: string): boolean {
+  const pathRanges = windowsPathRanges(text);
+  for (const match of text.matchAll(/\\(?:n|r)/gu)) {
+    const index = match.index ?? -1;
+    let precedingSlashes = 0;
+    for (let i = index - 1; i >= 0 && text[i] === '\\'; i -= 1) precedingSlashes += 1;
+    if (precedingSlashes % 2 === 1) continue;
+    if (pathRanges.some(([start, end]) => index >= start && index < end)) continue;
+    return true;
+  }
+  return false;
+}
+
 /**
  * 修复边界可由后续必填标签唯一确定的轻微 XML 疏漏。
  * 仅当 option 与 sum 均完整存在时，才允许在首个 option 前补 maintext 闭合；
@@ -76,7 +101,7 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
       const type = line.split('|')[0]?.trim().toLowerCase();
       if (!['对话', 'dialog', 'dialogue'].includes(type)) return false;
       const text = line.split('|').slice(3).join('|');
-      return /(^|[^\\])\\(?:n|r)(?![A-Za-z0-9_])/u.test(text);
+      return hasDialogueEscapeArtifact(text);
     });
     if (dialogueEscape) {
       errors.push({ code: 'ESCAPED_DIALOGUE_NEWLINE', message: '对话中包含未渲染的字面量\\n或\\r，请使用真实换行。', tag: 'maintext' });
