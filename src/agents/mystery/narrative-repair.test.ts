@@ -19,6 +19,13 @@ const packet = {
 } as unknown as WriterPacket;
 
 describe('narrative repair strategy', () => {
+  it('allows the minimal content repair needed for a playable mandatory event', () => {
+    const prompt = buildNarrativeFormatRepairPrompt(packet, '<maintext>电话让你等候。</maintext>', [
+      { code: 'DEATH_NEWS_NOT_DELIVERED', message: '必须明确告知文穗已经死亡' },
+    ]);
+    expect(prompt).toContain('演出契约纠错优先于保留原文含义');
+    expect(prompt).toContain('只补足已授权的事件');
+  });
   it('locks the plot and requests sentence-level edits for style-only violations', () => {
     const review: FactReview = {
       approved: false,

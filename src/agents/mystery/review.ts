@@ -1,3 +1,5 @@
+import { FIXED_LOCATION_NPC_IDS } from './brief';
+import { projectCharacterPerformances } from '../../data/characterPerformance';
 import { isRevealAtMost } from './reveal-level';
 import { isAllowedKnowledgeDiscovery } from '../../data/playerKnowledge';
 import {
@@ -235,6 +237,20 @@ export function reviewDirectorPlan(
   turnContext?: Record<string, unknown>,
 ): FactReview {
   const violations: FactReviewViolation[] = [];
+  const forbiddenNpcIds = new Set(brief.sceneContract?.forbiddenNpcIds ?? []);
+  const visitedLocations = new Set(plan.beats.map(beat => beat.locationId).filter(Boolean));
+  for (const locationId of visitedLocations) {
+    for (const npcId of FIXED_LOCATION_NPC_IDS[locationId!] ?? []) {
+      if (forbiddenNpcIds.has(npcId)) continue;
+      if (!plan.beats.some(beat => beat.locationId === locationId && beat.speakerIds?.includes(npcId))) {
+        violations.push({
+          code: 'missing-fixed-location-npc',
+          message: `${locationId} 场景必须由固定角色 ${npcId} 实际参与接待或回应，不得省略或替换为泛化路人。学校仍须先经门卫核验，不授予入校权限。`,
+        });
+      }
+    }
+  }
+
   const seen = new Set<string>();
   const allowedMemoryIds = selectedMemoryIds(turnContext);
   const contextBackgroundFacts = selectedBackgroundFacts(turnContext);
@@ -609,7 +625,10 @@ export function buildWriterPacket(
       'authorizedKnowledgeEvents 中的新人或新地点只能在 evidence 所描述的玩家可见事件发生后，才可使用新称呼或地址。',
     ],
     playerPresentation: brief.playerPresentation,
-    characterPerformances: brief.characterPerformances,
+    characterPerformances: projectCharacterPerformances(brief.playerPresentation, [
+      ...brief.characterPerformances.map(profile => profile.id),
+      ...plan.beats.flatMap(beat => beat.speakerIds ?? []),
+    ]),
     npcPlayerKnowledge: brief.npcPlayerKnowledge?.map(item => ({
       ...item,
       actualKnowledgeScope: item.expressibleKnowledgeScope,

@@ -75,10 +75,11 @@ describe('opening storyline parse', () => {
     expect(scene.actionItems?.some(item => /拨打.*文穗.*电话/.test(item.desc))).toBe(true);
   });
 
-  it('presents room evidence without turning observations into conclusions', () => {
+  it('keeps optional room observations at the first-day atmosphere level', () => {
     const observe = parseOpeningStoryline().observe ?? '';
 
-    expect(observe).toContain('绿色围裙');
+    expect(observe).toContain('空缺');
+    expect(observe).not.toContain('绿色围裙');
     expect(observe).toContain('药瓶');
     expect(observe).not.toContain('她今天不是去学校');
     expect(observe).not.toContain('好像有人重新涂过');

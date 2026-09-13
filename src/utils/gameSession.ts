@@ -1,5 +1,5 @@
 import { maintextToScene } from '../engine/scene-parser';
-import { OPENING_STORYLINE, parseOpeningStoryline } from '../engine/opening-storyline';
+import { OPENING_MAINTEXT, OPENING_PANELS, OPENING_PUBLIC_CONTINUITY, OPENING_STORYLINE, parseOpeningStoryline } from '../engine/opening-storyline';
 import { INITIAL_PLAYER_RESOURCES } from '../data/gameDefaults';
 import { getChats, saveChat } from '../sillytavern/database';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
@@ -19,9 +19,9 @@ import { resolveSceneEnvironment } from './sceneEnvironment';
 import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
 
 export const OPENING_ASSISTANT_CONTENT =
-  `<maintext>\n${OPENING_STORYLINE}\n</maintext>\n<sum>开局:暴雨第五天，文穗临时不去学校且暂时联系不上</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
+  `<maintext>\n${OPENING_MAINTEXT}\n</maintext>\n${OPENING_PANELS}\n<sum>开局:暴雨第五天，文穗临时不去学校且暂时联系不上</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
 
-function parseOpeningAssistantContent(): ParsedContent {
+export function parseOpeningAssistantContent(): ParsedContent {
   return parseChunk(createParseState(), OPENING_ASSISTANT_CONTENT, { strict: true }).parsed;
 }
 
@@ -116,12 +116,16 @@ export async function startNewGame(): Promise<void> {
 
   const globalMeta = loadMetaProgress();
   const mergedProgress = mergeMetaProgress(createDefaultVariables(), [], globalMeta);
-  const variables = mergedProgress.variables;
+  const variables = {
+    ...mergedProgress.variables,
+    openingPublicContinuity: OPENING_PUBLIC_CONTINUITY.map(fact => ({ ...fact })),
+  };
   const endingsSeen = mergedProgress.endingsSeen;
   const openingMsg: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'assistant',
     content: OPENING_ASSISTANT_CONTENT,
+    parsed: parseOpeningAssistantContent(),
     timestamp: Date.now(),
     variables,
   };
@@ -282,7 +286,9 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
   const maintext = lastAssistant?.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim()
     || OPENING_STORYLINE;
-  const scene = maintext === OPENING_STORYLINE ? parseOpeningStoryline() : maintextToScene(maintext);
+  const scene = maintext === OPENING_STORYLINE || maintext === OPENING_MAINTEXT
+    ? parseOpeningStoryline()
+    : maintextToScene(maintext);
   const lineIndex = Math.max(
     0,
     Math.min(save.gameState?.currentLineIndex ?? 0, Math.max(0, scene.lines.length - 1)),

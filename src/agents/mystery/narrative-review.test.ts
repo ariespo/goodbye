@@ -7,8 +7,41 @@ import {
 import type { WriterPacket } from './types';
 
 const emptyAuthority = { authorizedFacts: [], playerKnownFacts: [] };
+const disclosedMorningMessage = {
+  ...emptyAuthority,
+  continuityContext: { publicContinuity: [{ id: 'opening-message-0650', text: '今早06:50文穗发来聊天消息：“我先出门了，今天不去学校。晚饭不用等我，回来再跟你说。”这是她自述的安排，尚未核实学校请假或她的去向。' }] },
+};
 
 describe('deterministic final narrative review', () => {
+  it.each([
+    '她今早发消息说今天不去学校，电话打不通，衣柜里有一处不自然的空缺。',
+    '她六点五十说今天不去学校。',
+  ])('leaves a limited paraphrase of the disclosed message to semantic review: %s', narrative => {
+    expect(reviewNarrativeDeterministically(disclosedMorningMessage, narrative)).toEqual([]);
+  });
+
+  it.each([
+    '她今早发消息说今天不去学校，所以确认她今早未到校。',
+    '她今早发消息说今天不去学校，所以确认她未到校。',
+    '她今早发消息说今天不去学校，文穗今早买了两瓶牛奶。',
+    '她06:55发消息说今天不去学校。',
+  ])('does not authorize added history beside the disclosed message: %s', narrative => {
+    expect(reviewNarrativeDeterministically(disclosedMorningMessage, narrative)).not.toEqual([]);
+  });
+
+  it('reports the complete unsupported school conclusion and repairs its dependent scene chain', async () => {
+    const narrative = '<sum>暴雨中走访灯织、便利店与学校，确认文穗今早未到校，回家时注意到衣柜里的空缺</sum>';
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' },
+      preset: null, packet: emptyAuthority as unknown as WriterPacket, narrative,
+      complete: async () => { throw new Error('Explicit unsupported history must be rejected locally'); },
+    });
+    expect(review.approved).toBe(false);
+    expect(review.violations[0].message).toContain(narrative);
+    expect(review.corrections.join(' ')).toMatch(/门卫.*旁白.*hint.*sum/);
+    expect(review.corrections.join(' ')).toMatch(/已批准.*plan.*错误/);
+  });
+
   it('blocks an invented same-morning purchase and destination claim', () => {
     const violations = reviewNarrativeDeterministically(
       emptyAuthority,
@@ -42,7 +75,7 @@ describe('deterministic final narrative review', () => {
     )).toEqual([]);
   });
 
-  it('removes only unsupported lines so a valid scene can continue without another model call', () => {
+  it('preserves the entire exchange for repair instead of dropping the answer', () => {
     const candidate = [
       '对话|陈慧慧|calm|“她今天早上来过。”',
       '对话|旁白|calm|你收起雨伞。',
@@ -50,14 +83,11 @@ describe('deterministic final narrative review', () => {
       '<option>观察便利店环境</option>',
     ].join('\n');
 
-    expect(removeUngroundedNarrativeLines(emptyAuthority, candidate)).toBe([
-      '对话|旁白|calm|你收起雨伞。',
-      '<option>直接问她今天早上有没有见过文穗</option>',
-      '<option>观察便利店环境</option>',
-    ].join('\n'));
+    expect(removeUngroundedNarrativeLines(emptyAuthority, candidate)).toBe(candidate);
+    expect(reviewNarrativeDeterministically(emptyAuthority, candidate)).not.toEqual([]);
   });
 
-  it('removes invented evidence details from dialogue and options', () => {
+  it('preserves invented evidence and dependent options for a coherent full repair', () => {
     const candidate = [
       '对话|陈慧慧|calm|“我、我没见过……你要看看这个文件夹吗？”',
       '对话|旁白|calm|冷气从通风口吹下来。',
@@ -65,10 +95,8 @@ describe('deterministic final narrative review', () => {
       '<option>询问她今天有没有见过文穗</option>',
     ].join('\n');
 
-    expect(removeUngroundedNarrativeLines(emptyAuthority, candidate)).toBe([
-      '对话|旁白|calm|冷气从通风口吹下来。',
-      '<option>询问她今天有没有见过文穗</option>',
-    ].join('\n'));
+    expect(removeUngroundedNarrativeLines(emptyAuthority, candidate)).toBe(candidate);
+    expect(reviewNarrativeDeterministically(emptyAuthority, candidate)).not.toEqual([]);
   });
 
   it('allows present-time service interaction and the authorized identity introduction', () => {
@@ -76,6 +104,44 @@ describe('deterministic final narrative review', () => {
       emptyAuthority,
       '店员|“欢、欢迎光临。”\n旁白|你认出这是附近便利店的店员陈慧慧。',
     )).toEqual([]);
+    expect(reviewNarrativeDeterministically(emptyAuthority,
+      '对话|旁白|calm|她现在接过钱，付款后把牛奶递给你。',
+    )).toEqual([]);
+  });
+
+  it('allows a disclosed record in authorized background history', () => {
+    expect(reviewNarrativeDeterministically({
+      ...emptyAuthority,
+      authorizedBackgroundFacts: [{
+        factId: 'bg:receipt', text: '玩家保存着自己的旧收据。',
+        characterIds: ['player'], locationIds: ['home'], level: 'fixed',
+        privacy: 'common', timeScope: 'pre-game', source: 'author', createdTurn: 0,
+      }],
+    }, '旁白|玩家保存着自己的旧收据。')).toEqual([]);
+  });
+
+  it('sends disclosed opening continuity and the complete draft to the actual fact review request', async () => {
+    const packet = {
+      ...emptyAuthority,
+      continuityContext: {
+        clock: '08:20', publicContinuity: [{ id: 'opening-message', text: '今早06:50文穗发来消息。' }],
+        recentHistory: ['你查看了那条消息。'], memory: ['记得约定。'],
+      },
+    } as unknown as WriterPacket;
+    const narrative = '旁白|今早06:50文穗发来消息。';
+    let request = '';
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' },
+      preset: null, packet, narrative,
+      complete: async messages => {
+        request = messages.map(message => message.content).join('\n');
+        return JSON.stringify({ approved: true, violations: [], corrections: [] });
+      },
+    });
+    expect(review.approved).toBe(true);
+    const packetBlock = request.split('[WriterPacket]')[1]?.split('[Narrative]')[0].trim();
+    expect(JSON.parse(packetBlock ?? '{}')).toEqual(packet);
+    expect(request.split('[Narrative]')[1]?.trim()).toBe(narrative);
   });
 
   it('blocks invented habitual shared visits', () => {

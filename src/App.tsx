@@ -18,7 +18,8 @@ import { HistoryDrawer } from './components/tavern/HistoryDrawer';
 import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
 import { createDefaultVariables } from './sillytavern/vars-merger';
-import { OPENING_ASSISTANT_CONTENT } from './utils/gameSession';
+import { OPENING_ASSISTANT_CONTENT, parseOpeningAssistantContent } from './utils/gameSession';
+import { OPENING_PUBLIC_CONTINUITY } from './engine/opening-storyline';
 import './styles/animations.css';
 import './styles/themes.css';
 import { applyFontFamily } from './utils/fonts';
@@ -96,10 +97,12 @@ function App() {
         // 但不设置 currentScene，等用户在 TitleScreen 点击"开始游戏"后再进入
         if (chats.length === 0 && settings) {
           const openingVariables = createDefaultVariables();
+          openingVariables.openingPublicContinuity = OPENING_PUBLIC_CONTINUITY.map(fact => ({ ...fact }));
           const openingMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             content: OPENING_ASSISTANT_CONTENT,
+            parsed: parseOpeningAssistantContent(),
             timestamp: Date.now(),
             variables: openingVariables,
           };

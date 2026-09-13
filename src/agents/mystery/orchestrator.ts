@@ -505,12 +505,8 @@ async function runMysteryPipeline(
       || options.truthContext.lockedRoute !== null
       || !!brief.saturationPivot
       || intentMode === 'divert',
-    narrative: options.mode === 'strict'
-      || directorPlan.revelations.length > 0
-      || (directorPlan.backgroundFactProposals?.length ?? 0) > 0
-      || directorPlan.beats.some(beat => (beat.sourceBackgroundFactIds?.length ?? 0) > 0)
-      || (directorPlan.knowledgeEvents?.length ?? 0) > 0
-      || (brief.sceneContract?.requiredKnowledgeEvents.length ?? 0) > 0,
+    // The Writer can invent a new fact even when the Director declares none.
+    narrative: true,
     style: true,
     state: options.mode === 'strict'
       || !!brief.saturationPivot
@@ -651,6 +647,7 @@ async function runMysteryPipeline(
   }
 
   const writerPacket = buildWriterPacket(directorPlan, brief, options.turnContext);
+  writerPacket.continuityContext = { ...options.presentationContext };
   const writerSystem = buildWriterSystemPrompt(options.formatPrompt);
   const writerMessages: ChatCompletionMessage[] = [
     { role: 'system', content: writerSystem },

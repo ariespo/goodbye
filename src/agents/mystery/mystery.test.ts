@@ -558,3 +558,69 @@ describe('director fact review', () => {
     expect(promptText).toContain('characterPerformances');
   });
 });
+
+
+describe('fixed cast in director-selected destinations', () => {
+  const visit = (locationId: string, speakerIds: string[]): DirectorPlan => ({
+    ...plan([]), beats: [{ id: 'visit', purpose: '打听线索', description: '进入目的地，与接待者交谈。', locationId, speakerIds }],
+  });
+  const fromHome = () => buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
+    playerPresentation: buildPlayerKnowledgeBrief({ location: 'home', knowledgeEvents: [] }),
+  }));
+
+  it.each([
+    ['supermarket', 'chen-huihui'], ['community-hospital', 'detective-b'],
+    ['old-man-building', 'old-man'], ['senpai-building', 'touko'], ['school', 'school-guard'],
+  ])('rejects omitted or replaced fixed cast at %s', (location, actor) => {
+    for (const speakers of [[], ['random-clerk']]) {
+      const review = reviewDirectorPlan(visit(location, speakers), fromHome());
+      expect(review.violations).toContainEqual(expect.objectContaining({ code: 'missing-fixed-location-npc' }));
+    }
+    expect(reviewDirectorPlan(visit(location, [actor]), fromHome()).approved).toBe(true);
+  });
+
+  it('projects the selected store clerk even when the starting home has no active NPC', () => {
+    const packet = buildWriterPacket(visit('supermarket', ['chen-huihui']), fromHome());
+    expect(packet.characterPerformances.find(profile => profile.id === 'chen-huihui')?.role).toContain('便利店员');
+    expect(packet.characterPerformances.some(profile => profile.id === 'detective-b')).toBe(false);
+  });
+
+  it('retains independent unknown name and occupation boundaries at the hospital', () => {
+    const brief = fromHome();
+    const packet = buildWriterPacket(visit('community-hospital', ['detective-b']), brief);
+    expect(packet.characterPerformances.find(profile => profile.id === 'detective-b')?.publicIdentity).toContain('普通护士');
+    expect(packet.playerPresentation.entities).toEqual(brief.playerPresentation.entities);
+    expect(packet.authorizedKnowledgeEvents).toEqual([]);
+    expect(packet.forbiddenInstructions.join(' ')).toContain('姓名、职业');
+    expect(JSON.stringify(packet.characterPerformances)).not.toContain('林静');
+  });
+
+  it('does not add a destination cast to a rest at home', () => {
+    const brief = fromHome();
+    const packet = buildWriterPacket(visit('home', []), brief);
+    expect(packet.plan.beats[0].speakerIds).toEqual([]);
+    expect(packet.characterPerformances).toEqual(brief.characterPerformances);
+  });
+});
+
+
+it('preserves established addresses for a newly planned destination without claiming NPC presence', () => {
+  const truthContext = context({
+    playerIdentity: { name: '李明', gender: 'male' }, playerIdentityVariables: {},
+    playerPresentation: buildPlayerKnowledgeBrief({ location: 'home', knowledgeEvents: [] }),
+  });
+  const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, truthContext);
+  const visitPlan: DirectorPlan = { ...plan([]), beats: [{
+    id: 'store', purpose: '询问', description: '向店员询问。', locationId: 'supermarket', speakerIds: ['chen-huihui'],
+  }] };
+  const packet = buildWriterPacket(visitPlan, brief);
+  expect(packet.npcPlayerKnowledge?.find(item => item.npcId === 'chen-huihui')).toMatchObject({
+    knowsPlayerName: true, allowedAddress: '李哥', actualKnowledgeScope: 'familiar-honorific',
+  });
+  expect(packet.npcPlayerKnowledge?.find(item => item.npcId === 'detective-b')).toMatchObject({
+    knowsPlayerName: false, actualKnowledgeScope: 'unknown', expressibleKnowledgeScope: 'unknown',
+  });
+  expect(truthContext.activeNpcIds).toEqual([]);
+  expect(brief.npcKnowledge).toEqual([]);
+  expect(packet.characterPerformances.some(item => item.id === 'detective-b')).toBe(false);
+});

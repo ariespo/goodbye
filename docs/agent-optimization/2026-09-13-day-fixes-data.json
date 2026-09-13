@@ -1,0 +1,754 @@
+[
+  {
+    "name": "fast-standard-fixed-v1.json",
+    "diagnostic": false,
+    "stop": "turn-cap",
+    "attempts": 14,
+    "successful": 4,
+    "final": {
+      "time": "2024-09-09T01:38:00Z",
+      "cycleCount": 1,
+      "location": "senpai-room",
+      "stamina": 100,
+      "sanity": 70,
+      "knowledge": [
+        "know:home",
+        "know:school",
+        "know:supermarket",
+        "meet:touko"
+      ],
+      "facts": {
+        "shared-apron-missing": "atmosphere"
+      },
+      "suspicion": {
+        "old-man": 0,
+        "detective-a": 0,
+        "detective-b": 0,
+        "self": 10,
+        "clerk": 0,
+        "teacher": 0,
+        "senpai": 0
+      },
+      "pendingReset": null,
+      "pendingEnding": null,
+      "historyLength": 4
+    },
+    "calls": 119,
+    "foregroundMs": 396904,
+    "withBackgroundMs": 419502,
+    "playableMedianMs": 23083,
+    "playableP90Ms": 34709,
+    "acceptedChars": 3274,
+    "emptyTurns": [],
+    "zeroMinuteTurns": [],
+    "stateTurns": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "firstTokenMedianMs": 5496,
+    "maxRequestChars": 41199,
+    "maxReportedPromptTokens": 14694,
+    "httpStatuses": {
+      "200": 119
+    },
+    "tokens": {
+      "prompt": 918044,
+      "completion": 62564,
+      "reported": 106
+    },
+    "styleRejected": null,
+    "errors": [
+      {
+        "attempt": 1,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文补写了未获授权的既往来访、购买或去向：“文穗今早”。请删除该信息，只保留当下普通互动。"
+      },
+      {
+        "attempt": 2,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文补写了未获授权的既往来访、购买或去向：“文穗今早”。请删除该信息，只保留当下普通互动。\n候选正文中灯织“我这边先替你去问问。有结果我打给你”与旧正文中灯织“回了我就告诉你”承担完全相同的叙事功能：都是灯织承诺替玩家打听文穗下落并主动回报。两处均为灯织对玩家焦虑的直接回应，且都发生在玩家询问文穗联系不上的情境中，构成明显重复。\n候选正文结尾“两个小时，只排除了一个可能——她没有去学校”与旧正文中玩家出门前“学校那边应该能查到她有没有请假”形成同一调查线索的重复推进：旧文已把“去学校查请假”作为明确行动目标，候选正文再次以“排除她没有去学校”作为本轮调查的唯一结论，意象和叙事功能均重复，缺少新的递进或反转。"
+      },
+      {
+        "attempt": 5,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文中灯织说“她跟我说过今天有课”，与已展示的今早06:50消息“今天不去学校”构成矛盾，且该“有课”说法无任何授权来源，属于新增未授权事实。\n正文中灯织展示聊天窗口并称“我给她发过消息。她没回”，但 publicContinuity 仅授权“当面发消息询问，并答应收到回复就告诉玩家”，未授权“至今未回”这一具体状态；该细节超出授权范围。"
+      },
+      {
+        "attempt": 6,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文中灯织说“先回你们楼附近问问。路上总有人看见。”——这是对“路上有人看见文穗”的未经授权暗示，可能被读作对文穗行踪的间接确认，超出灯织当前 npcKnowledge 与 authorizedFacts 范围。\n正文中灯织递伞并说“你那把伞骨坏了。拿着。”——灯织在本回合之前并未被授权知道玩家伞骨损坏；该细节来自玩家本回合出门时的即时观察，灯织不在场，属于凭空赋予 NPC 知识。"
+      },
+      {
+        "attempt": 7,
+        "error": "最终语义修复后的导演计划未通过硬审查，本回合已停止。"
+      },
+      {
+        "attempt": 9,
+        "error": "AI 输出格式不合法:\n• <maintext> 中包含 1 行无法识别的行指令"
+      },
+      {
+        "attempt": 10,
+        "error": "AI 输出格式不合法:\n• <maintext> 中包含 1 行无法识别的行指令"
+      },
+      {
+        "attempt": 11,
+        "error": "AI 输出格式不合法:\n• <maintext> 中包含 1 行无法识别的行指令"
+      },
+      {
+        "attempt": 12,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文中灯织说“我早上发的那条，到现在还是一个勾。她没点开。”——publicContinuity 的 opening-touko-visit 只授权“她说今天尚未联系文穗，当面发消息询问，并答应收到回复就告诉玩家”，并未授权“消息显示未读/一个勾/她没点开”这一具体状态细节。这是新增的、未经授权的证据性细节（消息已读状态），属于对文穗去向的额外事实暗示。\n正文中灯织说“是。所以你现在在这，说明你也没等到。”——将玩家上门这一行为解释为“你也没等到回复”，属于旁白/角色对未授权事实的推断性确认，超出 opening-touko-visit 授权范围。\n候选正文重复了近期完整语句：“她今天没跟我提过要去哪儿。”。"
+      },
+      {
+        "attempt": 13,
+        "error": "AI 输出格式不合法:\n• <maintext> 中包含 1 行无法识别的行指令"
+      }
+    ],
+    "timeline": [
+      {
+        "turn": 1,
+        "attempt": 3,
+        "input": "我停下来整理刚刚发生的事情，先做目前可以做到的下一步。",
+        "options": [
+          "前往中学，确认文穗今天有没有请假",
+          "去社区便利店，问店员今早有没有见过文穗",
+          "去对面商住楼找灯织，看文穗有没有回复她",
+          "去找周大爷，问他今早散步时有没有见过文穗"
+        ],
+        "from": "2024-09-09T00:00:00Z",
+        "to": "2024-09-09T00:08:00Z",
+        "minutes": 8,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 577,
+        "calls": 11,
+        "playableMs": 18794
+      },
+      {
+        "turn": 2,
+        "attempt": 4,
+        "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+        "options": [
+          "前往中学，核实文穗今天有没有请假",
+          "去对面商住楼找灯织，看文穗有没有回复她",
+          "去找周大爷，问他今早散步时有没有见过文穗",
+          "再拨一次文穗的电话，看看有没有回音"
+        ],
+        "from": "2024-09-09T00:08:00Z",
+        "to": "2024-09-09T00:33:00Z",
+        "minutes": 25,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 886,
+        "calls": 11,
+        "playableMs": 23083
+      },
+      {
+        "turn": 3,
+        "attempt": 8,
+        "input": "我停下来整理刚刚发生的事情，先做目前可以做到的下一步。",
+        "options": [
+          "去对面商住楼找灯织，看文穗有没有回复她",
+          "去找周大爷，问他今早散步时有没有见过文穗",
+          "在学校门口多站一会儿，看有没有人认得文穗",
+          "再拨一次文穗的电话，看看有没有回音"
+        ],
+        "from": "2024-09-09T00:33:00Z",
+        "to": "2024-09-09T01:13:00Z",
+        "minutes": 40,
+        "location": "school",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 692,
+        "calls": 14,
+        "playableMs": 34709
+      },
+      {
+        "turn": 4,
+        "attempt": 14,
+        "input": "我停下来整理刚刚发生的事情，先做目前可以做到的下一步。",
+        "options": [
+          "去麻将馆楼上找周大爷，问他今早散步时有没有见过文穗",
+          "回学校找文穗的班主任，当面核实今天的请假情况",
+          "在商住楼下的咖啡厅坐一会儿，等灯织或文穗的消息",
+          "再拨一次文穗的电话，看看有没有回音"
+        ],
+        "from": "2024-09-09T01:13:00Z",
+        "to": "2024-09-09T01:38:00Z",
+        "minutes": 25,
+        "location": "senpai-room",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 1119,
+        "calls": 9,
+        "playableMs": 24741
+      }
+    ],
+    "revisionNote": "修复中间版本v1；人工停止，只计完整留档尝试。"
+  },
+  {
+    "name": "fast-standard-fixed-v2.json",
+    "diagnostic": false,
+    "stop": "blocked-six-attempts",
+    "attempts": 12,
+    "successful": 4,
+    "final": {
+      "time": "2024-09-09T05:00:00Z",
+      "cycleCount": 1,
+      "location": "home",
+      "stamina": 100,
+      "sanity": 70,
+      "knowledge": [
+        "know:home",
+        "know:school",
+        "know:supermarket",
+        "meet:touko"
+      ],
+      "facts": {
+        "shared-apron-missing": "atmosphere"
+      },
+      "suspicion": {
+        "old-man": 0,
+        "detective-a": 0,
+        "detective-b": 0,
+        "self": 10,
+        "clerk": 0,
+        "teacher": 0,
+        "senpai": 0
+      },
+      "pendingReset": null,
+      "pendingEnding": null,
+      "historyLength": 4
+    },
+    "calls": 82,
+    "foregroundMs": 331511,
+    "withBackgroundMs": 351835,
+    "playableMedianMs": 33982,
+    "playableP90Ms": 46228,
+    "acceptedChars": 4239,
+    "emptyTurns": [],
+    "zeroMinuteTurns": [],
+    "stateTurns": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "firstTokenMedianMs": 8538,
+    "maxRequestChars": 42125,
+    "maxReportedPromptTokens": 15733,
+    "httpStatuses": {
+      "200": 77,
+      "402": 5
+    },
+    "tokens": {
+      "prompt": 644956,
+      "completion": 43530,
+      "reported": 68
+    },
+    "styleRejected": null,
+    "errors": [
+      {
+        "attempt": 3,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文中玩家对灯织说“她六点五十说今天不去学校”，但 publicContinuity 的 opening-message-0650 明确该消息是“我先出门了，今天不去学校。晚饭不用等我，回来再跟你说。”，并未出现“六点五十”这一精确时间表述；正文把消息发送时间当作文穗自述内容复述，属于新增精确时间细节。\n正文“她六点五十说今天不去学校”将 06:50 这一时间点与“不去学校”的自述绑定为文穗原话内容，超出 authorizedFacts/playerKnownFacts 提供的文本，且与已展示消息内容不一致。"
+      },
+      {
+        "attempt": 4,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文补写了未获授权的既往来访、购买或去向。完整违规句：对话|旁白|calm|“她今早发消息说今天不去学校，电话打不通，衣柜里有一处不自然的空缺。匹配片段“她今早”只是定位，不代表整句的其余断言已获授权。"
+      },
+      {
+        "attempt": 7,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n候选正文与近期语句高度近似：“”他把伞往你那边偏了偏，像是替你挡一点，“我六点多下来坐会儿，看见几个孩子跑过去，都打着伞，看不清脸。” / “”他把伞往你那边偏了偏，像是要替你挡一点，“我六点多下来坐会儿，看见几个孩子跑过去，都打着伞，看不清脸。”。"
+      },
+      {
+        "attempt": 8,
+        "error": "剧情生成中断: 请求超时（60s 无响应）"
+      },
+      {
+        "attempt": 9,
+        "error": "正文审查失败，未播放也未写入存档：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      },
+      {
+        "attempt": 10,
+        "error": "多 Agent 编排失败：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      },
+      {
+        "attempt": 11,
+        "error": "多 Agent 编排失败：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      },
+      {
+        "attempt": 12,
+        "error": "多 Agent 编排失败：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      }
+    ],
+    "timeline": [
+      {
+        "turn": 1,
+        "attempt": 1,
+        "input": "我用接下来的两个小时在附近寻找文穗，向愿意回答的人打听，不做越权的事情。",
+        "options": [
+          "去中学，确认文穗今天有没有请假",
+          "回对面商住楼，问灯织文穗有没有回复她",
+          "沿旧街再扩大范围问人，重点问清晨时段",
+          "先回家，查看文穗的房间，确认她带走了什么"
+        ],
+        "from": "2024-09-09T00:00:00Z",
+        "to": "2024-09-09T02:00:00Z",
+        "minutes": 120,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {},
+        "chars": 1316,
+        "calls": 13,
+        "playableMs": 36216
+      },
+      {
+        "turn": 2,
+        "attempt": 2,
+        "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+        "options": [
+          "回便利店再问陈慧慧一句，留意她攥着的东西和没说完的话",
+          "沿旧街扩大范围，重点问清晨时段的路人",
+          "去对面商住楼再找灯织，追问文穗是否回复",
+          "先回家，仔细查看文穗的房间，留意衣柜里那处不自然的空缺"
+        ],
+        "from": "2024-09-09T02:00:00Z",
+        "to": "2024-09-09T02:45:00Z",
+        "minutes": 45,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 1414,
+        "calls": 14,
+        "playableMs": 46228
+      },
+      {
+        "turn": 3,
+        "attempt": 5,
+        "input": "我停下来整理刚刚发生的事情，先做目前可以做到的下一步。",
+        "options": [
+          "沿旧街扩大范围，重点问清晨时段的路人",
+          "去对面商住楼找灯织，问她今日有没有见过文穗",
+          "回中学，换个方式再向门卫或值班老师打听",
+          "先回家，把文穗房间里那处空缺再仔细看一遍"
+        ],
+        "from": "2024-09-09T02:45:00Z",
+        "to": "2024-09-09T03:00:00Z",
+        "minutes": 15,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 653,
+        "calls": 13,
+        "playableMs": 33982
+      },
+      {
+        "turn": 4,
+        "attempt": 6,
+        "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+        "options": [
+          "回中学，通过班主任或值班老师正式核实文穗今日请假与到校情况",
+          "换时段再沿旧街问傍晚前后可能见过文穗的人",
+          "去对面商住楼找灯织，问她今日有没有见过文穗或收到回复",
+          "先回家，把文穗房间里衣柜那处空缺再仔细看一遍"
+        ],
+        "from": "2024-09-09T03:00:00Z",
+        "to": "2024-09-09T05:00:00Z",
+        "minutes": 120,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 856,
+        "calls": 8,
+        "playableMs": 20415
+      }
+    ],
+    "revisionNote": "修复中间版本v2；余额不足中断，不代表最终代码完整一天测试。"
+  },
+  {
+    "name": "options-standard-fixed-v2.json",
+    "diagnostic": false,
+    "stop": "blocked-six-attempts",
+    "attempts": 16,
+    "successful": 7,
+    "final": {
+      "time": "2024-09-09T02:05:00Z",
+      "cycleCount": 1,
+      "location": "school",
+      "stamina": 96,
+      "sanity": 70,
+      "knowledge": [
+        "know:home",
+        "know:school",
+        "know:supermarket",
+        "meet:touko",
+        "visit:school"
+      ],
+      "facts": {
+        "shared-apron-missing": "atmosphere"
+      },
+      "suspicion": {
+        "old-man": 0,
+        "detective-a": 0,
+        "detective-b": 0,
+        "self": 10,
+        "clerk": 0,
+        "teacher": 0,
+        "senpai": 0
+      },
+      "pendingReset": null,
+      "pendingEnding": null,
+      "historyLength": 7
+    },
+    "calls": 93,
+    "foregroundMs": 300201,
+    "withBackgroundMs": 348052,
+    "playableMedianMs": 18743,
+    "playableP90Ms": 62572,
+    "acceptedChars": 4783,
+    "emptyTurns": [],
+    "zeroMinuteTurns": [],
+    "stateTurns": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "firstTokenMedianMs": 1227,
+    "maxRequestChars": 40478,
+    "maxReportedPromptTokens": 15290,
+    "httpStatuses": {
+      "200": 86,
+      "402": 5,
+      "ApiCallError": 2
+    },
+    "tokens": {
+      "prompt": 641248,
+      "completion": 40129,
+      "reported": 74
+    },
+    "styleRejected": null,
+    "errors": [
+      {
+        "attempt": 3,
+        "error": "正文连续修复后仍存在事实、角色或文风问题，已保留最新原稿：\n正文中教务处值班人员“没有翻开任何本子或记录”“从头到尾没有翻开任何东西”，并据此得出“你也没能问出任何一行字”。但本回合 authorizedFacts 为空，playerKnownFacts 仅有 F001（衣柜空缺），并未授权任何关于教务处请假登记、请假条提交方式或经办人的事实。计划中 b2/b3 的“翻查当日请假登记”“确认记录存在”“提交方式一栏未写明”等内容均无授权来源，正文虽以“未答复”形式呈现，仍属于对未授权事实的否定性确认，且 observe 中“[发现] 她表示请假的事没法当场答复”与“[线索] 她拒绝透露班主任是谁”构成对未授权事实的间接呈现。\n正文让教务处值班人员说出“请假的事，我这边没法当场给你答复”“等我们跟班主任那边核过再说”“班主任是哪位？我怎么找他？”等对话，隐含“存在可核对的请假记录”与“存在班主任”两项事实。这两项均未出现在 authorizedFacts、playerKnownFacts 或 authorizedBackgroundFacts 中，属于新增未授权事实。\n正文中“她表示请假的事没法当场答复，让你留联系方式，等跟班主任核过再说”以及“她拒绝透露班主任是谁、怎么联系”等表述，实质确认了“文穗今日请假记录存在且需与班主任核对”这一事实层级，超出本回合授权范围。"
+      },
+      {
+        "attempt": 8,
+        "error": "AI 输出格式不合法:\n• <maintext> 中包含 2 行无法识别的行指令"
+      },
+      {
+        "attempt": 9,
+        "error": "AI 输出格式不合法:\n• <maintext> 中包含 2 行无法识别的行指令"
+      },
+      {
+        "attempt": 11,
+        "error": "AI 输出格式不合法:\n• <maintext> 中包含 1 行无法识别的行指令"
+      },
+      {
+        "attempt": 12,
+        "error": "正文格式修复调用失败，已保留原稿：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      },
+      {
+        "attempt": 13,
+        "error": "多 Agent 编排失败：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      },
+      {
+        "attempt": 14,
+        "error": "多 Agent 编排失败：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      },
+      {
+        "attempt": 15,
+        "error": "多 Agent 编排失败：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      },
+      {
+        "attempt": 16,
+        "error": "多 Agent 编排失败：API error 402: {\"error\":{\"message\":\"Insufficient Balance\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\"}}"
+      }
+    ],
+    "timeline": [
+      {
+        "turn": 1,
+        "attempt": 1,
+        "input": "我检查眼前能看到的事情，决定接下来去哪里找文穗。",
+        "options": [
+          "前往中学，确认文穗今天到底有没有请假",
+          "去社区便利店，问店员今早是否见过文穗",
+          "去对面商住楼找灯织，看看文穗有没有回复她",
+          "回到文穗房间，再仔细看看衣柜里那处空缺"
+        ],
+        "from": "2024-09-09T00:00:00Z",
+        "to": "2024-09-09T00:15:00Z",
+        "minutes": 15,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 661,
+        "calls": 10,
+        "playableMs": 23074
+      },
+      {
+        "turn": 2,
+        "attempt": 2,
+        "input": "前往中学，确认文穗今天到底有没有请假",
+        "options": [
+          "去教务处问清楚，文穗的请假条是怎么交的、谁批的",
+          "回便利店，问店员今早有没有见过文穗",
+          "去对面商住楼找灯织，看她有没有收到文穗的回复",
+          "在校门外再等一会儿，看有没有老师或学生能提供信息"
+        ],
+        "from": "2024-09-09T00:15:00Z",
+        "to": "2024-09-09T00:25:00Z",
+        "minutes": 10,
+        "location": "school",
+        "stamina": 96,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "visit:school"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 693,
+        "calls": 7,
+        "playableMs": 12833
+      },
+      {
+        "turn": 3,
+        "attempt": 4,
+        "input": "去教务处问清楚，文穗的请假条是怎么交的、谁批的",
+        "options": [
+          "沿走廊往操场方向走，看能否找到校方人员当面询问",
+          "回社区便利店，问店员今早有没有见过文穗",
+          "去对面商住楼找灯织，看她有没有收到文穗的回复",
+          "留在教务处外，等值班人员忙完再问一次"
+        ],
+        "from": "2024-09-09T00:25:00Z",
+        "to": "2024-09-09T00:50:00Z",
+        "minutes": 25,
+        "location": "school",
+        "stamina": 96,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "visit:school"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 402,
+        "calls": 8,
+        "playableMs": 14714
+      },
+      {
+        "turn": 4,
+        "attempt": 5,
+        "input": "沿走廊往操场方向走，看能否找到校方人员当面询问",
+        "options": [
+          "折返教务处外，等值班人员忙完再问一次",
+          "回社区便利店，问店员今早有没有见过文穗",
+          "去对面商住楼找灯织，看她有没有收到文穗的回复",
+          "在校门外再等一会儿，看有没有老师或学生能提供信息"
+        ],
+        "from": "2024-09-09T00:50:00Z",
+        "to": "2024-09-09T01:10:00Z",
+        "minutes": 20,
+        "location": "school",
+        "stamina": 96,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "visit:school"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 615,
+        "calls": 5,
+        "playableMs": 9603
+      },
+      {
+        "turn": 5,
+        "attempt": 6,
+        "input": "折返教务处外，等值班人员忙完再问一次",
+        "options": [
+          "回社区便利店，问店员今早有没有见过文穗",
+          "去对面商住楼找灯织，看她有没有收到文穗的回复",
+          "在校门外再等一会儿，看有没有老师或学生能提供信息",
+          "先回家，重新核对纸条与消息里可能遗漏的细节"
+        ],
+        "from": "2024-09-09T01:10:00Z",
+        "to": "2024-09-09T01:25:00Z",
+        "minutes": 15,
+        "location": "school",
+        "stamina": 96,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "visit:school"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 738,
+        "calls": 7,
+        "playableMs": 18743
+      },
+      {
+        "turn": 6,
+        "attempt": 7,
+        "input": "回社区便利店，问店员今早有没有见过文穗",
+        "options": [
+          "去对面商住楼找灯织，看她有没有收到文穗的回复",
+          "在便利店门口附近再等一会儿，看有没有熟客或邻居提到今早见过文穗",
+          "先回家，重新核对纸条与消息里可能遗漏的细节",
+          "沿文穗可能走的路线往公交站方向走一段，看有没有人留意到今早出门的人"
+        ],
+        "from": "2024-09-09T01:25:00Z",
+        "to": "2024-09-09T01:50:00Z",
+        "minutes": 25,
+        "location": "school",
+        "stamina": 96,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "visit:school"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 718,
+        "calls": 9,
+        "playableMs": 25905
+      },
+      {
+        "turn": 7,
+        "attempt": 10,
+        "input": "我停下来整理刚刚发生的事情，先做目前可以做到的下一步。",
+        "options": [
+          "去对面商住楼找灯织，看她有没有收到文穗的回复",
+          "沿文穗可能走的路线往公交站方向走一段，看有没有人留意到今早出门的人",
+          "先回家，重新核对纸条与消息里可能遗漏的细节",
+          "在便利店门口附近再等一会儿，看有没有熟客或邻居提到今早见过文穗"
+        ],
+        "from": "2024-09-09T01:50:00Z",
+        "to": "2024-09-09T02:05:00Z",
+        "minutes": 15,
+        "location": "school",
+        "stamina": 96,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "visit:school"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "chars": 956,
+        "calls": 17,
+        "playableMs": 62572
+      }
+    ],
+    "revisionNote": "修复中间版本v2；余额不足中断，不代表最终代码完整一天测试。"
+  }
+]

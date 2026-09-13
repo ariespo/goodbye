@@ -12,6 +12,15 @@ import {
 import { projectCharacterPerformances } from '../../data/characterPerformance';
 import { buildNpcPlayerKnowledgeBrief } from '../../data/npcPlayerKnowledge';
 
+/** Fixed public scene cast; this is neither an encounter list for home nor case knowledge. */
+export const FIXED_LOCATION_NPC_IDS: Readonly<Record<string, readonly string[]>> = {
+  supermarket: ['chen-huihui'],
+  'community-hospital': ['detective-b'],
+  'old-man-building': ['old-man'],
+  'senpai-building': ['touko'],
+  school: ['school-guard'],
+};
+
 function budgetFor(context: TruthContext): RevealBudget {
   if (context.lockedRoute) {
     return {
@@ -238,8 +247,9 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
     continuityWarnings,
     playerPresentation,
     characterPerformances: projectCharacterPerformances(playerPresentation, context.activeNpcIds),
+    // Address permissions are a directory for possible planned destinations, not a presence list.
     npcPlayerKnowledge: buildNpcPlayerKnowledgeBrief(
-      context.activeNpcIds,
+      [...new Set([...context.activeNpcIds, ...Object.values(FIXED_LOCATION_NPC_IDS).flat()])],
       context.playerIdentity,
       context.playerIdentityVariables,
     ),

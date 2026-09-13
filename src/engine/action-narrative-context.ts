@@ -40,11 +40,12 @@ const DESTINATIONS: DestinationRule[] = [
   { locationId: 'detective-inn', aliases: /侦探小旅馆|小旅馆|旅馆/ },
   { locationId: 'water-tower', aliases: /废弃水塔|水塔/ },
   { locationId: 'observation-deck', aliases: /废弃观景台|观景台/ },
-  { locationId: 'home', aliases: /玩家公寓|自己家|家里|回家|公寓/ },
+  { locationId: 'home', aliases: /玩家公寓|自己家|家里|公寓|家(?!属|人|长)/ },
 ];
 
-const TRAVEL_INTENT = /(?:去|前往|赶往|赶到|走向|走到|走进|进入|进去|进校|到|到达|抵达|返回|回到|拜访|探访|动身|出发|过去|调查|查看|寻找|去找|找)(?:.{0,16})/;
-const NEGATED_TRAVEL = /(?:不|别|不要|取消|放弃)(?:再|打算|准备|想)?(?:去|前往|进入|回到|拜访|调查|查看|寻找)/;
+const TRAVEL_VERBS = /前往|赶往|赶到|走向|走到|走进|进入|进去|到达|抵达|返回|回到|回|拜访|探访|动身|出发|过去|调查|查看|寻找|去找|去|找|到/g;
+const DESTINATION_MODIFIERS = /^(?:往|向|去|到|附近的?|对面的?|那家|这家|那座|这座|沈|的|\s)*/;
+const NON_ACTION_CONTEXT = /不|别|没有|没打算|取消|放弃|怎么|如何|是否|哪里|哪儿|告诉|询问|问问|想起|回忆|昨天|曾经/;
 const SCHOOL_INTERIOR = /进(?:入|去)?(?:中学|学校|校内|校园|教学楼|操场|体育办公室)|进校|校内|校园|教学楼|操场|体育办公室|找体育老师|找刘仁光/;
 const SCHOOL_EXTERIOR = /校门|门口|学校外|中学外|校外/;
 
@@ -68,8 +69,25 @@ function stableRoll(seed: string): number {
 }
 
 function findDestination(input: string): DestinationRule | null {
-  if (!TRAVEL_INTENT.test(input) || NEGATED_TRAVEL.test(input)) return null;
-  return DESTINATIONS.find(rule => rule.aliases.test(input)) ?? null;
+  // Only bind a verb to its adjacent destination phrase. A location in an
+  // earlier clause (including the origin) is not evidence of travel there.
+  for (const clause of input.split(/[，,。；;！!\n]/)) {
+    for (const verb of clause.matchAll(TRAVEL_VERBS)) {
+      const prefix = clause.slice(0, verb.index);
+      if (NON_ACTION_CONTEXT.test(prefix) || /[？?]|(?:吗|么)\s*$/.test(clause)) continue;
+      if (verb[0] === '到' && /[谈提听看见想问收得知]$/.test(prefix)) continue;
+      const target = clause.slice(verb.index + verb[0].length).replace(DESTINATION_MODIFIERS, '');
+      const rule = DESTINATIONS.find(candidate => {
+        const match = candidate.aliases.exec(target);
+        if (match?.index !== 0) return false;
+        // Inspecting a receipt or seeking a phone number does not move the
+        // player into the building mentioned as that object's owner.
+        return !/^(?:的|里?的)/.test(target.slice(match[0].length));
+      });
+      if (rule) return rule;
+    }
+  }
+  return null;
 }
 
 function npcPublicLabel(npcId: string): string {
@@ -100,11 +118,12 @@ export function resolveActionNarrativeContext(
   if (!location) return null;
 
   const currentLocationId = options.currentLocationId ?? 'home';
+  const isTravel = currentLocationId !== location.id;
   const estimate = estimateTravel(currentLocationId, location.id);
   const timeMinutes = explicitTimeCostMinutes > 0
     ? explicitTimeCostMinutes
-    : estimate?.timeMinutes ?? 10;
-  const arrivalTime = addMinutes(currentTime, timeMinutes);
+    : isTravel ? estimate?.timeMinutes ?? 10 : undefined;
+  const arrivalTime = addMinutes(currentTime, timeMinutes ?? 0);
   const background = getLocationBackground(location, arrivalTime);
   const entryMode = location.id === 'school'
     ? (SCHOOL_INTERIOR.test(input) && !SCHOOL_EXTERIOR.test(input) ? 'interior' : 'exterior')
@@ -141,7 +160,6 @@ export function resolveActionNarrativeContext(
     }
   }
 
-  const isTravel = currentLocationId !== location.id;
   const enRouteRoll = options.enRouteEncounterRoll ?? stableRoll(
     `route|${options.cycleCount ?? 1}|${currentTime.toISOString()}|${currentLocationId}|${location.id}|${input}`,
   );
@@ -215,7 +233,7 @@ ${identityFlow}
     presentationMode,
     costs: {
       timeMinutes,
-      stamina: explicitTimeCostMinutes > 0 ? undefined : estimate?.staminaCost,
+      stamina: explicitTimeCostMinutes > 0 || !isTravel ? undefined : estimate?.staminaCost,
     },
     directive,
     sceneContract,

@@ -233,6 +233,7 @@ export type FactReviewViolationCode =
   | 'character-performance-violation'
   | 'player-knowledge-violation'
   | 'scene-contract-violation'
+  | 'missing-fixed-location-npc'
   | 'ungrounded-past-claim'
   | 'ungrounded-evidence-detail'
   | 'repeated-prose'
@@ -262,6 +263,8 @@ export interface WriterFact {
 }
 
 export interface WriterPacket {
+  /** Public clock, accepted history and memory survive both semantic and format repairs. */
+  continuityContext?: Record<string, unknown>;
   plan: Omit<DirectorPlan, 'revelations' | 'knowledgeEvents' | 'backgroundFactProposals'>;
   playerKnownFacts: ProjectedFact[];
   authorizedFacts: WriterFact[];

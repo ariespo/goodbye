@@ -38,6 +38,16 @@ function completeApproved(plan: DirectorPlan = validPlan) {
 }
 
 describe('mystery orchestrator', () => {
+  it('reviews undeclared narrative facts and preserves public continuity for every repair packet', async () => {
+    const plan = { ...validPlan, revelations: [] };
+    const continuity = { clock: { localDate: '2024-09-09', localTime: '12:00', cycleCount: 1 },
+      publicContinuity: [{ id: 'opening-message', text: '今早06:50，文穗发消息说今天不去学校。' }] };
+    const result = await prepareMysteryTurn({ mode: 'standard',
+      api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null, truthContext,
+      turnContext: continuity, presentationContext: continuity, complete: completeApproved(plan) });
+    expect(result.reviewPolicy.narrative).toBe(true);
+    expect(result.writerPacket.continuityContext).toMatchObject(continuity);
+  });
   beforeEach(() => {
     resetResponseFormatSupportCache();
   });

@@ -140,49 +140,84 @@ const NEGATED_HISTORY_RESULT = /(?:未|没有|并未|无法|不能)(?:提供|得
 
 export function reviewNarrativeDeterministically(
   packet: Pick<WriterPacket, 'authorizedFacts' | 'playerKnownFacts'>
-    & Partial<Pick<WriterPacket, 'authorizedBackgroundFacts' | 'authorizedKnowledgeEvents'>>,
+    & Partial<Pick<WriterPacket, 'authorizedBackgroundFacts' | 'authorizedKnowledgeEvents'>>
+    & { continuityContext?: Record<string, unknown> },
+  narrative: string,
+): FactReviewViolation[] {
+  // A question in another line must not pardon an asserted, invented answer.
+  return narrative.split(/[。！？\n]/).flatMap(sentence => reviewNarrativeSentence(packet, sentence));
+}
+
+function reviewNarrativeSentence(
+  packet: Parameters<typeof reviewNarrativeDeterministically>[0],
   narrative: string,
 ): FactReviewViolation[] {
   const evidenceMatch = narrative.match(UNAUTHORIZED_EVIDENCE_DETAIL);
+  const publicContinuity = packet.continuityContext?.publicContinuity;
+  const publicTexts = Array.isArray(publicContinuity)
+    ? publicContinuity.flatMap(item => item && typeof item.text === 'string' ? [item.text] : [])
+    : [];
   const authorizedText = [
     ...packet.authorizedFacts.map(fact => fact.text),
     ...packet.playerKnownFacts.map(fact => fact.text),
+    ...(packet.authorizedBackgroundFacts ?? []).map(fact => fact.text),
     ...(packet.authorizedKnowledgeEvents ?? []).map(event => event.evidence),
+    ...publicTexts,
   ].join('\n');
   if (evidenceMatch && !authorizedText.includes(evidenceMatch[0])) {
     return [{
       code: 'ungrounded-evidence-detail',
-      message: `正文补写了未获授权的可调查物件或记录：“${evidenceMatch[0]}”。请删除该信息，只保留当下普通互动。`,
+      message: `正文补写了未获授权的可调查物件或记录（${evidenceMatch[0]}）。完整违规句：${narrative.trim()}。请完整修复该句及其依赖内容。`,
     }];
   }
   const habitMatch = narrative.match(HISTORICAL_HABIT);
   if (habitMatch && (packet.authorizedBackgroundFacts?.length ?? 0) === 0) {
     return [{
       code: 'ungrounded-past-claim',
-      message: `正文出现了无固定生活史或已接受软设定来源的习惯性旧经历：“${habitMatch[0]}”。`,
+      message: `正文出现了无固定生活史或已接受软设定来源的习惯性旧经历。完整违规句：${narrative.trim()}。`,
     }];
   }
-  const match = narrative.match(UNAUTHORIZED_CASE_HISTORY);
+  // Exempt only the reported statement, never its adjacent conclusion. The
+  // public message proves what she said, not attendance or her later actions.
+  const hasMorningMessage = Array.isArray(publicContinuity) && publicContinuity.some(item =>
+    item?.id === 'opening-message-0650' && typeof item.text === 'string'
+    && item.text.includes('06:50') && item.text.includes('不去学校'));
+  const historyToCheck = hasMorningMessage
+    ? narrative.replace(/(?:她|文穗)(?:今早|今天早上)?(?:六点五十|0?6[:：]50)?(?:发(?:来)?(?:聊天)?消息说|说)(?:她)?今天不去学校/g, '')
+    : narrative;
+  const match = historyToCheck.match(UNAUTHORIZED_CASE_HISTORY)
+    ?? (historyToCheck !== narrative
+      ? historyToCheck.match(/(?:确认|确定|证实)(?:她|文穗)(?:未到校|没有去学校)/)
+      : null);
   if (!match) return [];
   if (OPEN_HISTORY_QUESTION.test(narrative) || NEGATED_HISTORY_RESULT.test(narrative)) return [];
+  if (/现在|此刻|眼下|当场/.test(narrative)
+    && !/今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}/.test(narrative)) return [];
+  if (authorizedText.includes(match[0])) return [];
   const caseAuthorization = [...packet.authorizedFacts, ...packet.playerKnownFacts]
     .some(fact => /今早|今天早上|早上(?!好)|昨晚|昨天|\d{1,2}\s*[:：]\s*\d{2}|买|付款|离开|去往|行踪/.test(fact.text));
   if (caseAuthorization) return [];
   return [{
     code: 'ungrounded-past-claim',
-    message: `正文补写了未获授权的既往来访、购买或去向：“${match[0]}”。请删除该信息，只保留当下普通互动。`,
+    message: `正文补写了未获授权的既往来访、购买或去向。完整违规句：${narrative.trim()}。匹配片段“${match[0]}”只是定位，不代表整句的其余断言已获授权。`,
   }];
 }
 
 export function removeUngroundedNarrativeLines(
-  packet: Parameters<typeof reviewNarrativeDeterministically>[0],
+  _packet: Parameters<typeof reviewNarrativeDeterministically>[0],
   narrative: string,
 ): string {
-  return narrative
-    .split(/\r?\n/)
-    .filter(line => reviewNarrativeDeterministically(packet, line).length === 0)
-    .join('\n');
+  // Compatibility entry point: violations belong to full-scene review/repair.
+  // Deleting individual lines silently breaks questions, answers and options.
+  return narrative;
 }
+
+const NARRATIVE_CONTINUITY_REVIEW = `你正在审核实际正文与已知公开连续性，而不是要求每句正文都成为新的事实提案。
+continuityContext.publicContinuity 是已经展示的可信开局事件；authorizedBackgroundFacts 是已授权生活史，二者均可自然重述，无须再次 proposal。clock 是当前时钟；recentHistory/memory 用于检查承接，不把玩家愿望或猜测变成事实。
+若 publicContinuity 已展示今早06:50的消息，允许“她今早发消息说今天不去学校”或“她六点五十说今天不去学校”等有限转述；06:50与六点五十是同一时间，消息发送时间不必出现在引号内的消息正文中。转述只证明她这样说过，不能推成确认未到校、已请假或新的购买/去向记录。逐个局部断言比对来源，不要因句中有“她今早”就把整句判成未授权往事。
+只拒绝明确新增且无授权的事实、物证、具体旧事件、时间线矛盾或人物知识/身份越界。例如擅自确认考勤、请假条、过去具体购买记录，或与已展示今早06:50消息矛盾的说法。请指出具体原句及缺失来源或冲突来源。
+普通当下服务动作、当前对话、递交商品和关怀性口吻本身不构成新案件事实；不要因涉及学校、牛奶或善意关怀就拒绝。不要以未逐字复述计划或语气偏好代替事实审核。
+发现违规时要求完整修复问答、旁白和依赖选项，不允许静默删除整条台词使对话断链。`;
 
 export function sanitizeNarrativeFactReview(
   review: FactReview,
@@ -242,13 +277,16 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     return {
       approved: false,
       violations: deterministicViolations,
-      corrections: ['删除所有关于文穗此前来过、买过、付过钱、离开或去向的补写，改为当下服务互动。'],
+      corrections: [
+        '根据完整违规句撤销无授权结论，并同步修复门卫等人物陈述、旁白、hint、sum和选项中依赖该结论的整条因果链；不能只替换被匹配的前缀，也不能静默删除整条台词造成断链。',
+        '即使已批准的 plan 含有同类错误收束，也必须修正该错误及其依赖内容，事实授权优先于保留计划。人物没在门口看见她不能证明她未到校；她自述不去学校不能替代已核实的考勤、请假或去向。可以保留已授权公开连续性和生活史，并以尚未确认的状态承接下一步。',
+      ],
     };
   }
   const complete = options.complete
     ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
   const messages = [
-    { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
+    { role: 'system', content: `${FACT_CRITIC_SYSTEM_PROMPT}\n\n${NARRATIVE_CONTINUITY_REVIEW}` },
     { role: 'user', content: buildNarrativeFactCriticUserPrompt(options.packet, options.narrative) },
   ] as const;
   const value = await completeParsedStructured(

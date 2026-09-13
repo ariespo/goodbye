@@ -4,6 +4,7 @@ import { mergeVariables, variablesToEndingContext } from '../sillytavern/vars-me
 import { checkCycleFailure, type CycleResetReason } from '../utils/cycleLoop';
 import { advanceClock, clampTimeCost, laterTime } from './game-clock';
 import { checkScheduledEvents } from './scheduled-events';
+import { hasDeliveredDeathNews } from './narrative-contract';
 
 export interface GameResourceCosts {
   timeMinutes?: number;
@@ -21,6 +22,9 @@ export interface GameTransactionInput {
   hasEndingInProgress?: boolean;
   /** 叙事回合开始前已有待送达死讯；回合成功后由引擎确认已送达。 */
   deliverPendingDeathNews?: boolean;
+  /** Only successful generated turns have a minimum clock advance; local UI operations may be free. */
+  narrativeTurn?: boolean;
+  narrativeText?: string;
 }
 
 export interface GameTransactionResult {
@@ -69,10 +73,10 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
   const staminaBeforeCost = finiteStatus(variables.stamina, input.gameStatus.stamina, 0, 120);
   const sanityBeforeCost = finiteStatus(variables.sanity, input.gameStatus.sanity, 0, 100);
   const stamina = Math.max(0, staminaBeforeCost - finiteNonNegative(input.costs?.stamina));
-  const sanity = Math.max(0, sanityBeforeCost - finiteNonNegative(input.costs?.sanity));
+  let sanity = Math.max(0, sanityBeforeCost - finiteNonNegative(input.costs?.sanity));
 
   const previousTime = resolvePreviousTime(input.variables, input.gameStatus);
-  const rawMinutes = finiteNonNegative(input.costs?.timeMinutes);
+  const rawMinutes = Math.max(input.narrativeTurn ? 1 : 0, finiteNonNegative(input.costs?.timeMinutes));
   const advancedTime = rawMinutes > 0
     ? advanceClock(previousTime, clampTimeCost(rawMinutes))
     : previousTime;
@@ -88,10 +92,14 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
   };
   if (
     input.deliverPendingDeathNews
+    && hasDeliveredDeathNews(input.narrativeText ?? '')
     && input.variables.deathNews === 'pending'
     && !scheduledEventPatch.deathNews
   ) {
     variables.deathNews = 'delivered';
+    // Apply the event consequence once, without doubling a larger State-reported drop.
+    sanity = Math.min(sanity, Math.max(0, input.gameStatus.sanity - 12));
+    variables.sanity = sanity;
   }
 
   const gameStatus: GameStatus = {

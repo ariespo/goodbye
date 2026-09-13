@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { appendResourcePrompt } from './resourcePrompt';
 
 describe('appendResourcePrompt(按玩家知识过滤)', () => {
+  it('uses dialogue instructions for sprites instead of an unsupported character command', () => {
+    const prompt = appendResourcePrompt('测试', 'home-day', { knowledgeEvents: [] });
+    expect(prompt).not.toContain('输出格式为：角色|');
+    expect(prompt).toContain('程序按对话行的人物与情绪自动选择立绘');
+  });
   it('初始状态不暴露隐藏地点与背景', () => {
     const prompt = appendResourcePrompt('测试', 'home-day', { knowledgeEvents: [] });
     expect(prompt).not.toContain('detective-inn');

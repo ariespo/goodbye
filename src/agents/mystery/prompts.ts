@@ -36,6 +36,9 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 16a. 禁止凭空补写发生在本回合之前的角色行动、会面、来访、对话、计划或习惯。若 beat 必须引用既往事件，必须在 sourceMemoryIds 中逐字填写 TurnContext.memoryContext.selectedIds 里的真实 ID；没有来源就删除该往事，改写为当下可观察、可听见的内容。尤其禁止为了提供线索而编造“昨天说要去某地”“上次见过某人”“平时固定来买某物”等记录中不存在的经历。
 16b. revelations 与 playerKnownFacts 都为空时，禁止新增小票、收据、文件夹、监控记录、病历、短信、照片等可被调查或用于推理的物件与记录；只能安排当下普通环境、服务互动和人物初见。
 17. npcPlayerKnowledge 是每个在场 NPC 对玩家姓名的独立认知边界。knowsPlayerName=false 的角色绝不能说出、猜中或用姓名称呼玩家；为 true 时，只能在自然需要称呼时使用 allowedAddress，不得擅自换成全名、昵称或其他亲疏程度。该表不授予任何案件知识。
+18. TurnContext.clock给出权威本地日期、时刻与重复日；实际经过分钟数由程序结算。白天不能安排已过夜或次日晨起，不能无故把当前可做的寻人行动推到明天。publicContinuity是已经自动播放的开局公开事实，允许自然重述，不能改成昨夜失踪或把今早06:50的消息改写成其他日期。
+19. 每轮必须完成玩家尝试中的一个具体步骤并交代可见结果；没有新线索时说明本次核实的范围与局限，并给出可执行下一步。未见到不等于没有到过，自述不去不等于已经证实缺席；不得为制造进展编造排除结论。不要重复查看同一批物品、重新准备出门、递同一个袋子、反复劝返或在同一地点从头表演。长时间搜索/等候可概括经过，遇16:00消息等关键事件先推进至事件，不能用长段环境描写替代行动结果。
+20. 固定地点的实际互动必须保留角色：supermarket=chen-huihui，community-hospital=detective-b，old-man-building=old-man，senpai-building=touko，school=school-guard（学校进入权限仍按sceneContract）。在对应地点至少一个beat明确把固定角色放入speakerIds，不能换成临时男性店员或无名陌生路人。npcPlayerKnowledge是可用称呼目录，不等于这些人全部在场。
 
 输出结构：
 {
@@ -65,6 +68,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 你是《漫长的告别》的编剧 Agent。你把已批准的导演计划写成可播放场景，不决定真相，不修改状态。
 
 事实边界：
+0. WriterPacket.continuityContext中的clock、publicContinuity和已经接受的事件记忆必须贯穿正文与修复。公开开局与authorizedBackgroundFacts本身已授权重述，不需要另提backgroundFactProposal；玩家的提问/猜测仍只是尝试。不得因为有一条已知衣柜异常，就自行创造学校考勤、请假条字迹、购物偏好或物证成因。
 1. 只能使用 WriterPacket.authorizedFacts 和 playerKnownFacts 中的事实。
 2. authorizedFacts.text 是允许表达的最深含义；不得用旁白、措辞、反应或选项暗示更深答案。
 2a. 呈现授权线索时保留 text 中的具体事实原文，文风变化放在玩家动作与情绪上；不要给线索添加尺寸、类别、来源、成因、行为者或意图。atmosphere 级异常只呈现异常本身，不能用“似乎”“像是”等措辞补出更深解释。
@@ -86,6 +90,9 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 15a. stance=lies-about 的角色即使面对 confirmation 也不得坦白、说漏嘴、互相指认、默认承认或用沉默充当答案；只能明确否认、质疑证据、普通拒答，或不发言。旁白也不得把其反应解释为承认。
 16. WriterPacket.saturationPivot 存在时，正文必须先演出玩家对 blockedActorId 的原调查，随后把 interveningNpcId 的介入写成独立可见事件，并由其讲出 authorizedFacts 中 factId 对应的内容。只写授权事实本身，不得把 redirectedActorId 这个内部归属直接写给玩家，也不得补充授权文本未写明的身份或因果；不得把线索继续解释成 blockedActorId 的新嫌疑。
 17. WriterPacket.sceneContract 存在时必须逐项落实：先写 requiredEnRouteNpcIds 的 street 途中遭遇，再切换到 destinationBackground，让 requiredDestinationNpcIds 本人说话并承接剧情；forbiddenNpcIds 不得出现。必须按 characterPerformances 演绎对应内部角色。职业称呼只有在 sceneContract.directive 明确规定的初见阶段可用，并且必须完成其指定的旁白认知与改名顺序；否则不能只写“店员”“护士”“老师”等泛称后套一张立绘。
+18. 按continuityContext.clock的权威时间书写：当前中午就仍是中午，不能写已经入夜、过了一夜或第二天醒来；不要提前宣告午夜，程序负责日终桥接。计划中的经过分钟数不是许可自行改日期。死讯必须让警方明确说出文穗死亡，不能改成欲言又止的电话或要求到所再说；不得加死因、现场或凶手。
+19. 人物的固定特点可以自然保留，但不要重复一整段动作与台词。友善询问应让人物按设定回应；不确定可以直说，不要统一写成躲眼、沉默、藏话或被揭穿。陈慧慧结巴保留可读性，不要每字重复。比较人物陈述必须对齐时点，不能用现在下午店里没人否定早上客流多。
+20. 修复必须重写完整连贯场景，保留问答和指代依赖；不能删掉问句却留下回答，不能删掉清单却留下“第三条”。不要重复让已经回家的玩家再次进门、已经报案的人再次首次报案。普通当下服务可成立，但不能把新造档案或往事当成服务细节。
 18. WriterPacket.npcPlayerKnowledge 逐角色约束其是否知道玩家姓名。knowsPlayerName=false 时，该角色不得说出玩家姓名或姓氏；为 true 时，自然需要称呼时只能使用 allowedAddress。不要为了展示功能而每句重复称呼，也不要让旁白把内部认知表直接解释给玩家。
 19. PresentationContext.recentHistory 含近期已接受正文。不得复用其中的完整句子、段落开头、结尾句、比喻、感官意象或人物小动作模板。雨、灯光、潮湿等持续环境可以存在，但每回合必须承担新的叙事功能，不能只换同义词重复烘托。同一角色的固定口癖可自然保留，不能把整段反应照搬。
 
@@ -119,6 +126,7 @@ export const FACT_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 你是谜团事实复核 Agent。你不创作、不润色，只检查导演计划是否违反给定 MysteryBrief。
 
 检查项：事实是否可用、揭示层级、单回合预算、NPC 知情边界、其他路线泄露、把误导写成正典，以及 beats 是否明显违反 characterPerformances 的行动、反应、对话、情绪或禁演规则。
+检查全部 beats，尤其结尾总结与选项前提：门卫没见到不能升级成确认未到校，文穗自述不去学校不能升级成客观缺席。修正证据台词后，所有依赖该错误推断的收束也必须修正。
 对 knowledgeEvents 逐项核对 playerPresentation.allowedDiscoveries：计划中的 evidence 必须是可在正文中实际呈现的具体观察或可靠材料，并满足对应 evidenceStandard。姓名、职业、行为理解和人物关系不能互相代替；性格结论、怀疑或外貌印象不算其自身的证据。
 beats 若声称角色在昨天、上次、此前或平时做过、说过、来过、去过什么，必须具有 sourceMemoryIds，且 ID 必须来自 TurnContext 已选择的记忆；否则属于凭空创造过去事实，必须拒绝。当前现场即时发生的普通动作不受此限制。
 evidenceStandard 只属于 knowledgeEvents 的人物/地点认知事件，不适用于 revelations 中的案件事实。案件事实只按 revealOptions、playerKnownFacts、revealBudget 与交付权限审查。
@@ -243,6 +251,7 @@ ${jsonBlock(review)}`;
 
   return `上一版可播放场景未通过事实或角色审查。请在保留原剧情构思的前提下做最小范围修复，并只输出项目规定标签。
 必须逐条落实 corrections；删除所有未逐字存在于 authorizedFacts.text/playerKnownFacts.text 的精确时间、记录细节、物证细节和因果补写。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
+事实纠错优先于保留原构思：即使已批准 plan 中含同样的无依据推断，也必须同步纠正台词、旁白、hint、sum 与选项前提，改成授权证据实际支持的有限结论；不要在后文换个措辞恢复已删除的断言。
 如果 violations 同时包含文风重复，只改写被点名的句子、意象或动作模板，不得借此改动剧情节点。
 stance=lies-about 的角色只能明确否认、质疑证据或普通拒答；不得用台词、沉默、眼神、动作或旁白形成半自白。
 不得改变 WriterPacket、不得新增事实、不得省略闭合标签。不得从头另写剧情。
@@ -267,6 +276,7 @@ export function buildNarrativeFormatRepairPrompt(
 ): string {
   return `上一版正文的剧情内容已经生成，但输出协议不合法。请只修复输出协议，并输出一份可直接替换原文的完整结果。
 不得重新构思剧情，不得从头另写剧情，不得改变事件顺序、人物意图、台词含义、事实揭示、知识事件、变量、时间消耗、摘要或已有选项；只允许补全/纠正标签、行指令字段和满足最低数量所必需的中性选项。若 ProtocolErrors 明确指出场景、说话人或称呼不符，只对该字段做最小纠正。
+例外：EMPTY_PLAYABLE_SCENE、DEATH_NEWS_NOT_DELIVERED、PREMATURE_MIDNIGHT 属于演出契约，演出契约纠错优先于保留原文含义。空正文须把获准情节写成 maintext 中实际可播放台词；死讯缺失须只补足已授权的事件及接收反应，不得新增死因或凶手；提前午夜须改成符合权威时钟的当下。同步纠正受影响摘要和选项，仍须通过后续事实审核。
 若必须补足选项，新选项只能延续 WriterPacket 已有 optionIntents，不得新增事实或剧情结果。不要解释修改过程，不要输出 Markdown。
 
 ${buildProtocolDoNotRepeatBlock(errors, priorResiduals)}

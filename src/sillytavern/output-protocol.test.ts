@@ -70,6 +70,25 @@ B</option>
     expect(errors.some(e => e.code === 'UNCLOSED_TAG' || e.code === 'MISMATCHED_TAG')).toBe(true);
   });
 
+  it('names unsupported instructions so repair can fix the actual offending lines', () => {
+    const maintext = baseParsed.maintext + '\n角色|touko-half-closed';
+    const errors = protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext });
+    expect(errors.find(error => error.code === 'MAINTEXT_INVALID_LINES')?.message).toContain('角色|touko-half-closed');
+  });
+
+  it('rejects a scene with only background/music even when all prose is hidden in observe', () => {
+    const maintext = '场景|senpai-building\n音乐|rain';
+    const raw = `<maintext>${maintext}<observe>对话|旁白|calm|你等待了两个小时。</observe></maintext><option>A\nB</option><sum>等候</sum>`;
+    expect(protocol.validate(raw, { ...baseParsed, maintext, observe: '你等待了两个小时。' }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'EMPTY_PLAYABLE_SCENE' })]));
+  });
+
+  it('does not display escaped instruction separators as part of a dialogue line', () => {
+    const maintext = '对话|旁白|calm|雨没有停。\\n对话|旁白|calm|手机响了。';
+    expect(protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: 'ESCAPED_INSTRUCTION_NEWLINE' })]));
+  });
+
   it('repairs a missing maintext close only when complete option and sum tags prove the boundary', () => {
     const malformed = `<maintext>\n场景|room.jpg\n对话|少女|calm|你好。\n<option>A\nB</option>\n<sum>完成</sum>`;
     const repaired = repairRecoverableOutput(malformed);

@@ -9,7 +9,21 @@ import { maintextToScene } from './scene-parser';
 
 export const OPENING_KNOWLEDGE_EVENTS = ['meet:touko'] as const;
 
-export const OPENING_STORYLINE = `场景|opening-rain-black
+/** Public continuity from the mandatory prologue only; these are not mystery evidence IDs.
+ * The first generated turn follows the prologue. Optional observe/investigate content
+ * must never be added here merely because it is available in a panel.
+ */
+export const OPENING_PUBLIC_CONTINUITY = [
+  { id: 'opening-morning', text: '开局是九月九日08:00，暴雨第五天；这是开局时刻，后续当前时间以游戏时钟为准。' },
+  { id: 'opening-breakfast', text: '今早文穗留下了切去面包皮的三明治和已经凉了的牛奶，家中无人应答。' },
+  { id: 'opening-note', text: '今早杯底纸条写着“公交卡在外层口袋！今天可能晚一点回来。”署名旁画着猫，尾巴延到纸背；纸条没有写目的地。' },
+  { id: 'opening-message-0650', text: '今早06:50文穗发来聊天消息：“我先出门了，今天不去学校。晚饭不用等我，回来再跟你说。”这是她自述的安排，尚未核实学校请假或她的去向。' },
+  { id: 'opening-unanswered-contact', text: '玩家今早看消息后问她去哪儿，尚无回复；随后拨打电话无人接听。开局只能确定暂时联系不上，尚不清楚原因与去向。' },
+  { id: 'opening-touko-visit', text: '灯织今早来归还洗好的饭盒；她说今天尚未联系文穗，当面发消息询问，并答应收到回复就告诉玩家，随后离开。' },
+  { id: 'opening-weather', text: '手机收到暴雨橙色预警，预计傍晚六点前后雨势最强。' },
+] as const;
+
+export const OPENING_MAINTEXT = `场景|opening-rain-black
 音乐|silence
 对话|旁白|calm|雨声一直响着。
 对话|旁白|calm|你闭着眼睛，听见水滴接连落在窗外的铁棚上。后脑有些发沉。刚才似乎做了一个梦，等你想起要记住，已经什么都不剩了。
@@ -78,14 +92,14 @@ export const OPENING_STORYLINE = `场景|opening-rain-black
 对话|旁白|calm|现在去问，会不会显得小题大做？
 对话|旁白|calm|窗外的积水已经漫过楼下那截矮台阶。你按亮手机，还是没有回复。
 对话|旁白|calm|只问问她在哪里。至少得确定她有地方避雨。
-对话|旁白|calm|钥匙挂在门边。你坐在餐桌旁，先想该从哪里问起。
+对话|旁白|calm|钥匙挂在门边。你坐在餐桌旁，先想该从哪里问起。`;
 
-<observe>
+export const OPENING_PANELS = `<observe>
 客厅里还有三明治和牛奶的气味。纸条放在桌边，背面露出一截画歪的猫尾巴。手机上没有新消息。
 
 隔着阳台玻璃上的水雾，只能看见对面商住楼模糊的轮廓。灯织刚回去不久。
 
-文穗的房门开着一条缝。床尾叠着被子，书桌上的课本收成一摞。衣柜门没有关严，一只空衣架斜挂着；平时挂在那里的绿色围裙没有看见。
+文穗的房门开着一条缝。床尾叠着被子，书桌上的课本收成一摞。衣柜门没有关严，里面有一处不自然的空缺，从门口还看不清少了什么。
 
 床头柜上的药瓶标签已经磨得模糊，从门口看不清上面写着什么。
 
@@ -107,6 +121,8 @@ export const OPENING_STORYLINE = `场景|opening-rain-black
 去对面商住楼找灯织，看看文穗有没有回复她|现实|5分钟|3|1
 去找周大爷，问他早上散步时有没有见过文穗|现实|12分钟|7|2
 </action>`;
+
+export const OPENING_STORYLINE = `${OPENING_MAINTEXT}\n\n${OPENING_PANELS}`;
 
 export function parseOpeningStoryline() {
   const scene = maintextToScene(OPENING_STORYLINE, {

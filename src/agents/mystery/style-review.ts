@@ -1,15 +1,52 @@
 import { getMaxOutputTokens } from '../../sillytavern/token-budget';
 import { maintextToScene } from '../../engine/scene-parser';
-import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
+import { callSecondaryApi, type ApiConfig, type ResponseFormat } from '../../sillytavern/api-router';
 import type { ChatMessage, ChatPreset } from '../../sillytavern/types';
-import { buildStyleCriticUserPrompt, STYLE_CRITIC_SYSTEM_PROMPT } from './prompts';
-import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
+import { buildStyleCriticUserPrompt } from './prompts';
+import { createParseState, parseChunk } from '../../sillytavern/stream-parser';
 import { completeParsedStructured, extractJson, type AgentCompletion } from './structured';
 import type { FactReview, FactReviewViolation } from './types';
+
+type GroundedStyleViolation = FactReviewViolation & { oldQuote?: string; candidateQuote?: string };
+type GroundedStyleReview = Omit<FactReview, 'violations'> & { violations: GroundedStyleViolation[] };
+
+const STYLE_RESPONSE_FORMAT: ResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'grounded_style_review', strict: true,
+    schema: {
+      type: 'object', additionalProperties: false,
+      required: ['approved', 'violations', 'corrections'],
+      properties: {
+        approved: { type: 'boolean' },
+        violations: { type: 'array', items: {
+          type: 'object', additionalProperties: false,
+          required: ['code', 'message', 'oldQuote', 'candidateQuote'],
+          properties: {
+            code: { type: 'string', enum: ['repeated-prose', 'repeated-imagery', 'style-template-repetition'] },
+            message: { type: 'string' }, oldQuote: { type: 'string' }, candidateQuote: { type: 'string' },
+          },
+        } },
+        corrections: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  },
+};
+
+const GROUNDED_STYLE_PROMPT = `你是文风连续性审查员，只比较已接受旧正文和候选正文。
+拒绝仅限完整长句、段落或具有同样叙事功能的具体表达明显重复，且没有递进或反转。
+角色固定特点、职业身份、习惯及持续天气、相同地点不等于重复；不要以抽象段落模板、气氛或普通动作相似为理由阻断。
+exemptTexts 是本回合授权且必须呈现的证据原文，允许重复。简短服务用语、姓名、必要承接和有推进的回环允许。
+每项违规必须给出逐字可核验的 oldQuote（只能来自已接受旧正文）和 candidateQuote（只能来自候选正文），至少引用有意义的完整表达。
+不得虚构旧文或把候选中的句子当旧文；找不到双方确切引句则通过。message 必须说明具体表达及叙事功能如何重复。
+只输出 JSON：{"approved":boolean,"violations":[{"code":"repeated-prose|repeated-imagery|style-template-repetition","message":"string","oldQuote":"string","candidateQuote":"string"}],"corrections":["string"]}。`;
 
 const MIN_EXACT_LENGTH = 10;
 const MIN_NEAR_LENGTH = 16;
 const NEAR_DUPLICATE_THRESHOLD = 0.75;
+// Semantic judgement may catch longer rewrites below the automatic 0.75 cutoff,
+// but topic/character similarity alone is not evidence of repeated prose.
+const MIN_SEMANTIC_WORDING_OVERLAP = 0.6;
 
 function normalizeSentence(value: string): string {
   return value
@@ -96,26 +133,22 @@ export function reviewProseDeterministically(
   return [];
 }
 
-/** Exact repeats add no new plot information; drop their whole dialogue line before model review. */
+/** Compatibility entry point: repetition requires whole-scene repair to preserve dialogue dependencies. */
 export function removeExactRepeatedLines(
   narrative: string,
   recentNarratives: string[],
   exemptTexts: string[] = [],
 ): string {
-  const previous = new Set(recentNarratives.flatMap(sentenceList).map(item => item.normalized));
-  const duplicates = sentenceList(narrative)
-    .filter(item => previous.has(item.normalized) && !isAuthorizedEvidenceSentence(item.normalized, exemptTexts))
-    .map(item => item.raw);
-  if (duplicates.length === 0) return narrative;
-  return narrative.split(/\r?\n/).filter(line => !duplicates.some(sentence => line.includes(sentence))).join('\n');
+  void recentNarratives;
+  void exemptTexts;
+  return narrative;
 }
 
 export function recentAcceptedNarratives(messages: ChatMessage[], limit = 3): string[] {
   return messages
     .filter(message => message.role === 'assistant')
     .map(message => message.parsed?.maintext
-      || message.content.match(/<maintext>([\s\S]*?)<\/maintext>/i)?.[1]?.trim()
-      || '')
+      ?? parseChunk(createParseState(), message.content).parsed.maintext)
     .filter(Boolean)
     .slice(-limit);
 }
@@ -154,21 +187,36 @@ export async function reviewNarrativeStyle(options: {
     complete,
     `${options.api.baseUrl}|${options.api.model}`,
     [
-      { role: 'system', content: STYLE_CRITIC_SYSTEM_PROMPT },
-      { role: 'user', content: buildStyleCriticUserPrompt(options.recentNarratives, options.narrative) },
+      { role: 'system', content: GROUNDED_STYLE_PROMPT },
+      { role: 'user', content: `${buildStyleCriticUserPrompt(options.recentNarratives, options.narrative)}\n\nexemptTexts（授权证据原文）：\n${JSON.stringify(options.exemptTexts ?? [])}` },
     ],
     { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
-    FACT_REVIEW_RESPONSE_FORMAT,
+    STYLE_RESPONSE_FORMAT,
     raw => {
-      const parsed = extractJson(raw) as Partial<FactReview> | null;
+      const parsed = extractJson(raw) as Partial<GroundedStyleReview> | null;
       if (!parsed || typeof parsed.approved !== 'boolean'
         || !Array.isArray(parsed.violations) || !Array.isArray(parsed.corrections)) {
         throw new Error('文风连续性审查返回了不可解析的结果。');
       }
-      return parsed as FactReview;
+      return parsed as GroundedStyleReview;
     },
   );
-  const violations = value.violations.filter(item => item && typeof item.message === 'string');
+  // Quotes are evidence, not authority: ungrounded model accusations cannot block a turn.
+  const violations = value.violations.filter(item => {
+    if (!item || typeof item.message !== 'string'
+      || typeof item.oldQuote !== 'string' || typeof item.candidateQuote !== 'string') return false;
+    const oldQuote = item.oldQuote.trim();
+    const candidateQuote = item.candidateQuote.trim();
+    const oldWording = normalizeSentence(oldQuote);
+    const candidateWording = normalizeSentence(candidateQuote);
+    if (oldWording.length < MIN_NEAR_LENGTH || candidateWording.length < MIN_NEAR_LENGTH) return false;
+    const lengthRatio = Math.min(oldWording.length, candidateWording.length)
+      / Math.max(oldWording.length, candidateWording.length);
+    if (lengthRatio < 0.72 || diceSimilarity(oldWording, candidateWording) < MIN_SEMANTIC_WORDING_OVERLAP) return false;
+    return options.recentNarratives.some(text => text.includes(oldQuote))
+      && options.narrative.includes(candidateQuote)
+      && !isAuthorizedEvidenceSentence(normalizeSentence(candidateQuote), options.exemptTexts ?? []);
+  });
   return {
     approved: violations.length === 0,
     violations,

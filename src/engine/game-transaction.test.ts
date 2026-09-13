@@ -69,8 +69,28 @@ describe('settleGameTransaction', () => {
       gameStatus: status({ time: new Date('2024-09-09T16:10:00') }),
       costs: { timeMinutes: 10 },
       deliverPendingDeathNews: true,
+      narrativeText: '警方告知：文穗已经死亡。请保持电话畅通。',
     });
 
     expect(result.variables.deathNews).toBe('delivered');
+    expect(result.gameStatus.sanity).toBeLessThan(70);
+  });
+
+  it('does not deliver pending death news for a suspense phone call or parents death certificate', () => {
+    const result = settleGameTransaction({
+      variables: { ...createDefaultVariables(), deathNews: 'pending', time: '2024-09-09T16:15:00' },
+      gameStatus: status({ time: new Date('2024-09-09T16:15:00') }),
+      costs: { timeMinutes: 10 }, deliverPendingDeathNews: true,
+      narrativeText: '派出所说，文穗的事需要当面说，没有在电话里说。带上她父母的死亡证明。',
+    });
+    expect(result.variables.deathNews).toBe('pending');
+  });
+
+  it('advances a committed narrative despite zero same-location travel cost, while local UI actions remain free', () => {
+    const input = { variables: { ...createDefaultVariables(), time: '2024-09-09T16:20:00' },
+      gameStatus: status({ time: new Date('2024-09-09T16:20:00') }), costs: { timeMinutes: 0 } };
+    expect(settleGameTransaction({ ...input, narrativeTurn: true }).gameStatus.time.getTime())
+      .toBeGreaterThan(input.gameStatus.time.getTime());
+    expect(settleGameTransaction(input).gameStatus.time.getTime()).toBe(input.gameStatus.time.getTime());
   });
 });

@@ -1,4 +1,5 @@
 import type { ParsedContent } from './types';
+import { maintextToScene } from '../engine/scene-parser';
 
 export interface ValidationError {
   code: string;
@@ -68,6 +69,9 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
 
   function validate(rawText: string, parsed: ParsedContent): ValidationError[] {
     const errors: ValidationError[] = [];
+    if (/\\(?:r\\n|n)(?:对话|场景|音乐|认知|dialogue|scene)\|/u.test(parsed.maintext ?? '')) {
+      errors.push({ code: 'ESCAPED_INSTRUCTION_NEWLINE', message: '指令之间必须使用真实换行，不能把字面量\\n和下一条指令写进台词。', tag: 'maintext' });
+    }
 
     // 1. 必填标签检查
     for (const tag of requiredTags) {
@@ -75,6 +79,8 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
         case 'maintext':
           if (!parsed.maintext || parsed.maintext.trim().length === 0) {
             errors.push({ code: 'MISSING_MAINTEXT', message: '缺少 <maintext> 或内容为空', tag });
+          } else if (!maintextToScene(parsed.maintext).lines.some(line => line.text.trim())) {
+            errors.push({ code: 'EMPTY_PLAYABLE_SCENE', message: 'maintext必须包含实际可播放的对话或旁白；场景、音乐和observe面板不能代替正文。', tag });
           }
           break;
         case 'option': {
@@ -212,7 +218,7 @@ export function createOutputProtocol(options: ValidationOptions = {}) {
       if (invalidLines.length > 0) {
         errors.push({
           code: 'MAINTEXT_INVALID_LINES',
-          message: `<maintext> 中包含 ${invalidLines.length} 行无法识别的行指令`,
+          message: `<maintext> 中包含 ${invalidLines.length} 行无法识别的行指令：${invalidLines.slice(0, 5).map(line => JSON.stringify(line.slice(0, 200))).join('；')}。使用场景、音乐、对话、镜头、效果、动作或认知指令；立绘由对话行自动选择，不支持单独的角色指令。`,
           tag: 'maintext',
         });
       }

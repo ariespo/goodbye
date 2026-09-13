@@ -9,6 +9,53 @@ import {
 const morning = new Date('2025-09-09T08:00:00');
 
 describe('action narrative context semantic planning', () => {
+  it.each([
+    ['离开便利店，前往对面商住楼找灯织', 'senpai-building'],
+    ['从学校走到社区医院问问护士', 'community-hospital'],
+    ['不去便利店，改去学校找门卫', 'school'],
+    ['去医院问问学校的情况', 'community-hospital'],
+    ['回家休息一段时间', 'home'],
+  ])('binds the destination to the actual movement: %s', (input, destination) => {
+    const context = resolveActionNarrativeContext(input, morning, 0, {
+      currentLocationId: 'street', enRouteEncounterRoll: 1,
+    });
+    expect(context?.locationId).toBe(destination);
+    expect(context?.costs.timeMinutes).toBeGreaterThan(0);
+  });
+
+  it.each([
+    '我想核实学校现在能够告诉家属的情况，请告诉我接下来应该去哪里找她',
+    '查看便利店的小票，寻找学校的联系电话',
+    '我想问问灯织，要不要去学校？',
+    '请告诉我怎么去医院',
+    '暂时不要回家，留在这里等消息',
+    '我没有去学校，只是在便利店门口等人',
+    '想起昨天去学校找她的事',
+    '和门卫谈到学校最近发生的事情',
+    '问她是否见到灯织',
+    '听到医院传来的消息后，先留在原地',
+  ])('leaves questions, mentions and rejected movement to the director: %s', input => {
+    expect(resolveActionNarrativeContext(input, morning)).toBeNull();
+  });
+
+  it.each(['如果暂时没有可做的事，就回家休息一段时间', '回到家里休息一段时间'])('leaves rest duration to the director: %s', input => {
+    const context = resolveActionNarrativeContext(input, morning, 0, {
+      currentLocationId: 'home', enRouteEncounterRoll: 0,
+    });
+    expect(context?.locationId).toBe('home');
+    expect(context?.costs.timeMinutes).toBeUndefined();
+    expect(context?.costs.stamina ?? 0).toBe(0);
+    expect(context?.enRouteNpcIds).toEqual([]);
+  });
+
+  it('preserves an explicit action duration while already at the destination', () => {
+    const context = resolveActionNarrativeContext('回家休息一段时间', morning, 30, {
+      currentLocationId: 'home',
+    });
+    expect(context?.costs.timeMinutes).toBe(30);
+    expect(context?.costs.stamina).toBeUndefined();
+  });
+
   it('stages Huihui as clerk, recognition narration, archive event, then her known name', () => {
     const context = resolveActionNarrativeContext(
       '去便利店打听文穗早上的行踪',

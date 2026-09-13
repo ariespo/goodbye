@@ -4,6 +4,8 @@ import { gameLocations } from '../../data/locations';
 import { appendResourcePrompt } from '../../utils/resourcePrompt';
 import { buildNpcPlayerKnowledgeBrief, doesPlayerIntroduceName, formatNpcPlayerKnowledgeDirective, type PlayerIdentity } from '../../data/npcPlayerKnowledge';
 import { buildScheduledDirectives } from '../../engine/scheduled-events';
+import { buildNarrativeClock } from '../../engine/narrative-contract';
+import { OPENING_MAINTEXT, OPENING_PUBLIC_CONTINUITY } from '../../engine/opening-storyline';
 import { translateForDirector } from '../../engine/variable-thresholds';
 import { buildPlayerKnowledgeBrief } from '../../data/playerKnowledge';
 import { evaluatePlayerIntent } from '../../engine/player-intent-policy';
@@ -86,9 +88,26 @@ export interface TurnPreparationInput {
   endingCheckContext: EndingCheckContext; history: ChatMessage[];
   pendingNarrativeContext?: ActionNarrativeContext | null; hasPendingAction?: boolean;
 }
+/** Old saves predate the public ledger. Trust only the exact mandatory assistant
+ * opening, never a player quote or parsed-only claim. Legacy panels were nested
+ * inside maintext, but their optional contents do not confer any knowledge.
+ */
+function hasOfficialOpeningHistory(history: ChatMessage[]): boolean {
+  return history.some(message => {
+    if (message.role !== 'assistant') return false;
+    const maintext = message.content.match(/^\s*<maintext>([\s\S]*?)<\/maintext>/)?.[1];
+    if (!maintext) return false;
+    const mandatoryText = maintext
+      .replace(/<(observe|investigate|action)>[\s\S]*?<\/\1>/g, '')
+      .replace(/\r\n/g, '\n')
+      .trim();
+    return mandatoryText === OPENING_MAINTEXT;
+  });
+}
+
 /** Both foreground and speculative callers use the identical authority inputs. */
 export function buildTurnPreparation(input: TurnPreparationInput) {
-  const { userInput, settings, activePreset, history, hasPendingAction = false } = input;
+  const { userInput, settings, activePreset, history } = input;
   const pendingNarrativeContext = input.pendingNarrativeContext ?? null;
   const tavern = { variables: input.variables };
   const game = { gameStatus: input.gameStatus, currentState: input.currentState, endingCheckContext: input.endingCheckContext };
@@ -112,6 +131,11 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
   const scheduledDirectives = buildScheduledDirectives(narrativeVariables);
   const intentPolicy = evaluatePlayerIntent(userInput, narrativeVariables);
   const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
+  const clock = buildNarrativeClock(game.gameStatus.time, Number(tavern.variables.cycleCount ?? 1));
+  const openingIds = new Set(Array.isArray(tavern.variables.openingPublicContinuity)
+    ? tavern.variables.openingPublicContinuity.map((fact: { id?: unknown }) => fact?.id) : []);
+  const recoverOpening = tavern.variables.openingPublicContinuity === undefined && hasOfficialOpeningHistory(history);
+  const publicContinuity = OPENING_PUBLIC_CONTINUITY.filter(fact => recoverOpening || openingIds.has(fact.id));
   const historyMessages = history;
   const agentMode: AgentNarrativeMode = settings.agentNarrativeMode ?? 'standard';
   const mysteryLocation = actionNarrativeContext?.locationId ?? resolveMysteryLocation(narrativeBackground);
@@ -132,6 +156,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
   };
   const npcPlayerKnowledge = buildNpcPlayerKnowledgeBrief(activeNpcIds, playerIdentity, playerIdentityVariables);
   const basePromptUserInput = appendResourcePrompt(userInput, narrativeBackground, narrativeVariables)
+    + `\n\n${clock.directive}`
     + (actionNarrativeContext ? `\n\n${actionNarrativeContext.directive}` : '')
     + (npcPlayerKnowledge.length ? `\n\n${formatNpcPlayerKnowledgeDirective(npcPlayerKnowledge)}` : '')
     + `\n\n[玩家意图裁决] ${intentPolicy.directorDirective}`
@@ -193,7 +218,9 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
       recentHistory,
       memoryContext: contextBundle.directorMemory,
       contextSelectionIds: contextBundle.selectedIds,
-      requiresStateAgent: hasPendingAction || !!actionNarrativeContext || intentPolicy.mode !== 'normal',
+      requiresStateAgent: true,
+      clock,
+      publicContinuity,
       gameStatus: {
         time: game.gameStatus.time.toISOString(),
         stamina: game.gameStatus.stamina,
@@ -204,6 +231,8 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
         + (scheduledDirectives.length ? '\n' + scheduledDirectives.map(l => `- ${l}`).join('\n') : ''),
     },
     presentationContext: {
+      clock,
+      publicContinuity,
       playerInput: userInput,
       recentHistory,
       currentLocation: truthContext.currentLocation,

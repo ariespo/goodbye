@@ -2,6 +2,7 @@ import { buildTurnPreparation, preparationContextKey, resolveAnalysisApi, resolv
 import { assertTurnActive, runStateWithFallback } from '../utils/turn-lifecycle';
 import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
 import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
+import { validateNarrativeContract } from '../engine/narrative-contract';
 
 import { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
@@ -431,7 +432,7 @@ export function useGameLoop() {
           gameStatus: game.gameStatus,
           variablePatch,
           costs: {
-            timeMinutes: explicitCosts?.timeMinutes ?? llmCost ?? 10,
+            timeMinutes: finitePositive(explicitCosts?.timeMinutes) ? explicitCosts!.timeMinutes : llmCost ?? 10,
             stamina: explicitCosts?.stamina,
             sanity: (explicitCosts?.sanity ?? 0) + intentPolicy.sanityPenalty || undefined,
           },
@@ -439,6 +440,8 @@ export function useGameLoop() {
           endingsSeen: game.endingsSeen,
           hasEndingInProgress: game.endingPanel.visible || !!game.endingPanel.pendingEndingId,
           deliverPendingDeathNews: hadPendingDeathNews,
+          narrativeTurn: true,
+          narrativeText: parsed.maintext || fullText,
         });
         const acceptedAt = Date.now();
         const turnId = crypto.randomUUID();
@@ -632,6 +635,13 @@ export function useGameLoop() {
               const candidateScene = candidateParseState.parsed.maintext
                 ? parseNarrativeScene(candidateParseState.parsed.maintext)
                 : null;
+              const explicitMinutes = resolvePendingCosts()?.timeMinutes;
+              candidateValidationErrors.push(...validateNarrativeContract(candidateScene, {
+                time: game.gameStatus.time,
+                timeMinutes: finitePositive(explicitMinutes) ? Number(explicitMinutes)
+                  : Number(preparedTurn?.writerPacket.plan.timeCostMinutes) || 10,
+                pendingDeathNews: hadPendingDeathNews,
+              }));
               if (candidateScene && actionNarrativeContext) {
                 const contextError = actionNarrativeContextError(actionNarrativeContext, candidateScene);
                 if (contextError) {
@@ -642,7 +652,7 @@ export function useGameLoop() {
                 const playerAddressError = npcPlayerKnowledgeError(
                   candidateScene.lines,
                   playerIdentity,
-                  npcPlayerKnowledge,
+                  preparedTurn?.writerPacket.npcPlayerKnowledge ?? npcPlayerKnowledge,
                 );
                 if (playerAddressError) {
                   candidateValidationErrors.push({
@@ -978,10 +988,8 @@ export function useGameLoop() {
                   return null;
                 }, assertCurrent));
                 assertCurrent();
-                if (stateResult?.summary) {
-                  parseStateRef.current.parsed.summary = stateResult.summary;
-                  actions.setParsedContent({ summary: stateResult.summary });
-                }
+                // Only the already-reviewed narrative summary may enter durable memory.
+                // State analyzes numeric changes; its free-form summary has no fact authority.
                 if (stateResult && (stateResult.rejected.length || stateResult.clamped.length)) {
                   console.warn('[state-agent]', stateResult.rejected, stateResult.clamped);
                 }

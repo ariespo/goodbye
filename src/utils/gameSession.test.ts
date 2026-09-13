@@ -81,6 +81,47 @@ describe('new-game resource initialization', () => {
     expect(parsedOpening.vars).toMatchObject({ location: 'home', stamina: 100, sanity: 70 });
   });
 
+  it('keeps optional opening panels outside played maintext and stores the parsed assistant history', async () => {
+    await startNewGame();
+    const state = useGameStore.getState();
+    const message = state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId)!.messages[0];
+
+    expect(message.parsed?.maintext).toContain('先想该从哪里问起。');
+    expect(message.parsed?.maintext).not.toMatch(/<\/?(?:observe|investigate|action)>/);
+    expect(message.parsed?.maintext).not.toContain('一只空衣架');
+    expect(message.parsed?.observe).toContain('衣柜');
+    expect(message.parsed?.actionItems).toHaveLength(5);
+    expect(message.content.indexOf('</maintext>')).toBeLessThan(message.content.indexOf('<observe>'));
+  });
+
+  it('seeds only public opening continuity without treating optional observations as discovered mystery evidence', async () => {
+    await startNewGame();
+    const state = useGameStore.getState();
+    const facts = state.tavern.variables.openingPublicContinuity as Array<{ id: string; text: string }>;
+
+    expect(facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'opening-message-0650', text: expect.stringContaining('06:50') }),
+      expect.objectContaining({ id: 'opening-note', text: expect.stringContaining('可能晚一点回来') }),
+      expect.objectContaining({ id: 'opening-unanswered-contact' }),
+    ]));
+    expect(JSON.stringify(facts)).not.toMatch(/绿色围裙|空衣架|校门口|男性|真凶/);
+    expect(state.tavern.variables.mysteryKnowledge ?? {}).toEqual({});
+    expect(state.api.parsedContent.observe).not.toContain('绿色围裙');
+  });
+
+  it('keeps the current opening clock distinct from the message time and unconfirmed disappearance', async () => {
+    await startNewGame();
+    const state = useGameStore.getState();
+    expect(state.game.gameStatus.time.getHours()).toBe(8);
+    expect(state.game.gameStatus.time.getMinutes()).toBe(0);
+    const facts = state.tavern.variables.openingPublicContinuity as Array<{ id: string; text: string }>;
+    expect(facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'opening-message-0650', text: expect.stringContaining('今天不去学校') }),
+      expect.objectContaining({ id: 'opening-unanswered-contact', text: expect.stringContaining('暂时联系不上') }),
+    ]));
+    expect(JSON.stringify(facts)).not.toMatch(/昨晚失踪|昨夜失踪|从昨晚|从昨夜/);
+  });
+
   it('replaces stale parsed options when starting a new game', async () => {
     useGameStore.setState(state => ({
       api: { ...state.api, parsedContent: parsed },
