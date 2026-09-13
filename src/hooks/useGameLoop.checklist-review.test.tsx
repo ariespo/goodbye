@@ -42,7 +42,8 @@ beforeEach(async () => {
   const preset = { ...createDefaultPreset(), id: 'preset', createdAt: 0, updatedAt: 0 } as ChatPreset;
   const settings = { api: { baseUrl: 'test', apiKey: 'test', model: 'test' },
     activePresetId: preset.id, userName: '玩家', characterName: '文穗', agentNarrativeMode: 'strict' } as AppSettings;
-  const chat = { id: 'checklist-chat', name: 'test', messages: [], variables, createdAt: 0, updatedAt: 0 } as ChatSession;
+  const chat: ChatSession = { id: 'checklist-chat', name: 'test', messages: [], variables,
+    characterName: '文穗', userName: '玩家', presetId: preset.id, lorebookIds: [], createdAt: 0, updatedAt: 0 };
   useGameStore.setState({ ...baseline,
     tavern: { ...baseline.tavern, settings, presets: [preset], variables, chats: [chat], activeChatId: chat.id },
     api: { ...baseline.api, abortController: null },

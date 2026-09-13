@@ -594,6 +594,7 @@ export function useGameLoop() {
             if (updatedContent !== lastAssistant.content) {
               const updatedMessages = chat.messages.map(m => (m.id === token ? { ...m, content: updatedContent } : m));
               await persistActiveChat({ messages: updatedMessages }, {
+                signal: abortController.signal,
                 assertCurrent: () => {
                   const latest = useGameStore.getState();
                   const latestChat = latest.tavern.chats.find(item => item.id === latest.tavern.activeChatId);
