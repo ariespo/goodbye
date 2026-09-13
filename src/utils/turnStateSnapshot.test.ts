@@ -24,6 +24,19 @@ const scene: Scene = {
 };
 
 describe('turn state snapshot', () => {
+  it('isolates nested action and memory state through capture and rollback', () => {
+    const source = { gameStatus: status, currentState, currentScene: scene, currentLineIndex: 0, sceneComplete: true,
+      variables: { actionContinuity: { cycleCount: 1, appliedEventEffectIds: ['death-news:cycle:1'] },
+        worldMemory: { events: [{ id: 'retained' }] } } };
+    const captured = captureTurnState(source);
+    source.variables.actionContinuity.appliedEventEffectIds.push('mutated');
+    source.variables.worldMemory.events[0].id = 'mutated';
+    expect(captured.variables.actionContinuity?.appliedEventEffectIds).toEqual(['death-news:cycle:1']);
+    expect(captured.variables.worldMemory.events[0].id).toBe('retained');
+    const restored = resolveTurnRollback({ id: 'm', role: 'user', content: '继续', timestamp: 0, variables: {}, turnState: captured }, source);
+    restored.variables.actionContinuity!.appliedEventEffectIds!.push('another');
+    expect(captured.variables.actionContinuity?.appliedEventEffectIds).toEqual(['death-news:cycle:1']);
+  });
   it('捕获独立的回合前状态副本', () => {
     const snapshot = captureTurnState({
       gameStatus: status,

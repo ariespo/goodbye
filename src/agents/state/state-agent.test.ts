@@ -2,8 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultVariables } from '../../sillytavern/vars-merger';
 import { projectWritableState, validateStateAgentResponse } from './state-agent';
 import { buildStateEvidenceAuthority } from './state-evidence';
+import type { ResolvedActionOutcome } from '../../engine/action-resolution';
 
 describe('validateStateAgentResponse', () => {
+  it('cannot override resolved resources or the program continuation even with matching prose', () => {
+    const resolved: ResolvedActionOutcome = { id: 'r', cycleCount: 1,
+      startTime: '2024-09-09T08:00:00', endTime: '2024-09-09T08:55:00',
+      startLocationId: 'home', endLocationId: 'home', plannedMinutes: 55, executedMinutes: 55,
+      segments: [], completedSourceIds: [], eventEffectIds: [],
+      resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } } };
+    const quote = '你精疲力竭，忘了之前的调查。';
+    const response = { patch: { stamina: 1, sanity: 1, location: 'school', actionContinuity: { cycleCount: 9 } },
+      evidence: ['stamina', 'sanity', 'location', 'actionContinuity.cycleCount'].map(path => ({ path, quote })) };
+    const result = validateStateAgentResponse(response, createDefaultVariables(), quote, undefined, undefined, resolved);
+    expect(result.vars).toEqual({});
+    expect(result.rejected.map(item => item.path).sort())
+      .toEqual(['actionContinuity.cycleCount', 'location', 'sanity', 'stamina']);
+  });
+
   it('rejects unknown location mutations while preserving the registered anchor', () => {
     const current = { ...createDefaultVariables(), location: 'school' };
     const result = validateStateAgentResponse({

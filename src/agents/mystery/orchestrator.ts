@@ -35,6 +35,12 @@ import { completeStructured, extractJson, getResponseFormatSupport } from './str
 import type { AgentCompletion } from './structured';
 import { buildDirectorRepairTask, mergeRepairResiduals } from './repair-task';
 import type { RepairFailedStage } from './repair-task';
+import type { ActionAuthorityContext } from './action-authority';
+import { buildActionAuthorityInput, projectExecutedPlan, buildActionOutcomeSources, isNonWorkResolution } from './action-authority';
+import { resolveAction } from '../../engine/action-resolution';
+import type { ResolvedActionOutcome } from '../../engine/action-resolution';
+import type { ExecutedTurnProjection } from './turn-preparation';
+import { capturePendingActionAuthorization, restorePendingActionAuthorization, type PendingActionAuthorization } from './pending-action-authorization';
 
 export type AgentNarrativeMode = AgentNarrativeModeSetting;
 
@@ -53,9 +59,15 @@ export interface PrepareMysteryTurnOptions {
   abortSignal?: AbortSignal;
   /** 后台预规划调用时标记为 true，仅影响编排日志展示。 */
   speculative?: boolean;
+  actionAuthority?: ActionAuthorityContext;
+  executionFingerprint?: string;
+  projectExecution?: (resolution: ResolvedActionOutcome) => ExecutedTurnProjection;
 }
 
 export interface PreparedMysteryTurn {
+  /** Program-only authorization for unfinished work; never serialized to model messages. */
+  pendingActionAuthorization?: import('./pending-action-authorization').PendingActionAuthorization | null;
+  executedContext?: ExecutedTurnProjection;
   brief: MysteryBrief;
   directorPlan: DirectorPlan;
   hardReview: FactReview;
@@ -93,6 +105,24 @@ function parseDirectorPlan(text: string): DirectorPlan {
   if (!Array.isArray(plan.beats) || !Array.isArray(plan.revelations)
     || !Array.isArray(plan.optionIntents) || !Array.isArray(plan.assetRequests)) {
     throw new Error('导演计划数组字段不完整。');
+  }
+  if (plan.actionSteps !== undefined) {
+    const allowed = new Set(['id', 'kind', 'scope', 'locationId']);
+    const ids = new Set<string>();
+    if (!Array.isArray(plan.actionSteps) || plan.actionSteps.length < 1 || plan.actionSteps.length > 8) {
+      throw new Error('actionSteps 必须包含一至八个行动阶段。');
+    }
+    for (const step of plan.actionSteps) {
+      if (!step || typeof step !== 'object' || Array.isArray(step)
+        || Object.keys(step).some(key => !allowed.has(key))
+        || typeof step.id !== 'string' || !step.id.trim() || ids.has(step.id)
+        || typeof step.locationId !== 'string' || !step.locationId.trim()
+        || !['inquiry', 'investigation', 'search', 'travel', 'rest', 'wait'].includes(step.kind)
+        || !['short', 'normal', 'deep'].includes(step.scope)) {
+        throw new Error('行动阶段仅允许唯一 id、kind、scope、locationId；不得指定资源、结果或事件。');
+      }
+      ids.add(step.id);
+    }
   }
   return plan as DirectorPlan;
 }
@@ -402,7 +432,40 @@ async function runMysteryPipeline(
     }
   }
   const factAliases = createFactAliasTable(MYSTERY_TRUTH_GRAPH);
-  const brief = buildAliasedMysteryBrief(internalBrief, factAliases);
+  let brief = buildAliasedMysteryBrief(internalBrief, factAliases);
+  let restored: ReturnType<typeof restorePendingActionAuthorization> | undefined;
+  const authority = options.actionAuthority;
+  if (authority?.resumeActionId && authority.deathNews !== 'pending') {
+    if (!authority.continuation || !authority.pendingAuthorization) {
+      throw new MysteryPipelineBlockedError('未完成行动缺少原授权记录，请重新选择行动。');
+    }
+    restored = restorePendingActionAuthorization({ ledger: authority.pendingAuthorization,
+      continuation: authority.continuation, graph: MYSTERY_TRUTH_GRAPH, aliases: factAliases,
+      truthContext: options.truthContext });
+    const restoredIds = new Set(restored.usableFacts.map(fact => fact.id));
+    const npcs = new Map(brief.npcKnowledge.map(npc => [npc.npcId, npc]));
+    for (const npc of restored.npcKnowledge) {
+      const existing = npcs.get(npc.npcId);
+      npcs.set(npc.npcId, { npcId: npc.npcId, facts: [...new Map([
+        ...(existing?.facts ?? []), ...npc.facts,
+      ].map(fact => [fact.factId, fact])).values()] });
+    }
+    brief = { ...brief, usableFacts: [...new Map([...brief.usableFacts, ...restored.usableFacts].map(fact => [fact.id, fact])).values()],
+      npcKnowledge: [...npcs.values()], hiddenFacts: brief.hiddenFacts.filter(fact => !restoredIds.has(fact.id)),
+      forbiddenReveals: brief.forbiddenReveals.filter(fact => !restoredIds.has(fact.factId)),
+      playerPresentation: { ...brief.playerPresentation, allowedDiscoveries: [...new Map([
+        ...brief.playerPresentation.allowedDiscoveries, ...restored.allowedDiscoveries,
+      ].map(discovery => [discovery.eventId, discovery])).values()] } };
+    options = { ...options, turnContext: { ...options.turnContext, pendingAction: {
+      steps: authority.continuation.steps.map(step => ({ kind: step.kind, scope: step.scope, locationId: step.locationId })),
+      revelations: restored.revelations, knowledgeEvents: restored.knowledgeEvents,
+      instruction: '玩家明确继续原行动；必须延续原获准成果，不重新选择调查主题，也不能预支尚未完成的成果。',
+    } } };
+  }
+  const parsePlan = (text: string): DirectorPlan => {
+    const plan = parseDirectorPlan(text);
+    return restored ? { ...plan, revelations: structuredClone(restored.revelations), knowledgeEvents: structuredClone(restored.knowledgeEvents) } : plan;
+  };
   const complete = options.complete ?? ((messages, callOptions) => callSecondaryApi(
     options.api,
     messages,
@@ -422,7 +485,7 @@ async function runMysteryPipeline(
     complete, supportKey, directorMessages,
     { temperature: 0.2, maxTokens: getMaxOutputTokens(options.preset) },
     DIRECTOR_PLAN_RESPONSE_FORMAT,
-    parseDirectorPlan,
+    parsePlan,
   ));
   directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
   observe.setDirectorPlan(directorPlan);
@@ -440,7 +503,7 @@ async function runMysteryPipeline(
       directorRepairMessages(rejectedPlan, rejectedReview, hardReviewResiduals, 'hard-review'),
       { temperature: 0.1, maxTokens: getMaxOutputTokens(options.preset) },
       DIRECTOR_PLAN_RESPONSE_FORMAT,
-      parseDirectorPlan,
+      parsePlan,
     ));
     hardReviewResiduals = mergeRepairResiduals(hardReviewResiduals, rejectedReview.violations);
     directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
@@ -564,7 +627,7 @@ async function runMysteryPipeline(
           directorRepairMessages(rejectedPlan, combinedReview, criticResiduals, failedStage),
           { temperature: stageName === 'semantic-repair' ? 0.05 : 0, maxTokens: getMaxOutputTokens(options.preset) },
           DIRECTOR_PLAN_RESPONSE_FORMAT,
-          parseDirectorPlan,
+          parsePlan,
         ));
         criticResiduals = mergeRepairResiduals(criticResiduals, combinedReview.violations);
         directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
@@ -636,16 +699,69 @@ async function runMysteryPipeline(
     }
   }
 
-  const writerPacket = buildWriterPacket(directorPlan, brief, options.turnContext);
-  writerPacket.continuityContext = { ...options.presentationContext };
+  let executedContext: ExecutedTurnProjection | undefined;
+  let resolvedAction: ResolvedActionOutcome | undefined;
+  let pendingActionAuthorization: PendingActionAuthorization | null | undefined;
+  let writerBrief = brief;
+  let writerTurnContext = options.turnContext;
+  let writerPresentation = options.presentationContext;
+  if (options.actionAuthority) {
+    if (!options.projectExecution) throw new MysteryPipelineBlockedError('行动缺少实际执行场景的投影器。');
+    resolvedAction = resolveAction(buildActionAuthorityInput(directorPlan,
+      { ...options.actionAuthority, sourceLocationId: options.truthContext.currentLocation }, crypto.randomUUID()));
+    pendingActionAuthorization = capturePendingActionAuthorization({ plan: directorPlan, brief, aliases: factAliases,
+      graph: MYSTERY_TRUTH_GRAPH, resolution: resolvedAction, sourceLocationId: options.truthContext.currentLocation,
+      previous: options.actionAuthority.resumeActionId && options.actionAuthority.deathNews !== 'pending'
+        ? options.actionAuthority.pendingAuthorization : undefined });
+    executedContext = options.projectExecution(resolvedAction);
+    writerTurnContext = executedContext.turnContext;
+    writerPresentation = executedContext.presentationContext;
+    const currentBrief = buildAliasedMysteryBrief(buildMysteryBrief(MYSTERY_TRUTH_GRAPH, executedContext.truthContext), factAliases);
+    const completed = new Set(resolvedAction.completedSourceIds);
+    const earnedFacts = brief.usableFacts.filter(fact => fact.revealOptions.some(option => completed.has(`fact:${fact.id}:${option.level}`)));
+    const earnedIds = new Set(earnedFacts.map(fact => fact.id));
+    const usableById = new Map([...currentBrief.usableFacts, ...earnedFacts].map(fact => [fact.id, fact]));
+    // Completed earlier segments may legitimately carry a finding from their
+    // own location even when the final segment ends elsewhere.
+    const npcKnowledge = new Map(currentBrief.npcKnowledge.map(npc => [npc.npcId, npc]));
+    for (const npc of brief.npcKnowledge) {
+      const earnedKnowledge = npc.facts.filter(fact => earnedIds.has(fact.factId));
+      if (!earnedKnowledge.length) continue;
+      const current = npcKnowledge.get(npc.npcId);
+      npcKnowledge.set(npc.npcId, { npcId: npc.npcId,
+        facts: [...new Map([...(current?.facts ?? []), ...earnedKnowledge].map(fact => [fact.factId, fact])).values()] });
+    }
+    writerBrief = { ...currentBrief, usableFacts: [...usableById.values()], npcKnowledge: [...npcKnowledge.values()],
+      playerPresentation: { ...currentBrief.playerPresentation, allowedDiscoveries: [...new Map([
+        ...currentBrief.playerPresentation.allowedDiscoveries,
+        ...brief.playerPresentation.allowedDiscoveries.filter(event => completed.has(`accepted-event:${event.eventId}`)),
+      ].map(event => [event.eventId, event])).values()] },
+      saturationPivot: brief.saturationPivot && earnedIds.has(brief.saturationPivot.factId) ? brief.saturationPivot : undefined };
+    if (isNonWorkResolution(resolvedAction)) {
+      writerBrief = { ...writerBrief, sceneContract: undefined, npcPlayerKnowledge: [], characterPerformances: [] };
+    }
+    directorPlan = projectExecutedPlan(directorPlan, resolvedAction, executedContext.activeNpcIds);
+    hardReview = reviewDirectorPlan(directorPlan, writerBrief, writerTurnContext);
+    observe.setDirectorPlan(directorPlan);
+    observe.setHardReview(hardReview);
+    if (!hardReview.approved) throw new MysteryPipelineBlockedError(`实际行动投影未通过约束：${hardReview.corrections.join('；')}`);
+  }
+  const writerPacket = buildWriterPacket(directorPlan, writerBrief, writerTurnContext);
+  if (resolvedAction) {
+    writerPacket.resolvedAction = resolvedAction;
+    writerPacket.authorizedActionOutcomes = buildActionOutcomeSources(resolvedAction);
+  }
+  writerPacket.continuityContext = { ...writerPresentation };
   const writerSystem = buildWriterSystemPrompt(options.formatPrompt);
   const writerMessages: ChatCompletionMessage[] = [
     { role: 'system', content: writerSystem },
-    { role: 'user', content: buildWriterUserPrompt(writerPacket, options.presentationContext) },
+    { role: 'user', content: buildWriterUserPrompt(writerPacket, writerPresentation) },
   ];
 
   return {
-    brief,
+    brief: writerBrief,
+    executedContext,
+    pendingActionAuthorization,
     directorPlan,
     hardReview,
     semanticReview: reviewPolicy.semantic ? semanticReview : null,

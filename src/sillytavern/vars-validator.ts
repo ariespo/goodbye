@@ -37,6 +37,7 @@ const PROGRAM_OWNED_KEYS = new Set([
   'knowledgeEvents',
   'playerNameKnownByNpcIds',
   'worldMemory',
+  'actionContinuity',
   'lockedRoute',
   'overlay',
   'finalChoice',

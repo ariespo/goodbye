@@ -1,4 +1,5 @@
 import { getMaxOutputTokens } from '../../sillytavern/token-budget';
+import type { ResolvedActionOutcome } from '../../engine/action-resolution';
 import type { ChatPreset, DynamicRecord, GameStatus } from '../../sillytavern/types';
 import {
   callSecondaryApi,
@@ -37,6 +38,7 @@ export interface RunStateAgentOptions {
   playerInput: string;
   narrative: string;
   evidenceAuthority?: StateEvidenceAuthority;
+  resolvedAction?: ResolvedActionOutcome;
   deterministicCosts?: {
     timeMinutes?: number;
     stamina?: number;
@@ -71,6 +73,7 @@ const STATE_AGENT_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 - 只记录正文明确发生的变化。没有证据就不要改。
 - 纯氛围、眼神、停顿、玩家主观猜测或同一证据的重复叙述，不足以支持新的决定性嫌疑增长。
 - 固定行动成本由游戏引擎另行扣除，不要在 patch 中重复扣除。
+- 若请求含 resolvedAction，时间、地点、体力、理智均以该结果为准；不得用正文描写覆盖这些值，也不得写 actionContinuity。
 - 可写字段：stamina、sanity、location、suspicion.*、affinity.*、investigation.*、
   organizedClues。
 - 禁止写入：time、cycleCount、stayStreak、stayedEver、routesLockedEver、endingsSeen、
@@ -123,6 +126,7 @@ const STATE_AGENT_FORBIDDEN_ROOTS = new Set([
   'finalChoice',
   'loopSuspicionStart',
   'worldMemory',
+  'actionContinuity',
 ]);
 
 export function validateStateAgentResponse(
@@ -131,6 +135,7 @@ export function validateStateAgentResponse(
   evidenceText: string,
   saturationPivot?: RunStateAgentOptions['saturationPivot'],
   evidenceAuthority?: StateEvidenceAuthority,
+  resolvedAction?: ResolvedActionOutcome,
 ): ValidatedStateAgentResult {
   const rejected: SanitizeResult['rejected'] = [];
   const normalizedSource = normalizeQuote(evidenceText);
@@ -143,7 +148,8 @@ export function validateStateAgentResponse(
   let evidencedPatch: DynamicRecord = {};
   for (const [path, value] of Object.entries(flatten(response.patch ?? {}))) {
     const root = path.split('.')[0];
-    if (STATE_AGENT_FORBIDDEN_ROOTS.has(root)) {
+    if (STATE_AGENT_FORBIDDEN_ROOTS.has(root)
+      || (resolvedAction && ['stamina', 'sanity', 'location'].includes(root))) {
       rejected.push({ path, reason: '该字段由游戏程序或事实门维护，State Agent 无权写入' });
       continue;
     }
@@ -226,6 +232,7 @@ export async function runStateAgent(options: RunStateAgentOptions): Promise<Vali
           },
         },
         deterministicCostsHandledByEngine: options.deterministicCosts ?? {},
+        resolvedAction: options.resolvedAction ?? null,
         playerInput: options.playerInput,
         narrative: options.narrative,
         evidenceAuthority: options.evidenceAuthority ?? { newEvidence: [] },
@@ -264,6 +271,7 @@ export async function runStateAgent(options: RunStateAgentOptions): Promise<Vali
     options.narrative,
     options.saturationPivot,
     options.evidenceAuthority,
+    options.resolvedAction,
   );
 }
 

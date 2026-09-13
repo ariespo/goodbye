@@ -3,6 +3,7 @@ import { assertTurnActive, runStateWithFallback } from '../utils/turn-lifecycle'
 import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
 import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
 import { validateNarrativeContract } from '../engine/narrative-contract';
+import { selectPresentedActionFacts, type ActionAuthorityContext } from '../agents/mystery/action-authority';
 
 import { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
@@ -94,9 +95,10 @@ const outputProtocol = createOutputProtocol({
 function combineNarrativeReviews(reviews: FactReview[]): FactReview {
   const violations = reviews.flatMap(review => review.violations);
   return {
-    approved: violations.length === 0,
+    approved: reviews.every(review => review.approved) && violations.length === 0,
     violations,
     corrections: violations.length === 0 ? [] : reviews.flatMap(review => review.corrections),
+    assertionAudit: reviews.find(review => review.assertionAudit)?.assertionAudit,
   };
 }
 function mergeAuthorizedKnowledge(
@@ -174,9 +176,14 @@ let pendingActionCost: {
   input: string;
   costs: GameResourceCosts;
   narrativeContext?: ActionNarrativeContext;
+  originalInput?: string;
+  selection?: ActionAuthorityContext['selection'];
+  resumeActionId?: string;
 } | null = null;
 
 export interface SendMessageOptions {
+  /** 仅恢复当前轮回中匹配的未完成行动；不接受调用方提供的剩余成本。 */
+  resumeActionId?: string;
   isReroll?: boolean;
   /** 重试失败回合：复用已持久化的 user 消息，不重复追加 */
   isRetry?: boolean;
@@ -240,6 +247,16 @@ export function useGameLoop() {
 
       const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
       let baseMessages = activeChat ? [...activeChat.messages] : [];
+      const selectedAction = pendingActionCost?.chatId === tavern.activeChatId && pendingActionCost.input === userInput
+        ? pendingActionCost : null;
+      const savedRequest = (isRetry || isReroll) ? [...baseMessages].reverse().find(message => message.role === 'user')?.actionRequest : undefined;
+      const actionRequest: ChatMessage['actionRequest'] = savedRequest ?? {
+        originalInput: selectedAction?.originalInput,
+        selection: selectedAction?.selection,
+        narrativeContext: selectedAction?.narrativeContext,
+        inputOrigin: selectedAction ? 'menu' : 'player',
+        resumeActionId: opts?.resumeActionId ?? selectedAction?.resumeActionId,
+      };
 
       // 玩家放弃失败回合、未撤回就直接输入新内容：先自动撤回孤儿 user 消息
       if (!isRetry && !isReroll && liveStore.api.turnRecovery.phase !== 'idle') {
@@ -264,6 +281,7 @@ export function useGameLoop() {
           content: userInput,
           timestamp: Date.now(),
           variables: { ...tavern.variables },
+          actionRequest: structuredClone(actionRequest),
           turnState: captureTurnState({
             gameStatus: game.gameStatus,
             currentState: game.currentState,
@@ -285,19 +303,17 @@ export function useGameLoop() {
       actions.setStreaming(true);
       parseStateRef.current = createParseState();
 
-      const pendingNarrativeContext = pendingActionCost
-        && pendingActionCost.chatId === tavern.activeChatId
-        && pendingActionCost.input === userInput
-          ? pendingActionCost.narrativeContext ?? null
-          : null;
+      const pendingNarrativeContext = actionRequest.narrativeContext ?? null;
       const preparation = buildTurnPreparation({
         userInput, settings, activePreset, variables: tavern.variables,
         gameStatus: game.gameStatus, currentState: game.currentState, endingCheckContext: game.endingCheckContext,
         history: excludeCurrentInputFromHistory(messages, userInput), pendingNarrativeContext,
-        hasPendingAction: !!pendingActionCost && pendingActionCost.chatId === tavern.activeChatId && pendingActionCost.input === userInput,
+        hasPendingAction: actionRequest.inputOrigin === 'menu',
+        actionSelection: actionRequest.selection, originalActionInput: actionRequest.originalInput,
+        resumeActionId: actionRequest.resumeActionId,
       });
-      const { actionNarrativeContext, narrativeVariables, intentPolicy, hadPendingDeathNews,
-        mysteryLocation, activeNpcIds, playerIdentity, introducesPlayerName, knownByNpcIds, npcPlayerKnowledge } = preparation;
+      const { intentPolicy, hadPendingDeathNews, playerIdentity, introducesPlayerName } = preparation;
+      let { actionNarrativeContext, narrativeVariables, mysteryLocation, activeNpcIds, knownByNpcIds, npcPlayerKnowledge } = preparation;
 
       let preparedTurn: PreparedMysteryTurn | null = null;
       let resumedNarrativeFailure: CachedNarrativeFailure | null = null;
@@ -324,6 +340,9 @@ export function useGameLoop() {
           preparedTurn ??= await consumePreplan(userInput, preplanKey, abortController.signal);
           preparedTurn ??= await prepareMysteryTurn({ ...preparation.request, abortSignal: abortController.signal });
           assertCurrent();
+          if (preparedTurn.executedContext) {
+            ({ actionNarrativeContext, narrativeVariables, mysteryLocation, activeNpcIds, knownByNpcIds, npcPlayerKnowledge } = preparedTurn.executedContext);
+          }
           endPreparation();
           requestMessages = preparedTurn.writerMessages;
           cachedPreparedTurn = { contextKey: preplanKey, turn: preparedTurn };
@@ -367,6 +386,14 @@ export function useGameLoop() {
       }
 
       let fullText = '';
+      let acceptedNarrativeReview: FactReview | undefined;
+      const earnedPresentedTurn = (): PreparedMysteryTurn | null => {
+        const turn = preparedTurn;
+        const resolution = turn?.writerPacket.resolvedAction;
+        return turn && resolution ? { ...turn, writerPacket: selectPresentedActionFacts(
+          turn.writerPacket, acceptedNarrativeReview, resolution.completedSourceIds,
+        ) } : turn;
+      };
       const prevScene = game.currentScene;
 
       const resolvePendingCosts = (): GameResourceCosts | null => (
@@ -413,7 +440,7 @@ export function useGameLoop() {
           : [];
         const authorizedVariables = mergeAuthorizedKnowledge(
           tavern.variables,
-          preparedTurn,
+          earnedPresentedTurn(),
           presentedKnowledgeEventIds,
           actionNarrativeContext?.sceneContract.requiredKnowledgeEvents.map(event => event.eventId) ?? [],
         );
@@ -424,6 +451,10 @@ export function useGameLoop() {
             `visit:${actionNarrativeContext.locationId}`,
           );
         }
+        const resolution = preparedTurn?.writerPacket.resolvedAction;
+        if (resolution && resolution.endLocationId !== resolution.startLocationId) {
+          variablePatch.knowledgeEvents = addKnowledgeEvent(authorizedVariables.knowledgeEvents, `visit:${resolution.endLocationId}`);
+        }
         if (introducesPlayerName) {
           variablePatch.playerNameKnownByNpcIds = [...knownByNpcIds];
         }
@@ -431,6 +462,8 @@ export function useGameLoop() {
           variables: authorizedVariables,
           gameStatus: game.gameStatus,
           variablePatch,
+          resolvedAction: resolution,
+          pendingActionAuthorization: preparedTurn?.pendingActionAuthorization,
           costs: {
             timeMinutes: finitePositive(explicitCosts?.timeMinutes) ? explicitCosts!.timeMinutes : llmCost ?? 10,
             stamina: explicitCosts?.stamina,
@@ -664,6 +697,7 @@ export function useGameLoop() {
                 timeMinutes: finitePositive(explicitMinutes) ? Number(explicitMinutes)
                   : Number(preparedTurn?.writerPacket.plan.timeCostMinutes) || 10,
                 pendingDeathNews: hadPendingDeathNews,
+                resolvedAction: preparedTurn?.writerPacket.resolvedAction,
               }));
               if (candidateScene && actionNarrativeContext) {
                 const contextError = actionNarrativeContextError(actionNarrativeContext, candidateScene);
@@ -957,6 +991,7 @@ export function useGameLoop() {
                     return;
                   }
 
+                  acceptedNarrativeReview = narrativeReview;
                   actions.setStreamBuffer(fullText);
                   actions.setParsedContent(parseStateRef.current.parsed);
                 } catch (reviewError) {
@@ -982,7 +1017,7 @@ export function useGameLoop() {
                 }
               }
 
-              const evidenceAuthority = buildStateEvidenceAuthority(preparedTurn.writerPacket, MYSTERY_TRUTH_GRAPH,
+              const evidenceAuthority = buildStateEvidenceAuthority(earnedPresentedTurn()!.writerPacket, MYSTERY_TRUTH_GRAPH,
                 preparation.request.truthContext.playerKnowledge ?? {},
                 preparation.request.truthContext.unlockedClueIds, preparedTurn.factAliases.aliasToFactId);
               if (preparedTurn.reviewPolicy.state || evidenceAuthority.newEvidence.length > 0) {
@@ -994,7 +1029,8 @@ export function useGameLoop() {
                   gameStatus: game.gameStatus,
                   playerInput: userInput,
                   narrative: parseStateRef.current.parsed.maintext || fullText,
-                  deterministicCosts: resolvePendingCosts() ?? undefined,
+                  deterministicCosts: preparedTurn?.writerPacket.resolvedAction ? undefined : resolvePendingCosts() ?? undefined,
+                  resolvedAction: acceptedTurn.writerPacket.resolvedAction,
                   saturationPivot: acceptedTurn.brief.saturationPivot
                     ? {
                         blockedActorId: acceptedTurn.brief.saturationPivot.blockedActorId,
@@ -1249,6 +1285,8 @@ export function useGameLoop() {
           ? {
               chatId,
               input: prompt,
+              originalInput: item.desc,
+              selection: { kind: 'investigation' },
               costs: {
                 timeMinutes: parsedCost > 0 ? clampTimeCost(parsedCost) : undefined,
                 stamina: Math.max(0, Number(item.stamina) || 0),
@@ -1298,6 +1336,7 @@ ${narrativeContext ? `\n${narrativeContext.directive}\n` : ''}
           ? {
               chatId,
               input: prompt,
+              originalInput: item.desc,
               costs: {
                 timeMinutes: parsedCost > 0 ? clampTimeCost(parsedCost) : undefined,
                 stamina: Math.max(0, Number(item.stamina) || 0),

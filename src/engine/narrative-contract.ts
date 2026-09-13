@@ -1,6 +1,7 @@
 import { maintextToScene } from './scene-parser';
 import type { Scene } from '../sillytavern/types';
 import { clampTimeCost } from './game-clock';
+import type { ResolvedActionOutcome } from './action-resolution';
 
 /** Evidence must name this victim and report death, not hint at a meeting or her parents. */
 export function hasDeliveredDeathNews(narrative: string | Pick<Scene, 'lines'>): boolean {
@@ -26,6 +27,7 @@ export function hasDeliveredDeathNews(narrative: string | Pick<Scene, 'lines'>):
 
 export function validateNarrativeContract(scene: Pick<Scene, 'lines'> | null, options: {
   time: Date; timeMinutes: number; pendingDeathNews: boolean;
+  resolvedAction?: ResolvedActionOutcome;
 }): Array<{ code: string; message: string }> {
   const errors: Array<{ code: string; message: string }> = [];
   if (!scene?.lines.some(line => line.text.trim())) {
@@ -36,12 +38,38 @@ export function validateNarrativeContract(scene: Pick<Scene, 'lines'> | null, op
   }
   const midnight = new Date(options.time);
   midnight.setHours(24, 0, 0, 0);
-  const end = options.time.getTime() + clampTimeCost(options.timeMinutes) * 60_000;
+  const end = options.resolvedAction ? new Date(options.resolvedAction.endTime).getTime()
+    : options.time.getTime() + clampTimeCost(options.timeMinutes) * 60_000;
   const narration = scene.lines.filter(line => /^(?:旁白|narration)$/i.test(line.speaker)).map(line => line.text).join('\n');
   if (end < midnight.getTime() && /午夜(?:已经)?到了|时间(?:已经)?(?:越过|跨过)午夜|已经是(?:第二天|次日)早晨/u.test(narration)) {
     errors.push({ code: 'PREMATURE_MIDNIGHT', message: '本回合获准分钟数尚未抵达午夜，不能写午夜已到、过夜或次日晨起；按权威本地时钟重写，日终重置由程序执行。' });
   }
+  if (options.resolvedAction) {
+    // A narrow numerical sentinel. Semantic assertion review handles other
+    // duration claims, figurative language and sub-scenes within this interval.
+    const elapsedClaims = narration.matchAll(/(?:^|[。！？\n])(?:这(?:次|场|轮)(?:调查|问询|搜查|走访|行动|休息|等待)|整个(?:过程|调查|行动))(?:共|总共|一共)?(?:耗时|持续了|花了|用了|用去)([零一二两三四五六七八九十百\d]+)(分钟|小时)(?=[。！？\n]|$)/gu);
+    for (const claim of elapsedClaims) {
+      const count = readSmallDurationNumber(claim[1]);
+      if (count === null) continue;
+      const minutes = count * (claim[2] === '小时' ? 60 : 1);
+      if (minutes !== options.resolvedAction.executedMinutes) {
+        errors.push({ code: 'RESOLVED_DURATION_CONFLICT',
+          message: `正文把整个行动写成${minutes}分钟，但程序实际执行${options.resolvedAction.executedMinutes}分钟。按权威起止时间重写，只需演绎关键片段。` });
+      }
+    }
+  }
   return errors;
+}
+
+function readSmallDurationNumber(text: string): number | null {
+  if (/^\d+$/.test(text)) return Number(text);
+  const digits: Record<string, number> = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (text.length === 1 && text in digits) return digits[text];
+  if (/^[一二两三四五六七八九]?十[一二三四五六七八九]?$/.test(text)) {
+    const [tens, units] = text.split('十');
+    return (tens ? digits[tens] : 1) * 10 + (units ? digits[units] : 0);
+  }
+  return null;
 }
 
 export function buildNarrativeClock(time: Date, cycleCount: number) {

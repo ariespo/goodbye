@@ -6,6 +6,7 @@ import { advanceClock, clampTimeCost, laterTime } from './game-clock';
 import { checkScheduledEvents } from './scheduled-events';
 import { hasDeliveredDeathNews } from './narrative-contract';
 import { getLocationById, resolveRegisteredLocation } from '../data/locations';
+import type { ResolvedActionOutcome } from './action-resolution';
 
 export interface GameResourceCosts {
   timeMinutes?: number;
@@ -26,6 +27,9 @@ export interface GameTransactionInput {
   /** Only successful generated turns have a minimum clock advance; local UI operations may be free. */
   narrativeTurn?: boolean;
   narrativeText?: string;
+  /** Program-owned immutable result; model patches and menu costs cannot override it. */
+  resolvedAction?: ResolvedActionOutcome;
+  pendingActionAuthorization?: import('../agents/mystery/pending-action-authorization').PendingActionAuthorization | null;
 }
 
 export interface GameTransactionResult {
@@ -55,11 +59,42 @@ function resolvePreviousTime(variables: DynamicRecord, status: GameStatus): stri
   return status.time.toISOString();
 }
 
+function assertResolutionCurrent(input: GameTransactionInput, resolved: ResolvedActionOutcome) {
+  const continuity = input.variables.actionContinuity;
+  if (continuity?.cycleCount === resolved.cycleCount
+    && Array.isArray(continuity.settledResolutionIds)
+    && continuity.settledResolutionIds.includes(resolved.id)) {
+    throw new Error('行动结果已结算，不能重复提交。');
+  }
+  const beforeTime = new Date(resolvePreviousTime(input.variables, input.gameStatus)).getTime();
+  const startTime = new Date(resolved.startTime).getTime();
+  const endTime = new Date(resolved.endTime).getTime();
+  if (!resolved.id || resolved.cycleCount !== Number(input.variables.cycleCount ?? 1)
+    || !Number.isFinite(startTime) || startTime !== beforeTime
+    || startTime !== input.gameStatus.time.getTime()
+    || resolved.startLocationId !== (input.variables.location ?? 'home')
+    || resolved.resources.before.stamina !== input.gameStatus.stamina
+    || resolved.resources.before.sanity !== input.gameStatus.sanity) {
+    throw new Error('行动结果已失效：轮回、时钟、地点或资源已改变。');
+  }
+  if (!Number.isFinite(endTime) || endTime < startTime
+    || (endTime - startTime) / 60_000 !== resolved.executedMinutes
+    || !getLocationById(resolved.endLocationId)
+    || !Number.isFinite(resolved.resources.after.stamina)
+    || resolved.resources.after.stamina < 0 || resolved.resources.after.stamina > 120
+    || !Number.isFinite(resolved.resources.after.sanity)
+    || resolved.resources.after.sanity < 0 || resolved.resources.after.sanity > 100) {
+    throw new Error('行动结果无效：结束时间、地点或资源不合法。');
+  }
+}
+
 /**
  * 所有会改变游戏数值的路径都应经过这里：
  * 合并受信状态补丁 → 扣除确定性成本 → 推进时钟 → 定时事件 → 结局/轮回失败判定。
  */
 export function settleGameTransaction(input: GameTransactionInput): GameTransactionResult {
+  const resolved = input.resolvedAction;
+  if (resolved) assertResolutionCurrent(input, resolved);
   const previousVariables = { ...input.variables };
   const previousGameStatus = {
     ...input.gameStatus,
@@ -69,6 +104,12 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
   const patch = { ...(input.variablePatch ?? {}) };
   const requestedTime = typeof patch.time === 'string' ? patch.time : null;
   delete patch.time;
+  if (resolved) {
+    delete patch.stamina;
+    delete patch.sanity;
+    delete patch.actionContinuity;
+    patch.location = resolved.endLocationId;
+  }
 
   // Location is a registered-map ingress. Preserve a valid current anchor when
   // callers propose an unknown destination; old invalid saves recover to home.
@@ -87,15 +128,17 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
   }
   const staminaBeforeCost = finiteStatus(variables.stamina, input.gameStatus.stamina, 0, 120);
   const sanityBeforeCost = finiteStatus(variables.sanity, input.gameStatus.sanity, 0, 100);
-  const stamina = Math.max(0, staminaBeforeCost - finiteNonNegative(input.costs?.stamina));
-  let sanity = Math.max(0, sanityBeforeCost - finiteNonNegative(input.costs?.sanity));
+  const stamina = resolved?.resources.after.stamina
+    ?? Math.max(0, staminaBeforeCost - finiteNonNegative(input.costs?.stamina));
+  let sanity = resolved?.resources.after.sanity
+    ?? Math.max(0, sanityBeforeCost - finiteNonNegative(input.costs?.sanity));
 
   const previousTime = resolvePreviousTime(input.variables, input.gameStatus);
   const rawMinutes = Math.max(input.narrativeTurn ? 1 : 0, finiteNonNegative(input.costs?.timeMinutes));
   const advancedTime = rawMinutes > 0
     ? advanceClock(previousTime, clampTimeCost(rawMinutes))
     : previousTime;
-  const time = requestedTime ? laterTime(advancedTime, requestedTime) : advancedTime;
+  const time = resolved?.endTime ?? (requestedTime ? laterTime(advancedTime, requestedTime) : advancedTime);
 
   const scheduledEventPatch = checkScheduledEvents(previousTime, time, variables);
   variables = {
@@ -105,6 +148,27 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
     time,
     ...scheduledEventPatch,
   };
+  if (resolved) {
+    const prior = input.variables.actionContinuity?.cycleCount === resolved.cycleCount
+      ? input.variables.actionContinuity : undefined;
+    const priorIds: string[] = Array.isArray(prior?.settledResolutionIds) ? prior.settledResolutionIds : [];
+    const priorEffects: string[] = Array.isArray(prior?.appliedEventEffectIds) ? prior.appliedEventEffectIds : [];
+    const preservesWork = resolved.startLocationId === resolved.endLocationId
+      && new Date(resolved.startTime).toDateString() === new Date(resolved.endTime).toDateString()
+      && resolved.segments.every(segment => segment.step.kind === 'event' || segment.step.kind === 'wait');
+    const retainedContinuation = preservesWork && prior?.continuation?.cycleCount === resolved.cycleCount
+      && prior.continuation.expectedLocationId === resolved.endLocationId ? prior.continuation : null;
+    variables.actionContinuity = {
+      cycleCount: resolved.cycleCount,
+      lastResolutionId: resolved.id,
+      settledResolutionIds: [...new Set([...priorIds, resolved.id])],
+      appliedEventEffectIds: [...new Set([...priorEffects, ...resolved.eventEffectIds])],
+      continuation: resolved.continuation ?? retainedContinuation,
+      pendingAuthorization: resolved.continuation
+        ? input.pendingActionAuthorization ?? null
+        : retainedContinuation ? prior?.pendingAuthorization ?? null : null,
+    };
+  }
   if (
     input.deliverPendingDeathNews
     && hasDeliveredDeathNews(input.narrativeText ?? '')
@@ -113,7 +177,7 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
   ) {
     variables.deathNews = 'delivered';
     // Apply the event consequence once, without doubling a larger State-reported drop.
-    sanity = Math.min(sanity, Math.max(0, input.gameStatus.sanity - 12));
+    if (!resolved) sanity = Math.min(sanity, Math.max(0, input.gameStatus.sanity - 12));
     variables.sanity = sanity;
   }
 

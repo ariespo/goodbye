@@ -1,15 +1,19 @@
 import { DEFAULT_CONTEXT_TOKENS, getMaxOutputTokens } from '../../sillytavern/token-budget';
 import type { AppSettings, ChatPreset, ChatMessage, DynamicRecord, GameStatus, CurrentState, EndingCheckContext } from '../../sillytavern/types';
-import { gameLocations } from '../../data/locations';
+import { gameLocations, getLocationById, getLocationBackground } from '../../data/locations';
 import { appendResourcePrompt } from '../../utils/resourcePrompt';
 import { buildNpcPlayerKnowledgeBrief, doesPlayerIntroduceName, formatNpcPlayerKnowledgeDirective, type PlayerIdentity } from '../../data/npcPlayerKnowledge';
-import { buildScheduledDirectives } from '../../engine/scheduled-events';
+import { buildScheduledDirectives, nextScheduledBoundary } from '../../engine/scheduled-events';
+import { advanceClock } from '../../engine/game-clock';
 import { buildNarrativeClock } from '../../engine/narrative-contract';
 import { OPENING_MAINTEXT, OPENING_PUBLIC_CONTINUITY } from '../../engine/opening-storyline';
 import { translateForDirector } from '../../engine/variable-thresholds';
 import { buildPlayerKnowledgeBrief } from '../../data/playerKnowledge';
 import { evaluatePlayerIntent } from '../../engine/player-intent-policy';
-import { resolveActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
+import { resolveActionNarrativeContext, resolveExecutedActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
+import type { ResolvedActionOutcome } from '../../engine/action-resolution';
+import type { ActionAuthorityContext } from './action-authority';
+import { isNonWorkResolution } from './action-authority';
 import { compileTurnContext, type TurnContextBundle } from '../../memory/world-memory';
 import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
 import { REVEAL_LEVELS, type RevealLevel, type MysteryRouteId, type MysteryOverlayId, type TruthContext } from './types';
@@ -87,6 +91,22 @@ export interface TurnPreparationInput {
   variables: DynamicRecord; gameStatus: GameStatus; currentState: CurrentState;
   endingCheckContext: EndingCheckContext; history: ChatMessage[];
   pendingNarrativeContext?: ActionNarrativeContext | null; hasPendingAction?: boolean;
+  actionSelection?: ActionAuthorityContext['selection']; originalActionInput?: string;
+  resumeActionId?: string;
+}
+
+export interface ExecutedTurnProjection {
+  truthContext: TruthContext;
+  turnContext: Record<string, unknown>;
+  presentationContext: Record<string, unknown>;
+  actionNarrativeContext: ActionNarrativeContext | null;
+  narrativeVariables: DynamicRecord;
+  narrativeBackground: string | null;
+  mysteryLocation: string;
+  activeNpcIds: string[];
+  npcPlayerKnowledge: ReturnType<typeof buildNpcPlayerKnowledgeBrief>;
+  knownByNpcIds: Set<string>;
+  contextBundle: TurnContextBundle;
 }
 /** Old saves predate the public ledger. Trust only the exact mandatory assistant
  * opening, never a player quote or parsed-only claim. Legacy panels were nested
@@ -106,7 +126,9 @@ function hasOfficialOpeningHistory(history: ChatMessage[]): boolean {
 }
 
 /** Both foreground and speculative callers use the identical authority inputs. */
-export function buildTurnPreparation(input: TurnPreparationInput) {
+function buildProjection(input: TurnPreparationInput, execution?: {
+  resolution: ResolvedActionOutcome; proposed: ActionNarrativeContext | null;
+}) {
   const { userInput, settings, activePreset, history } = input;
   const pendingNarrativeContext = input.pendingNarrativeContext ?? null;
   const tavern = { variables: input.variables };
@@ -114,7 +136,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
   const currentLocationId = typeof tavern.variables.location === 'string'
     ? tavern.variables.location
     : resolveMysteryLocation(game.currentState.background);
-  const actionNarrativeContext = pendingNarrativeContext ?? resolveActionNarrativeContext(
+  const proposed = pendingNarrativeContext ?? resolveActionNarrativeContext(
     userInput,
     game.gameStatus.time,
     0,
@@ -124,10 +146,28 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
       knowledgeEvents: tavern.variables.knowledgeEvents,
     },
   );
-  const narrativeVariables = actionNarrativeContext
-    ? { ...tavern.variables, location: actionNarrativeContext.locationId }
+  let actionNarrativeContext = execution
+    ? resolveExecutedActionNarrativeContext(execution.proposed, execution.resolution) : proposed;
+  const resolution = execution?.resolution;
+  const transit = !!resolution?.segments.some(segment => segment.step.kind === 'travel' && !segment.completed);
+  const nonWork = !!resolution && isNonWorkResolution(resolution);
+  if (nonWork) actionNarrativeContext = null;
+  if (resolution && actionNarrativeContext && resolution.segments.some(segment => !segment.completed)) {
+    const earned = new Set(resolution.completedSourceIds);
+    const requiredKnowledgeEvents = actionNarrativeContext.sceneContract.requiredKnowledgeEvents
+      .filter(event => earned.has(`accepted-event:${event.eventId}`));
+    const directive = `实际到达${actionNarrativeContext.locationId}，本次只执行了${resolution.executedMinutes}分钟，调查尚未全部完成。仅演绎已执行的阶段；不得预支调查结果。只允许在正文实际呈现以下已获准认知事件：${requiredKnowledgeEvents.map(event => event.evidence).join('；') || '无新增认知事件'}。`;
+    actionNarrativeContext = { ...actionNarrativeContext, directive,
+      sceneContract: { ...actionNarrativeContext.sceneContract, requiredKnowledgeEvents, directive } };
+  }
+  const actualLocation = resolution?.endLocationId ?? actionNarrativeContext?.locationId;
+  const narrativeVariables = actualLocation
+    ? { ...tavern.variables, location: actualLocation,
+      ...(resolution ? { stamina: resolution.resources.after.stamina, sanity: resolution.resources.after.sanity } : {}) }
     : tavern.variables;
-  const narrativeBackground = actionNarrativeContext?.background ?? game.currentState.background;
+  const actualLocationData = actualLocation ? getLocationById(actualLocation) : undefined;
+  const narrativeBackground = transit ? 'street' : actionNarrativeContext?.background
+    ?? (resolution && actualLocationData ? getLocationBackground(actualLocationData, new Date(resolution.endTime)) : game.currentState.background);
   const scheduledDirectives = buildScheduledDirectives(narrativeVariables);
   const intentPolicy = evaluatePlayerIntent(userInput, narrativeVariables);
   const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
@@ -138,8 +178,8 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
   const publicContinuity = OPENING_PUBLIC_CONTINUITY.filter(fact => recoverOpening || openingIds.has(fact.id));
   const historyMessages = history;
   const agentMode: AgentNarrativeMode = settings.agentNarrativeMode ?? 'standard';
-  const mysteryLocation = actionNarrativeContext?.locationId ?? resolveMysteryLocation(narrativeBackground);
-  const activeNpcIds = [...new Set([
+  const mysteryLocation = actualLocation ?? resolveMysteryLocation(narrativeBackground);
+  const activeNpcIds = transit || nonWork ? [] : [...new Set([
     ...(npcIdsByLocation[mysteryLocation] ?? []),
     ...(actionNarrativeContext?.requiredNpcIds ?? []),
     ...(actionNarrativeContext?.enRouteNpcIds ?? []),
@@ -155,7 +195,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     playerNameKnownByNpcIds: [...knownByNpcIds],
   };
   const npcPlayerKnowledge = buildNpcPlayerKnowledgeBrief(activeNpcIds, playerIdentity, playerIdentityVariables);
-  const basePromptUserInput = appendResourcePrompt(userInput, narrativeBackground, narrativeVariables)
+  const basePromptUserInput = appendResourcePrompt(execution ? input.originalActionInput ?? userInput : userInput, narrativeBackground, narrativeVariables)
     + `\n\n${clock.directive}`
     + (actionNarrativeContext ? `\n\n${actionNarrativeContext.directive}` : '')
     + (npcPlayerKnowledge.length ? `\n\n${formatNpcPlayerKnowledgeDirective(npcPlayerKnowledge)}` : '')
@@ -251,6 +291,53 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
   return { request, actionNarrativeContext, narrativeVariables, narrativeBackground, intentPolicy,
     hadPendingDeathNews, mysteryLocation, activeNpcIds, playerIdentity, introducesPlayerName,
     knownByNpcIds, npcPlayerKnowledge, contextBundle };
+}
+
+/** The callback and its immutable source snapshot stay in the in-memory preparation cache. */
+export function buildTurnPreparation(input: TurnPreparationInput) {
+  const snapshot = structuredClone(input);
+  const prepared = buildProjection(snapshot);
+  const cycleCount = Number(snapshot.variables.cycleCount ?? 1);
+  const startTime = advanceClock(snapshot.gameStatus.time.toISOString(), 0);
+  const currentLocationId = typeof snapshot.variables.location === 'string'
+    ? snapshot.variables.location : resolveMysteryLocation(snapshot.currentState.background);
+  const continuity = snapshot.variables.actionContinuity?.cycleCount === cycleCount ? snapshot.variables.actionContinuity : undefined;
+  const actionAuthority: ActionAuthorityContext = {
+    cycleCount, startTime, currentLocationId, stamina: snapshot.gameStatus.stamina, sanity: snapshot.gameStatus.sanity,
+    originalInput: snapshot.originalActionInput ?? snapshot.userInput,
+    deathNews: typeof snapshot.variables.deathNews === 'string' ? snapshot.variables.deathNews : undefined,
+    proposedScene: prepared.actionNarrativeContext,
+    nextBoundary: nextScheduledBoundary(startTime, snapshot.variables),
+    appliedEventEffectIds: continuity?.appliedEventEffectIds ?? [],
+    continuation: continuity?.continuation ?? undefined,
+    pendingAuthorization: continuity?.pendingAuthorization ?? undefined,
+    resumeActionId: snapshot.resumeActionId,
+    fantasy: prepared.intentPolicy.mode === 'fantasy',
+    selection: snapshot.actionSelection,
+    inputOrigin: snapshot.hasPendingAction ? 'menu' : 'player',
+  };
+  prepared.request.actionAuthority = actionAuthority;
+  // Exact comparison, not a collision-prone digest. No credentials are added;
+  // API/preset/format configuration is already covered by the outer request key.
+  prepared.request.executionFingerprint = JSON.stringify({
+    userInput: snapshot.userInput, variables: snapshot.variables, history: snapshot.history,
+    gameStatus: snapshot.gameStatus, currentState: snapshot.currentState, endingCheckContext: snapshot.endingCheckContext,
+    identity: { userName: snapshot.settings.userName, playerGender: snapshot.settings.playerGender,
+      confirmed: snapshot.settings.playerIdentityConfirmed, characterName: snapshot.settings.characterName },
+    budget: snapshot.activePreset?.settings,
+  });
+  prepared.request.projectExecution = resolution => {
+    const projected = buildProjection(snapshot, { resolution, proposed: prepared.actionNarrativeContext });
+    return {
+      truthContext: projected.request.truthContext, turnContext: projected.request.turnContext,
+      presentationContext: projected.request.presentationContext,
+      actionNarrativeContext: projected.actionNarrativeContext, narrativeVariables: projected.narrativeVariables,
+      narrativeBackground: projected.narrativeBackground, mysteryLocation: projected.mysteryLocation,
+      activeNpcIds: projected.activeNpcIds, npcPlayerKnowledge: projected.npcPlayerKnowledge,
+      knownByNpcIds: projected.knownByNpcIds, contextBundle: projected.contextBundle,
+    };
+  };
+  return prepared;
 }
 
 /** Exact, stable, in-memory comparison; never write this credential-bearing key to logs. */

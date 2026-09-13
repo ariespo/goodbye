@@ -22,6 +22,14 @@ export interface DynamicRecord extends Record<string, unknown> {
   organizedClues?: OrganizedClue[];
   knowledgeEvents?: string[];
   loopSuspicionStart?: Record<string, number>;
+  actionContinuity?: {
+    cycleCount: number;
+    lastResolutionId?: string;
+    settledResolutionIds?: string[];
+    appliedEventEffectIds?: string[];
+    continuation?: import('../engine/action-resolution').ActionContinuation | null;
+    pendingAuthorization?: import('../agents/mystery/pending-action-authorization').PendingActionAuthorization | null;
+  };
   worldMemory?: import('../memory/world-memory').WorldMemoryState | {
     cognition?: unknown[];
     softCanonFacts?: unknown[];
@@ -368,6 +376,15 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   variables: DynamicRecord;
+  /** 玩家选择的程序元数据，用于重试/重演；不承载模型报价或剩余成本。 */
+  actionRequest?: {
+    resumeActionId?: string;
+    originalInput?: string;
+    selection?: { kind: 'inquiry' | 'investigation' | 'search' | 'travel' | 'rest' | 'wait';
+      scope?: import('../engine/action-resolution').ActionScope; locationId?: string };
+    narrativeContext?: import('../engine/action-narrative-context').ActionNarrativeContext;
+    inputOrigin?: 'player' | 'menu';
+  };
   /** 该玩家回合开始前的可回滚运行时快照。旧消息可不存在。 */
   turnState?: {
     gameStatus: GameStatus;

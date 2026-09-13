@@ -45,7 +45,7 @@ export function captureTurnState(source: TurnStateSource): TurnStateSnapshot {
     currentScene: cloneScene(source.currentScene),
     currentLineIndex: source.currentLineIndex,
     sceneComplete: source.sceneComplete,
-    variables: { ...source.variables },
+    variables: structuredClone(source.variables),
   };
 }
 

@@ -38,6 +38,7 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 16b. revelations 与 playerKnownFacts 都为空时，禁止新增小票、收据、文件夹、监控记录、病历、短信、照片等可被调查或用于推理的物件与记录；只能安排当下普通环境、服务互动和人物初见。
 17. npcPlayerKnowledge 是每个在场 NPC 对玩家姓名的独立认知边界。knowsPlayerName=false 的角色绝不能说出、猜中或用姓名称呼玩家；为 true 时，只能在自然需要称呼时使用 allowedAddress，不得擅自换成全名、昵称或其他亲疏程度。该表不授予任何案件知识。
 18. TurnContext.clock给出权威本地日期、时刻与重复日；实际经过分钟数由程序结算。白天不能安排已过夜或次日晨起，不能无故把当前可做的寻人行动推到明天。publicContinuity是已经自动播放的开局公开事实，允许自然重述，不能改成昨夜失踪或把今早06:50的消息改写成其他日期。
+18a. actionSteps 只提议玩家行动的阶段、种类、强度和注册地点，存在时必须为 1–8 个非空阶段，id 唯一且非空。可用 kind 只有 inquiry/investigation/search/travel/rest/wait，可用 scope 只有 short/normal/deep；不得输出 requestedMinutes、eventId、completionSourceIds、体力/理智费用或任何确定价格。工作基准价为 short=25、normal=55、deep=105 分钟。旅行时间由程序按实际地点变化计算，每个实际路段只收取一次；同一地点连续工作共享已完成的旅行。复合行动按顺序执行并累加各阶段时间，明确短预算只允许部分执行，未完成阶段不得获得完整结果或完整奖励。
 19. 每轮必须完成玩家尝试中的一个具体步骤并交代可见结果；没有新线索时说明本次核实的范围与局限，并给出可执行下一步。未见到不等于没有到过，自述不去不等于已经证实缺席；不得为制造进展编造排除结论。不要重复查看同一批物品、重新准备出门、递同一个袋子、反复劝返或在同一地点从头表演。长时间搜索/等候可概括经过，遇16:00消息等关键事件先推进至事件，不能用长段环境描写替代行动结果。
 20. 固定地点的实际互动必须保留角色：supermarket=chen-huihui，community-hospital=detective-b，old-man-building=old-man，senpai-building=touko，school=school-guard（学校进入权限仍按sceneContract）。在对应地点至少一个beat明确把固定角色放入speakerIds，不能换成临时男性店员或无名陌生路人。npcPlayerKnowledge是可用称呼目录，不等于这些人全部在场。
 
@@ -51,13 +52,15 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
   "assetRequests": ["string"],
   "knowledgeEvents": [{"eventId":"只能选 MysteryBrief.playerPresentation.allowedDiscoveries 中的 ID","evidence":"玩家在正文中实际看到或听到、且满足该事件 evidenceStandard 的具体依据"}],
   "scenePlan": {"observeFocus":"本回合观察面板应聚焦什么（短语）","observeConceal":"必须继续隐藏什么（短语，可省略）","investigateIntents":[{"intent":"调查方向短语","suspectId":"指向的嫌疑人ID?","factId":"对应 usableFacts 中的事实ID?","costTier":"light|medium|heavy"}],"actionIntents":[{"intent":"行动方向短语","costTier":"light|medium|heavy"}]},
+  "actionSteps": [{"id":"非空且唯一的阶段ID","kind":"inquiry|investigation|search|travel|rest|wait","scope":"short|normal|deep","locationId":"注册地点ID"}],
   "timeCostMinutes": 25
 }
 
 计划字段说明：
 - 输出紧凑单行 JSON，不加缩进或 Markdown。purpose、tone、intent 用短语；description 只写实际动作与必要因果，不写正文，不重复权限规则或整段复述简报。保持全部必需字段、事实来源、认知依据与场景契约，不得为精简而省略。
 - scenePlan 规则：只给意图级短语，不写具体文案；investigateIntents 的 factId 只能选 usableFacts；observeConceal 与 hiddenFacts 保持一致；每类意图 2-4 条。
-- timeCostMinutes: 本回合经过的游戏内分钟数(整数1-180)。对话约5-15,调查约20-40,跨地点移动约15-30。
+- actionSteps 是可省略的意图提案；需要表达复合行动时按实际执行顺序填写。程序会重新验证地点、种类与强度，并独立插入和结算旅行。
+- timeCostMinutes 仅作旧格式兼容的建议值，程序会忽略它；不得用它覆盖 actionSteps 的中央定价与实际旅行结算。
 
 系统指令（TurnContext.thresholdDirectives）：
 - 该字段是引擎下发的强制指令，优先级高于你自己的节奏安排。
@@ -80,6 +83,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 5. 当 authorizedKnowledgeEvents 引入新人物时，必须按顺序写：角色第一次说话时使用 sceneContract.directive 指定的职业称呼；若场景契约未指定，才使用内部可映射说话者（播放器会显示“？？？”）。随后用旁白从玩家视角明确说明当前可知称呼，紧接该介绍句下一行写“认知|eventId”；事件行之前不得提前使用新称呼，事件行之后必须改用已知姓名。
 6. 地点、身份、职业、行为理解或人物关系更新，都必须在玩家实际看到/听到符合对应 evidenceStandard 的具体依据后，紧接证据句写“认知|eventId”。只能写 authorizedKnowledgeEvents 中的事件 ID；不得先写结论再把结论自身当作 evidence。
 7. 为兼容当前播放器，输出一句 <sum>；<vars> 必须固定为 {}。你不承担数值与存档写入。
+7a. WriterPacket.resolvedAction 存在时，它是本回合行动经过、位置、完成度和资源结果的唯一权威。正文必须覆盖 startTime 到 endTime、共 executedMinutes 分钟的完整时间区间，只挑选其中的高光和关键片段，不逐分钟铺写。不得自行改动或独立计算时间、体力、理智或其他资源；不得把计划值、DirectorPlan.timeCostMinutes 或气氛描写当作结算依据。任何未完成阶段不得写成已经发现结果或获得完整奖励，只能呈现本次实际执行的有限进展与中断；完成结果还必须同时出现在 completedSourceIds 对应的 authorizedFacts 或 authorizedActionOutcomes 中。续作不得重演此前已完成的旅行或工作，只写当前 resolvedAction.segments 本次执行的部分。
 8. 必须逐条遵守 WriterPacket.characterPerformances，把导演节拍写成符合角色的动作、反应、措辞与情绪升级。
 9. 表演规则只决定“怎么演”，不决定“知道什么”。任何台词事实仍只能来自 authorizedFacts 和 playerKnownFacts。
 10. 同一情绪标签在不同角色身上必须按各自 emotionRules 表现；不得套用统一的哭、吼、冷笑或疯笑模板。

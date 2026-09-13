@@ -1,8 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { maintextToScene } from './scene-parser';
 import { hasDeliveredDeathNews, validateNarrativeContract } from './narrative-contract';
+import type { ResolvedActionOutcome } from './action-resolution';
+
+const resolved: ResolvedActionOutcome = { id: 'r', cycleCount: 1,
+  startTime: '2024-09-09T08:00:00', endTime: '2024-09-09T08:55:00',
+  startLocationId: 'home', endLocationId: 'home', plannedMinutes: 55, executedMinutes: 55,
+  segments: [], completedSourceIds: [], eventEffectIds: [],
+  resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } } };
 
 describe('rendered narrative contracts', () => {
+  it.each(['这次调查耗时两小时。', '整个行动用了120分钟。'])('rejects explicit elapsed duration conflicting with resolution: %s', text => {
+    const errors = validateNarrativeContract(maintextToScene(`对话|旁白|calm|${text}`), {
+      time: new Date(resolved.startTime), timeMinutes: 55, pendingDeathNews: false, resolvedAction: resolved,
+    });
+    expect(errors.some(error => error.code === 'RESOLVED_DURATION_CONFLICT')).toBe(true);
+  });
+  it.each(['这次调查耗时55分钟。', '你想起两小时前的那句话，心里很疲惫。',
+    '这次调查没有耗时两小时。', '这次调查原计划耗时两小时，实际只进行了55分钟。'])('accepts accurate elapsed time and subjective grief: %s', text => {
+    expect(validateNarrativeContract(maintextToScene(`对话|旁白|calm|${text}`), {
+      time: new Date(resolved.startTime), timeMinutes: 55, pendingDeathNews: false, resolvedAction: resolved,
+    })).toEqual([]);
+  });
+  it('uses the resolved long wait end rather than the legacy clock clamp', () => {
+    expect(validateNarrativeContract(maintextToScene('对话|旁白|calm|午夜到了。'), {
+      time: new Date('2024-09-09T16:00:00'), timeMinutes: 480, pendingDeathNews: false,
+      resolvedAction: { ...resolved, startTime: '2024-09-09T16:00:00', endTime: '2024-09-10T00:00:00', executedMinutes: 480, plannedMinutes: 480 },
+    })).toEqual([]);
+  });
   it.each([
     '警方告知：文穗已经死亡。',
     '经初步确认，是文穗。人已经死亡。',

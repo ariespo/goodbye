@@ -207,6 +207,14 @@ export interface DirectorScenePlan {
   actionIntents: Array<{ intent: string; costTier: 'light' | 'medium' | 'heavy' }>;
 }
 
+/** Director-owned intent proposal. Program authority adds costs, sources and event effects. */
+export interface DirectorActionStepProposal {
+  id: string;
+  kind: 'inquiry' | 'investigation' | 'search' | 'travel' | 'rest' | 'wait';
+  scope: import('../../engine/action-resolution').ActionScope;
+  locationId: string;
+}
+
 export interface DirectorPlan {
   turnGoal: string;
   tone: string;
@@ -217,7 +225,9 @@ export interface DirectorPlan {
   knowledgeEvents?: Array<{ eventId: string; evidence: string }>;
   backgroundFactProposals?: BackgroundFactProposal[];
   scenePlan?: DirectorScenePlan;
-  /** 本回合预计经过的分钟数(1-180)，引擎据此推进游戏时钟 */
+  /** Intent-only stages; the program validates them and owns costs and outcomes. */
+  actionSteps?: DirectorActionStepProposal[];
+  /** 旧格式兼容的建议值；程序结算会忽略它。 */
   timeCostMinutes?: number;
 }
 
@@ -275,6 +285,7 @@ export interface WriterPacket {
   authorizedFacts: WriterFact[];
   authorizedKnowledgeEvents: Array<{ eventId: string; evidence: string }>;
   authorizedActionOutcomes?: Array<{ id: string; text: string; speakerIds?: string[] }>;
+  /** Required for new live turns; optional only while reading legacy test or persisted packets. */
   resolvedAction?: import('../../engine/action-resolution').ResolvedActionOutcome;
   authorizedBackgroundFacts: BackgroundFactRecord[];
   authorizedBackgroundSpeakers?: Array<{ factId: string; speakerIds: string[] }>;

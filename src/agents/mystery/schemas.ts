@@ -56,6 +56,25 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
       },
     },
     assetRequests: { type: 'array', items: { type: 'string' } },
+    actionSteps: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 8,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'kind', 'scope', 'locationId'],
+        properties: {
+          id: { type: 'string', minLength: 1 },
+          kind: {
+            type: 'string',
+            enum: ['inquiry', 'investigation', 'search', 'travel', 'rest', 'wait'],
+          },
+          scope: { type: 'string', enum: ['short', 'normal', 'deep'] },
+          locationId: { type: 'string', minLength: 1 },
+        },
+      },
+    },
     scenePlan: {
       type: 'object',
       additionalProperties: false,

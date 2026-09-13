@@ -189,7 +189,7 @@ if (!location.accepted) {
 
 **Interfaces:** Consume WriterPacket projected sources and existing `FactReview`; produce assertion types/functions above. Add optional `assertionAudit?: AssertionAudit` to semantic result types for transport; require it for live narrative approval. Existing deterministic hard reviews remain valid without this field. Add source fields only through approved public projections; never serialize graph `canonicalTruth`.
 
-- [ ] Add red regression table for actual gateway text and permissive boundaries. Exact fixture assertions include:
+- [x] Add red regression table for actual gateway text and permissive boundaries. Exact fixture assertions include:
 
 ```ts
 const fields = { maintext: '店员说清晨六点半前后有白色配送车送面包牛奶。' };
@@ -211,8 +211,8 @@ it('rejects a real source id with an invented source quote', () => {
 });
 ```
 
-- [ ] Run `npm test -- --run src/agents/mystery/narrative-review.test.ts src/agents/mystery/fact-assertion-review.test.ts`; verify failures. Add paired semantic mocks for supported06:50 paraphrase, ordinary water handover, no reply this attempt, “可能” hypothesis, and authorized confirmation; add unsupported no-login/negative attendance/note-time drift and option/summary/checklist-only claims. A mock is structural integration evidence; real-model cases remain Task8.
-- [ ] Build sources separately by source type. Source IDs alone are not entailment; require exact cited source substring, actual assertion span, permissible delivery and audit field coverage. Extend critic JSON schema/prompt to extract and compare each material proposition, not return only a blanket approval. Empty or missing audits on material prose are review failures, and an unsupported assertion blocks even if top-level approved=true.
+- [x] Run `npm test -- --run src/agents/mystery/narrative-review.test.ts src/agents/mystery/fact-assertion-review.test.ts`; verify failures. Add paired semantic mocks for supported06:50 paraphrase, ordinary water handover, no reply this attempt, “可能” hypothesis, and authorized confirmation; add unsupported no-login/negative attendance/note-time drift and option/summary/checklist-only claims. A mock is structural integration evidence; real-model cases remain Task8.
+- [x] Build sources separately by source type. Source IDs alone are not entailment; require exact cited source substring, actual assertion span, permissible delivery and audit field coverage. Extend critic JSON schema/prompt to extract and compare each material proposition, not return only a blanket approval. Empty or missing audits on material prose are review failures, and an unsupported assertion blocks even if top-level approved=true.
 
 ```ts
 const byId = new Map(sources.map(source => [source.id, source]));
@@ -225,10 +225,10 @@ const badSupport = claim.status === 'supported' &&
 // Combine this structural check with semantic unsupported/contradicted findings.
 ```
 
-- [ ] Remove broad `caseAuthorization` and background-length exemptions. Replace global confirmation sanitizer erasure with exact fact/reveal/delivery validation; never erase an unrelated unsupported assertion. Keep deterministic precise sentinel tests, but document they cannot prove semantic coverage. Hard-review registered plan destinations with the Task1 resolver and preserve allowed street scene anchored to current location.
-- [ ] Close compatibility model fact writes explicitly: remove `mysteryKnowledge` from `FREE_KEYS` and strip model-origin `mysteryKnowledge`, `unlockedClues`, `cultClues`, `worldGlitchClues`, `fakeEvidence`, `letterFragments`, and fact-derived `tripProgress` at legacy sanitation as well as State. Add a forged legacy patch test setting day4 solution knowledge/route fragments and confirm none reaches eligibility. Nested/dotted paths must be covered. Keep authoritative `mergeAuthorizedKnowledge` / `deriveAuthorizedFactProgress` and trusted transaction patches working; do not route genuine program commits through a sanitizer that strips its own facts. An existing organized-clue UI operation may preserve already-known organization, but must not introduce a new truth-graph fact.
-- [ ] Integrate review across material playable fields, including asynchronously generated checklist text before attaching it. Failed checklist audit retains the prior valid list or deterministic safe opportunities; it must not publish unaudited detail. Whole-scene repairs re-review all dependent fields and retain sources in repair packets.
-- [ ] Run all listed Task2 tests and existing repair/structured-schema tests. Review WriterPacket snapshots for absence of canonical truth. Root commits phase1 after checks.
+- [x] Remove broad `caseAuthorization` and background-length exemptions. Replace global confirmation sanitizer erasure with exact fact/reveal/delivery validation; never erase an unrelated unsupported assertion. Keep deterministic precise sentinel tests, but document they cannot prove semantic coverage. Hard-review registered plan destinations with the Task1 resolver and preserve allowed street scene anchored to current location.
+- [x] Close compatibility model fact writes explicitly: remove `mysteryKnowledge` from `FREE_KEYS` and strip model-origin `mysteryKnowledge`, `unlockedClues`, `cultClues`, `worldGlitchClues`, `fakeEvidence`, `letterFragments`, and fact-derived `tripProgress` at legacy sanitation as well as State. Add a forged legacy patch test setting day4 solution knowledge/route fragments and confirm none reaches eligibility. Nested/dotted paths must be covered. Keep authoritative `mergeAuthorizedKnowledge` / `deriveAuthorizedFactProgress` and trusted transaction patches working; do not route genuine program commits through a sanitizer that strips its own facts. An existing organized-clue UI operation may preserve already-known organization, but must not introduce a new truth-graph fact.
+- [x] Integrate review across material playable fields, including asynchronously generated checklist text before attaching it. Failed checklist audit retains the prior valid list or deterministic safe opportunities; it must not publish unaudited detail. Whole-scene repairs re-review all dependent fields and retain sources in repair packets.
+- [x] Run all listed Task2 tests and existing repair/structured-schema tests. Review WriterPacket snapshots for absence of canonical truth. Root commits phase1 after checks.
 
 ### Task 3: scarce action quote, resolution and interruption
 
@@ -236,7 +236,7 @@ const badSupport = claim.status === 'supported' &&
 
 **Interfaces:** Produce action types/functions above plus `nextScheduledBoundary(time: string, variables: DynamicRecord): { id: string; at: string } | undefined`. Keep `checkScheduledEvents` for event mutation. Resolve `midnight`, death news and active due commitments as chronological blockers. Use a Task6 commitment adapter later rather than importing memory internals now.
 
-- [ ] Write red unit fixture and conservation cases:
+- [x] Write red unit fixture and conservation cases:
 
 ```ts
 const deepStep: ActionStep = { id: 'work', kind: 'investigation', scope: 'deep',
@@ -259,8 +259,8 @@ it('a five-minute budget cannot buy a full deep investigation', () => {
 });
 ```
 
-- [ ] Run `npm test -- --run src/engine/action-resolution.test.ts`; ensure missing implementation fails. Add tests for quote25/55/105, distinct actual travel legs, same destination two work steps, explicit120 budget, interrupted travel, exact16:00, midnight, old-cycle continuation rejection, split-cost sum and event IDs once.
-- [ ] Implement pure ordered segmentation. Derive work price from scope, travel from registered map geometry. Budget applies to aggregate travel+work. Iterate while time remains; stop before boundary; only completed milestones expose source IDs. A deliberately authorized wait can exceed180 to reach a disclosed boundary; do not change arbitrary legacy clock clamp globally.
+- [x] Run `npm test -- --run src/engine/action-resolution.test.ts`; ensure missing implementation fails. Add tests for quote25/55/105, distinct actual travel legs, same destination two work steps, explicit120 budget, interrupted travel, exact16:00, midnight, old-cycle continuation rejection, split-cost sum and event IDs once.
+- [x] Implement pure ordered segmentation. Derive work price from scope, travel from registered map geometry. Budget applies to aggregate travel+work. Iterate while time remains; stop before boundary; only completed milestones expose source IDs. A deliberately authorized wait can exceed180 to reach a disclosed boundary; do not change arbitrary legacy clock clamp globally.
 
 ```ts
 const execute = Math.min(plannedRemaining, budgetRemaining, minutesUntilBoundary);
@@ -270,9 +270,9 @@ const completed = cumulative === plannedMinutes;
 const earned = completed ? step.completionSourceIds : [];
 ```
 
-- [ ] Validate all finite numbers, known kinds/scopes/locations, stable step IDs and continuation cycle/clock compatibility. Store `previousResolutionId`, a stable digest of validated ordered steps, `resumableFromTime` and `expectedLocationId`; on resume require matching current-cycle active saved continuation, matching digest/step IDs/location, and start clock at or after `resumableFromTime`. Root supplies only the active saved continuation, not arbitrary model/user objects; changing plan/location or resetting invalidates it. Waiting at the same location may retain it unless a deadline/opportunity expires. `quoteActionSteps` uses its completed minutes and charged-cost maps to quote only remaining work/travel. Ignore Director numeric price as authority.
-- [ ] Apply spec resource rates, rest cap120, fantasy−8, death−12 once with explicit cycle-scoped effect IDs. The resolver is the single resource-effect owner for resolved narrative actions; `event` steps carry validated event IDs and consult `appliedEventEffectIds`. Task4 must bypass the transaction's existing death-news sanity deduction when `resolvedAction` is present, while retaining the old branch for non-resolved compatibility/local callers. No implicit sanity depletion for grief words.
-- [ ] Run resolver/event/action-context tests. Review start/end scene behavior for interrupted travel: no unexecuted destination/NPC. Root records task gate and commits pure engine checkpoint.
+- [x] Validate all finite numbers, known kinds/scopes/locations, stable step IDs and continuation cycle/clock compatibility. Store `previousResolutionId`, a stable digest of validated ordered steps, `resumableFromTime` and `expectedLocationId`; on resume require matching current-cycle active saved continuation, matching digest/step IDs/location, and start clock at or after `resumableFromTime`. Root supplies only the active saved continuation, not arbitrary model/user objects; changing plan/location or resetting invalidates it. Waiting at the same location may retain it unless a deadline/opportunity expires. `quoteActionSteps` uses its completed minutes and charged-cost maps to quote only remaining work/travel. Ignore Director numeric price as authority.
+- [x] Apply spec resource rates, rest cap120, fantasy−8, death−12 once with explicit cycle-scoped effect IDs. The resolver is the single resource-effect owner for resolved narrative actions; `event` steps carry validated event IDs and consult `appliedEventEffectIds`. Task4 must bypass the transaction's existing death-news sanity deduction when `resolvedAction` is present, while retaining the old branch for non-resolved compatibility/local callers. No implicit sanity depletion for grief words.
+- [x] Run resolver/event/action-context tests. Review start/end scene behavior for interrupted travel: no unexecuted destination/NPC. Root records task gate and commits pure engine checkpoint.
 
 ### Task 4: one outcome through Writer, State and commit
 
