@@ -58,6 +58,7 @@ export interface AssertionSource {
   factId?: string;
   level?: import('./types').RevealLevel;
   speakerIds?: string[];
+  requiredEvidenceText?: string; // conditional approved soft proposal; must occur in actual playable maintext
 }
 export interface NarrativeAssertion {
   field: string; quote: string; proposition: string;
@@ -69,7 +70,8 @@ export interface AssertionAudit {
   reviewedFields: string[];
   assertions: NarrativeAssertion[];
 }
-export function buildAssertionSources(packet: import('./types').WriterPacket): AssertionSource[];
+export function buildAssertionSources(packet: import('./types').WriterPacket,
+  narrativeFields?: Record<string, string>): AssertionSource[];
 export function validateAssertionAudit(
   audit: AssertionAudit,
   sources: AssertionSource[],
@@ -151,7 +153,7 @@ Root may rename a type for an existing convention, but must change its consumers
 
 **Interfaces:** Consume existing `gameLocations`, `getLocationById`, `sanitizeVarsPatch`, `validateStateAgentResponse`, `settleGameTransaction`; produce `resolveRegisteredLocation` above.
 
-- [ ] Add red cases using existing fixtures plus these standalone location assertions:
+- [x] Add red cases using existing fixtures plus these standalone location assertions:
 
 ```ts
 it('retains the registered anchor for an unknown generated location', () => {
@@ -166,8 +168,8 @@ it('represents outdoor transit without inventing a map coordinate', () => {
 });
 ```
 
-- [ ] Run `npm test -- --run src/data/locations.test.ts src/agents/state/state-agent.test.ts src/sillytavern/vars-validator.test.ts src/engine/game-transaction.test.ts src/sillytavern/output-protocol.test.ts`; confirm new unknown-location/dialogue-escape assertions fail before implementation.
-- [ ] Implement the shared resolver: named ID accepted; `street` accepted with current anchor and transient scene metadata; unknown rejected. For old corrupt current ID only, select the existing registered default explicitly during migration, not as acceptance of the new mutation. Replace free location assignment with this guard at State/legacy sanitation and transaction. Reject nested or non-string location values. Preserve rejection evidence in sanitizer output.
+- [x] Run `npm test -- --run src/data/locations.test.ts src/agents/state/state-agent.test.ts src/sillytavern/vars-validator.test.ts src/engine/game-transaction.test.ts src/sillytavern/output-protocol.test.ts`; confirm new unknown-location/dialogue-escape assertions fail before implementation.
+- [x] Implement the shared resolver: named ID accepted; `street` accepted with current anchor and transient scene metadata; unknown rejected. For old corrupt current ID only, select the existing registered default explicitly during migration, not as acceptance of the new mutation. Replace free location assignment with this guard at State/legacy sanitation and transaction. Reject nested or non-string location values. Preserve rejection evidence in sanitizer output.
 
 ```ts
 const location = resolveRegisteredLocation(value, String(current.location ?? 'home'));
@@ -178,8 +180,8 @@ if (!location.accepted) {
 }
 ```
 
-- [ ] Add raw protocol fixture whose playable `对话|旁白|calm|` text contains a literal backslash-n before ordinary prose, not another command; assert rejection. Keep a JSON `vars` escaped string and an ordinary backslash control positive. Expand playable-field checks; use existing format repair and rerun complete protocol/fact review, never `JSON.parse` an arbitrary dialogue line or globally replace every backslash.
-- [ ] Rerun the focused tests; root reviews diff for silent-home fallback and transient-scene handling. Commit checkpoint only through root after this gate.
+- [x] Add raw protocol fixture whose playable `对话|旁白|calm|` text contains a literal backslash-n before ordinary prose, not another command; assert rejection. Keep a JSON `vars` escaped string and an ordinary backslash control positive. Expand playable-field checks; use existing format repair and rerun complete protocol/fact review, never `JSON.parse` an arbitrary dialogue line or globally replace every backslash.
+- [x] Rerun the focused tests; root reviews diff for silent-home fallback and transient-scene handling. Commit checkpoint only through root after this gate.
 
 ### Task 2: individual assertion/source review
 
