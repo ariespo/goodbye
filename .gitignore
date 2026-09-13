@@ -33,3 +33,5 @@ docs/superpowers/completion-reports/
 docs/development-assets/
 docs/approved-art/
 .worktrees/
+.codex-test-tmp/
+.vercel/

@@ -1,3 +1,4 @@
+import { getMaxOutputTokens } from '../src/sillytavern/token-budget';
 import { writeFile } from 'node:fs/promises';
 import { callSecondaryApi, type ApiConfig } from '../src/sillytavern/api-router';
 import { prepareMysteryTurn } from '../src/agents/mystery/orchestrator';
@@ -28,7 +29,7 @@ const preset: ChatPreset = {
   id: 'deepseek-flash-e2e',
   createdAt: Date.now(),
   updatedAt: Date.now(),
-  settings: { ...presetBase.settings, openai_max_tokens: 8000 },
+  settings: { ...presetBase.settings },
 };
 
 const protocol = createOutputProtocol({
@@ -150,7 +151,7 @@ async function runScenario(scenario: Scenario) {
       presentationContext: { location: earlyLocation, cycleCount: cycle },
       formatPrompt: DEFAULT_FORMAT_PROMPT, complete,
     });
-    let earlyRaw = await callSecondaryApi(api, prepared.writerMessages, preset, { temperature: 0.35, maxTokens: 8000 });
+    let earlyRaw = await callSecondaryApi(api, prepared.writerMessages, preset, { temperature: 0.35, maxTokens: getMaxOutputTokens(preset) });
     let earlyParseState = parseChunk(createParseState(), earlyRaw, { strict: true });
     let earlyValidationErrors = [
       ...protocol.validate(earlyRaw, earlyParseState.parsed),
@@ -161,7 +162,7 @@ async function runScenario(scenario: Scenario) {
         ...prepared.writerMessages,
         { role: 'assistant', content: earlyRaw },
         { role: 'user', content: '上一响应标签不完整。请从头输出完整场景，严格闭合 maintext、option、hint、sum、vars；不要解释。' },
-      ], preset, { temperature: 0, maxTokens: 8000 });
+      ], preset, { temperature: 0, maxTokens: getMaxOutputTokens(preset) });
       earlyParseState = parseChunk(createParseState(), earlyRaw, { strict: true });
       earlyValidationErrors = [
         ...protocol.validate(earlyRaw, earlyParseState.parsed),
@@ -217,7 +218,7 @@ async function runScenario(scenario: Scenario) {
     presentationContext: { location: scenario.location, cycleCount: 5 },
     formatPrompt: DEFAULT_FORMAT_PROMPT, complete,
   });
-  let raw = await callSecondaryApi(api, prepared.writerMessages, preset, { temperature: 0.35, maxTokens: 8000 });
+  let raw = await callSecondaryApi(api, prepared.writerMessages, preset, { temperature: 0.35, maxTokens: getMaxOutputTokens(preset) });
   let parseState = parseChunk(createParseState(), raw, { strict: true });
   const validationErrors = [...protocol.validate(raw, parseState.parsed), ...parseState.errors.map(message => ({ code: 'STREAM', message }))];
   let narrativeReview: unknown = null;
@@ -225,20 +226,20 @@ async function runScenario(scenario: Scenario) {
     const reviewRaw = await callSecondaryApi(api, [
       { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
       { role: 'user', content: buildNarrativeFactCriticUserPrompt(prepared.writerPacket, parseState.parsed.maintext) },
-    ], preset, { temperature: 0, maxTokens: 2500 });
+    ], preset, { temperature: 0, maxTokens: getMaxOutputTokens(preset) });
     narrativeReview = sanitizeNarrativeReview(JSON.parse(reviewRaw.slice(reviewRaw.indexOf('{'), reviewRaw.lastIndexOf('}') + 1)));
     for (let repairAttempt = 0; repairAttempt < 2 && (narrativeReview as { approved?: boolean }).approved !== true; repairAttempt++) {
       raw = await callSecondaryApi(api, [
         { role: 'system', content: `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${DEFAULT_FORMAT_PROMPT}` },
         { role: 'user', content: buildNarrativeRepairPrompt(prepared.writerPacket, parseState.parsed.maintext, narrativeReview) },
-      ], preset, { temperature: 0, maxTokens: 8000 });
+      ], preset, { temperature: 0, maxTokens: getMaxOutputTokens(preset) });
       parseState = parseChunk(createParseState(), raw, { strict: true });
       validationErrors.push(...protocol.validate(raw, parseState.parsed), ...parseState.errors.map(message => ({ code: 'STREAM', message })));
       if (validationErrors.length === 0) {
         const retryReviewRaw = await callSecondaryApi(api, [
           { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
           { role: 'user', content: buildNarrativeFactCriticUserPrompt(prepared.writerPacket, parseState.parsed.maintext) },
-        ], preset, { temperature: 0, maxTokens: 2500 });
+        ], preset, { temperature: 0, maxTokens: getMaxOutputTokens(preset) });
         narrativeReview = sanitizeNarrativeReview(JSON.parse(retryReviewRaw.slice(retryReviewRaw.indexOf('{'), retryReviewRaw.lastIndexOf('}') + 1)));
       }
     }

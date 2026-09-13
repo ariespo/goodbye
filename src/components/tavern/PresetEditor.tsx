@@ -1,3 +1,4 @@
+import { DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from '../../sillytavern/token-budget';
 import { useState } from 'react';
 import type { ChatPreset, DynamicRecord, PromptOrderItem } from '../../sillytavern/types';
 import { DEFAULT_PROMPT_ORDER } from '../../sillytavern/types';
@@ -107,10 +108,10 @@ export function PresetEditor({ preset, onChange }: Props) {
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="最大上下文 (max_context)">
-                <input type="number" value={s.openai_max_context ?? 80000} onChange={e => patchSettings({ openai_max_context: Number(e.target.value) || 0 })} className={inputCls} />
+                <input type="number" value={s.openai_max_context ?? DEFAULT_CONTEXT_TOKENS} onChange={e => patchSettings({ openai_max_context: Number(e.target.value) || 0 })} className={inputCls} />
               </Field>
               <Field label="最大输出 (max_tokens)">
-                <input type="number" value={s.openai_max_tokens ?? 4096} onChange={e => patchSettings({ openai_max_tokens: Number(e.target.value) || 0 })} className={inputCls} />
+                <input type="number" value={s.openai_max_tokens ?? DEFAULT_OUTPUT_TOKENS} onChange={e => patchSettings({ openai_max_tokens: Number(e.target.value) || 0 })} className={inputCls} />
               </Field>
             </div>
             <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer">

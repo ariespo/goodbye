@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultVariables } from '../../sillytavern/vars-merger';
-import { validateStateAgentResponse } from './state-agent';
+import { projectWritableState, validateStateAgentResponse } from './state-agent';
+import { buildStateEvidenceAuthority } from './state-evidence';
 
 describe('validateStateAgentResponse', () => {
+  it('does not award suspicion for a player guess without program authority', () => {
+    const result = validateStateAgentResponse({
+      patch: { suspicion: { 'old-man': 10 } },
+      evidence: [{ path: 'suspicion.old-man', quote: '我猜老人有嫌疑' }],
+    }, createDefaultVariables(), '我猜老人有嫌疑\n没有找到新的证据');
+    expect(result.vars['suspicion.old-man']).toBeUndefined();
+  });
   it('只接受有逐字段原文证据的状态变化', () => {
     const result = validateStateAgentResponse({
       summary: '玩家发现老人的证词有矛盾。',
@@ -11,9 +19,11 @@ describe('validateStateAgentResponse', () => {
         investigation: { crime: 8 },
       },
       evidence: [
-        { path: 'suspicion.old-man', quote: '老人的证词前后矛盾' },
+        { path: 'suspicion.old-man', quote: '老人的证词前后矛盾', evidenceId: 'fact:F001' },
       ],
-    }, createDefaultVariables(), '你发现老人的证词前后矛盾，但还没有取得物证。');
+    }, createDefaultVariables(), '你发现老人的证词前后矛盾，但还没有取得物证。', undefined, {
+      newEvidence: [{ id: 'fact:F001', actorIds: ['old-man'], text: '老人的证词前后矛盾' }],
+    });
 
     expect(result.vars['suspicion.old-man']).toBe(10);
     expect(result.vars['investigation.crime']).toBeUndefined();
@@ -76,10 +86,12 @@ describe('validateStateAgentResponse', () => {
         lockedRoute: 'A',
       },
       evidence: [
-        { path: 'suspicion.old-man', quote: '所有证据都指向老人' },
+        { path: 'suspicion.old-man', quote: '所有证据都指向老人', evidenceId: 'fact:F001' },
         { path: 'lockedRoute', quote: '你认定老人就是凶手' },
       ],
-    }, createDefaultVariables(), '所有证据都指向老人。你认定老人就是凶手。');
+    }, createDefaultVariables(), '所有证据都指向老人。你认定老人就是凶手。', undefined, {
+      newEvidence: [{ id: 'fact:F001', actorIds: ['old-man'], text: '所有证据都指向老人' }],
+    });
 
     expect(result.vars['suspicion.old-man']).toBe(15);
     expect(result.vars.lockedRoute).toBeUndefined();
@@ -101,5 +113,57 @@ describe('validateStateAgentResponse', () => {
 
     expect(result.vars['suspicion.old-man']).toBeUndefined();
     expect(result.vars['suspicion.self']).toBe(15);
+  });
+
+  it('rejects wrong actor, fabricated IDs, and unrelated quotes even with an authorized fact', () => {
+    const authority = { newEvidence: [{ id: 'fact:F001', actorIds: ['old-man'], text: '老人的证词前后矛盾' }] };
+    for (const [actor, id, quote] of [
+      ['self', 'fact:F001', '老人的证词前后矛盾'],
+      ['old-man', 'fact:invented', '老人的证词前后矛盾'],
+      ['old-man', 'fact:F001', '我猜老人有嫌疑'],
+    ]) {
+      const result = validateStateAgentResponse({
+        patch: { suspicion: { [actor]: 25 } },
+        evidence: [{ path: `suspicion.${actor}`, quote, evidenceId: id }],
+      }, createDefaultVariables(), '老人的证词前后矛盾。我猜老人有嫌疑。', undefined, authority);
+      expect(result.vars[`suspicion.${actor}`]).toBeUndefined();
+    }
+  });
+
+  it('awards a new fact once and rejects it after deterministic knowledge settlement', () => {
+    const packet = { authorizedFacts: [{ id: 'F001', level: 'clue' as const, text: '老人的证词前后矛盾', delivery: 'narration' as const }] };
+    const graph = { version: 'test', npcKnowledge: [], facts: [{ id: 'canonical', route: 'A' as const, kind: 'evidence' as const, canonicalTruth: 'secret', characters: ['old-man'], suspicionTargets: ['old-man'], locations: [], revelations: {}, availability: {} }] };
+    const response = { patch: { suspicion: { 'old-man': 10 } }, evidence: [{ path: 'suspicion.old-man', quote: '老人的证词前后矛盾', evidenceId: 'fact:F001' }] };
+    const first = validateStateAgentResponse(response, createDefaultVariables(), packet.authorizedFacts[0].text, undefined,
+      buildStateEvidenceAuthority(packet, graph, {}, [], { F001: 'canonical' }));
+    expect(first.vars['suspicion.old-man']).toBe(10);
+    const variables = createDefaultVariables();
+    variables.suspicion['old-man'] = 10;
+    response.patch.suspicion['old-man'] = 15;
+    const repeated = validateStateAgentResponse(response, variables, packet.authorizedFacts[0].text, undefined,
+      buildStateEvidenceAuthority(packet, graph, { canonical: 'clue' }, [], { F001: 'canonical' }));
+    expect(repeated.vars['suspicion.old-man']).toBeUndefined();
+  });
+
+  it('sends only writable values and omits accumulated memory and canonical knowledge', () => {
+    const variables = createDefaultVariables();
+    const projected = projectWritableState({ ...variables, worldMemory: { text: 'x'.repeat(20000) }, mysteryKnowledge: { secret: 'confirmation' }, suspicion: { ...variables.suspicion, secret: 77 } });
+    expect(projected.suspicion).toEqual(variables.suspicion);
+    expect(projected.location).toBe(variables.location);
+    expect(projected.worldMemory).toBeUndefined();
+    expect(projected.mysteryKnowledge).toBeUndefined();
+    expect(projected.loopSuspicionStart).toBeUndefined();
+  });
+
+  it('retains the full-day suspicion cap after authorizing a second new fact', () => {
+    const variables = createDefaultVariables();
+    variables.suspicion['old-man'] = 10;
+    const result = validateStateAgentResponse({
+      patch: { suspicion: { 'old-man': 25 } },
+      evidence: [{ path: 'suspicion.old-man', quote: '老人的证词前后矛盾', evidenceId: 'fact:F002' }],
+    }, variables, '老人的证词前后矛盾', undefined, {
+      newEvidence: [{ id: 'fact:F002', actorIds: ['old-man'], text: '老人的证词前后矛盾' }],
+    });
+    expect(result.vars['suspicion.old-man']).toBe(15);
   });
 });

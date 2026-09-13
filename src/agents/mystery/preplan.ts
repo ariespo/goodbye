@@ -1,5 +1,7 @@
 import { prepareMysteryTurn } from './orchestrator';
 import type { PreparedMysteryTurn, PrepareMysteryTurnOptions } from './orchestrator';
+import { ApiCallError } from '../../sillytavern/api-router';
+import { awaitWithAbort } from '../../utils/turn-lifecycle';
 
 export type PreplanRunner = (options: PrepareMysteryTurnOptions) => Promise<PreparedMysteryTurn>;
 
@@ -20,6 +22,7 @@ interface PreplanSlot {
 
 // 单槽位：只预跑最可能的一个输入，避免并发浪费额度
 let slot: PreplanSlot | null = null;
+const adopted = new Set<PreplanSlot>();
 
 export function normalizePreplanInput(input: string): string {
   return input.trim();
@@ -47,7 +50,8 @@ export function startPreplan(request: PreplanRequest, run: PreplanRunner = prepa
  * 玩家实际输入到达时尝试复用预规划结果。
  * 输入或上下文不匹配、或预规划失败时返回 null（并作废旧任务），调用方应重新编排。
  */
-export async function consumePreplan(input: string, contextKey: string): Promise<PreparedMysteryTurn | null> {
+export async function consumePreplan(input: string, contextKey: string, signal?: AbortSignal): Promise<PreparedMysteryTurn | null> {
+  if (signal?.aborted) throw new ApiCallError('请求已中止', 'abort');
   const current = slot;
   if (!current) return null;
   if (current.input !== normalizePreplanInput(input) || current.contextKey !== contextKey) {
@@ -55,17 +59,27 @@ export async function consumePreplan(input: string, contextKey: string): Promise
     return null;
   }
   slot = null;
+  adopted.add(current);
+  const abort = () => current.controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
   try {
-    return await current.promise;
-  } catch {
+    return await awaitWithAbort(current.promise, current.controller.signal);
+  } catch (error) {
+    if (current.controller.signal.aborted || signal?.aborted) {
+      throw new ApiCallError('请求已中止', 'abort');
+    }
+    if (error instanceof ApiCallError && error.kind === 'abort') throw error;
     return null;
+  } finally {
+    signal?.removeEventListener('abort', abort);
+    adopted.delete(current);
   }
 }
 
 /** 作废并中止所有预规划任务（reroll / 轮回重置 / 会话切换 / 新回合开始时调用）。 */
 export function invalidatePreplans(): void {
-  if (!slot) return;
-  try { slot.controller.abort(); } catch { /* ignore */ }
+  for (const current of adopted) current.controller.abort();
+  slot?.controller.abort();
   slot = null;
 }
 

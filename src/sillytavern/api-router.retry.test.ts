@@ -57,6 +57,30 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('default per-call output budget', () => {
+  it('sends a 40k output limit for non-stream calls without a preset', async () => {
+    let requestBody: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      requestBody = JSON.parse(String(init.body));
+      return jsonResponse('answer');
+    });
+    await callSecondaryApi(config, [{ role: 'user', content: 'continue' }], null);
+    expect(requestBody.max_tokens).toBe(40000);
+  });
+
+  it('sends a 40k output limit for streaming calls without a preset', async () => {
+    let requestBody: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      requestBody = JSON.parse(String(init.body));
+      return sseResponse(['answer']);
+    });
+    await streamChatCompletion(config, [{ role: 'user', content: 'continue' }], null, {
+      onToken: () => {}, onComplete: () => {}, onError: () => {},
+    });
+    expect(requestBody.max_tokens).toBe(40000);
+  });
+});
+
 describe('reasoning_content compatibility', () => {
   it('rejects a non-stream response that contains only private reasoning', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reasoningJsonResponse('fallback')));

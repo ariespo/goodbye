@@ -1,8 +1,13 @@
+import { buildTurnPreparation, preparationContextKey, resolveAnalysisApi, resolveMysteryLocation, readPlayerKnowledge } from '../agents/mystery/turn-preparation';
+import { assertTurnActive, runStateWithFallback } from '../utils/turn-lifecycle';
+import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
+import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
+
 import { useCallback, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { ApiCallError, streamChatCompletion } from '../sillytavern/api-router';
 import { maintextToScene, mergeParsedIntoScene } from '../engine/scene-parser';
-import { translateForDirector } from '../engine/variable-thresholds';
+
 import { sanitizeVarsPatch } from '../sillytavern/vars-validator';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
 import {
@@ -13,22 +18,17 @@ import {
 } from '../sillytavern/output-protocol';
 import type { ChatMessage, DynamicRecord } from '../sillytavern/types';
 import { persistActiveChat } from '../utils/chatPersistence';
-import { appendResourcePrompt } from '../utils/resourcePrompt';
+
 import {
-  buildNpcPlayerKnowledgeBrief,
-  doesPlayerIntroduceName,
-  formatNpcPlayerKnowledgeDirective,
   npcPlayerKnowledgeError,
-  type PlayerIdentity,
 } from '../data/npcPlayerKnowledge';
 import { parseTimeCost, clampTimeCost } from '../engine/game-clock';
-import { buildScheduledDirectives } from '../engine/scheduled-events';
+
 import { settleGameTransaction, type GameResourceCosts } from '../engine/game-transaction';
-import { gameLocations } from '../data/locations';
+
 import {
   addKnowledgeEvent,
   addPresentedAuthorizedKnowledgeEvents,
-  buildPlayerKnowledgeBrief,
   normalizeKnowledgeEvents,
 } from '../data/playerKnowledge';
 import {
@@ -53,16 +53,11 @@ import {
   reviewNarrativeStyle,
   REVEAL_LEVELS,
   startPreplan,
-  type AgentNarrativeMode,
   type FactReview,
   type FactReviewViolation,
-  type MysteryOverlayId,
-  type MysteryRouteId,
   type PreparedMysteryTurn,
-  type RevealLevel,
-  type TruthContext,
 } from '../agents/mystery';
-import type { AppSettings } from '../sillytavern/types';
+
 import {
   generateSceneChecklist,
   insertTagsIntoMaintext,
@@ -76,14 +71,14 @@ import { rebuildSceneFromChat } from '../utils/sceneFromChat';
 import { excludeCurrentInputFromHistory } from '../sillytavern/history-cutoff';
 import { captureTurnState, resolveTurnRollback } from '../utils/turnStateSnapshot';
 import { deriveAuthorizedFactProgress } from '../agents/mystery/knowledge-progression';
-import { evaluatePlayerIntent } from '../engine/player-intent-policy';
+
 import {
   applyActionNarrativeKnowledgeFallback,
   actionNarrativeContextError,
   resolveActionNarrativeContext,
   type ActionNarrativeContext,
 } from '../engine/action-narrative-context';
-import { buildTurnCommit, compileTurnContext, type TurnContextBundle } from '../memory/world-memory';
+import { buildTurnCommit } from '../memory/world-memory';
 import type { Scene } from '../sillytavern/types';
 
 const outputProtocol = createOutputProtocol({
@@ -93,7 +88,7 @@ const outputProtocol = createOutputProtocol({
   checkUnclosedTags: true,
 });
 
-const mysteryFactIds = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => fact.id));
+
 
 function combineNarrativeReviews(reviews: FactReview[]): FactReview {
   const violations = reviews.flatMap(review => review.violations);
@@ -103,51 +98,6 @@ function combineNarrativeReviews(reviews: FactReview[]): FactReview {
     corrections: violations.length === 0 ? [] : reviews.flatMap(review => review.corrections),
   };
 }
-const npcIdsByLocation: Record<string, string[]> = {
-  supermarket: ['chen-huihui'],
-  'community-hospital': ['detective-b'],
-  school: ['school-guard'],
-  'mountain-trail': ['morning-witness'],
-  'senpai-building': ['touko'],
-  'old-man-building': ['old-man'],
-  'detective-inn': ['detective-a', 'detective-b'],
-  'water-tower': ['detective-a'],
-};
-
-function resolveMysteryLocation(background: string | null): string {
-  const normalized = (background ?? '').replace(/\.png$/i, '');
-  if (!normalized || normalized.startsWith('home') || normalized.startsWith('bedroom')) return 'home';
-  const location = gameLocations.find(candidate =>
-    [candidate.id, candidate.background, candidate.dayBackground, candidate.nightBackground]
-      .filter(Boolean)
-      .includes(normalized)
-  );
-  return location?.id ?? 'home';
-}
-
-function readLockedRoute(variables: DynamicRecord): MysteryRouteId | null {
-  const value = variables.lockedRoute ?? variables.mysteryRoute;
-  return value === 'A' || value === 'B' || value === 'C' || value === 'NONE' || value === 'FAKE'
-    ? value
-    : null;
-}
-
-function readPlayerKnowledge(variables: DynamicRecord, clueIds: string[]): Record<string, RevealLevel> {
-  const result: Record<string, RevealLevel> = {};
-  const stored = variables.mysteryKnowledge;
-  if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-    for (const [id, level] of Object.entries(stored)) {
-      if (mysteryFactIds.has(id) && REVEAL_LEVELS.includes(level as RevealLevel)) {
-        result[id] = level as RevealLevel;
-      }
-    }
-  }
-  for (const id of clueIds) {
-    if (mysteryFactIds.has(id) && !result[id]) result[id] = 'clue';
-  }
-  return result;
-}
-
 function mergeAuthorizedKnowledge(
   variables: DynamicRecord,
   prepared: PreparedMysteryTurn | null,
@@ -195,47 +145,13 @@ function mergeAuthorizedKnowledge(
   };
 }
 
-function readActiveOverlay(variables: DynamicRecord): MysteryOverlayId | null {
-  return variables.overlay === 'CULT' || variables.overlay === 'PSYCH'
-    ? variables.overlay
-    : null;
-}
-
 function finitePositive(value: unknown): boolean {
   const number = Number(value);
   return Number.isFinite(number) && number > 0;
 }
 
-function resolveAnalysisApi(settings: AppSettings) {
-  // 导演/审查是结构化 JSON 任务,优先走次 API(便宜模型),未配置时回退主 API
-  const sec = settings.api.secondary;
-  return sec?.enabled && sec.apiKey && sec.baseUrl
-    ? { baseUrl: sec.baseUrl, apiKey: sec.apiKey, model: sec.model }
-    : { baseUrl: settings.api.baseUrl, apiKey: settings.api.apiKey, model: settings.api.model };
-}
-
-function readConfirmedPlayerIdentity(settings: AppSettings): PlayerIdentity | undefined {
-  if (!settings.playerIdentityConfirmed || !settings.userName.trim()) return undefined;
-  if (settings.playerGender !== 'male' && settings.playerGender !== 'female') return undefined;
-  return { name: settings.userName.trim(), gender: settings.playerGender };
-}
-
-function buildPreplanContextKey(
-  mode: AgentNarrativeMode,
-  chatId: string | null,
-  truthContext: Pick<TruthContext, 'cycleCount' | 'currentLocation' | 'lockedRoute'>,
-): string {
-  return [
-    mode,
-    truthContext.cycleCount,
-    truthContext.currentLocation,
-    truthContext.lockedRoute ?? 'none',
-    chatId ?? 'none',
-  ].join('|');
-}
-
 // 失败回合的编排结果缓存：重试时输入未变则跳过导演/审查重跑
-let cachedPreparedTurn: { chatId: string | null; input: string; turn: PreparedMysteryTurn } | null = null;
+let cachedPreparedTurn: { contextKey: string; turn: PreparedMysteryTurn } | null = null;
 
 interface CachedNarrativeFailure {
   chatId: string | null;
@@ -283,6 +199,21 @@ export function useGameLoop() {
 
     const liveStore = useGameStore.getState();
     const { tavern, game, actions } = liveStore;
+    const abortController = new AbortController();
+    liveStore.api.abortController?.abort();
+    actions.setAbortController(abortController);
+    let turnCommitted = false;
+    const ownsTurn = () => {
+      const current = useGameStore.getState();
+      return current.tavern.activeChatId === tavern.activeChatId
+        && current.api.abortController === abortController;
+    };
+    const assertCurrent = () => assertTurnActive(abortController.signal, () => ownsTurn()
+      && (turnCommitted || useGameStore.getState().tavern.variables === tavern.variables));
+    const writeGuard = { signal: abortController.signal, assertCurrent };
+    const metrics = beginTurnMetrics();
+    const endPreparation = metrics.startStage('preparation');
+    let endWriter = () => {};
     const isReroll = opts?.isReroll ?? false;
     const isRetry = opts?.isRetry ?? false;
     const forceRegenerate = opts?.forceRegenerate ?? false;
@@ -314,7 +245,7 @@ export function useGameLoop() {
         if (baseMessages.length > 0 && baseMessages[baseMessages.length - 1].role === 'user') {
           baseMessages = baseMessages.slice(0, -1);
           if (activeChat) {
-            await persistActiveChat({ messages: baseMessages });
+            await persistActiveChat({ messages: baseMessages }, writeGuard);
           }
         }
       }
@@ -344,7 +275,7 @@ export function useGameLoop() {
         messages = [...baseMessages, userMessage];
 
         if (activeChat) {
-          await persistActiveChat({ messages });
+          await persistActiveChat({ messages }, writeGuard);
         }
       }
 
@@ -358,62 +289,14 @@ export function useGameLoop() {
         && pendingActionCost.input === userInput
           ? pendingActionCost.narrativeContext ?? null
           : null;
-      const currentLocationId = typeof tavern.variables.location === 'string'
-        ? tavern.variables.location
-        : resolveMysteryLocation(game.currentState.background);
-      const actionNarrativeContext = pendingNarrativeContext ?? resolveActionNarrativeContext(
-        userInput,
-        game.gameStatus.time,
-        0,
-        {
-          currentLocationId,
-          cycleCount: Number(tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
-          knowledgeEvents: tavern.variables.knowledgeEvents,
-        },
-      );
-      const narrativeVariables = actionNarrativeContext
-        ? { ...tavern.variables, location: actionNarrativeContext.locationId }
-        : tavern.variables;
-      const narrativeBackground = actionNarrativeContext?.background ?? game.currentState.background;
-      const scheduledDirectives = buildScheduledDirectives(narrativeVariables);
-      const intentPolicy = evaluatePlayerIntent(userInput, narrativeVariables);
-      const hadPendingDeathNews = tavern.variables.deathNews === 'pending';
-      const historyMessages = excludeCurrentInputFromHistory(messages, userInput);
-      const agentMode: AgentNarrativeMode = settings.agentNarrativeMode ?? 'standard';
-      const mysteryLocation = actionNarrativeContext?.locationId ?? resolveMysteryLocation(narrativeBackground);
-      const activeNpcIds = [...new Set([
-        ...(npcIdsByLocation[mysteryLocation] ?? []),
-        ...(actionNarrativeContext?.requiredNpcIds ?? []),
-        ...(actionNarrativeContext?.enRouteNpcIds ?? []),
-      ])];
-      const playerIdentity = readConfirmedPlayerIdentity(settings);
-      const introducesPlayerName = doesPlayerIntroduceName(userInput, playerIdentity);
-      const knownByNpcIds = new Set(Array.isArray(narrativeVariables.playerNameKnownByNpcIds)
-        ? narrativeVariables.playerNameKnownByNpcIds.filter((id): id is string => typeof id === 'string')
-        : []);
-      if (introducesPlayerName) activeNpcIds.forEach(id => knownByNpcIds.add(id));
-      const playerIdentityVariables = {
-        ...narrativeVariables,
-        playerNameKnownByNpcIds: [...knownByNpcIds],
-      };
-      const npcPlayerKnowledge = buildNpcPlayerKnowledgeBrief(activeNpcIds, playerIdentity, playerIdentityVariables);
-      const basePromptUserInput = appendResourcePrompt(userInput, narrativeBackground, narrativeVariables)
-        + (actionNarrativeContext ? `\n\n${actionNarrativeContext.directive}` : '')
-        + (npcPlayerKnowledge.length ? `\n\n${formatNpcPlayerKnowledgeDirective(npcPlayerKnowledge)}` : '')
-        + `\n\n[玩家意图裁决] ${intentPolicy.directorDirective}`
-        + (scheduledDirectives.length ? '\n\n' + scheduledDirectives.map(l => `[系统指令] ${l}`).join('\n') : '');
-      const contextBundle: TurnContextBundle = compileTurnContext({
-        userInput,
-        locationId: mysteryLocation,
-        activeNpcIds,
-        history: historyMessages,
-        variables: narrativeVariables,
-        maxContext: Number(activePreset?.settings?.openai_max_context ?? 80000),
-        reservedOutput: Math.max(4096, Number(activePreset?.settings?.openai_max_tokens ?? 4096)),
-        fixedPromptText: `${basePromptUserInput}\n${settings.formatPromptTemplate ?? ''}`,
+      const preparation = buildTurnPreparation({
+        userInput, settings, activePreset, variables: tavern.variables,
+        gameStatus: game.gameStatus, currentState: game.currentState, endingCheckContext: game.endingCheckContext,
+        history: excludeCurrentInputFromHistory(messages, userInput), pendingNarrativeContext,
+        hasPendingAction: !!pendingActionCost && pendingActionCost.chatId === tavern.activeChatId && pendingActionCost.input === userInput,
       });
-      const abortController = new AbortController();
-      actions.setAbortController(abortController);
+      const { actionNarrativeContext, narrativeVariables, intentPolicy, hadPendingDeathNews,
+        mysteryLocation, activeNpcIds, playerIdentity, introducesPlayerName, knownByNpcIds, npcPlayerKnowledge } = preparation;
 
       let preparedTurn: PreparedMysteryTurn | null = null;
       let resumedNarrativeFailure: CachedNarrativeFailure | null = null;
@@ -430,89 +313,19 @@ export function useGameLoop() {
       );
       let requestMessages: PreparedMysteryTurn['writerMessages'] = [];
       {
-        const knownClueIds = (Array.isArray(game.endingCheckContext.unlockedClues)
-          ? game.endingCheckContext.unlockedClues
-          : []).filter(id => mysteryFactIds.has(id));
-        const playerPresentation = buildPlayerKnowledgeBrief({ ...narrativeVariables, location: mysteryLocation });
-        const truthContext: TruthContext = {
-          cycleCount: Number(narrativeVariables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
-          currentLocation: mysteryLocation,
-          lockedRoute: readLockedRoute(narrativeVariables),
-          unlockedClueIds: knownClueIds,
-          playerKnowledge: readPlayerKnowledge(narrativeVariables, knownClueIds),
-          suspicion: {
-            ...game.endingCheckContext.suspicion,
-            ...(narrativeVariables.suspicion && typeof narrativeVariables.suspicion === 'object'
-              ? narrativeVariables.suspicion
-              : {}),
-          },
-          affinity: {
-            ...game.endingCheckContext.affinity,
-            ...(narrativeVariables.affinity && typeof narrativeVariables.affinity === 'object'
-              ? narrativeVariables.affinity
-              : {}),
-          },
-          tripProgress: Number(narrativeVariables.tripProgress ?? 0),
-          sanity: game.gameStatus.sanity,
-          activeOverlay: readActiveOverlay(narrativeVariables),
-          activeNpcIds,
-          playerPresentation,
-          playerIdentity,
-          playerIdentityVariables,
-          sceneContract: actionNarrativeContext?.sceneContract,
-        };
-        const recentHistory = contextBundle.recentMessages.map(message => ({ role: message.role, content: message.content }));
-        const analysisApi = resolveAnalysisApi(settings);
+        const preplanKey = preparationContextKey(tavern.activeChatId, preparation.request, settings.api);
         try {
-          // 失败回合重试：编排结果已缓存则直接复用，不重跑导演/审查
-          if (isRetry && cachedPreparedTurn
-            && cachedPreparedTurn.chatId === tavern.activeChatId
-            && cachedPreparedTurn.input === userInput) {
+          if (isRetry && cachedPreparedTurn?.contextKey === preplanKey) {
             preparedTurn = cachedPreparedTurn.turn;
+          } else {
+            cachedNarrativeFailure = null;
           }
-          // 玩家阅读期间可能已预跑过同一输入的导演/审查，命中则直接复用
-          const preplanKey = buildPreplanContextKey(agentMode, tavern.activeChatId, truthContext);
-          preparedTurn ??= await consumePreplan(userInput, preplanKey);
-          preparedTurn ??= await prepareMysteryTurn({
-            mode: agentMode,
-            api: analysisApi,
-            preset: activePreset,
-            truthContext,
-            turnContext: {
-              playerInput: userInput,
-              playerIntentPolicy: intentPolicy,
-              sceneContract: actionNarrativeContext?.sceneContract,
-              recentHistory,
-              memoryContext: contextBundle.directorMemory,
-              contextSelectionIds: contextBundle.selectedIds,
-              requiresStateAgent: !!pendingActionCost || intentPolicy.mode !== 'normal',
-              gameStatus: {
-                time: game.gameStatus.time.toISOString(),
-                stamina: game.gameStatus.stamina,
-                sanity: game.gameStatus.sanity,
-              },
-              investigation: game.endingCheckContext.investigation,
-              thresholdDirectives: translateForDirector(tavern.variables)
-                + (scheduledDirectives.length ? '\n' + scheduledDirectives.map(l => `- ${l}`).join('\n') : ''),
-            },
-            presentationContext: {
-              playerInput: userInput,
-              recentHistory,
-              currentLocation: truthContext.currentLocation,
-              currentBackground: narrativeBackground,
-              currentSpeaker: game.currentState.speaker,
-              userName: settings.userName,
-              characterName: settings.characterName,
-              resourceInstructions: basePromptUserInput,
-              playerIntentPolicy: intentPolicy,
-              memoryContext: contextBundle.writerMemory,
-              contextSelectionIds: contextBundle.selectedIds,
-            },
-            formatPrompt: settings.formatPromptTemplate,
-            abortSignal: abortController.signal,
-          });
+          preparedTurn ??= await consumePreplan(userInput, preplanKey, abortController.signal);
+          preparedTurn ??= await prepareMysteryTurn({ ...preparation.request, abortSignal: abortController.signal });
+          assertCurrent();
+          endPreparation();
           requestMessages = preparedTurn.writerMessages;
-          cachedPreparedTurn = { chatId: tavern.activeChatId, input: userInput, turn: preparedTurn };
+          cachedPreparedTurn = { contextKey: preplanKey, turn: preparedTurn };
           if (isRetry && !forceRegenerate
             && cachedNarrativeFailure
             && cachedNarrativeFailure.chatId === tavern.activeChatId
@@ -528,6 +341,7 @@ export function useGameLoop() {
             }
           }
         } catch (pipelineError) {
+          assertCurrent();
           preparedTurn = null;
           if (pipelineError instanceof MysteryPipelineBlockedError) {
             // 不硬终止：进入可恢复状态，玩家可以安全重试或撤回输入。
@@ -567,6 +381,8 @@ export function useGameLoop() {
         stateAgentPatch: DynamicRecord = {},
         acceptedScene: Scene,
       ) => {
+        assertCurrent();
+        const endCommit = metrics.startStage('commit');
         const parsed = parseStateRef.current.parsed;
         const explicitCosts = resolvePendingCosts();
         let variablePatch: DynamicRecord;
@@ -624,7 +440,6 @@ export function useGameLoop() {
           hasEndingInProgress: game.endingPanel.visible || !!game.endingPanel.pendingEndingId,
           deliverPendingDeathNews: hadPendingDeathNews,
         });
-        pendingActionCost = null;
         const acceptedAt = Date.now();
         const turnId = crypto.randomUUID();
         const memoryCommit = buildTurnCommit({
@@ -675,8 +490,9 @@ export function useGameLoop() {
         const finalMessages = [...messages, assistantMessage];
         if (activeChat) {
           try {
-            await persistActiveChat({ messages: finalMessages, variables: mergedVariables });
+            await metrics.stage('persistence', () => persistActiveChat({ messages: finalMessages, variables: mergedVariables }, writeGuard));
           } catch (persistError) {
+            assertCurrent();
             actions.setStreaming(false);
             actions.setIsWaitingForAI(false);
             actions.setTurnRecovery({
@@ -687,11 +503,14 @@ export function useGameLoop() {
             return;
           }
         }
+        assertCurrent();
         const committedScene = mergeParsedIntoScene(prevScene, {
           ...acceptedScene,
           knowledgeAlreadyCommitted: true,
         }, parsed);
         commitGameTransaction(transaction, committedScene);
+        turnCommitted = true;
+        pendingActionCost = null;
 
         actions.addHistorySnapshot({
           turnIndex: game.history.length,
@@ -710,6 +529,10 @@ export function useGameLoop() {
         actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
         actions.setStreaming(false);
         actions.setIsWaitingForAI(false);
+
+        endCommit();
+        metrics.markPlayable();
+        metrics.finish('success');
 
         cachedPreparedTurn = null;
         cachedNarrativeFailure = null;
@@ -769,87 +592,30 @@ export function useGameLoop() {
         // 预规划: 玩家阅读期间按最可能的输入(第一个选项)后台预跑导演/审查
         const firstOption = parsed.options?.[0]?.trim();
         if (allowPreplan && firstOption) {
-          const mysteryLocation = resolveMysteryLocation(game.currentState.background);
-          const knownClueIds = (Array.isArray(mergedVariables.unlockedClues) ? mergedVariables.unlockedClues : [])
-            .filter((id: string) => mysteryFactIds.has(id));
-          const speculativeTruthContext: TruthContext = {
-            cycleCount: Number(mergedVariables.cycleCount ?? 1),
-            currentLocation: mysteryLocation,
-            lockedRoute: readLockedRoute(mergedVariables),
-            unlockedClueIds: knownClueIds,
-            playerKnowledge: readPlayerKnowledge(mergedVariables, knownClueIds),
-            suspicion: {
-              ...game.endingCheckContext.suspicion,
-              ...(mergedVariables.suspicion && typeof mergedVariables.suspicion === 'object'
-                ? mergedVariables.suspicion
-                : {}),
-            },
-            affinity: mergedVariables.affinity && typeof mergedVariables.affinity === 'object'
-              ? mergedVariables.affinity
-              : {},
-            tripProgress: Number(mergedVariables.tripProgress ?? 0),
-            sanity: nextStatus.sanity,
-            activeOverlay: readActiveOverlay(mergedVariables),
-            activeNpcIds: npcIdsByLocation[mysteryLocation] ?? [],
-            playerPresentation: buildPlayerKnowledgeBrief({ ...mergedVariables, location: mysteryLocation }),
-            playerIdentity: readConfirmedPlayerIdentity(settings),
-            playerIdentityVariables: mergedVariables,
-          };
-          const speculativePrompt = appendResourcePrompt(firstOption, game.currentState.background, mergedVariables);
-          const speculativeContextBundle = compileTurnContext({
-            userInput: firstOption,
-            locationId: mysteryLocation,
-            activeNpcIds: speculativeTruthContext.activeNpcIds,
-            history: finalMessages,
-            variables: mergedVariables,
-            maxContext: Number(activePreset?.settings?.openai_max_context ?? 80000),
-            reservedOutput: Math.max(4096, Number(activePreset?.settings?.openai_max_tokens ?? 4096)),
-            fixedPromptText: `${speculativePrompt}\n${settings.formatPromptTemplate ?? ''}`,
-          });
-          const speculativeHistory = speculativeContextBundle.recentMessages.map(m => ({ role: m.role, content: m.content }));
-          startPreplan({
-            input: firstOption,
-            contextKey: buildPreplanContextKey(agentMode, tavern.activeChatId, speculativeTruthContext),
-            options: {
-              mode: agentMode,
-              api: resolveAnalysisApi(settings),
-              preset: activePreset,
-              truthContext: speculativeTruthContext,
-              turnContext: {
-                playerInput: firstOption,
-                recentHistory: speculativeHistory,
-                memoryContext: speculativeContextBundle.directorMemory,
-                contextSelectionIds: speculativeContextBundle.selectedIds,
-                gameStatus: {
-                  time: Number.isNaN(nextStatus.time.getTime())
-                    ? game.gameStatus.time.toISOString()
-                    : nextStatus.time.toISOString(),
-                  stamina: nextStatus.stamina,
-                  sanity: nextStatus.sanity,
-                },
-                investigation: game.endingCheckContext.investigation,
-                thresholdDirectives: translateForDirector(mergedVariables),
-              },
-              presentationContext: {
-                playerInput: firstOption,
-                recentHistory: speculativeHistory,
-                currentLocation: mysteryLocation,
-                currentBackground: game.currentState.background,
-                currentSpeaker: game.currentState.speaker,
-                userName: settings.userName,
-                characterName: settings.characterName,
-                resourceInstructions: speculativePrompt,
-                memoryContext: speculativeContextBundle.writerMemory,
-                contextSelectionIds: speculativeContextBundle.selectedIds,
-              },
-              formatPrompt: settings.formatPromptTemplate,
-            },
-          });
+          try {
+            const committed = useGameStore.getState();
+            const terminalBackground = committedScene.lines.reduce(
+              (background, line) => line.background ?? background, committed.game.currentState.background,
+            );
+            const speculative = buildTurnPreparation({
+              userInput: firstOption, settings, activePreset, variables: mergedVariables,
+              gameStatus: nextStatus, currentState: { ...committed.game.currentState, background: terminalBackground },
+              endingCheckContext: committed.game.endingCheckContext, history: finalMessages,
+            });
+            startPreplan({ input: firstOption,
+              contextKey: preparationContextKey(tavern.activeChatId, speculative.request, settings.api), options: speculative.request });
+          } catch {
+            // An optional preplan budget failure must not undo a committed turn.
+            invalidatePreplans();
+          }
         }
       };
 
       const completeNarrative = async () => {
+            endWriter();
+            assertCurrent();
             const validateNarrativeCandidate = (rawNarrative: string) => {
+              assertCurrent();
               const candidateText = repairRecoverableOutput(rawNarrative).text;
               const candidateParseState = parseChunk(createParseState(), candidateText, { strict: true });
               const candidateValidationErrors = outputProtocol.validate(
@@ -900,7 +666,7 @@ export function useGameLoop() {
                 resumedNarrativeFailure.formatErrors,
               );
             }
-            const repairProtocol = async (rawNarrative: string) => {
+            const repairProtocol = async (rawNarrative: string) => metrics.stage('protocol', async () => {
               let candidate = validateNarrativeCandidate(rawNarrative);
               if (!preparedTurn) return candidate;
               for (let attempt = 0;
@@ -909,7 +675,7 @@ export function useGameLoop() {
                 const errors = candidate.validationErrors.length > 0
                   ? candidate.validationErrors
                   : [{ code: 'MISSING_SCENE', message: '正文没有生成可播放场景。' }];
-                const repaired = await repairNarrativeFormatAgainstWriterPacket({
+                const repaired = await metrics.stage('repair', () => repairNarrativeFormatAgainstWriterPacket({
                   api: resolveAnalysisApi(settings),
                   preset: activePreset,
                   packet: preparedTurn.writerPacket,
@@ -918,17 +684,19 @@ export function useGameLoop() {
                   priorResiduals: protocolResiduals,
                   formatPrompt: settings.formatPromptTemplate,
                   abortSignal: abortController.signal,
-                });
+                }));
                 protocolResiduals = mergeProtocolRepairResiduals(protocolResiduals, errors);
                 candidate = validateNarrativeCandidate(repaired);
               }
               return candidate;
-            };
+            });
 
             let acceptedCandidate;
             try {
               acceptedCandidate = await repairProtocol(fullText);
+              assertCurrent();
             } catch (formatRepairError) {
+              assertCurrent();
               cachedNarrativeFailure = {
                 chatId: tavern.activeChatId,
                 input: userInput,
@@ -1016,30 +784,32 @@ export function useGameLoop() {
                   const reviewCandidate = async (candidateNarrative: string, candidateOutput: string) => {
                     const [candidateFactReview, candidateStyleReview] = await Promise.all([
                       preparedTurn.reviewPolicy.narrative
-                        ? reviewNarrativeAgainstWriterPacket({
+                        ? metrics.stage('fact-review', () => reviewNarrativeAgainstWriterPacket({
                             api: resolveAnalysisApi(settings),
                             preset: activePreset,
                             packet: preparedTurn.writerPacket,
                             narrative: candidateOutput,
                             abortSignal: abortController.signal,
-                          })
+                          }))
                         : Promise.resolve(approvedReview),
-                      reviewNarrativeStyle({
+                      metrics.stage('style-review', () => reviewNarrativeStyle({
                         api: resolveAnalysisApi(settings),
                         preset: activePreset,
                         narrative: candidateNarrative,
                         recentNarratives,
                         exemptTexts: styleExemptTexts,
                         abortSignal: abortController.signal,
-                      }),
+                      })),
                     ]);
+                    assertCurrent();
                     return combineNarrativeReviews([candidateFactReview, candidateStyleReview]);
                   };
 
                   narrativeReview = await reviewCandidate(narrative, fullText);
+                  assertCurrent();
                   for (let attempt = 0; attempt < 3 && narrativeReview && !narrativeReview.approved; attempt += 1) {
                     const rejectedReview = narrativeReview;
-                    const repairedNarrative = await repairNarrativeAgainstWriterPacket({
+                    const repairedNarrative = await metrics.stage('repair', () => repairNarrativeAgainstWriterPacket({
                       api: resolveAnalysisApi(settings),
                       preset: activePreset,
                       packet: preparedTurn.writerPacket,
@@ -1048,12 +818,15 @@ export function useGameLoop() {
                       priorResiduals: narrativeResiduals,
                       formatPrompt: settings.formatPromptTemplate,
                       abortSignal: abortController.signal,
-                    });
+                    }));
+                    assertCurrent();
                     narrativeResiduals = mergeRepairResiduals(narrativeResiduals, rejectedReview.violations);
                     let repairCandidate;
                     try {
                       repairCandidate = await repairProtocol(repairedNarrative);
+                      assertCurrent();
                     } catch (formatRepairError) {
+              assertCurrent();
                       cachedNarrativeFailure = {
                         chatId: tavern.activeChatId,
                         input: userInput,
@@ -1079,6 +852,7 @@ export function useGameLoop() {
                       preparedTurn.writerPacket,
                       repairCandidate.text,
                     );
+                    assertCurrent();
                     if (groundedRepair !== repairCandidate.text) {
                       const candidate = validateNarrativeCandidate(groundedRepair);
                       if (candidate.validationErrors.length === 0 && candidate.scene) repairCandidate = candidate;
@@ -1153,6 +927,7 @@ export function useGameLoop() {
                   actions.setStreamBuffer(fullText);
                   actions.setParsedContent(parseStateRef.current.parsed);
                 } catch (reviewError) {
+                  assertCurrent();
                   cachedNarrativeFailure = {
                     chatId: tavern.activeChatId,
                     input: userInput,
@@ -1174,9 +949,12 @@ export function useGameLoop() {
                 }
               }
 
-              if (preparedTurn.reviewPolicy.state) {
-                try {
-                const stateResult = await runStateAgent({
+              const evidenceAuthority = buildStateEvidenceAuthority(preparedTurn.writerPacket, MYSTERY_TRUTH_GRAPH,
+                preparation.request.truthContext.playerKnowledge ?? {},
+                preparation.request.truthContext.unlockedClueIds, preparedTurn.factAliases.aliasToFactId);
+              if (preparedTurn.reviewPolicy.state || evidenceAuthority.newEvidence.length > 0) {
+                const acceptedTurn = preparedTurn;
+                const stateResult = await metrics.stage('state', () => runStateWithFallback(() => runStateAgent({
                   api: resolveAnalysisApi(settings),
                   preset: activePreset,
                   currentVariables: tavern.variables,
@@ -1184,36 +962,30 @@ export function useGameLoop() {
                   playerInput: userInput,
                   narrative: parseStateRef.current.parsed.maintext || fullText,
                   deterministicCosts: resolvePendingCosts() ?? undefined,
-                  saturationPivot: preparedTurn.brief.saturationPivot
+                  saturationPivot: acceptedTurn.brief.saturationPivot
                     ? {
-                        blockedActorId: preparedTurn.brief.saturationPivot.blockedActorId,
-                        redirectedActorId: preparedTurn.brief.saturationPivot.redirectedActorId,
-                        requiredSuspicionGain: preparedTurn.brief.saturationPivot.requiredSuspicionGain,
+                        blockedActorId: acceptedTurn.brief.saturationPivot.blockedActorId,
+                        redirectedActorId: acceptedTurn.brief.saturationPivot.redirectedActorId,
+                        requiredSuspicionGain: acceptedTurn.brief.saturationPivot.requiredSuspicionGain,
                       }
                     : undefined,
                   abortSignal: abortController.signal,
-                });
-                if (stateResult.summary) {
+
+                  evidenceAuthority,
+                }), stateError => {
+                  actions.addNotification({ type: 'warning',
+                    message: `状态分析失败，本回合仅结算固定成本：${stateError instanceof Error ? stateError.message : String(stateError)}`, duration: 6000 });
+                  return null;
+                }, assertCurrent));
+                assertCurrent();
+                if (stateResult?.summary) {
                   parseStateRef.current.parsed.summary = stateResult.summary;
                   actions.setParsedContent({ summary: stateResult.summary });
                 }
-                if (stateResult.rejected.length > 0 || stateResult.clamped.length > 0) {
-                  console.warn(
-                    '[state-agent] 拒绝:',
-                    stateResult.rejected,
-                    '钳制:',
-                    stateResult.clamped,
-                  );
+                if (stateResult && (stateResult.rejected.length || stateResult.clamped.length)) {
+                  console.warn('[state-agent]', stateResult.rejected, stateResult.clamped);
                 }
-                  await finalize('dual', stateResult.vars, completedScene);
-                } catch (stateError) {
-                actions.addNotification({
-                  type: 'warning',
-                  message: `状态分析失败，本回合仅结算固定成本：${stateError instanceof Error ? stateError.message : String(stateError)}`,
-                  duration: 6000,
-                });
-                  await finalize('primary', {}, completedScene);
-                }
+                await finalize(stateResult ? 'dual' : 'primary', stateResult?.vars ?? {}, completedScene);
               } else {
                 await finalize('primary', {}, completedScene);
               }
@@ -1235,12 +1007,15 @@ export function useGameLoop() {
         actions.setStreamBuffer(fullText);
         await completeNarrative();
       } else {
+        endWriter = metrics.startStage('writer');
         await streamChatCompletion(
           settings.api,
           requestMessages,
           activePreset,
           {
             onToken: (token) => {
+              assertCurrent();
+              metrics.markFirstToken();
               fullText += token;
               actions.setStreamBuffer(fullText);
               // Deliberately do not parse or render partial output. The complete
@@ -1248,6 +1023,7 @@ export function useGameLoop() {
             },
             onComplete: completeNarrative,
             onError: (error) => {
+              assertCurrent();
               actions.setStreaming(false);
               actions.setIsWaitingForAI(false);
               actions.setApiError(error.message);
@@ -1257,6 +1033,7 @@ export function useGameLoop() {
           abortController.signal,
           {
             onRetry: (attempt, retryError) => {
+              assertCurrent();
               actions.addNotification({
                 type: 'warning',
                 message: `连接失败，正在自动重试（第 ${attempt} 次）: ${retryError.message}`,
@@ -1267,15 +1044,21 @@ export function useGameLoop() {
         );
       }
     } catch (error) {
-      actions.setStreaming(false);
-      actions.setIsWaitingForAI(false);
-      const message = error instanceof Error ? error.message : '未知错误';
-      actions.setApiError(message);
-      // 玩家主动中止（切换会话/轮回重置等）不进入恢复流程
-      if (!(error instanceof ApiCallError && error.kind === 'abort')) {
-        actions.setTurnRecovery({ phase: 'failed_stream', userInput, errorMessage: message });
+      const cancelled = abortController.signal.aborted || !ownsTurn()
+        || (error instanceof ApiCallError && error.kind === 'abort')
+        || (error instanceof Error && error.name === 'AbortError');
+      metrics.finish(cancelled ? 'cancelled' : 'failed');
+      if (ownsTurn()) {
+        actions.setStreaming(false);
+        actions.setIsWaitingForAI(false);
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : '未知错误';
+          actions.setApiError(message);
+          actions.setTurnRecovery({ phase: 'failed_stream', userInput, errorMessage: message });
+        }
       }
     } finally {
+      metrics.finish(turnCommitted ? 'success' : abortController.signal.aborted || !ownsTurn() ? 'cancelled' : 'failed');
       sendingLockRef.current = false;
     }
   }, []);

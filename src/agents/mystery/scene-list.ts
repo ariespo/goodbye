@@ -1,3 +1,4 @@
+import { getMaxOutputTokens } from '../../sillytavern/token-budget';
 import type { ApiConfig, ChatCompletionMessage } from '../../sillytavern/api-router';
 import { callSecondaryApi } from '../../sillytavern/api-router';
 import type { ChatPreset, Scene } from '../../sillytavern/types';
@@ -111,7 +112,7 @@ export async function generateSceneChecklist(
     complete,
     supportKey,
     buildSceneListMessages(input),
-    { temperature: 0.4, maxTokens: 1200 },
+    { temperature: 0.4, maxTokens: getMaxOutputTokens(options.preset) },
     SCENE_CHECKLIST_RESPONSE_FORMAT,
   );
   return parseSceneChecklist(text);

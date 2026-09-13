@@ -113,4 +113,31 @@ describe('mystery preplan', () => {
     expect(normalizePreplanInput('  查看衣柜 ')).toBe('查看衣柜');
     expect(normalizePreplanInput('查看 衣柜')).toBe('查看 衣柜');
   });
+
+  it('cancels an adopted run promptly even when its runner ignores cancellation', async () => {
+    let signal!: AbortSignal;
+    startPreplan(makeRequest('继续'), options => {
+      signal = options.abortSignal!;
+      return new Promise(() => {});
+    });
+    const pending = consumePreplan('继续', 'standard|1|home|none|chat-1');
+    const rejected = expect(pending).rejects.toMatchObject({ kind: 'abort' });
+    invalidatePreplans();
+    expect(signal.aborted).toBe(true);
+    await rejected;
+  });
+
+  it('binds adopted work to the foreground cancellation signal', async () => {
+    const controller = new AbortController();
+    let signal!: AbortSignal;
+    startPreplan(makeRequest('继续'), options => {
+      signal = options.abortSignal!;
+      return new Promise(() => {});
+    });
+    const pending = consumePreplan('继续', 'standard|1|home|none|chat-1', controller.signal);
+    const rejected = expect(pending).rejects.toMatchObject({ kind: 'abort' });
+    controller.abort();
+    expect(signal.aborted).toBe(true);
+    await rejected;
+  });
 });

@@ -1,7 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { completeParsedStructured } from './structured';
+import { completeParsedStructured, completeStructured, resetResponseFormatSupportCache } from './structured';
 
 describe('completeParsedStructured', () => {
+  it('uses JSON Object directly for the measured DeepSeek V4 endpoint, leaving other hosts unchanged', async () => {
+    resetResponseFormatSupportCache();
+    for (const [key, expected] of [
+      ['https://api.deepseek.com/v1|deepseek-v4-flash', 'json_object'],
+      ['https://proxy.example/v1|deepseek-v4-flash', 'json_schema'],
+      ['https://api.deepseek.com.evil.example/v1|deepseek-v4-flash', 'json_schema'],
+    ]) {
+      const complete = vi.fn().mockResolvedValue('{}');
+      await completeStructured(complete, key, [], {}, { type: 'json_schema',
+        json_schema: { name: 'test', schema: { type: 'object' } } });
+      expect(complete.mock.calls[0][1].responseFormat.type).toBe(expected);
+      expect(complete).toHaveBeenCalledTimes(1);
+    }
+  });
   it('feeds an invalid structured response back once and parses the correction', async () => {
     const complete = vi.fn()
       .mockResolvedValueOnce('not json')

@@ -1,3 +1,4 @@
+import { getMaxOutputTokens } from '../../sillytavern/token-budget';
 import type { AgentNarrativeModeSetting, ChatPreset } from '../../sillytavern/types';
 import type { ApiConfig, ChatCompletionMessage } from '../../sillytavern/api-router';
 import { callSecondaryApi } from '../../sillytavern/api-router';
@@ -18,7 +19,7 @@ import {
   DIRECTOR_SYSTEM_PROMPT,
   FACT_CRITIC_SYSTEM_PROMPT,
   PACING_CRITIC_SYSTEM_PROMPT,
-  WRITER_SYSTEM_PROMPT,
+  buildWriterSystemPrompt,
 } from './prompts';
 import {
   buildWriterPacket,
@@ -429,7 +430,7 @@ async function runMysteryPipeline(
   observe.setDirectorAttempts(directorAttempts);
   let directorPlan = await timeStage('director', () => completeParsed(
     complete, supportKey, directorMessages,
-    { temperature: 0.2, maxTokens: 4000 },
+    { temperature: 0.2, maxTokens: getMaxOutputTokens(options.preset) },
     DIRECTOR_PLAN_RESPONSE_FORMAT,
     parseDirectorPlan,
   ));
@@ -447,7 +448,7 @@ async function runMysteryPipeline(
       complete,
       supportKey,
       directorRepairMessages(rejectedPlan, rejectedReview, hardReviewResiduals, 'hard-review'),
-      { temperature: 0.1, maxTokens: 4000 },
+      { temperature: 0.1, maxTokens: getMaxOutputTokens(options.preset) },
       DIRECTOR_PLAN_RESPONSE_FORMAT,
       parseDirectorPlan,
     ));
@@ -541,11 +542,11 @@ async function runMysteryPipeline(
           semanticCanon,
         ),
       },
-    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview);
+    ], { temperature: 0, maxTokens: getMaxOutputTokens(options.preset) }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview);
     const pacingPromise = reviewPolicy.pacing ? timeStage('pacing-review', () => completeParsed(complete, supportKey, [
       { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
       { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-    ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview);
+    ], { temperature: 0, maxTokens: getMaxOutputTokens(options.preset) }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview)) : Promise.resolve(approvedReview);
     const [semanticParsed, pacingParsed] = await Promise.all([semanticPromise, pacingPromise]);
     semanticReview = sanitizeFactReview(semanticParsed, directorPlan, brief, options.turnContext);
     pacingReview = sanitizeFactReview(pacingParsed, directorPlan, brief, options.turnContext);
@@ -575,7 +576,7 @@ async function runMysteryPipeline(
           complete,
           supportKey,
           directorRepairMessages(rejectedPlan, combinedReview, criticResiduals, failedStage),
-          { temperature: stageName === 'semantic-repair' ? 0.05 : 0, maxTokens: 4000 },
+          { temperature: stageName === 'semantic-repair' ? 0.05 : 0, maxTokens: getMaxOutputTokens(options.preset) },
           DIRECTOR_PLAN_RESPONSE_FORMAT,
           parseDirectorPlan,
         ));
@@ -607,13 +608,13 @@ async function runMysteryPipeline(
             ? timeStage(semanticRetryStage, () => completeParsed(complete, supportKey, [
               { role: 'system', content: FACT_CRITIC_SYSTEM_PROMPT },
               { role: 'user', content: buildFactCriticUserPrompt(brief, directorPlan, semanticCanon) },
-            ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview))
+            ], { temperature: 0, maxTokens: getMaxOutputTokens(options.preset) }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview))
             : Promise.resolve(semanticReview ?? approvedReview),
           reviewPolicy.pacing && (pacingFailed || semanticFailed)
             ? timeStage(pacingRetryStage, () => completeParsed(complete, supportKey, [
               { role: 'system', content: PACING_CRITIC_SYSTEM_PROMPT },
               { role: 'user', content: buildPacingCriticUserPrompt(brief, directorPlan, options.turnContext) },
-            ], { temperature: 0, maxTokens: 2500 }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview))
+            ], { temperature: 0, maxTokens: getMaxOutputTokens(options.preset) }, FACT_REVIEW_RESPONSE_FORMAT, parseFactReview))
             : Promise.resolve(pacingReview ?? approvedReview),
         ]);
         if (reviewPolicy.semantic && (semanticFailed || pacingFailed)) {
@@ -650,9 +651,7 @@ async function runMysteryPipeline(
   }
 
   const writerPacket = buildWriterPacket(directorPlan, brief, options.turnContext);
-  const writerSystem = options.formatPrompt
-    ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
-    : WRITER_SYSTEM_PROMPT;
+  const writerSystem = buildWriterSystemPrompt(options.formatPrompt);
   const writerMessages: ChatCompletionMessage[] = [
     { role: 'system', content: writerSystem },
     { role: 'user', content: buildWriterUserPrompt(writerPacket, options.presentationContext) },

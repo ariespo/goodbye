@@ -1,3 +1,4 @@
+import { ContextBudgetError, estimateTokens, DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from '../sillytavern/token-budget';
 import type { ChatMessage, ChatSession, Scene, TurnSnapshot } from '../sillytavern/types';
 import {
   BACKGROUND_HISTORY_VERSION,
@@ -331,15 +332,7 @@ export function legacyEpisodesFromSnapshots(history: readonly TurnSnapshot[] | u
   }));
 }
 
-export function estimateTokens(text: string): number {
-  let cjk = 0;
-  let other = 0;
-  for (const char of text) {
-    if (/[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/u.test(char)) cjk += 1;
-    else other += 1;
-  }
-  return Math.ceil(cjk * 1.15 + other / 3.6 + 4);
-}
+export { estimateTokens } from '../sillytavern/token-budget';
 
 function scoreText(text: string, terms: readonly string[]): number {
   const normalized = text.toLowerCase();
@@ -357,18 +350,18 @@ export function compileTurnContext(options: {
   fixedPromptText?: string;
 }): TurnContextBundle {
   const memory = normalizeWorldMemory(options.variables, legacyEpisodesFromMessages(options.history));
-  const recentMessages = options.history.filter(message => message.role !== 'system').slice(-4);
+  let recentMessages = options.history.filter(message => message.role !== 'system').slice(-4);
   const terms = [...new Set([options.locationId, ...options.activeNpcIds, ...options.userInput.split(/[\s，。！？、]+/u)])]
     .filter(term => term.length > 1);
   const recentEpisodeIds = new Set(memory.episodes.slice(-2).map(item => item.episodeId));
-  const relevantEpisodes = memory.episodes
+  let relevantEpisodes = memory.episodes
     .map(item => ({ item, score: scoreText(`${item.locationId} ${item.actorIds.join(' ')} ${item.summary} ${item.unresolvedTags.join(' ')}`, terms)
       + item.salience * 2 + (recentEpisodeIds.has(item.episodeId) ? 2 : 0) }))
     .filter(entry => entry.score > 1)
     .sort((a, b) => b.score - a.score || b.item.turnIndex - a.item.turnIndex)
     .slice(0, 8)
     .map(entry => entry.item);
-  const relevantCognition = memory.cognition.filter(item => (
+  let relevantCognition = memory.cognition.filter(item => (
     item.observerId === 'player'
     || options.activeNpcIds.includes(item.observerId)
     || (item.subjectId ? options.activeNpcIds.includes(item.subjectId) : false)
@@ -380,18 +373,33 @@ export function compileTurnContext(options: {
     || fact.characterIds.some(id => options.activeNpcIds.includes(id))
     || scoreText(fact.text, terms) > 0
   )).slice(-20);
-  const relevantBackgroundFacts = [...fixedBackgroundFacts, ...relevantSoftFacts];
 
-  const maxContext = options.maxContext ?? 80000;
-  const reservedOutput = options.reservedOutput ?? 4096;
+  const maxContext = options.maxContext ?? DEFAULT_CONTEXT_TOKENS;
+  const reservedOutput = options.reservedOutput ?? DEFAULT_OUTPUT_TOKENS;
   const reservedRepair = Math.max(512, Math.ceil(maxContext * 0.08));
   const estimatedFixed = estimateTokens(options.fixedPromptText ?? '');
-  const selectedText = [
-    ...recentMessages.map(item => item.content),
-    ...relevantEpisodes.map(item => item.summary),
-    ...relevantCognition.map(item => item.summary),
-    ...relevantBackgroundFacts.map(item => item.text),
-  ].join('\n');
+  // Fixed background authority is mandatory. Optional records are selected whole:
+  // never slice a fact, instruction, or chat message into a misleading fragment.
+  const backgroundCognition = FIXED_NPC_BACKGROUND_COGNITION.filter(item => options.activeNpcIds.includes(item.npcId));
+  let estimatedSelected = estimateTokens(JSON.stringify({ backgroundFacts: fixedBackgroundFacts, backgroundCognition }));
+  const available = maxContext - reservedOutput - reservedRepair - estimatedFixed;
+  if (!Number.isFinite(available) || reservedOutput < 0 || available < estimatedSelected) {
+    throw new ContextBudgetError(`上下文预算不足：固定指令、背景事实、输出和修复预留无法容纳于 ${maxContext}。权威内容未被截断。`);
+  }
+  function selectWithinBudget<T>(items: readonly T[], project: (item: T) => unknown = item => item): T[] {
+    return items.filter(item => {
+      // Include serialized metadata and duplicate selection IDs with headroom.
+      const cost = estimateTokens(JSON.stringify(project(item))) + 32;
+      if (estimatedSelected + cost > available) return false;
+      estimatedSelected += cost;
+      return true;
+    });
+  }
+  // History state/rollback snapshots are local storage metadata, not prompt text.
+  recentMessages = selectWithinBudget([...recentMessages].reverse(), ({ id, role, content }) => ({ id, role, content })).reverse();
+  relevantCognition = selectWithinBudget([...relevantCognition].reverse()).reverse();
+  relevantEpisodes = selectWithinBudget(relevantEpisodes);
+  const relevantBackgroundFacts = [...fixedBackgroundFacts, ...selectWithinBudget([...relevantSoftFacts].reverse()).reverse()];
   const selectedIds = [
     ...recentMessages.map(item => `message:${item.id}`),
     ...relevantEpisodes.map(item => item.episodeId),
@@ -460,7 +468,7 @@ export function compileTurnContext(options: {
       reservedOutput,
       reservedRepair,
       estimatedFixed,
-      estimatedSelected: estimateTokens(selectedText),
+      estimatedSelected,
     },
   };
 }

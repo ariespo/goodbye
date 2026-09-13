@@ -47,6 +47,20 @@ export async function completeStructured(
   options: SecondaryApiOptions,
   responseFormat: ResponseFormat,
 ): Promise<string> {
+  // Measured on the official V4 Flash endpoint: json_schema returns HTTP 400
+  // "This response_format type is unavailable now"; json_object succeeds.
+  // Keep capability probing for proxies and other models.
+  if (!responseFormatSupportCache.has(supportKey)) {
+    const separator = supportKey.lastIndexOf('|');
+    try {
+      const endpoint = new URL(supportKey.slice(0, separator));
+      if (endpoint.origin === 'https://api.deepseek.com'
+        && /^\/(?:v1\/?)?$/.test(endpoint.pathname)
+        && supportKey.slice(separator + 1) === 'deepseek-v4-flash') {
+        responseFormatSupportCache.set(supportKey, 'json_object');
+      }
+    } catch { /* Unknown endpoints retain normal capability negotiation. */ }
+  }
   const cachedMode = responseFormatSupportCache.get(supportKey);
   if (cachedMode === undefined || cachedMode === 'json_schema') {
     try {

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultPreset, normalizeAgentNarrativeMode } from './types';
 
 describe('default narrative token budget', () => {
-  it('uses the expanded 80k context and 4k output reserve', () => {
+  it('uses a 100k context and 40k per-call output reserve', () => {
     const preset = createDefaultPreset();
-    expect(preset.settings.openai_max_context).toBe(80000);
-    expect(preset.settings.openai_max_tokens).toBe(4096);
+    expect(preset.settings.openai_max_context).toBe(100000);
+    expect(preset.settings.openai_max_tokens).toBe(40000);
   });
 });
 

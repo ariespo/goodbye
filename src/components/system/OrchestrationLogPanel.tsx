@@ -8,6 +8,10 @@ import {
   type OrchestrationLogEntry,
 } from '../../agents/mystery';
 import { GameIcon } from '../ui/GameIcon';
+import {
+  clearTurnMetrics, getTurnMetrics, subscribeTurnMetrics, TURN_METRICS_CAPACITY,
+  type TurnMetricsEntry, type TurnMetricStage,
+} from '../../agents/mystery/turn-metrics';
 
 const OUTCOME_STYLES: Record<OrchestrationLogEntry['outcome'], { label: string; className: string }> = {
   success: { label: '成功', className: 'bg-green-400/10 text-green-400 border-green-400/20' },
@@ -24,10 +28,17 @@ const STAGE_LABELS: Record<string, string> = {
   'pacing-review': '节奏审查',
 };
 
+const TURN_STAGE_LABELS: Record<TurnMetricStage, string> = {
+  preparation: '计划与前置审查', writer: '正文生成', 'fact-review': '正文事实审查',
+  'style-review': '风格审查', repair: '修复', state: '状态结算', persistence: '保存',
+  commit: '提交', protocol: '格式校验',
+};
+
 export function OrchestrationLogPanel() {
   const show = useGameStore(state => state.ui.showOrchestrationLog);
   const setShow = useGameStore(state => state.actions.setShowOrchestrationLog);
   const entries = useSyncExternalStore(subscribeOrchestrationLog, getOrchestrationLog, getOrchestrationLog);
+  const turns = useSyncExternalStore(subscribeTurnMetrics, getTurnMetrics, getTurnMetrics);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   if (!show) return null;
@@ -56,12 +67,12 @@ export function OrchestrationLogPanel() {
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-serif-cn text-text-primary">编排日志</h2>
             <span className="px-1.5 py-0.5 text-[10px] text-text-muted bg-bg-secondary border border-border-subtle">
-              最近 {entries.length} / {getOrchestrationLogCapacity()} 回合
+              完整回合 {turns.length} / {TURN_METRICS_CAPACITY}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => clearOrchestrationLog()}
+              onClick={() => { clearOrchestrationLog(); clearTurnMetrics(); }}
               className="px-2 py-1 text-[11px] text-text-muted border border-border-subtle hover:text-text-primary transition-colors"
             >
               清空
@@ -76,13 +87,42 @@ export function OrchestrationLogPanel() {
         </div>
 
         <div className="flex-1 pixel-scroll-blue overflow-y-auto p-4 space-y-2">
+          <h3 className="text-xs text-text-primary">完整回合耗时</h3>
+          <p className="text-[10px] text-text-muted">总耗时按实际经过时间计量；并行阶段不相加。首 token 是模型开始返回正文，可游玩是审查与结算后呈现场景。</p>
+          {turns.length === 0 && <div className="text-xs text-text-muted py-3">尚无完整回合记录</div>}
+          {[...turns].reverse().map(entry => <TurnTimingRow key={entry.id} entry={entry} />)}
+          <h3 className="text-xs text-text-primary pt-4">准备阶段日志（{entries.length} / {getOrchestrationLogCapacity()}）</h3>
+          <p className="text-[10px] text-text-muted">仅含导演计划与前置审查，也可能来自预规划，不代表完整回合。</p>
           {ordered.length === 0 && (
-            <div className="text-sm text-text-muted text-center py-8">尚无编排记录，进行一个回合后再来查看</div>
+            <div className="text-xs text-text-muted text-center py-3">尚无准备阶段记录</div>
           )}
           {ordered.map(entry => (
             <EntryRow key={entry.id} entry={entry} expanded={expandedIds.has(entry.id)} toggle={() => toggle(entry.id)} />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TurnTimingRow({ entry }: { entry: TurnMetricsEntry }) {
+  const outcome = { success: '成功', failed: '失败', cancelled: '已取消' }[entry.outcome];
+  const duration = (value: number | null) => value === null ? '未到达' : `${value}ms`;
+  return (
+    <div className="border border-border-subtle p-3 space-y-2 bg-bg-secondary/40">
+      <div className="flex flex-wrap gap-3 text-[11px] text-text-primary">
+        <span>{new Date(entry.startedAt).toLocaleTimeString()}</span>
+        <span>{outcome}</span>
+        <span>{`总耗时: ${entry.totalMs}ms`}</span>
+        <span>{`首 token: ${duration(entry.firstTokenMs)}`}</span>
+        <span>{`可游玩: ${duration(entry.playableMs)}`}</span>
+      </div>
+      <div className="flex flex-wrap gap-1 text-[10px] text-text-muted">
+        {entry.stages.map((stage, index) => (
+          <span key={index} className="px-1.5 py-0.5 bg-bg-secondary border border-border-subtle">
+            {TURN_STAGE_LABELS[stage.name]}: {stage.durationMs}ms
+          </span>
+        ))}
       </div>
     </div>
   );

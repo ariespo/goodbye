@@ -1,6 +1,8 @@
 import type { ChatPreset, DynamicRecord } from './types';
+import { assertRequestTokenBudget, ContextBudgetError, getMaxContextTokens, getMaxOutputTokens } from './token-budget';
 
 export type ApiErrorKind =
+  | 'context_budget'
   | 'network'
   | 'timeout'
   | 'http4xx'
@@ -33,6 +35,7 @@ export function classifyHttpStatus(status: number): ApiErrorKind {
 
 export function toApiCallError(cause: unknown): ApiCallError {
   if (cause instanceof ApiCallError) return cause;
+  if (cause instanceof ContextBudgetError) return new ApiCallError(cause.message, 'context_budget');
   if (cause instanceof Error && cause.name === 'AbortError') {
     return new ApiCallError('请求已中止', 'abort');
   }
@@ -295,6 +298,16 @@ async function fetchWithAuthFallback(
   throw new ApiCallError(lastError || '网络错误', 'network');
 }
 
+function serializeBudgetedRequest(body: DynamicRecord, preset: ChatPreset | null): string {
+  const serialized = JSON.stringify(body);
+  try {
+    assertRequestTokenBudget(serialized, getMaxContextTokens(preset), Number(body.max_tokens));
+  } catch (cause) {
+    throw toApiCallError(cause);
+  }
+  return serialized;
+}
+
 export interface StreamRetryOptions {
   onRetry?: (attempt: number, error: ApiCallError) => void;
   /** 首字节超时，默认 30s */
@@ -317,6 +330,7 @@ export async function streamChatCompletion(
     model: config.model || preset?.settings.openai_model,
     messages,
     stream: true,
+    max_tokens: getMaxOutputTokens(preset),
   };
   applyProviderCompatibility(body, config);
 
@@ -327,6 +341,8 @@ export async function streamChatCompletion(
     if (preset.settings.freq_pen_openai !== undefined) body.frequency_penalty = preset.settings.freq_pen_openai;
     if (preset.settings.pres_pen_openai !== undefined) body.presence_penalty = preset.settings.pres_pen_openai;
   }
+
+  const serializedBody = serializeBudgetedRequest(body, preset);
 
   const firstByteTimeoutMs = retryOptions?.firstByteTimeoutMs ?? 30_000;
   const idleTimeoutMs = retryOptions?.idleTimeoutMs ?? 60_000;
@@ -339,7 +355,7 @@ export async function streamChatCompletion(
       const response = await fetchWithAuthFallback(
         `${config.baseUrl}/chat/completions`,
         config.apiKey,
-        { method: 'POST', body: JSON.stringify(body), signal: timeout.signal }
+        { method: 'POST', body: serializedBody, signal: timeout.signal }
       );
 
       const reader = response.body?.getReader();
@@ -446,6 +462,7 @@ export async function callSecondaryApi(
   const body: DynamicRecord = {
     model: config.model || preset?.settings.openai_model,
     messages,
+    max_tokens: getMaxOutputTokens(preset),
   };
   applyProviderCompatibility(body, config);
 
@@ -459,13 +476,15 @@ export async function callSecondaryApi(
   if (options?.maxTokens !== undefined) body.max_tokens = options.maxTokens;
   if (options?.responseFormat !== undefined) body.response_format = options.responseFormat;
 
+  const serializedBody = serializeBudgetedRequest(body, preset);
+
   return withRetry(async () => {
     const timeout = createTimeoutSignal(options?.abortSignal, 30_000);
     try {
       const response = await fetchWithAuthFallback(
         `${config.baseUrl}/chat/completions`,
         config.apiKey,
-        { method: 'POST', body: JSON.stringify(body), signal: timeout.signal }
+        { method: 'POST', body: serializedBody, signal: timeout.signal }
       );
       const data = await response.json();
       const message = data.choices?.[0]?.message;

@@ -1,3 +1,4 @@
+import { DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from './token-budget';
 /**
  * Prompt Assembler — 酒馆兼容
  *
@@ -117,8 +118,8 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
   const afterEntries = uniqueEntries.filter(e => AFTER_POSITIONS.has(e.entry.position));
 
   // 2) token 预算裁剪历史
-  const maxContext = preset?.settings?.openai_max_context ?? 80000;
-  const maxOutput = preset?.settings?.openai_max_tokens ?? 4096;
+  const maxContext = preset?.settings?.openai_max_context ?? DEFAULT_CONTEXT_TOKENS;
+  const maxOutput = preset?.settings?.openai_max_tokens ?? DEFAULT_OUTPUT_TOKENS;
   const memoryBlock = contextBundle ? formatMemoryContext(contextBundle) : '';
   const fixedText = [
     userInput,
@@ -341,8 +342,8 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   const afterEntries = uniqueEntries.filter(e => AFTER_POSITIONS.has(e.entry.position));
 
   // 2) token 预算裁剪历史
-  const maxContext = preset?.settings?.openai_max_context ?? 80000;
-  const maxOutput = preset?.settings?.openai_max_tokens ?? 4096;
+  const maxContext = preset?.settings?.openai_max_context ?? DEFAULT_CONTEXT_TOKENS;
+  const maxOutput = preset?.settings?.openai_max_tokens ?? DEFAULT_OUTPUT_TOKENS;
   const memoryBlock = contextBundle ? formatMemoryContext(contextBundle) : '';
   const repairReserve = contextBundle?.tokenBudget.reservedRepair ?? Math.max(512, Math.ceil(maxContext * 0.08));
   const fixedText = [

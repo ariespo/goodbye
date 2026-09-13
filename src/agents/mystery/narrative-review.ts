@@ -1,3 +1,4 @@
+import { getMaxOutputTokens } from '../../sillytavern/token-budget';
 import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
 import type { ChatPreset } from '../../sillytavern/types';
 import { completeParsedStructured, extractJson, type AgentCompletion } from './structured';
@@ -6,7 +7,7 @@ import {
   buildNarrativeFormatRepairPrompt,
   buildNarrativeRepairPrompt,
   FACT_CRITIC_SYSTEM_PROMPT,
-  WRITER_SYSTEM_PROMPT,
+  buildWriterSystemPrompt,
 } from './prompts';
 import { FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import { mergeRepairResiduals } from './repair-task';
@@ -254,7 +255,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     complete,
     `${options.api.baseUrl}|${options.api.model}`,
     [...messages],
-    { temperature: 0, maxTokens: 2500, abortSignal: options.abortSignal },
+    { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
     FACT_REVIEW_RESPONSE_FORMAT,
     raw => {
       const parsed = extractJson(raw) as Partial<FactReview> | null;
@@ -279,9 +280,7 @@ export async function repairNarrativeAgainstWriterPacket(options: {
   priorResiduals?: FactReviewViolation[];
   complete?: AgentCompletion;
 }): Promise<string> {
-  const systemPrompt = options.formatPrompt
-    ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
-    : WRITER_SYSTEM_PROMPT;
+  const systemPrompt = buildWriterSystemPrompt(options.formatPrompt);
   const complete = options.complete
     ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
   return complete([
@@ -295,7 +294,7 @@ export async function repairNarrativeAgainstWriterPacket(options: {
         options.priorResiduals ?? [],
       ),
     },
-  ], { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
+  ], { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal });
 }
 
 export async function repairNarrativeFormatAgainstWriterPacket(options: {
@@ -309,9 +308,7 @@ export async function repairNarrativeFormatAgainstWriterPacket(options: {
   priorResiduals?: ValidationError[];
   complete?: AgentCompletion;
 }): Promise<string> {
-  const systemPrompt = options.formatPrompt
-    ? `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${options.formatPrompt}`
-    : WRITER_SYSTEM_PROMPT;
+  const systemPrompt = buildWriterSystemPrompt(options.formatPrompt);
   const complete = options.complete
     ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
   return complete([
@@ -325,5 +322,5 @@ export async function repairNarrativeFormatAgainstWriterPacket(options: {
         options.priorResiduals ?? [],
       ),
     },
-  ], { temperature: 0, maxTokens: 4000, abortSignal: options.abortSignal });
+  ], { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal });
 }

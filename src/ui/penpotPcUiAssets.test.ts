@@ -10,6 +10,7 @@ function load(name: string) {
 }
 
 function cssBlock(css: string, selector: string) {
+  css = css.replace(/\r\n/g, '\n')
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = css.match(new RegExp(`(^|\\n)\\s*${escapedSelector}\\s*\\{`))
   if (!match || match.index === undefined) return ''
@@ -20,6 +21,12 @@ function cssBlock(css: string, selector: string) {
 }
 
 describe('Penpot PC UI overlay assets', () => {
+  it('reads multiline selectors with Windows and Unix line endings', () => {
+    for (const newline of ['\n', '\r\n']) {
+      const css = `.a,${newline}.b { color: red; }${newline}.c { color: blue; }`
+      expect(cssBlock(css, '.a,\n.b')).toBe('.a,\n.b { color: red; }')
+    }
+  })
   const states = ['pc-wheel-closed.svg', 'pc-wheel-open.svg']
 
   it.each(states)('%s uses a transparent 1920x1080 crisp pixel canvas', (name) => {

@@ -1,3 +1,4 @@
+import { getMaxOutputTokens } from '../../sillytavern/token-budget';
 import { maintextToScene } from '../../engine/scene-parser';
 import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
 import type { ChatMessage, ChatPreset } from '../../sillytavern/types';
@@ -156,7 +157,7 @@ export async function reviewNarrativeStyle(options: {
       { role: 'system', content: STYLE_CRITIC_SYSTEM_PROMPT },
       { role: 'user', content: buildStyleCriticUserPrompt(options.recentNarratives, options.narrative) },
     ],
-    { temperature: 0, maxTokens: 1200, abortSignal: options.abortSignal },
+    { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
     FACT_REVIEW_RESPONSE_FORMAT,
     raw => {
       const parsed = extractJson(raw) as Partial<FactReview> | null;

@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { AppSettings, ChatPreset, Lorebook, ChatSession, SaveSlot } from './types';
 import { DEFAULT_FORMAT_PROMPT, DEFAULT_OPAQUE_TAGS, normalizeAgentNarrativeMode } from './types';
+import { DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from './token-budget';
 import {
   legacyEpisodesFromSnapshots,
   migrateChatWorldMemory,
@@ -161,6 +162,28 @@ export class FarewellDatabase extends Dexie {
       .upgrade(async tx => {
         await tx.table('settings').toCollection().modify((settings: LegacyAppSettings) => {
           settings.agentNarrativeMode = normalizeAgentNarrativeMode(settings.agentNarrativeMode);
+        });
+      });
+
+    // v10: expand former default budgets without replacing custom preset values.
+    this.version(10)
+      .stores({
+        settings: '++id',
+        presets: 'id, name, updatedAt',
+        lorebooks: 'id, name, updatedAt',
+        chats: 'id, name, updatedAt',
+        saves: 'id, name, createdAt',
+      })
+      .upgrade(async tx => {
+        await tx.table('presets').toCollection().modify((preset: ChatPreset) => {
+          if (preset.settings.openai_max_context === undefined
+            || preset.settings.openai_max_context === 80000) {
+            preset.settings.openai_max_context = DEFAULT_CONTEXT_TOKENS;
+          }
+          if (preset.settings.openai_max_tokens === undefined
+            || preset.settings.openai_max_tokens === 4096) {
+            preset.settings.openai_max_tokens = DEFAULT_OUTPUT_TOKENS;
+          }
         });
       });
   }
@@ -367,8 +390,34 @@ export async function getChats(): Promise<ChatSession[]> {
   return (await db.chats.orderBy('updatedAt').reverse().toArray()).map(migrateChatWorldMemory);
 }
 
-export async function saveChat(chat: ChatSession): Promise<void> {
-  await db.chats.put(migrateChatWorldMemory(chat));
+export interface ChatWriteGuard {
+  signal: AbortSignal;
+  assertCurrent: () => void;
+}
+
+export async function saveChat(chat: ChatSession, guard?: ChatWriteGuard): Promise<void> {
+  guard?.assertCurrent();
+  const migrated = migrateChatWorldMemory(chat);
+  const database = db;
+  if (guard && database instanceof FarewellDatabase) {
+    let detach = () => {};
+    try {
+      await database.transaction('rw', database.chats, async transaction => {
+        const abort = () => transaction.abort();
+        guard.signal.addEventListener('abort', abort, { once: true });
+        detach = () => guard.signal.removeEventListener('abort', abort);
+        guard.assertCurrent();
+        await database.chats.put(migrated);
+        guard.assertCurrent();
+      });
+    } finally {
+      detach();
+    }
+  } else {
+    // The memory implementation writes synchronously before yielding.
+    guard?.assertCurrent();
+    await database.chats.put(migrated);
+  }
 }
 
 export async function deleteChat(id: string): Promise<void> {

@@ -2,6 +2,7 @@ import type { DirectorPlan, FactReview, FactReviewViolation, MysteryBrief, Write
 import type { ValidationError } from '../../sillytavern/output-protocol';
 import { LOOP_PACING_CONTRACT } from './loop-contract';
 import { buildDoNotRepeatBlock, buildProtocolDoNotRepeatBlock } from './repair-task';
+import { DEFAULT_FORMAT_PROMPT } from '../../sillytavern/types';
 
 export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 
@@ -50,6 +51,7 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 }
 
 计划字段说明：
+- 输出紧凑单行 JSON，不加缩进或 Markdown。purpose、tone、intent 用短语；description 只写实际动作与必要因果，不写正文，不重复权限规则或整段复述简报。保持全部必需字段、事实来源、认知依据与场景契约，不得为精简而省略。
 - scenePlan 规则：只给意图级短语，不写具体文案；investigateIntents 的 factId 只能选 usableFacts；observeConceal 与 hiddenFacts 保持一致；每类意图 2-4 条。
 - timeCostMinutes: 本回合经过的游戏内分钟数(整数1-180)。对话约5-15,调查约20-40,跨地点移动约15-30。
 
@@ -65,6 +67,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 事实边界：
 1. 只能使用 WriterPacket.authorizedFacts 和 playerKnownFacts 中的事实。
 2. authorizedFacts.text 是允许表达的最深含义；不得用旁白、措辞、反应或选项暗示更深答案。
+2a. 呈现授权线索时保留 text 中的具体事实原文，文风变化放在玩家动作与情绪上；不要给线索添加尺寸、类别、来源、成因、行为者或意图。atmosphere 级异常只呈现异常本身，不能用“似乎”“像是”等措辞补出更深解释。
 3. 不得新增凶手、动机、证据、死因、时间线节点或 NPC 知情内容。
 3a. “不得新增证据”包括不得擅自补写任何精确时间、电话号码、短信删除、行程修改、脚印、擦痕、撞击痕、血迹形状/位置、检验结论或角色亲口供述；除非这些细节逐字存在于 authorizedFacts.text 或 playerKnownFacts.text。导演 beat 中出现的未授权具体化也不能当作事实使用。
 3b. authorizedFacts 与 playerKnownFacts 都为空时，只能描写当下可见的普通环境、玩家本人的一般行动和服务性对话。禁止生成小票/收据、精确购买清单、文件夹、监控或其他可调查记录，也禁止让 NPC 补充任何角色此前来过、买过、说过或计划过什么。
@@ -87,13 +90,29 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 19. PresentationContext.recentHistory 含近期已接受正文。不得复用其中的完整句子、段落开头、结尾句、比喻、感官意象或人物小动作模板。雨、灯光、潮湿等持续环境可以存在，但每回合必须承担新的叙事功能，不能只换同义词重复烘托。同一角色的固定口癖可自然保留，不能把整段反应照搬。
 
 输出协议：
-<maintext>场景、音乐、对话、物品、特效与获准的“认知|eventId”指令</maintext>
-<option>玩家选项</option>
+<maintext>
+场景|资源清单中的场景id
+音乐|资源清单中的音乐id
+对话|旁白|calm|旁白正文
+对话|已获准的人物称呼|calm|台词正文
+</maintext>
+<option>
+第一个玩家选项
+第二个玩家选项
+</option>
 <hint>非剧透提示</hint>
 <sum>本回合一句话摘要</sum>
 <vars>{}</vars>
 
-observe/investigate/action 标签无需输出，观察与调查/行动清单由系统在正文之后补全。`;
+maintext 每行一个指令，以半角 | 分隔；旁白也必须使用“对话|旁白|calm|正文”，禁止裸段落。场景与音乐仅在改变时声明；背景昼夜版本服从当前时间。情绪只能用 calm/horror/insane/sad/angry/happy。物品展示可在对话末尾增加第五字段，使用资源清单中与正文实际内容相符的物品id；资源可用不代表其证据内容已授权。获准认知单独成行：认知|eventId。
+option 只输出一组标签，至少 2 项，每行一个选项，不加序号。示例仅说明语法，不是必须照抄的剧情。
+vars 固定为空对象，不输出 timeCost；时间与状态由后续程序结算。不要输出 observe/investigate/action，观察与调查/行动清单由系统在正文之后补全。`;
+
+/** The default legacy format grants Writer state ownership; use the agent protocol instead. */
+export function buildWriterSystemPrompt(formatPrompt?: string): string {
+  if (!formatPrompt?.trim() || formatPrompt === DEFAULT_FORMAT_PROMPT) return WRITER_SYSTEM_PROMPT;
+  return `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${formatPrompt}\n\n[Agent 状态权限优先]\n<vars>{}</vars> 必须为空对象；不得输出 timeCost，状态与时间由程序结算。`;
+}
 
 export const FACT_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 
@@ -145,7 +164,7 @@ export const PACING_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 {"approved":boolean,"violations":[{"code":"string","message":"string"}],"corrections":["string"]}`;
 
 function jsonBlock(value: unknown): string {
-  return JSON.stringify(value, null, 2);
+  return JSON.stringify(value);
 }
 
 export function buildDirectorUserPrompt(

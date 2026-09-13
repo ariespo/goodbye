@@ -1,0 +1,3389 @@
+{
+  "contextTokens": 100000,
+  "maxOutputTokensPerCall": 40000,
+  "input": "我在房间里坐下，整理思绪，暂时不调查新线索。",
+  "scope": "Real useGameLoop, fresh day-one chat per sample; disk persistence and background tasks stubbed; playable means accepted scene committed, not browser paint.",
+  "rows": [
+    {
+      "phase": "baseline",
+      "mode": "standard",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292354884-1-714b5a0a",
+        "startedAt": 1789292354884,
+        "outcome": "success",
+        "totalMs": 10328,
+        "firstTokenMs": 6369,
+        "playableMs": 10328,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5441
+          },
+          {
+            "name": "writer",
+            "durationMs": 4326
+          },
+          {
+            "name": "protocol",
+            "durationMs": 5
+          },
+          {
+            "name": "style-review",
+            "durationMs": 3
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 546
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 6
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 400,
+          "inputChars": 16391,
+          "headersMs": 423.03510000000006,
+          "completeMs": 428.95730000000003,
+          "responseFormat": "json_schema"
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 193.6887999999999,
+          "completeMs": 4168.826999999999,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 836,
+            "total_tokens": 6882,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 24745,
+          "headersMs": 139.049500000001,
+          "completeMs": 788.4490000000005,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9414,
+            "completion_tokens": 16,
+            "total_tokens": 9430,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 5958
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 18998,
+          "headersMs": 104.68089999999938
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13864,
+          "headersMs": 229.92510000000038,
+          "completeMs": 544.4631000000008,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5433,
+            "completion_tokens": 16,
+            "total_tokens": 5449,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 4537
+          }
+        }
+      ]
+    },
+    {
+      "phase": "baseline",
+      "mode": "strict",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292365246-2-35b06f93",
+        "startedAt": 1789292365246,
+        "outcome": "success",
+        "totalMs": 16851,
+        "firstTokenMs": 6171,
+        "playableMs": 16851,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5371
+          },
+          {
+            "name": "writer",
+            "durationMs": 4254
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 3
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 3606
+          },
+          {
+            "name": "repair",
+            "durationMs": 2242
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 378
+          },
+          {
+            "name": "state",
+            "durationMs": 995
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 128.03499999999985,
+          "completeMs": 4502.9504000000015,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 872,
+            "total_tokens": 6918,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 24648,
+          "headersMs": 248.81140000000232,
+          "completeMs": 563.0561000000016,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9450,
+            "completion_tokens": 16,
+            "total_tokens": 9466,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 5994
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 14407,
+          "headersMs": 202.65320000000065,
+          "completeMs": 858.7656999999999,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5104,
+            "completion_tokens": 17,
+            "total_tokens": 5121,
+            "prompt_tokens_details": {
+              "cached_tokens": 4096
+            },
+            "prompt_cache_hit_tokens": 4096,
+            "prompt_cache_miss_tokens": 1008
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 18879,
+          "headersMs": 155.05129999999917
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13615,
+          "headersMs": 213.96570000000065,
+          "completeMs": 3603.826000000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5410,
+            "completion_tokens": 406,
+            "total_tokens": 5816,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 4258
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 17673,
+          "headersMs": 93.11939999999959,
+          "completeMs": 2240.5057000000015,
+          "usage": {
+            "prompt_tokens": 7346,
+            "completion_tokens": 526,
+            "total_tokens": 7872,
+            "prompt_tokens_details": {
+              "cached_tokens": 2176
+            },
+            "prompt_cache_hit_tokens": 2176,
+            "prompt_cache_miss_tokens": 5170
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13519,
+          "headersMs": 115.5632000000005,
+          "completeMs": 375.997199999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5346,
+            "completion_tokens": 16,
+            "total_tokens": 5362,
+            "prompt_tokens_details": {
+              "cached_tokens": 4736
+            },
+            "prompt_cache_hit_tokens": 4736,
+            "prompt_cache_miss_tokens": 610
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3353,
+          "headersMs": 90.12200000000303,
+          "completeMs": 992.0250000000015,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1488,
+            "completion_tokens": 40,
+            "total_tokens": 1528,
+            "prompt_tokens_details": {
+              "cached_tokens": 128
+            },
+            "prompt_cache_hit_tokens": 128,
+            "prompt_cache_miss_tokens": 1360
+          }
+        }
+      ]
+    },
+    {
+      "phase": "baseline-series",
+      "mode": "standard",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292426285-1-18e93a2a",
+        "startedAt": 1789292426285,
+        "outcome": "success",
+        "totalMs": 10701,
+        "firstTokenMs": 5928,
+        "playableMs": 10701,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5439
+          },
+          {
+            "name": "writer",
+            "durationMs": 3943
+          },
+          {
+            "name": "protocol",
+            "durationMs": 5
+          },
+          {
+            "name": "style-review",
+            "durationMs": 2
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1305
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 5
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 400,
+          "inputChars": 16391,
+          "headersMs": 159.45800000000008,
+          "completeMs": 161.66600000000017,
+          "responseFormat": "json_schema",
+          "providerError": "This response_format type is unavailable now"
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 185.06510000000026,
+          "completeMs": 4379.2054,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 871,
+            "total_tokens": 6917,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 24751,
+          "headersMs": 182.98809999999958,
+          "completeMs": 866.2366000000002,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9449,
+            "completion_tokens": 16,
+            "total_tokens": 9465,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 5993
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 18994,
+          "headersMs": 100.64589999999953
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13882,
+          "headersMs": 106.45069999999942,
+          "completeMs": 1302.9668999999994,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5467,
+            "completion_tokens": 16,
+            "total_tokens": 5483,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 4315
+          }
+        }
+      ]
+    },
+    {
+      "phase": "baseline-series",
+      "mode": "standard",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292437018-2-73437b16",
+        "startedAt": 1789292437018,
+        "outcome": "success",
+        "totalMs": 10908,
+        "firstTokenMs": 6420,
+        "playableMs": 10908,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5034
+          },
+          {
+            "name": "writer",
+            "durationMs": 5015
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 2
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 856
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 226.43219999999928,
+          "completeMs": 4058.451399999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 852,
+            "total_tokens": 6898,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 24706,
+          "headersMs": 251.4878000000026,
+          "completeMs": 961.1959000000024,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9430,
+            "completion_tokens": 16,
+            "total_tokens": 9446,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 5974
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 18949,
+          "headersMs": 121.85489999999845
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13796,
+          "headersMs": 213.39879999999903,
+          "completeMs": 855.4154999999992,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5475,
+            "completion_tokens": 16,
+            "total_tokens": 5491,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 4323
+          }
+        }
+      ]
+    },
+    {
+      "phase": "baseline-series",
+      "mode": "standard",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292447940-3-7eb74c62",
+        "startedAt": 1789292447940,
+        "outcome": "success",
+        "totalMs": 11593,
+        "firstTokenMs": 7040,
+        "playableMs": 11593,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6281
+          },
+          {
+            "name": "writer",
+            "durationMs": 4260
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 9
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1046
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 2
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 147.0537000000004,
+          "completeMs": 5302.047899999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 1022,
+            "total_tokens": 7068,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 24803,
+          "headersMs": 351.15569999999934,
+          "completeMs": 969.902399999999,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9518,
+            "completion_tokens": 16,
+            "total_tokens": 9534,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 6062
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 19038,
+          "headersMs": 140.04939999999988
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13885,
+          "headersMs": 433.7175999999963,
+          "completeMs": 1043.6510999999955,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5535,
+            "completion_tokens": 16,
+            "total_tokens": 5551,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 4383
+          }
+        }
+      ]
+    },
+    {
+      "phase": "baseline-series",
+      "mode": "strict",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292459557-4-36180c55",
+        "startedAt": 1789292459557,
+        "outcome": "success",
+        "totalMs": 11401,
+        "firstTokenMs": 6635,
+        "playableMs": 11401,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5964
+          },
+          {
+            "name": "writer",
+            "durationMs": 3765
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 558
+          },
+          {
+            "name": "state",
+            "durationMs": 1112
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 118.18480000000272,
+          "completeMs": 5149.0013000000035,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 1007,
+            "total_tokens": 7053,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 24978,
+          "headersMs": 190.99930000000313,
+          "completeMs": 788.2380000000048,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9561,
+            "completion_tokens": 16,
+            "total_tokens": 9577,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 6105
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 14737,
+          "headersMs": 199.69400000000314,
+          "completeMs": 802.0048000000024,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5215,
+            "completion_tokens": 17,
+            "total_tokens": 5232,
+            "prompt_tokens_details": {
+              "cached_tokens": 4096
+            },
+            "prompt_cache_hit_tokens": 4096,
+            "prompt_cache_miss_tokens": 1119
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 19229,
+          "headersMs": 117.74409999999625
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 14050,
+          "headersMs": 104.72310000000289,
+          "completeMs": 555.799500000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5559,
+            "completion_tokens": 17,
+            "total_tokens": 5576,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 4407
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3610,
+          "headersMs": 110.2809999999954,
+          "completeMs": 1108.5574999999953,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1652,
+            "completion_tokens": 41,
+            "total_tokens": 1693,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 756
+          }
+        }
+      ]
+    },
+    {
+      "phase": "baseline-series",
+      "mode": "strict",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292470983-5-64b68d94",
+        "startedAt": 1789292470983,
+        "outcome": "success",
+        "totalMs": 13179,
+        "firstTokenMs": 7514,
+        "playableMs": 13179,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6748
+          },
+          {
+            "name": "writer",
+            "durationMs": 5083
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 3
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 757
+          },
+          {
+            "name": "state",
+            "durationMs": 585
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 5
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 161.0827000000063,
+          "completeMs": 5416.163700000005,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 1030,
+            "total_tokens": 7076,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 25038,
+          "headersMs": 610.9657000000007,
+          "completeMs": 949.2485000000015,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9608,
+            "completion_tokens": 16,
+            "total_tokens": 9624,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 6152
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 14797,
+          "headersMs": 607.9960999999967,
+          "completeMs": 1310.7864999999947,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5262,
+            "completion_tokens": 16,
+            "total_tokens": 5278,
+            "prompt_tokens_details": {
+              "cached_tokens": 4096
+            },
+            "prompt_cache_hit_tokens": 4096,
+            "prompt_cache_miss_tokens": 1166
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 19289,
+          "headersMs": 111.11119999999937
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 14247,
+          "headersMs": 179.21130000000267,
+          "completeMs": 755.4602999999988,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5691,
+            "completion_tokens": 16,
+            "total_tokens": 5707,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 4539
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3603,
+          "headersMs": 91.52270000000135,
+          "completeMs": 584.5368000000017,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1647,
+            "completion_tokens": 42,
+            "total_tokens": 1689,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 751
+          }
+        }
+      ]
+    },
+    {
+      "phase": "baseline-series",
+      "mode": "strict",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292484191-6-45b7c3ec",
+        "startedAt": 1789292484191,
+        "outcome": "success",
+        "totalMs": 11211,
+        "firstTokenMs": 6781,
+        "playableMs": 11211,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6097
+          },
+          {
+            "name": "writer",
+            "durationMs": 3850
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 452
+          },
+          {
+            "name": "state",
+            "durationMs": 807
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 3
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 16391,
+          "headersMs": 146.35059999999794,
+          "completeMs": 5255.917399999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 6046,
+            "completion_tokens": 917,
+            "total_tokens": 6963,
+            "prompt_tokens_details": {
+              "cached_tokens": 5888
+            },
+            "prompt_cache_hit_tokens": 5888,
+            "prompt_cache_miss_tokens": 158
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 24786,
+          "headersMs": 163.68099999999686,
+          "completeMs": 594.0878999999986,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 9464,
+            "completion_tokens": 16,
+            "total_tokens": 9480,
+            "prompt_tokens_details": {
+              "cached_tokens": 3456
+            },
+            "prompt_cache_hit_tokens": 3456,
+            "prompt_cache_miss_tokens": 6008
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 14545,
+          "headersMs": 263.67229999999836,
+          "completeMs": 824.6250999999975,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5118,
+            "completion_tokens": 16,
+            "total_tokens": 5134,
+            "prompt_tokens_details": {
+              "cached_tokens": 4096
+            },
+            "prompt_cache_hit_tokens": 4096,
+            "prompt_cache_miss_tokens": 1022
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 19029,
+          "headersMs": 173.56510000000708
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13719,
+          "headersMs": 168.16259999999602,
+          "completeMs": 449.9030999999959,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5375,
+            "completion_tokens": 16,
+            "total_tokens": 5391,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 4223
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3498,
+          "headersMs": 122.00430000000051,
+          "completeMs": 804.5053000000044,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1572,
+            "completion_tokens": 37,
+            "total_tokens": 1609,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 676
+          }
+        }
+      ]
+    },
+    {
+      "phase": "optimized-series",
+      "mode": "standard",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292661294-1-5e0b8bb4",
+        "startedAt": 1789292661294,
+        "outcome": "success",
+        "totalMs": 9537,
+        "firstTokenMs": 6062,
+        "playableMs": 9537,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5548
+          },
+          {
+            "name": "writer",
+            "durationMs": 3405
+          },
+          {
+            "name": "protocol",
+            "durationMs": 7
+          },
+          {
+            "name": "style-review",
+            "durationMs": 2
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 566
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 6
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 257.0656999999992,
+          "completeMs": 4931.004199999999,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 964,
+            "total_tokens": 6283,
+            "prompt_tokens_details": {
+              "cached_tokens": 2432
+            },
+            "prompt_cache_hit_tokens": 2432,
+            "prompt_cache_miss_tokens": 2887
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18650,
+          "headersMs": 191.80189999999857,
+          "completeMs": 531.4542000000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7765,
+            "completion_tokens": 16,
+            "total_tokens": 7781,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 6869
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14829,
+          "headersMs": 110.0402000000031
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11069,
+          "headersMs": 131.49079999999958,
+          "completeMs": 564.213800000005,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4719,
+            "completion_tokens": 16,
+            "total_tokens": 4735,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3567
+          }
+        }
+      ]
+    },
+    {
+      "phase": "optimized-series",
+      "mode": "standard",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292670885-2-2ad0fa87",
+        "startedAt": 1789292670885,
+        "outcome": "success",
+        "totalMs": 14246,
+        "firstTokenMs": 6463,
+        "playableMs": 14246,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5693
+          },
+          {
+            "name": "writer",
+            "durationMs": 3670
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1616
+          },
+          {
+            "name": "repair",
+            "durationMs": 2706
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 558
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 128.49049999999988,
+          "completeMs": 4354.4038,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 871,
+            "total_tokens": 6190,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18545,
+          "headersMs": 232.45290000000386,
+          "completeMs": 1322.498599999999,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7713,
+            "completion_tokens": 16,
+            "total_tokens": 7729,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4769
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14705,
+          "headersMs": 104.36869999999908
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10952,
+          "headersMs": 99.80210000000079,
+          "completeMs": 1613.879399999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4687,
+            "completion_tokens": 244,
+            "total_tokens": 4931,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3535
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13051,
+          "headersMs": 126.89210000000458,
+          "completeMs": 2705.419099999999,
+          "usage": {
+            "prompt_tokens": 5748,
+            "completion_tokens": 465,
+            "total_tokens": 6213,
+            "prompt_tokens_details": {
+              "cached_tokens": 1664
+            },
+            "prompt_cache_hit_tokens": 1664,
+            "prompt_cache_miss_tokens": 4084
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10830,
+          "headersMs": 96.47529999999824,
+          "completeMs": 557.1828999999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4614,
+            "completion_tokens": 16,
+            "total_tokens": 4630,
+            "prompt_tokens_details": {
+              "cached_tokens": 4224
+            },
+            "prompt_cache_hit_tokens": 4224,
+            "prompt_cache_miss_tokens": 390
+          }
+        }
+      ]
+    },
+    {
+      "phase": "optimized-series",
+      "mode": "standard",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292685143-3-727871b1",
+        "startedAt": 1789292685143,
+        "outcome": "success",
+        "totalMs": 10396,
+        "firstTokenMs": 7008,
+        "playableMs": 10396,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6307
+          },
+          {
+            "name": "writer",
+            "durationMs": 3436
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 651
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 104.3434000000052,
+          "completeMs": 5451.8629,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 983,
+            "total_tokens": 6302,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18735,
+          "headersMs": 151.46100000000297,
+          "completeMs": 849.2747999999992,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7827,
+            "completion_tokens": 16,
+            "total_tokens": 7843,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4883
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14914,
+          "headersMs": 109.56399999999849
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10985,
+          "headersMs": 99.60329999999522,
+          "completeMs": 649.9536999999982,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4696,
+            "completion_tokens": 16,
+            "total_tokens": 4712,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3544
+          }
+        }
+      ]
+    },
+    {
+      "phase": "optimized-series",
+      "mode": "strict",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292695550-4-ea66c363",
+        "startedAt": 1789292695550,
+        "outcome": "success",
+        "totalMs": 14265,
+        "firstTokenMs": 7481,
+        "playableMs": 14265,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5878
+          },
+          {
+            "name": "writer",
+            "durationMs": 6036
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 3
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1295
+          },
+          {
+            "name": "state",
+            "durationMs": 1054
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 105.24179999999615,
+          "completeMs": 5091.879699999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 997,
+            "total_tokens": 6316,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18775,
+          "headersMs": 234.99310000000696,
+          "completeMs": 779.6656000000075,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7832,
+            "completion_tokens": 16,
+            "total_tokens": 7848,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4888
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11189,
+          "headersMs": 192.25780000000668,
+          "completeMs": 490.474000000002,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4274,
+            "completion_tokens": 16,
+            "total_tokens": 4290,
+            "prompt_tokens_details": {
+              "cached_tokens": 640
+            },
+            "prompt_cache_hit_tokens": 640,
+            "prompt_cache_miss_tokens": 3634
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14954,
+          "headersMs": 128.19740000000456
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11451,
+          "headersMs": 157.7962000000116,
+          "completeMs": 1293.3804999999993,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4977,
+            "completion_tokens": 16,
+            "total_tokens": 4993,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3825
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3726,
+          "headersMs": 90.17220000000088,
+          "completeMs": 1050.7739999999903,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1737,
+            "completion_tokens": 37,
+            "total_tokens": 1774,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 841
+          }
+        }
+      ]
+    },
+    {
+      "phase": "optimized-series",
+      "mode": "strict",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292709835-5-d95e0aab",
+        "startedAt": 1789292709835,
+        "outcome": "success",
+        "totalMs": 10851,
+        "firstTokenMs": 7044,
+        "playableMs": 10851,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6677
+          },
+          {
+            "name": "writer",
+            "durationMs": 2855
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 0
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 738
+          },
+          {
+            "name": "state",
+            "durationMs": 580
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 0
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 101.74300000000221,
+          "completeMs": 4893.87950000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 860,
+            "total_tokens": 6179,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18496,
+          "headersMs": 1140.158899999995,
+          "completeMs": 1772.8022999999957,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7721,
+            "completion_tokens": 16,
+            "total_tokens": 7737,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4777
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10910,
+          "headersMs": 1104.6612000000023,
+          "completeMs": 1692.896900000007,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4163,
+            "completion_tokens": 16,
+            "total_tokens": 4179,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 835
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14675,
+          "headersMs": 127.4996000000101
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10677,
+          "headersMs": 123.28789999999572,
+          "completeMs": 737.0910000000003,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4540,
+            "completion_tokens": 16,
+            "total_tokens": 4556,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3388
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3277,
+          "headersMs": 349.4438000000082,
+          "completeMs": 578.1304999999993,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1431,
+            "completion_tokens": 34,
+            "total_tokens": 1465,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 535
+          }
+        }
+      ]
+    },
+    {
+      "phase": "optimized-series",
+      "mode": "strict",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292720714-6-0ef2c0de",
+        "startedAt": 1789292720714,
+        "outcome": "success",
+        "totalMs": 11734,
+        "firstTokenMs": 7130,
+        "playableMs": 11734,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6183
+          },
+          {
+            "name": "writer",
+            "durationMs": 3597
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 773
+          },
+          {
+            "name": "state",
+            "durationMs": 866
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 17
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 196.13959999999497,
+          "completeMs": 5125.8076,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 1032,
+            "total_tokens": 6351,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18791,
+          "headersMs": 236.408500000005,
+          "completeMs": 746.7600000000093,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7879,
+            "completion_tokens": 16,
+            "total_tokens": 7895,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4935
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11205,
+          "headersMs": 214.11549999999988,
+          "completeMs": 1043.184300000008,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4321,
+            "completion_tokens": 16,
+            "total_tokens": 4337,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 993
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14970,
+          "headersMs": 107.34150000000955
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11140,
+          "headersMs": 108.0679999999993,
+          "completeMs": 770.049199999994,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4811,
+            "completion_tokens": 16,
+            "total_tokens": 4827,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3659
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3391,
+          "headersMs": 105.84070000000065,
+          "completeMs": 864.7826000000059,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1507,
+            "completion_tokens": 40,
+            "total_tokens": 1547,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 611
+          }
+        }
+      ]
+    },
+    {
+      "phase": "final-series",
+      "mode": "standard",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292819984-1-632ef58b",
+        "startedAt": 1789292819984,
+        "outcome": "success",
+        "totalMs": 10817,
+        "firstTokenMs": 6394,
+        "playableMs": 10817,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6074
+          },
+          {
+            "name": "writer",
+            "durationMs": 3521
+          },
+          {
+            "name": "protocol",
+            "durationMs": 5
+          },
+          {
+            "name": "style-review",
+            "durationMs": 3
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1203
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 9
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 317.9423000000006,
+          "completeMs": 5030.390600000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 919,
+            "total_tokens": 6238,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18583,
+          "headersMs": 223.375,
+          "completeMs": 945.7368000000006,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7740,
+            "completion_tokens": 16,
+            "total_tokens": 7756,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4796
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14876,
+          "headersMs": 124.85310000000027
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10959,
+          "headersMs": 100.63509999999951,
+          "completeMs": 1200.197400000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4709,
+            "completion_tokens": 16,
+            "total_tokens": 4725,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3557
+          }
+        }
+      ]
+    },
+    {
+      "phase": "final-series",
+      "mode": "standard",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292830848-2-015cefda",
+        "startedAt": 1789292830848,
+        "outcome": "success",
+        "totalMs": 11609,
+        "firstTokenMs": 7566,
+        "playableMs": 11609,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6731
+          },
+          {
+            "name": "writer",
+            "durationMs": 4005
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 5
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 871
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 191.3695000000007,
+          "completeMs": 4432.694100000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 906,
+            "total_tokens": 6225,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18565,
+          "headersMs": 811.1559000000016,
+          "completeMs": 2275.4828000000016,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7730,
+            "completion_tokens": 16,
+            "total_tokens": 7746,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4786
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14858,
+          "headersMs": 183.71449999999822
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11014,
+          "headersMs": 108.21980000000258,
+          "completeMs": 869.2255000000005,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4733,
+            "completion_tokens": 16,
+            "total_tokens": 4749,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3581
+          }
+        }
+      ]
+    },
+    {
+      "phase": "final-series",
+      "mode": "standard",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292842487-3-9773396f",
+        "startedAt": 1789292842487,
+        "outcome": "success",
+        "totalMs": 11405,
+        "firstTokenMs": 7600,
+        "playableMs": 11405,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 7021
+          },
+          {
+            "name": "writer",
+            "durationMs": 3723
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 2
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 657
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 376.9844000000012,
+          "completeMs": 4809.6299000000035,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 887,
+            "total_tokens": 6206,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18578,
+          "headersMs": 1759.2964999999967,
+          "completeMs": 2200.4015,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7731,
+            "completion_tokens": 16,
+            "total_tokens": 7747,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4787
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14871,
+          "headersMs": 113.94810000000143
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10968,
+          "headersMs": 97.33299999999872,
+          "completeMs": 656.2253000000055,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4696,
+            "completion_tokens": 16,
+            "total_tokens": 4712,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3544
+          }
+        }
+      ]
+    },
+    {
+      "phase": "final-series",
+      "mode": "strict",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292853915-4-6e7013bb",
+        "startedAt": 1789292853915,
+        "outcome": "success",
+        "totalMs": 11181,
+        "firstTokenMs": 6512,
+        "playableMs": 11181,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 5343
+          },
+          {
+            "name": "writer",
+            "durationMs": 3989
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 2
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 906
+          },
+          {
+            "name": "state",
+            "durationMs": 941
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 2
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 106.11319999999978,
+          "completeMs": 4431.991000000002,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 891,
+            "total_tokens": 6210,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18581,
+          "headersMs": 149.76630000000296,
+          "completeMs": 877.0197000000044,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7735,
+            "completion_tokens": 16,
+            "total_tokens": 7751,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4791
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10995,
+          "headersMs": 244.08499999999913,
+          "completeMs": 898.2525999999998,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4177,
+            "completion_tokens": 16,
+            "total_tokens": 4193,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 849
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14874,
+          "headersMs": 118.78800000000047
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10918,
+          "headersMs": 238.98969999999827,
+          "completeMs": 903.0068000000028,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4646,
+            "completion_tokens": 16,
+            "total_tokens": 4662,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3494
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3397,
+          "headersMs": 113.75479999999516,
+          "completeMs": 937.120299999995,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1500,
+            "completion_tokens": 38,
+            "total_tokens": 1538,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 604
+          }
+        }
+      ]
+    },
+    {
+      "phase": "final-series",
+      "mode": "strict",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292865118-5-f44df53c",
+        "startedAt": 1789292865118,
+        "outcome": "success",
+        "totalMs": 10184,
+        "firstTokenMs": 5616,
+        "playableMs": 10184,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 4958
+          },
+          {
+            "name": "writer",
+            "durationMs": 3522
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 800
+          },
+          {
+            "name": "state",
+            "durationMs": 901
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 123.62089999999444,
+          "completeMs": 4162.998399999997,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 840,
+            "total_tokens": 6159,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18480,
+          "headersMs": 216.08029999999417,
+          "completeMs": 576.5774999999994,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7701,
+            "completion_tokens": 16,
+            "total_tokens": 7717,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4757
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10894,
+          "headersMs": 200.53570000000036,
+          "completeMs": 782.6690000000017,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4143,
+            "completion_tokens": 16,
+            "total_tokens": 4159,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 815
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14773,
+          "headersMs": 220.4233000000022
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10872,
+          "headersMs": 157.96929999999702,
+          "completeMs": 799.7560000000012,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4651,
+            "completion_tokens": 16,
+            "total_tokens": 4667,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3499
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3438,
+          "headersMs": 92.13360000000102,
+          "completeMs": 900.5614999999962,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1532,
+            "completion_tokens": 38,
+            "total_tokens": 1570,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 636
+          }
+        }
+      ]
+    },
+    {
+      "phase": "final-series",
+      "mode": "strict",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292875325-6-391fa88d",
+        "startedAt": 1789292875325,
+        "outcome": "success",
+        "totalMs": 11916,
+        "firstTokenMs": 6742,
+        "playableMs": 11916,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6145
+          },
+          {
+            "name": "writer",
+            "durationMs": 3901
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1166
+          },
+          {
+            "name": "state",
+            "durationMs": 701
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 3
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13571,
+          "headersMs": 157.57719999999972,
+          "completeMs": 5222.6094000000085,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5319,
+            "completion_tokens": 1004,
+            "total_tokens": 6323,
+            "prompt_tokens_details": {
+              "cached_tokens": 5120
+            },
+            "prompt_cache_hit_tokens": 5120,
+            "prompt_cache_miss_tokens": 199
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18737,
+          "headersMs": 162.08050000001094,
+          "completeMs": 820.619200000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7824,
+            "completion_tokens": 16,
+            "total_tokens": 7840,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4880
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11151,
+          "headersMs": 206.1185000000114,
+          "completeMs": 911.8150000000023,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4266,
+            "completion_tokens": 16,
+            "total_tokens": 4282,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 938
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 15011,
+          "headersMs": 280.3058000000019
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11146,
+          "headersMs": 98.39169999999285,
+          "completeMs": 1164.2260999999999,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4796,
+            "completion_tokens": 16,
+            "total_tokens": 4812,
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            },
+            "prompt_cache_hit_tokens": 1280,
+            "prompt_cache_miss_tokens": 3516
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3484,
+          "headersMs": 93.64690000000701,
+          "completeMs": 700.1700000000128,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1566,
+            "completion_tokens": 46,
+            "total_tokens": 1612,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 670
+          }
+        }
+      ]
+    },
+    {
+      "phase": "release-series",
+      "mode": "standard",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292967401-1-59285d76",
+        "startedAt": 1789292967401,
+        "outcome": "success",
+        "totalMs": 7543,
+        "firstTokenMs": 4208,
+        "playableMs": 7543,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 3449
+          },
+          {
+            "name": "writer",
+            "durationMs": 4065
+          },
+          {
+            "name": "protocol",
+            "durationMs": 11
+          },
+          {
+            "name": "style-review",
+            "durationMs": 2
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 7
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13703,
+          "headersMs": 278.6764000000003,
+          "completeMs": 3352.0790000000015,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5391,
+            "completion_tokens": 535,
+            "total_tokens": 5926,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            },
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 3343
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14491,
+          "headersMs": 320.13270000000193
+        }
+      ]
+    },
+    {
+      "phase": "release-series",
+      "mode": "standard",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292975001-2-1b20d154",
+        "startedAt": 1789292975001,
+        "outcome": "success",
+        "totalMs": 9641,
+        "firstTokenMs": 5041,
+        "playableMs": 9641,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 4468
+          },
+          {
+            "name": "writer",
+            "durationMs": 4634
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 5
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 531
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 3
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13703,
+          "headersMs": 227.53389999999854,
+          "completeMs": 3786.4699,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5391,
+            "completion_tokens": 630,
+            "total_tokens": 6021,
+            "prompt_tokens_details": {
+              "cached_tokens": 5248
+            },
+            "prompt_cache_hit_tokens": 5248,
+            "prompt_cache_miss_tokens": 143
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18519,
+          "headersMs": 100.05489999999918,
+          "completeMs": 670.6610000000001,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7693,
+            "completion_tokens": 16,
+            "total_tokens": 7709,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4749
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14812,
+          "headersMs": 106.1952999999994
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10951,
+          "headersMs": 244.97630000000208,
+          "completeMs": 527.0669000000016,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4681,
+            "completion_tokens": 16,
+            "total_tokens": 4697,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3529
+          }
+        }
+      ]
+    },
+    {
+      "phase": "release-series",
+      "mode": "standard",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292984663-3-35cf2e91",
+        "startedAt": 1789292984663,
+        "outcome": "success",
+        "totalMs": 10860,
+        "firstTokenMs": 4888,
+        "playableMs": 10860,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 4370
+          },
+          {
+            "name": "writer",
+            "durationMs": 5247
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 8
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1241
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 1
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13703,
+          "headersMs": 133.76759999999922,
+          "completeMs": 3825.8292999999976,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5391,
+            "completion_tokens": 650,
+            "total_tokens": 6041,
+            "prompt_tokens_details": {
+              "cached_tokens": 5248
+            },
+            "prompt_cache_hit_tokens": 5248,
+            "prompt_cache_miss_tokens": 143
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18540,
+          "headersMs": 132.66649999999936,
+          "completeMs": 533.4804000000004,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7713,
+            "completion_tokens": 16,
+            "total_tokens": 7729,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4769
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14833,
+          "headersMs": 120.56669999999576
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11315,
+          "headersMs": 156.57390000000305,
+          "completeMs": 1239.7834000000003,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4938,
+            "completion_tokens": 16,
+            "total_tokens": 4954,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3786
+          }
+        }
+      ]
+    },
+    {
+      "phase": "release-series",
+      "mode": "strict",
+      "sample": 0,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789292995555-4-e2c5137d",
+        "startedAt": 1789292995555,
+        "outcome": "success",
+        "totalMs": 14752,
+        "firstTokenMs": 7599,
+        "playableMs": 14752,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 6471
+          },
+          {
+            "name": "writer",
+            "durationMs": 6538
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 3
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 1109
+          },
+          {
+            "name": "state",
+            "durationMs": 629
+          },
+          {
+            "name": "persistence",
+            "durationMs": 1
+          },
+          {
+            "name": "commit",
+            "durationMs": 2
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13703,
+          "headersMs": 123.70999999999913,
+          "completeMs": 3937.5878999999986,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5391,
+            "completion_tokens": 630,
+            "total_tokens": 6021,
+            "prompt_tokens_details": {
+              "cached_tokens": 5248
+            },
+            "prompt_cache_hit_tokens": 5248,
+            "prompt_cache_miss_tokens": 143
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18524,
+          "headersMs": 325.38239999999496,
+          "completeMs": 863.9419999999955,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7693,
+            "completion_tokens": 16,
+            "total_tokens": 7709,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4749
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10938,
+          "headersMs": 2302.444499999998,
+          "completeMs": 2511.202299999997,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4135,
+            "completion_tokens": 16,
+            "total_tokens": 4151,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 807
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14817,
+          "headersMs": 334.55979999999545
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10845,
+          "headersMs": 742.9919000000009,
+          "completeMs": 1107.1113999999943,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4620,
+            "completion_tokens": 16,
+            "total_tokens": 4636,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3468
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3402,
+          "headersMs": 197.00040000000445,
+          "completeMs": 624.0794000000024,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1529,
+            "completion_tokens": 40,
+            "total_tokens": 1569,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 633
+          }
+        }
+      ]
+    },
+    {
+      "phase": "release-series",
+      "mode": "strict",
+      "sample": 1,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789293010331-5-ad0a596c",
+        "startedAt": 1789293010331,
+        "outcome": "success",
+        "totalMs": 10985,
+        "firstTokenMs": 5532,
+        "playableMs": 10985,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 4844
+          },
+          {
+            "name": "writer",
+            "durationMs": 4532
+          },
+          {
+            "name": "protocol",
+            "durationMs": 0
+          },
+          {
+            "name": "style-review",
+            "durationMs": 5
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 815
+          },
+          {
+            "name": "state",
+            "durationMs": 788
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 4
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13703,
+          "headersMs": 292.3990999999951,
+          "completeMs": 3878.1222999999954,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5391,
+            "completion_tokens": 619,
+            "total_tokens": 6010,
+            "prompt_tokens_details": {
+              "cached_tokens": 5248
+            },
+            "prompt_cache_hit_tokens": 5248,
+            "prompt_cache_miss_tokens": 143
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18508,
+          "headersMs": 237.64630000000034,
+          "completeMs": 953.193299999999,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7682,
+            "completion_tokens": 16,
+            "total_tokens": 7698,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4738
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10922,
+          "headersMs": 196.97260000000097,
+          "completeMs": 746.9706000000006,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4124,
+            "completion_tokens": 16,
+            "total_tokens": 4140,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 796
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14801,
+          "headersMs": 132.03800000000047
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 11094,
+          "headersMs": 425.15439999999944,
+          "completeMs": 810.8499000000011,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4787,
+            "completion_tokens": 16,
+            "total_tokens": 4803,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3635
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3662,
+          "headersMs": 112.94550000000163,
+          "completeMs": 785.3699999999953,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1714,
+            "completion_tokens": 43,
+            "total_tokens": 1757,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 818
+          }
+        }
+      ]
+    },
+    {
+      "phase": "release-series",
+      "mode": "strict",
+      "sample": 2,
+      "model": "deepseek-v4-flash",
+      "metrics": {
+        "id": "1789293021351-6-a62f65dc",
+        "startedAt": 1789293021351,
+        "outcome": "success",
+        "totalMs": 9575,
+        "firstTokenMs": 5141,
+        "playableMs": 9575,
+        "stages": [
+          {
+            "name": "preparation",
+            "durationMs": 4611
+          },
+          {
+            "name": "writer",
+            "durationMs": 3562
+          },
+          {
+            "name": "protocol",
+            "durationMs": 1
+          },
+          {
+            "name": "style-review",
+            "durationMs": 1
+          },
+          {
+            "name": "fact-review",
+            "durationMs": 657
+          },
+          {
+            "name": "state",
+            "durationMs": 742
+          },
+          {
+            "name": "persistence",
+            "durationMs": 0
+          },
+          {
+            "name": "commit",
+            "durationMs": 2
+          }
+        ]
+      },
+      "committed": 1,
+      "calls": [
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 13703,
+          "headersMs": 615.7115000000049,
+          "completeMs": 3976.3964000000124,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 5391,
+            "completion_tokens": 588,
+            "total_tokens": 5979,
+            "prompt_tokens_details": {
+              "cached_tokens": 5248
+            },
+            "prompt_cache_hit_tokens": 5248,
+            "prompt_cache_miss_tokens": 143
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 18471,
+          "headersMs": 174.23829999999725,
+          "completeMs": 490.56759999999485,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 7651,
+            "completion_tokens": 16,
+            "total_tokens": 7667,
+            "prompt_tokens_details": {
+              "cached_tokens": 2944
+            },
+            "prompt_cache_hit_tokens": 2944,
+            "prompt_cache_miss_tokens": 4707
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10885,
+          "headersMs": 166.2603999999992,
+          "completeMs": 615.0979999999981,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4093,
+            "completion_tokens": 16,
+            "total_tokens": 4109,
+            "prompt_tokens_details": {
+              "cached_tokens": 3328
+            },
+            "prompt_cache_hit_tokens": 3328,
+            "prompt_cache_miss_tokens": 765
+          }
+        },
+        {
+          "stream": true,
+          "status": 200,
+          "inputChars": 14764,
+          "headersMs": 123.61579999999958
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 10770,
+          "headersMs": 98.08229999999458,
+          "completeMs": 655.0333999999857,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 4556,
+            "completion_tokens": 16,
+            "total_tokens": 4572,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 3404
+          }
+        },
+        {
+          "stream": false,
+          "status": 200,
+          "inputChars": 3363,
+          "headersMs": 117.70319999998901,
+          "completeMs": 741.3709999999992,
+          "responseFormat": "json_object",
+          "usage": {
+            "prompt_tokens": 1500,
+            "completion_tokens": 41,
+            "total_tokens": 1541,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 604
+          }
+        }
+      ]
+    }
+  ]
+}

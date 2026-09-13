@@ -1,3 +1,4 @@
+import { DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from './token-budget';
 /**
  * SillyTavern Web - Core Types (v3 内核 + farewell-web 游戏专属)
  */
@@ -338,8 +339,8 @@ export function createDefaultPreset(): Omit<ChatPreset, 'id' | 'createdAt' | 'up
       pres_pen_openai: 0,
       top_p_openai: 0.9,
       top_k_openai: 0,
-      openai_max_context: 80000,
-      openai_max_tokens: 4096,
+      openai_max_context: DEFAULT_CONTEXT_TOKENS,
+      openai_max_tokens: DEFAULT_OUTPUT_TOKENS,
       stream_openai: true,
       openai_model: 'gpt-4o-mini',
       main: 'Write {{char}}\'s next reply in a fictional chat between {{char}} and {{user}}.',

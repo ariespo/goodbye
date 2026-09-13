@@ -1,4 +1,4 @@
-import { saveChat } from '../sillytavern/database';
+import { saveChat, type ChatWriteGuard } from '../sillytavern/database';
 import type { ChatMessage, ChatSession, DynamicRecord } from '../sillytavern/types';
 import { useGameStore } from '../stores/gameStore';
 
@@ -10,7 +10,8 @@ export async function persistActiveChat(patch: {
   messages?: ChatMessage[];
   variables?: DynamicRecord;
   userName?: string;
-}): Promise<ChatSession | null> {
+}, guard?: ChatWriteGuard): Promise<ChatSession | null> {
+  guard?.assertCurrent();
   const state = useGameStore.getState();
   const activeChat = state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId);
   if (!activeChat) return null;
@@ -22,7 +23,8 @@ export async function persistActiveChat(patch: {
     ...(patch.userName ? { userName: patch.userName } : {}),
     updatedAt: Date.now(),
   };
-  await saveChat(updated);
+  await saveChat(updated, guard);
+  guard?.assertCurrent();
   useGameStore.getState().actions.setChats(
     useGameStore.getState().tavern.chats.map(chat => (chat.id === updated.id ? updated : chat)),
   );
