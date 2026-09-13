@@ -127,6 +127,20 @@ B</option>
     }
   });
 
+  it('does not treat drive-like text inside ASCII words as a Windows path', () => {
+    const cases = [
+      { text: String.raw`NPC:\nNPC随后离开。`, valid: false },
+      { text: String.raw`ABC:\rABC随后离开。`, valid: false },
+      { text: String.raw`路径：C:\n\file.json。`, valid: true },
+      { text: String.raw`他说“C:\r.txt”后离开。`, valid: true },
+    ];
+    for (const { text, valid } of cases) {
+      const maintext = `对话|旁白|calm|${text}`;
+      const errors = protocol.validate(`<maintext>${maintext}</maintext>`, { ...baseParsed, maintext });
+      expect(errors.some(error => error.code === 'ESCAPED_DIALOGUE_NEWLINE')).toBe(!valid);
+    }
+  });
+
   it('repairs a missing maintext close only when complete option and sum tags prove the boundary', () => {
     const malformed = `<maintext>\n场景|room.jpg\n对话|少女|calm|你好。\n<option>A\nB</option>\n<sum>完成</sum>`;
     const repaired = repairRecoverableOutput(malformed);
