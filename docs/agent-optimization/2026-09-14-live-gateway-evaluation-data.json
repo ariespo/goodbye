@@ -1,0 +1,2989 @@
+{
+  "evaluatedGameplayCommit": "7feb23b5c0ec53b71f14acda9f76e46eb453b396",
+  "collectionDate": "2026-09-14 Asia/Shanghai",
+  "method": "Real useGameLoop/API/transactions/history, mocked storage, instant playback, production reviews enabled. Two alternate-channel campaigns overlapped in wall time. Gateway error classification and evaluation plumbing were being updated; gameplay engine unchanged.",
+  "probes": [
+    {
+      "model": "gemini-3.7-flash【果汁】",
+      "type": "tiny JSON handshake",
+      "httpStatus": 200,
+      "elapsedMs": 5066,
+      "usageTotalTokens": 15,
+      "result": {
+        "ok": true
+      },
+      "note": "Small prompt success does not establish full game prompt availability."
+    },
+    {
+      "model": "deepseek-v4-flash【神秘】【阿里】",
+      "type": "isolated fact-critic replay of options attempt 15",
+      "timeoutMs": 60000,
+      "result": "HttpClient timeout; no review obtained",
+      "note": "Not injected into gameplay; cannot compare quality."
+    }
+  ],
+  "campaigns": [
+    {
+      "name": "fast-standard-hakoyu-gemini37-20260914.json",
+      "baseUrl": "https://oneapi.hakoyu.com/v1",
+      "model": "gemini-3.7-flash【果汁】",
+      "diagnostic": false,
+      "stop": "manual-stop-upstream-proxy-error",
+      "attempts": 1,
+      "successful": 0,
+      "final": {
+        "time": "2024-09-09T00:00:00.000Z",
+        "cycleCount": 1,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "suspicion": {
+          "old-man": 0,
+          "detective-a": 0,
+          "detective-b": 0,
+          "self": 10,
+          "clerk": 0,
+          "teacher": 0,
+          "senpai": 0
+        },
+        "pendingReset": null,
+        "pendingEnding": null,
+        "historyLength": 0
+      },
+      "calls": 3,
+      "foregroundMs": 49655,
+      "withBackgroundMs": 50059,
+      "playableMedianMs": null,
+      "playableP90Ms": null,
+      "acceptedChars": 0,
+      "emptyTurns": [],
+      "zeroMinuteTurns": [],
+      "stateTurns": [],
+      "firstTokenMedianMs": null,
+      "maxRequestChars": 21688,
+      "maxReportedPromptTokens": 8976,
+      "httpStatuses": {
+        "200": 2,
+        "ApiCallError": 1
+      },
+      "tokens": {
+        "prompt": 17593,
+        "completion": 612,
+        "reported": 2
+      },
+      "styleRejected": null,
+      "errors": [
+        {
+          "attempt": 1,
+          "error": "多 Agent 编排失败：导演计划缺少 turnGoal 或 tone。"
+        }
+      ],
+      "timeline": [],
+      "collectionNote": "仅一个已完成失败尝试；随后在途重试人工取消，未完成请求不在本表。原始 turn-cap 是采集器运行中的默认值，并非达到回合上限。",
+      "stageCounts": {}
+    },
+    {
+      "name": "fast-standard-hakoyu-gemini37-alt-20260914.json",
+      "baseUrl": "https://oneapi.hakoyu.com/v1",
+      "model": "gemini-3.7-flash【神秘】",
+      "diagnostic": false,
+      "stop": "completed-calendar-day",
+      "attempts": 23,
+      "successful": 22,
+      "final": {
+        "time": "2024-09-09T00:00:00.000Z",
+        "cycleCount": 2,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "meet:old-man"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "suspicion": {
+          "old-man": 0,
+          "detective-a": 0,
+          "detective-b": 0,
+          "self": 10,
+          "clerk": 0,
+          "teacher": 0,
+          "senpai": 0
+        },
+        "pendingReset": null,
+        "pendingEnding": null,
+        "historyLength": 22
+      },
+      "calls": 168,
+      "foregroundMs": 541855,
+      "withBackgroundMs": 704721,
+      "playableMedianMs": 20845,
+      "playableP90Ms": 31162,
+      "acceptedChars": 5379,
+      "emptyTurns": [],
+      "zeroMinuteTurns": [],
+      "stateTurns": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ],
+      "firstTokenMedianMs": 10925,
+      "maxRequestChars": 34448,
+      "maxReportedPromptTokens": 11866,
+      "httpStatuses": {
+        "200": 164,
+        "401": 1,
+        "TypeError": 2,
+        "ApiCallError": 1
+      },
+      "tokens": {
+        "prompt": 817705,
+        "completion": 113048,
+        "reported": 142
+      },
+      "styleRejected": null,
+      "errors": [
+        {
+          "attempt": 19,
+          "error": "多 Agent 编排失败：API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609131618043012090158268d9d6YsJaQRU7)\",\"type\":\"new_api_error\"}}"
+        }
+      ],
+      "timeline": [
+        {
+          "turn": 1,
+          "attempt": 1,
+          "input": "我用接下来的两个小时在附近寻找文穗，向愿意回答的人打听，不做越权的事情。",
+          "options": [
+            "前往中学确认文穗的请假情况",
+            "去文穗常去的社区便利店向店员打听",
+            "去对面商住楼找灯织询问文穗是否回复了消息",
+            "折回公寓仔细搜查文穗的房间"
+          ],
+          "from": "2024-09-09T00:00:00.000Z",
+          "to": "2024-09-09T00:25:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {},
+          "chars": 576,
+          "calls": 8,
+          "playableMs": 28531
+        },
+        {
+          "turn": 2,
+          "attempt": 2,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "仔细检查文穗衣柜中空缺的衣物类型与随身物品",
+            "检查文穗书桌上的课本、笔记与抽屉留存",
+            "前往对面商住楼找灯织询问是否收到文穗回复",
+            "前往文穗的中学向门卫或老师核实到校与请假情况"
+          ],
+          "from": "2024-09-09T00:25:00.000Z",
+          "to": "2024-09-09T00:50:00.000Z",
+          "minutes": 25,
+          "location": "home",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 331,
+          "calls": 8,
+          "playableMs": 22634
+        },
+        {
+          "turn": 3,
+          "attempt": 3,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往文穗常去的社区便利店向店员打听",
+            "带上雨具沿文穗平时上学的路线沿途仔细排查"
+          ],
+          "from": "2024-09-09T00:50:00.000Z",
+          "to": "2024-09-09T01:20:00.000Z",
+          "minutes": 30,
+          "location": "home",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 343,
+          "calls": 7,
+          "playableMs": 18571
+        },
+        {
+          "turn": 4,
+          "attempt": 4,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "撑伞沿文穗平时上学的路线沿途仔细寻找"
+          ],
+          "from": "2024-09-09T01:20:00.000Z",
+          "to": "2024-09-09T01:50:00.000Z",
+          "minutes": 30,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 230,
+          "calls": 7,
+          "playableMs": 21342
+        },
+        {
+          "turn": 5,
+          "attempt": 5,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "沿文穗平时上学的路线沿途仔细排查"
+          ],
+          "from": "2024-09-09T01:50:00.000Z",
+          "to": "2024-09-09T02:15:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 187,
+          "calls": 7,
+          "playableMs": 16895
+        },
+        {
+          "turn": 6,
+          "attempt": 6,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "前往麻将馆楼上的旧楼询问周大爷是否看到文穗出门"
+          ],
+          "from": "2024-09-09T02:15:00.000Z",
+          "to": "2024-09-09T02:40:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 166,
+          "calls": 7,
+          "playableMs": 17518
+        },
+        {
+          "turn": 7,
+          "attempt": 7,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "前往麻将馆楼上的旧楼询问周大爷是否看到文穗出门"
+          ],
+          "from": "2024-09-09T02:40:00.000Z",
+          "to": "2024-09-09T04:40:00.000Z",
+          "minutes": 120,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 236,
+          "calls": 7,
+          "playableMs": 18866
+        },
+        {
+          "turn": 8,
+          "attempt": 8,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "前往麻将馆楼上的旧楼询问周大爷是否看到文穗出门"
+          ],
+          "from": "2024-09-09T04:40:00.000Z",
+          "to": "2024-09-09T05:10:00.000Z",
+          "minutes": 30,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 146,
+          "calls": 7,
+          "playableMs": 18190
+        },
+        {
+          "turn": 9,
+          "attempt": 9,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "前往麻将馆楼上的旧楼询问周大爷是否看到文穗出门"
+          ],
+          "from": "2024-09-09T05:10:00.000Z",
+          "to": "2024-09-09T05:35:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 187,
+          "calls": 7,
+          "playableMs": 17893
+        },
+        {
+          "turn": 10,
+          "attempt": 10,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "前往麻将馆楼上的旧楼询问周大爷是否看到文穗出门"
+          ],
+          "from": "2024-09-09T05:35:00.000Z",
+          "to": "2024-09-09T06:00:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 163,
+          "calls": 9,
+          "playableMs": 58165
+        },
+        {
+          "turn": 11,
+          "attempt": 11,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "前往麻将馆楼上的旧楼询问周大爷是否看到文穗出门"
+          ],
+          "from": "2024-09-09T06:00:00.000Z",
+          "to": "2024-09-09T07:00:00.000Z",
+          "minutes": 60,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 170,
+          "calls": 7,
+          "playableMs": 20182
+        },
+        {
+          "turn": 12,
+          "attempt": 12,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "前往文穗就读的中学核实到校与请假情况",
+            "前往对面商住楼找灯织学姐询问是否有文穗的消息",
+            "前往社区便利店向店员打听文穗早晨的行踪",
+            "前往麻将馆楼上的旧楼询问周大爷是否看到文穗出门"
+          ],
+          "from": "2024-09-09T07:00:00.000Z",
+          "to": "2024-09-09T08:00:00.000Z",
+          "minutes": 60,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 70,
+          "deathNews": "pending",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 167,
+          "calls": 7,
+          "playableMs": 20845
+        },
+        {
+          "turn": 13,
+          "attempt": 13,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "声音发颤地向警方核对通报细节与文穗的现状",
+            "极力否认警方的说法，坚称文穗只是没去学校一定是弄错了",
+            "丢下一切立刻赶往警方通知的对接地点",
+            "僵立在暴雨中，任凭冰冷的雨水冲刷失去知觉的身体"
+          ],
+          "from": "2024-09-09T08:00:00.000Z",
+          "to": "2024-09-09T08:20:00.000Z",
+          "minutes": 20,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 279,
+          "calls": 8,
+          "playableMs": 21161
+        },
+        {
+          "turn": 14,
+          "attempt": 14,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "死死攥着被雨水冲刷的手机发愣",
+            "拖着湿透沉重的脚步一步步走回空荡的公寓",
+            "冒雨前往商住楼找灯织学姐告知文穗的噩耗",
+            "固执地站在路口等待，坚信文穗只是还没回来"
+          ],
+          "from": "2024-09-09T08:20:00.000Z",
+          "to": "2024-09-09T08:50:00.000Z",
+          "minutes": 30,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 256,
+          "calls": 9,
+          "playableMs": 31162
+        },
+        {
+          "turn": 15,
+          "attempt": 15,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着湿透麻木的身体返回空无一人的公寓",
+            "冒着加剧的暴雨前往商住楼找灯织学姐",
+            "拿出手机回拨辖区警方的电话询问具体情况",
+            "固执地停留在昏暗的路灯下继续等待"
+          ],
+          "from": "2024-09-09T08:50:00.000Z",
+          "to": "2024-09-09T10:50:00.000Z",
+          "minutes": 120,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 256,
+          "calls": 7,
+          "playableMs": 20048
+        },
+        {
+          "turn": 16,
+          "attempt": 16,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着湿透麻木的身体走回空无一人的公寓",
+            "冒着暴雨前往商住楼找灯织学姐告知噩耗",
+            "在雨幕中死死攥着湿透冰冷的手机发愣",
+            "固执地停留在昏暗路灯下等待文穗撑伞走来的幻影"
+          ],
+          "from": "2024-09-09T10:50:00.000Z",
+          "to": "2024-09-09T12:20:00.000Z",
+          "minutes": 90,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 245,
+          "calls": 9,
+          "playableMs": 28322
+        },
+        {
+          "turn": 17,
+          "attempt": 17,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着湿透麻木的身体折返回空无一人的公寓",
+            "冒着夜雨前往商住楼找灯织学姐",
+            "再次回拨警局电话试图询问文穗的具体情况",
+            "固执地在昏暗路灯下继续伫立等待"
+          ],
+          "from": "2024-09-09T12:20:00.000Z",
+          "to": "2024-09-09T13:50:00.000Z",
+          "minutes": 90,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 236,
+          "calls": 7,
+          "playableMs": 20475
+        },
+        {
+          "turn": 18,
+          "attempt": 18,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着湿透麻木的身体走回空无一人的公寓",
+            "冒雨前往商住楼寻找灯织学姐",
+            "再次回拨警局电话试图确认消息",
+            "固执地站在昏暗路灯下等待文穗撑伞走来的幻影"
+          ],
+          "from": "2024-09-09T13:50:00.000Z",
+          "to": "2024-09-09T14:35:00.000Z",
+          "minutes": 45,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 257,
+          "calls": 9,
+          "playableMs": 31483
+        },
+        {
+          "turn": 19,
+          "attempt": 20,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着疲惫冰冷的身体走回空荡的公寓",
+            "冒着夜雨前往商住楼找灯织学姐",
+            "尝试联系警方核实文穗的具体情况",
+            "在昏暗的街角麻木伫立等待奇迹出现"
+          ],
+          "from": "2024-09-09T14:35:00.000Z",
+          "to": "2024-09-09T15:00:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 219,
+          "calls": 9,
+          "playableMs": 27755
+        },
+        {
+          "turn": 20,
+          "attempt": 21,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着透湿麻木的身体走回空无一人的公寓",
+            "冒雨穿过街巷前往商住楼找灯织学姐",
+            "颤抖着再次尝试联系警方核实情况",
+            "在昏暗的路灯下麻木伫立等待奇迹"
+          ],
+          "from": "2024-09-09T15:00:00.000Z",
+          "to": "2024-09-09T15:35:00.000Z",
+          "minutes": 35,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 264,
+          "calls": 7,
+          "playableMs": 22622
+        },
+        {
+          "turn": 21,
+          "attempt": 22,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着近乎冻僵的躯体折返回空无一人的公寓",
+            "冒着暴雨穿过街巷前往商住楼敲响灯织学姐的门",
+            "颤抖着手指在雨中再次拨打文穗早已关机的电话",
+            "在漆黑暴雨中闭上眼睛伫立等待文穗像往常一样从身后拍你的肩膀"
+          ],
+          "from": "2024-09-09T15:35:00.000Z",
+          "to": "2024-09-09T15:55:00.000Z",
+          "minutes": 20,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 230,
+          "calls": 7,
+          "playableMs": 20614
+        },
+        {
+          "turn": 22,
+          "attempt": 23,
+          "input": "我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。",
+          "options": [
+            "拖着近乎冻僵的躯体走回空无一人的公寓",
+            "冒着暴雨穿过街巷前往商住楼敲响灯织学姐的门",
+            "颤抖着手指在雨中再次拨打文穗早已关机的手机",
+            "在漆黑暴雨中闭上眼睛伫立等待文穗像往常一样从身后拍你的肩膀"
+          ],
+          "from": "2024-09-09T15:55:00.000Z",
+          "to": "2024-09-09T16:00:00.000Z",
+          "minutes": 5,
+          "location": "street",
+          "stamina": 100,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "meet:old-man"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 235,
+          "calls": 6,
+          "playableMs": 21208,
+          "reset": "day-end"
+        }
+      ],
+      "stageCounts": {
+        "preparation": 22,
+        "writer": 22,
+        "protocol": 26,
+        "style-review": 26,
+        "fact-review": 26,
+        "state": 22,
+        "persistence": 22,
+        "commit": 22,
+        "repair": 4
+      },
+      "resetScene": [
+        {
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "你确实尝试了“我继续寻找文穗，愿意花接下来的两个小时做当前实际能够做的搜索或等候，并留意这段时间发生的消息。”。这次行动的后果留在了这一天里，却没能阻止时间走到尽头。",
+          "id": "b8fb249a-4359-4019-96d3-17e93f408dd6:line:0"
+        },
+        {
+          "background": "black",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "午夜零点。雨没有停，但这一天到头了。",
+          "effect": "loop-transition",
+          "id": "b8fb249a-4359-4019-96d3-17e93f408dd6:line:1"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "9月9日，早上8:00。闹钟响了。暴雨的第五天——和之前的每一次一模一样。",
+          "id": "b8fb249a-4359-4019-96d3-17e93f408dd6:line:2"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "被子的另一半叠得整整齐齐。桌上会有还温着的早餐，和一张纸条。你已经知道上面写着什么。",
+          "id": "b8fb249a-4359-4019-96d3-17e93f408dd6:line:3"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "这是第 2 次。你记得的一切都还在。但这个世界不记得。",
+          "id": "b8fb249a-4359-4019-96d3-17e93f408dd6:line:4"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "重置前最后发生的事仍留在你的记忆里：在深夜暴雨中持续搜寻无果，体力消耗濒临极限，面临接近午夜时的去向抉择",
+          "id": "b8fb249a-4359-4019-96d3-17e93f408dd6:line:5"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "昨天约好的人、等候的位置和正在执行的计划都已被重置作废。你必须依据保留下来的记忆，重新决定今天怎么做。",
+          "id": "b8fb249a-4359-4019-96d3-17e93f408dd6:line:6"
+        }
+      ]
+    },
+    {
+      "name": "fast-standard-hakoyu-gemini38-20260914.json",
+      "baseUrl": "https://oneapi.hakoyu.com/v1",
+      "model": "gemini-3.8-flash【果汁】",
+      "diagnostic": false,
+      "stop": "manual-stop-upstream-proxy-error",
+      "attempts": 1,
+      "successful": 0,
+      "final": {
+        "time": "2024-09-09T00:00:00.000Z",
+        "cycleCount": 1,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko"
+        ],
+        "suspicion": {
+          "old-man": 0,
+          "detective-a": 0,
+          "detective-b": 0,
+          "self": 10,
+          "clerk": 0,
+          "teacher": 0,
+          "senpai": 0
+        },
+        "pendingReset": null,
+        "pendingEnding": null,
+        "historyLength": 0
+      },
+      "calls": 3,
+      "foregroundMs": 46993,
+      "withBackgroundMs": 47398,
+      "playableMedianMs": null,
+      "playableP90Ms": null,
+      "acceptedChars": 0,
+      "emptyTurns": [],
+      "zeroMinuteTurns": [],
+      "stateTurns": [],
+      "firstTokenMedianMs": null,
+      "maxRequestChars": 21688,
+      "maxReportedPromptTokens": 8922,
+      "httpStatuses": {
+        "200": 2,
+        "ApiCallError": 1
+      },
+      "tokens": {
+        "prompt": 17485,
+        "completion": 612,
+        "reported": 2
+      },
+      "styleRejected": null,
+      "errors": [
+        {
+          "attempt": 1,
+          "error": "多 Agent 编排失败：导演计划缺少 turnGoal 或 tone。"
+        }
+      ],
+      "timeline": [],
+      "collectionNote": "仅一个已完成失败尝试；随后在途重试人工取消，未完成请求不在本表。原始 turn-cap 是采集器运行中的默认值，并非达到回合上限。",
+      "stageCounts": {}
+    },
+    {
+      "name": "options-standard-hakoyu-gemini37-alt-20260914.json",
+      "baseUrl": "https://oneapi.hakoyu.com/v1",
+      "model": "gemini-3.7-flash【神秘】",
+      "diagnostic": false,
+      "stop": "completed-calendar-day",
+      "attempts": 56,
+      "successful": 50,
+      "final": {
+        "time": "2024-09-09T00:00:00.000Z",
+        "cycleCount": 2,
+        "location": "home",
+        "stamina": 100,
+        "sanity": 70,
+        "knowledge": [
+          "know:home",
+          "know:school",
+          "know:supermarket",
+          "meet:touko",
+          "visit:school",
+          "meet:chen-huihui",
+          "visit:senpai-building",
+          "insight:touko-protective",
+          "observe:shaved-man",
+          "visit:old-man-building",
+          "insight:chen-huihui-social-strain",
+          "hear:accident-site"
+        ],
+        "facts": {
+          "shared-apron-missing": "atmosphere"
+        },
+        "suspicion": {
+          "old-man": 0,
+          "detective-a": 0,
+          "detective-b": 0,
+          "self": 10,
+          "clerk": 0,
+          "teacher": 0,
+          "senpai": 0
+        },
+        "pendingReset": null,
+        "pendingEnding": null,
+        "historyLength": 50
+      },
+      "calls": 402,
+      "foregroundMs": 1253077,
+      "withBackgroundMs": 1677018,
+      "playableMedianMs": 20212,
+      "playableP90Ms": 33070,
+      "acceptedChars": 15017,
+      "emptyTurns": [],
+      "zeroMinuteTurns": [],
+      "stateTurns": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50
+      ],
+      "firstTokenMedianMs": 10846,
+      "maxRequestChars": 46409,
+      "maxReportedPromptTokens": 14731,
+      "httpStatuses": {
+        "200": 386,
+        "401": 8,
+        "TypeError": 8
+      },
+      "tokens": {
+        "prompt": 2265415,
+        "completion": 236126,
+        "reported": 336
+      },
+      "styleRejected": null,
+      "errors": [
+        {
+          "attempt": 10,
+          "error": "多 Agent 编排失败：API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609131615399075510898268d9d6bhvwx5Ep)\",\"type\":\"new_api_error\"}}"
+        },
+        {
+          "attempt": 19,
+          "error": "正文审查失败，未播放也未写入存档：API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609131620199373866438268d9d6T6sG9JSR)\",\"type\":\"new_api_error\"}}"
+        },
+        {
+          "attempt": 36,
+          "error": "正文审查失败，未播放也未写入存档：API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609131629001830262488268d9d6p5nNkTGY)\",\"type\":\"new_api_error\"}}"
+        },
+        {
+          "attempt": 38,
+          "error": "正文审查失败，未播放也未写入存档：API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609131629451174239028268d9d6WIZYMYIJ)\",\"type\":\"new_api_error\"}}"
+        },
+        {
+          "attempt": 52,
+          "error": "多 Agent 编排失败：API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609131636087314757738268d9d68ocjJwqt)\",\"type\":\"new_api_error\"}}"
+        },
+        {
+          "attempt": 55,
+          "error": "多 Agent 编排失败：API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609131637205896463358268d9d649IjGks1)\",\"type\":\"new_api_error\"}}"
+        }
+      ],
+      "timeline": [
+        {
+          "turn": 1,
+          "attempt": 1,
+          "input": "我检查眼前能看到的事情，决定接下来去哪里找文穗。",
+          "options": [
+            "前往文穗的中学确认请假情况",
+            "去附近的便利店询问文穗早晨是否来过",
+            "去对面商住楼找灯织学姐询问文穗是否回复",
+            "去旧街区找周大爷打听早晨散步见闻"
+          ],
+          "from": "2024-09-09T00:00:00.000Z",
+          "to": "2024-09-09T00:05:00.000Z",
+          "minutes": 5,
+          "location": "home",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 394,
+          "calls": 8,
+          "playableMs": 30413
+        },
+        {
+          "turn": 2,
+          "attempt": 2,
+          "input": "前往文穗的中学确认请假情况",
+          "options": [
+            "去学校附近的社区便利店询问店员",
+            "折返前往商住楼找灯织学姐确认消息",
+            "去旧街区向周大爷打听早晨散步见闻",
+            "在校门口避雨处再次尝试拨打文穗手机"
+          ],
+          "from": "2024-09-09T00:05:00.000Z",
+          "to": "2024-09-09T00:30:00.000Z",
+          "minutes": 25,
+          "location": "school",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 363,
+          "calls": 9,
+          "playableMs": 34175
+        },
+        {
+          "turn": 3,
+          "attempt": 3,
+          "input": "去学校附近的社区便利店询问店员",
+          "options": [
+            "前往文穗常去的社区便利店询问店员",
+            "折返商住楼找灯织学姐询问文穗是否回复",
+            "前往旧街区向周大爷打听早晨散步见闻",
+            "在校门外避雨处尝试给文穗的班主任致电"
+          ],
+          "from": "2024-09-09T00:30:00.000Z",
+          "to": "2024-09-09T00:45:00.000Z",
+          "minutes": 15,
+          "location": "school",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 415,
+          "calls": 7,
+          "playableMs": 18336
+        },
+        {
+          "turn": 4,
+          "attempt": 4,
+          "input": "前往文穗常去的社区便利店询问店员",
+          "options": [
+            "向店员询问今晨是否还有其他人在店外避雨",
+            "折返商住楼找灯织学姐询问是否有文穗的回复",
+            "前往旧街区向周大爷打听早晨街面上的见闻",
+            "在便利店屋檐下尝试拨打文穗班主任的电话"
+          ],
+          "from": "2024-09-09T00:45:00.000Z",
+          "to": "2024-09-09T01:05:00.000Z",
+          "minutes": 20,
+          "location": "supermarket",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 383,
+          "calls": 10,
+          "playableMs": 33250
+        },
+        {
+          "turn": 5,
+          "attempt": 5,
+          "input": "向店员询问今晨是否还有其他人在店外避雨",
+          "options": [
+            "在便利店门口拨打文穗班主任电话核实情况",
+            "折返商住楼找灯织学姐询问文穗是否回复",
+            "前往旧街区向周大爷打听早晨街面动静",
+            "在便利店门外的屋檐与伞架周围仔细查看"
+          ],
+          "from": "2024-09-09T01:05:00.000Z",
+          "to": "2024-09-09T01:15:00.000Z",
+          "minutes": 10,
+          "location": "supermarket",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 279,
+          "calls": 9,
+          "playableMs": 26007
+        },
+        {
+          "turn": 6,
+          "attempt": 6,
+          "input": "在便利店门口拨打文穗班主任电话核实情况",
+          "options": [
+            "折返商住楼寻找灯织学姐核对文穗的回复",
+            "冒雨前往旧街区向周大爷打听早晨街面上的动静",
+            "留在便利店继续向陈慧慧打听文穗的日常细节"
+          ],
+          "from": "2024-09-09T01:15:00.000Z",
+          "to": "2024-09-09T01:30:00.000Z",
+          "minutes": 15,
+          "location": "supermarket",
+          "stamina": 100,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 266,
+          "calls": 11,
+          "playableMs": 32264
+        },
+        {
+          "turn": 7,
+          "attempt": 7,
+          "input": "折返商住楼寻找灯织学姐核对文穗的回复",
+          "options": [
+            "向灯织询问文穗平时是否有提及其他常去的地点或朋友",
+            "冒雨前往旧街区向周大爷打听清晨街面的异常动静",
+            "前往文穗所在的中学校门口实地排查门卫与周边情况",
+            "与学姐共同梳理文穗早晨留下的纸条与作息习惯"
+          ],
+          "from": "2024-09-09T01:30:00.000Z",
+          "to": "2024-09-09T01:50:00.000Z",
+          "minutes": 20,
+          "location": "senpai-building",
+          "stamina": 94,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 320,
+          "calls": 8,
+          "playableMs": 19786
+        },
+        {
+          "turn": 8,
+          "attempt": 8,
+          "input": "向灯织询问文穗平时是否有提及其他常去的地点或朋友",
+          "options": [
+            "听从学姐建议，冒雨前往旧街区找周大爷打听清晨动静",
+            "前往文穗的中学向门卫核实清晨校门出入情况",
+            "继续向学姐询问文穗近期是否有任何反常言行",
+            "返回自己家中再次仔细检查文穗的个人物品与留下的痕迹"
+          ],
+          "from": "2024-09-09T01:50:00.000Z",
+          "to": "2024-09-09T02:05:00.000Z",
+          "minutes": 15,
+          "location": "senpai-building",
+          "stamina": 94,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 372,
+          "calls": 9,
+          "playableMs": 23791
+        },
+        {
+          "turn": 9,
+          "attempt": 9,
+          "input": "听从学姐建议，冒雨前往旧街区找周大爷打听清晨动静",
+          "options": [
+            "向周大爷打听清晨是否有其他邻居或陌生人在楼下经过",
+            "折回巷口向刚才偶遇的寸头货车司机打听早晨路况与见闻",
+            "离开旧街区前往文穗的中学排查门卫进出记录",
+            "前往附近的社区便利店向陈慧慧打听文穗今早是否来过"
+          ],
+          "from": "2024-09-09T02:05:00.000Z",
+          "to": "2024-09-09T02:30:00.000Z",
+          "minutes": 25,
+          "location": "old-man-building",
+          "stamina": 86,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 459,
+          "calls": 8,
+          "playableMs": 27365
+        },
+        {
+          "turn": 10,
+          "attempt": 11,
+          "input": "向周大爷打听清晨是否有其他邻居或陌生人在楼下经过",
+          "options": [
+            "离开旧楼，前往文穗的中学向门卫核实清晨的出入登记记录",
+            "折返巷口，向刚才在雨中搬运纸箱的寸头男人打听早晨路况与动静",
+            "前往附近的社区便利店，向店员陈慧慧询问文穗清晨是否去过",
+            "向周大爷询问平时文穗上学经过旧街区的大致时间与习惯"
+          ],
+          "from": "2024-09-09T02:30:00.000Z",
+          "to": "2024-09-09T02:40:00.000Z",
+          "minutes": 10,
+          "location": "old-man-building",
+          "stamina": 86,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 295,
+          "calls": 7,
+          "playableMs": 19682
+        },
+        {
+          "turn": 11,
+          "attempt": 12,
+          "input": "离开旧楼，前往文穗的中学向门卫核实清晨的出入登记记录",
+          "options": [
+            "前往附近的社区便利店向陈慧慧打听文穗清晨是否经过或停留",
+            "前往商住楼再次向灯织学姐询问是否有文穗的最新回复或线索",
+            "在学校周边的常经路线与公交站台附近冒雨排查寻找线索"
+          ],
+          "from": "2024-09-09T02:40:00.000Z",
+          "to": "2024-09-09T03:05:00.000Z",
+          "minutes": 25,
+          "location": "school",
+          "stamina": 86,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 369,
+          "calls": 9,
+          "playableMs": 30267
+        },
+        {
+          "turn": 12,
+          "attempt": 13,
+          "input": "前往附近的社区便利店向陈慧慧打听文穗清晨是否经过或停留",
+          "options": [
+            "向陈慧慧打听清晨便利店门前是否有可疑人员或货车经过",
+            "在便利店货架旁稍作停留并观察店外街道的雨势动向",
+            "离开便利店前往商住楼，向灯织学姐询问是否有文穗的最新消息",
+            "折返旧街区巷口，排查刚才在雨中搬运纸箱的寸头男人与货车动向"
+          ],
+          "from": "2024-09-09T03:05:00.000Z",
+          "to": "2024-09-09T03:30:00.000Z",
+          "minutes": 25,
+          "location": "supermarket",
+          "stamina": 86,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 422,
+          "calls": 8,
+          "playableMs": 17962
+        },
+        {
+          "turn": 13,
+          "attempt": 14,
+          "input": "向陈慧慧打听清晨便利店门前是否有可疑人员或货车经过",
+          "options": [
+            "追问清晨送货车辆的具体特征与送货时间",
+            "离开便利店，前往对面商住楼向灯织学姐打听是否有文穗的回复",
+            "离开便利店，前往旧街区排查清晨出没的寸头男人与货车动向",
+            "在便利店买下一瓶热饮稍作休整并观察店外街道雨势"
+          ],
+          "from": "2024-09-09T03:30:00.000Z",
+          "to": "2024-09-09T03:40:00.000Z",
+          "minutes": 10,
+          "location": "supermarket",
+          "stamina": 86,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 293,
+          "calls": 8,
+          "playableMs": 19700
+        },
+        {
+          "turn": 14,
+          "attempt": 15,
+          "input": "追问清晨送货车辆的具体特征与送货时间",
+          "options": [
+            "离开便利店，前往商住楼向灯织学姐询问文穗是否回复消息",
+            "离开便利店，前往旧街区进一步排查清晨出没的寸头男人动向",
+            "冒雨前往文穗的中学，向校方核实文穗今天是否有请假记录",
+            "在便利店买下一罐热饮稍作休整并观察店外雨势"
+          ],
+          "from": "2024-09-09T03:40:00.000Z",
+          "to": "2024-09-09T03:50:00.000Z",
+          "minutes": 10,
+          "location": "supermarket",
+          "stamina": 86,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 267,
+          "calls": 7,
+          "playableMs": 17104
+        },
+        {
+          "turn": 15,
+          "attempt": 16,
+          "input": "离开便利店，前往商住楼向灯织学姐询问文穗是否回复消息",
+          "options": [
+            "向灯织学姐详细询问早晨给文穗发消息的具体内容与时间",
+            "与灯织学姐商量接下来是去学校还是继续排查旧街区",
+            "走到商住楼门口留意街边寸头男人的小货车动向",
+            "当着学姐的面再次拨打文穗的手机尝试联络"
+          ],
+          "from": "2024-09-09T03:50:00.000Z",
+          "to": "2024-09-09T04:10:00.000Z",
+          "minutes": 20,
+          "location": "senpai-building",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 345,
+          "calls": 7,
+          "playableMs": 16633
+        },
+        {
+          "turn": 16,
+          "attempt": 17,
+          "input": "向灯织学姐详细询问早晨给文穗发消息的具体内容与时间",
+          "options": [
+            "采纳学姐的建议，立刻动身前往文穗的中学核查情况",
+            "向灯织学姐询问文穗平时是否向她提及过其他朋友或常去的地方",
+            "告别学姐，折返街面沿旧街区方向继续排查",
+            "提议让学姐用她的手机直接尝试拨打文穗的电话"
+          ],
+          "from": "2024-09-09T04:10:00.000Z",
+          "to": "2024-09-09T04:20:00.000Z",
+          "minutes": 10,
+          "location": "senpai-building",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 197,
+          "calls": 11,
+          "playableMs": 35282
+        },
+        {
+          "turn": 17,
+          "attempt": 18,
+          "input": "采纳学姐的建议，立刻动身前往文穗的中学核查情况",
+          "options": [
+            "向门卫详细询问文穗平日是否有老师或同学代为请假",
+            "向门卫打听文穗平日上下学的固定路线或同行伙伴",
+            "在校门周围及避雨棚查看是否有遗落物品或异常痕迹",
+            "离开学校大门，沿文穗可能途经的旧街区方向继续排查"
+          ],
+          "from": "2024-09-09T04:20:00.000Z",
+          "to": "2024-09-09T04:50:00.000Z",
+          "minutes": 30,
+          "location": "school",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 296,
+          "calls": 10,
+          "playableMs": 33070
+        },
+        {
+          "turn": 18,
+          "attempt": 20,
+          "input": "向门卫详细询问文穗平日是否有老师或同学代为请假",
+          "options": [
+            "向门卫打听文穗班主任或任课老师的常用联系渠道",
+            "在校门周围避雨棚及公告栏附近仔细查看有无文穗留下的痕迹",
+            "离开学校大门，折返街面沿文穗平日上学路线排查",
+            "在传达室雨棚下避雨，再次尝试用手机联系文穗"
+          ],
+          "from": "2024-09-09T04:50:00.000Z",
+          "to": "2024-09-09T05:05:00.000Z",
+          "minutes": 15,
+          "location": "school",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 263,
+          "calls": 5,
+          "playableMs": 10079
+        },
+        {
+          "turn": 19,
+          "attempt": 21,
+          "input": "向门卫打听文穗班主任或任课老师的常用联系渠道",
+          "options": [
+            "查看校门旁公告栏上的公开联系方式与作息表",
+            "离开学校大门，沿文穗清晨可能途经的街区折返寻访",
+            "在校门雨棚下再次拨打文穗手机尝试联络",
+            "前往社区便利店向店员打听早晨是否见过文穗"
+          ],
+          "from": "2024-09-09T05:05:00.000Z",
+          "to": "2024-09-09T05:15:00.000Z",
+          "minutes": 10,
+          "location": "school",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 237,
+          "calls": 7,
+          "playableMs": 23614
+        },
+        {
+          "turn": 20,
+          "attempt": 22,
+          "input": "查看校门旁公告栏上的公开联系方式与作息表",
+          "options": [
+            "尝试用手机拨打公告栏上抄录的教务处公开座机",
+            "离开学校大门，沿文穗清晨可能途经的街区折返寻访",
+            "前往文穗上学路旁的社区便利店向店员打听早晨动向",
+            "在校门雨棚下再次拨打文穗手机确认是否开机"
+          ],
+          "from": "2024-09-09T05:15:00.000Z",
+          "to": "2024-09-09T05:30:00.000Z",
+          "minutes": 15,
+          "location": "school",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 268,
+          "calls": 7,
+          "playableMs": 20472
+        },
+        {
+          "turn": 21,
+          "attempt": 23,
+          "input": "尝试用手机拨打公告栏上抄录的教务处公开座机",
+          "options": [
+            "离开学校大门，沿文穗清晨可能途经的街区折返寻访",
+            "前往文穗上学路旁的社区便利店向店员陈慧慧打听",
+            "在校门雨棚下再次拨打文穗手机确认是否开机",
+            "仔细观察校门外及雨棚周边的地面与避雨死角"
+          ],
+          "from": "2024-09-09T05:30:00.000Z",
+          "to": "2024-09-09T05:45:00.000Z",
+          "minutes": 15,
+          "location": "school",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 271,
+          "calls": 8,
+          "playableMs": 19863
+        },
+        {
+          "turn": 22,
+          "attempt": 24,
+          "input": "离开学校大门，沿文穗清晨可能途经的街区折返寻访",
+          "options": [
+            "前往文穗上学路旁的社区便利店向店员陈慧慧打听",
+            "仔细排查附近公交站牌与沿途避雨死角是否有目击痕迹",
+            "折返灯织学姐所在的商住楼核实她是否收到文穗回复",
+            "在沿途遮蔽处再次拨打文穗手机确认通信状态"
+          ],
+          "from": "2024-09-09T05:45:00.000Z",
+          "to": "2024-09-09T06:10:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 317,
+          "calls": 10,
+          "playableMs": 38061
+        },
+        {
+          "turn": 23,
+          "attempt": 25,
+          "input": "前往文穗上学路旁的社区便利店向店员陈慧慧打听",
+          "options": [
+            "询问陈慧慧早晨店外是否有其他可疑的人员或车辆经过",
+            "在便利店货架旁稍作停留，整理目前掌握的线索",
+            "离开便利店前往灯织学姐所在的商住楼核实情况",
+            "折返旧街区向周大爷所在旧楼周围继续打听"
+          ],
+          "from": "2024-09-09T06:10:00.000Z",
+          "to": "2024-09-09T06:30:00.000Z",
+          "minutes": 20,
+          "location": "supermarket",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 377,
+          "calls": 8,
+          "playableMs": 22560
+        },
+        {
+          "turn": 24,
+          "attempt": 26,
+          "input": "询问陈慧慧早晨店外是否有其他可疑的人员或车辆经过",
+          "options": [
+            "向陈慧慧询问文穗近期是否提到过特别的安排或常买的东西",
+            "离开便利店前往对面商住楼向灯织学姐核实是否有文穗的新消息",
+            "前往旧街区周大爷所住的楼房周围打听邻里早晨的动静",
+            "在便利店门口屋檐下再次查看手机通信与天气预警状态"
+          ],
+          "from": "2024-09-09T06:30:00.000Z",
+          "to": "2024-09-09T06:45:00.000Z",
+          "minutes": 15,
+          "location": "supermarket",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 301,
+          "calls": 7,
+          "playableMs": 20997
+        },
+        {
+          "turn": 25,
+          "attempt": 27,
+          "input": "向陈慧慧询问文穗近期是否提到过特别的安排或常买的东西",
+          "options": [
+            "离开便利店前往灯织学姐所在的商住楼打听",
+            "折返旧街区向周大爷所在旧楼周围继续寻访",
+            "在便利店屋檐下再次确认手机通信与天气预警",
+            "在便利店货架旁快速扫视是否有其他忽略的信息"
+          ],
+          "from": "2024-09-09T06:45:00.000Z",
+          "to": "2024-09-09T06:55:00.000Z",
+          "minutes": 10,
+          "location": "supermarket",
+          "stamina": 80,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 289,
+          "calls": 9,
+          "playableMs": 25878
+        },
+        {
+          "turn": 26,
+          "attempt": 28,
+          "input": "离开便利店前往灯织学姐所在的商住楼打听",
+          "options": [
+            "向灯织学姐详细询问文穗近期是否提到过其他常去地点或联系人",
+            "与学姐商讨接下来重点排查的区域或是否需要联系更多熟人",
+            "告别学姐，重新前往旧街区周大爷的楼房附近深入排查",
+            "在楼道内再次检查手机通信记录与暴雨预警最新动态"
+          ],
+          "from": "2024-09-09T06:55:00.000Z",
+          "to": "2024-09-09T07:15:00.000Z",
+          "minutes": 20,
+          "location": "senpai-building",
+          "stamina": 74,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 313,
+          "calls": 7,
+          "playableMs": 19709
+        },
+        {
+          "turn": 27,
+          "attempt": 29,
+          "input": "向灯织学姐详细询问文穗近期是否提到过其他常去地点或联系人",
+          "options": [
+            "与灯织学姐商讨是否需要重点排查旧街区或沿途路线",
+            "询问灯织学姐今天是否有其他关于文穗的补充记忆",
+            "告别灯织学姐，冒雨前往旧街区周大爷的旧楼继续寻访",
+            "在商住楼内再次核对手机通讯记录与天气预警动态"
+          ],
+          "from": "2024-09-09T07:15:00.000Z",
+          "to": "2024-09-09T07:30:00.000Z",
+          "minutes": 15,
+          "location": "senpai-building",
+          "stamina": 74,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 265,
+          "calls": 7,
+          "playableMs": 16763
+        },
+        {
+          "turn": 28,
+          "attempt": 30,
+          "input": "与灯织学姐商讨是否需要重点排查旧街区或沿途路线",
+          "options": [
+            "向灯织学姐询问旧街区具体哪些路段积水最严重、需要特别避开",
+            "与学姐约定若在旧街区有所发现后的联络与汇合方式",
+            "告别灯织学姐，顶着风雨立即前往旧街区方向展开实地搜寻",
+            "在商住楼内稍作整顿，再次尝试拨打文穗电话并检查手机电量"
+          ],
+          "from": "2024-09-09T07:30:00.000Z",
+          "to": "2024-09-09T07:45:00.000Z",
+          "minutes": 15,
+          "location": "senpai-building",
+          "stamina": 74,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 258,
+          "calls": 7,
+          "playableMs": 20912
+        },
+        {
+          "turn": 29,
+          "attempt": 31,
+          "input": "向灯织学姐询问旧街区具体哪些路段积水最严重、需要特别避开",
+          "options": [
+            "告别灯织学姐，带齐雨具即刻前往旧街区按规划路线展开搜寻",
+            "与学姐进一步核对旧街区周大爷住处附近的几个关键排查点",
+            "与灯织学姐约定若在旧街区发现异常情况时的即时联络与会合方式",
+            "在商住楼门厅避雨处最后检查一次手机信号与文穗的未读消息状态"
+          ],
+          "from": "2024-09-09T07:45:00.000Z",
+          "to": "2024-09-09T07:55:00.000Z",
+          "minutes": 10,
+          "location": "senpai-building",
+          "stamina": 74,
+          "sanity": 70,
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 268,
+          "calls": 8,
+          "playableMs": 19782
+        },
+        {
+          "turn": 30,
+          "attempt": 32,
+          "input": "告别灯织学姐，带齐雨具即刻前往旧街区按规划路线展开搜寻",
+          "options": [
+            "向周大爷打听今天白天是否看到文穗路过旧楼附近",
+            "在旧楼门廊稍作避雨并再次尝试拨打文穗手机",
+            "沿主路继续往旧街区更深处的商铺与避雨屋檐排查",
+            "小心靠近居民楼后侧排污渠与低洼泥泞边缘察看"
+          ],
+          "from": "2024-09-09T07:55:00.000Z",
+          "to": "2024-09-09T08:20:00.000Z",
+          "minutes": 25,
+          "location": "old-man-building",
+          "stamina": 74,
+          "sanity": 70,
+          "deathNews": "pending",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 303,
+          "calls": 8,
+          "playableMs": 33074
+        },
+        {
+          "turn": 31,
+          "attempt": 33,
+          "input": "向周大爷打听今天白天是否看到文穗路过旧楼附近",
+          "options": [
+            "追问电话中警方的通知细节并确认具体前往地点",
+            "顾不上向周大爷解释，立刻动身赶往警方通知处",
+            "声音发颤地向身旁的周大爷说出警方的死讯通报",
+            "颤抖着拨通灯织学姐的电话告知这突如其来的噩耗"
+          ],
+          "from": "2024-09-09T08:20:00.000Z",
+          "to": "2024-09-09T08:30:00.000Z",
+          "minutes": 10,
+          "location": "old-man-building",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 371,
+          "calls": 7,
+          "playableMs": 18657
+        },
+        {
+          "turn": 32,
+          "attempt": 34,
+          "input": "追问电话中警方的通知细节并确认具体前往地点",
+          "options": [
+            "声音沙哑地向周大爷说明警方通知文穗死亡的噩耗",
+            "顾不上向周大爷解释，立刻撑伞冒雨赶往辖区派出所",
+            "在门廊下颤抖着拨通灯织学姐的电话告知这一变故",
+            "坚信这只是电话弄错了，执拗地要在附近巷道里继续寻找文穗"
+          ],
+          "from": "2024-09-09T08:30:00.000Z",
+          "to": "2024-09-09T08:40:00.000Z",
+          "minutes": 10,
+          "location": "old-man-building",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 303,
+          "calls": 7,
+          "playableMs": 18249
+        },
+        {
+          "turn": 33,
+          "attempt": 35,
+          "input": "声音沙哑地向周大爷说明警方通知文穗死亡的噩耗",
+          "options": [
+            "强撑着向周大爷道谢，立刻撑伞冒雨赶往辖区派出所",
+            "在门廊下拨通灯织学姐的电话告知警方的通报",
+            "向周大爷打听暴雨天去辖区派出所的最快路线",
+            "执拗地认为这一定是弄错了，转身想先跑回公寓确认文穗是否已经回家"
+          ],
+          "from": "2024-09-09T08:40:00.000Z",
+          "to": "2024-09-09T08:45:00.000Z",
+          "minutes": 5,
+          "location": "old-man-building",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 279,
+          "calls": 7,
+          "playableMs": 23224
+        },
+        {
+          "turn": 34,
+          "attempt": 37,
+          "input": "强撑着向周大爷道谢，立刻撑伞冒雨赶往辖区派出所",
+          "options": [
+            "顶着暴雨加快脚步，直奔辖区派出所核对情况",
+            "在路边雨幕中暂时停下，颤抖着拨通灯织学姐的电话告知噩耗",
+            "躲在沿街屋檐下翻看手机，反复核对警方来电与文穗过去的消息",
+            "执拗地坚信这一切只是同名误判，转身折返街巷呼喊寻找文穗"
+          ],
+          "from": "2024-09-09T08:45:00.000Z",
+          "to": "2024-09-09T09:10:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 292,
+          "calls": 5,
+          "playableMs": 8775
+        },
+        {
+          "turn": 35,
+          "attempt": 39,
+          "input": "顶着暴雨加快脚步，直奔辖区派出所核对情况",
+          "options": [
+            "咬牙顶着暴雨冲进派出所大门，向值班民警核实死者身份",
+            "在派出所门口的雨棚下停步，颤抖着拿出手机再次拨打文穗的号码",
+            "靠在派出所外的湿冷墙边平复剧烈呼吸，试图整理混乱的心绪",
+            "执拗地认为眼前闪烁的警灯全是幻觉，转身折返雨幕坚信文穗一定还在等自己做晚饭"
+          ],
+          "from": "2024-09-09T09:10:00.000Z",
+          "to": "2024-09-09T09:35:00.000Z",
+          "minutes": 25,
+          "location": "street",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 283,
+          "calls": 5,
+          "playableMs": 7073
+        },
+        {
+          "turn": 36,
+          "attempt": 40,
+          "input": "咬牙顶着暴雨冲进派出所大门，向值班民警核实死者身份",
+          "options": [
+            "扶着接待台窗口请求确认文穗随身遗留的物品细节",
+            "颤抖着拿出湿透的手机给灯织学姐打电话告知确切死讯",
+            "浑浑噩噩地退到派出所的长椅上坐下，双手抱头陷入麻木",
+            "执拗地坚信这一切都是民警弄错了，大喊着文穗还在等自己吃晚饭并冲出大门跑回家"
+          ],
+          "from": "2024-09-09T09:35:00.000Z",
+          "to": "2024-09-09T09:55:00.000Z",
+          "minutes": 20,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 301,
+          "calls": 7,
+          "playableMs": 21000
+        },
+        {
+          "turn": 37,
+          "attempt": 41,
+          "input": "扶着接待台窗口请求确认文穗随身遗留的物品细节",
+          "options": [
+            "强忍眩晕向民警询问遗物封存与后续认领处理流程",
+            "退到大厅角落拿出手机给灯织学姐拨通电话告知确切死讯",
+            "脱力瘫坐在派出所铁质长椅上双手抱头陷入麻木空白",
+            "坚信这些遗物只是文穗不小心弄丢的、大喊着要回公寓等她做饭并冲向大门"
+          ],
+          "from": "2024-09-09T09:55:00.000Z",
+          "to": "2024-09-09T10:15:00.000Z",
+          "minutes": 20,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 260,
+          "calls": 8,
+          "playableMs": 26111
+        },
+        {
+          "turn": 38,
+          "attempt": 42,
+          "input": "强忍眩晕向民警询问遗物封存与后续认领处理流程",
+          "options": [
+            "脱力退到值班大厅的冰冷长椅上坐下，双手抱头陷入麻木空白",
+            "用颤抖的手拿出手机拨通灯织学姐的电话，告知文穗死讯与警方流程",
+            "失魂落魄地走出派出所大门，站在暴雨滂沱的雨檐下茫然四顾",
+            "执拗地坚信这一切都是民警在骗人，大喊着要回公寓等文穗吃晚饭并冲出大门"
+          ],
+          "from": "2024-09-09T10:15:00.000Z",
+          "to": "2024-09-09T10:30:00.000Z",
+          "minutes": 15,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 267,
+          "calls": 7,
+          "playableMs": 18924
+        },
+        {
+          "turn": 39,
+          "attempt": 43,
+          "input": "脱力退到值班大厅的冰冷长椅上坐下，双手抱头陷入麻木空白",
+          "options": [
+            "用颤抖的手拿出手机拨通灯织学姐的电话，向她告知文穗的确切死讯",
+            "强撑着站起身离开派出所值班大厅，在暴雨中的街道雨檐下茫然独行",
+            "闭上双眼继续瘫坐在冰冷长椅上，任由麻木吞没思维",
+            "执拗地坚信这只是一场噩梦，冲出大门冒雨跑回公寓确认文穗正在做饭"
+          ],
+          "from": "2024-09-09T10:30:00.000Z",
+          "to": "2024-09-09T10:45:00.000Z",
+          "minutes": 15,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 258,
+          "calls": 7,
+          "playableMs": 18902
+        },
+        {
+          "turn": 40,
+          "attempt": 44,
+          "input": "用颤抖的手拿出手机拨通灯织学姐的电话，向她告知文穗的确切死讯",
+          "options": [
+            "听从灯织学姐的叮嘱，继续坐在长椅上等待",
+            "强撑着站起身离开大厅，步入雨夜的街道",
+            "再次走向值班台，向民警询问后续具体流程",
+            "执拗地坚信文穗只是还没回家，冲出大门跑回公寓"
+          ],
+          "from": "2024-09-09T10:45:00.000Z",
+          "to": "2024-09-09T11:00:00.000Z",
+          "minutes": 15,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 400,
+          "calls": 7,
+          "playableMs": 16976
+        },
+        {
+          "turn": 41,
+          "attempt": 45,
+          "input": "听从灯织学姐的叮嘱，继续坐在长椅上等待",
+          "options": [
+            "继续低头呆坐在长椅上，任凭时间流逝与麻木蔓延",
+            "强撑着挪到值班台前，向民警低声询问后续遗物交接与身份核对流程",
+            "拿出手机翻看文穗以往发来的日常消息与备忘，试图抓住一丝残存的真实感",
+            "被执念驱使坚信这只是一场恶劣的误会，认定文穗此刻正害怕地在家里等候，不顾一切冲入暴雨跑回公寓"
+          ],
+          "from": "2024-09-09T11:00:00.000Z",
+          "to": "2024-09-09T11:30:00.000Z",
+          "minutes": 30,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 250,
+          "calls": 8,
+          "playableMs": 20184
+        },
+        {
+          "turn": 42,
+          "attempt": 46,
+          "input": "继续低头呆坐在长椅上，任凭时间流逝与麻木蔓延",
+          "options": [
+            "闭上双眼继续蜷缩在长椅上，任由意识在死寂中下沉",
+            "拿出手机凝视漆黑的屏幕，等待不会再亮起的日常消息",
+            "抬头望向大门外漆黑的滂沱暴雨，试图辨认夜色中的街景",
+            "被混乱的执念驱使猛然站起，试图冲进雨夜中盲目寻找"
+          ],
+          "from": "2024-09-09T11:30:00.000Z",
+          "to": "2024-09-09T12:00:00.000Z",
+          "minutes": 30,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 234,
+          "calls": 7,
+          "playableMs": 27829
+        },
+        {
+          "turn": 43,
+          "attempt": 47,
+          "input": "闭上双眼继续蜷缩在长椅上，任由意识在死寂中下沉",
+          "options": [
+            "继续闭着双眼一动不动，任由冰冷的麻木将知觉彻底淹没",
+            "勉强抬起沉重的眼皮看向墙上的挂钟，辨认此时深夜的具体时间",
+            "下意识摸向口袋里的钥匙与手机，试图寻找一丝残存的触感",
+            "幻听见门外雨声中传来熟悉的脚步，猛然惊起想要冲向大门"
+          ],
+          "from": "2024-09-09T12:00:00.000Z",
+          "to": "2024-09-09T12:30:00.000Z",
+          "minutes": 30,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 253,
+          "calls": 7,
+          "playableMs": 17634
+        },
+        {
+          "turn": 44,
+          "attempt": 48,
+          "input": "继续闭着双眼一动不动，任由冰冷的麻木将知觉彻底淹没",
+          "options": [
+            "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+            "勉强睁开干涩沉重的眼皮，抬头辨认大厅挂钟上的深夜时刻",
+            "把僵硬冰冷的手指伸进口袋，触摸文穗留下的便签与钥匙以确认残留触感",
+            "在耳畔雨声中产生熟悉呼唤的幻听，失控般想要从长椅上惊起冲向雨夜"
+          ],
+          "from": "2024-09-09T12:30:00.000Z",
+          "to": "2024-09-09T13:00:00.000Z",
+          "minutes": 30,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 241,
+          "calls": 7,
+          "playableMs": 21372
+        },
+        {
+          "turn": 45,
+          "attempt": 49,
+          "input": "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+          "options": [
+            "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+            "勉强睁开干涩沉重的眼皮，抬头确认大厅挂钟上的深夜时刻",
+            "把僵硬冰冷的手指伸进口袋，触摸文穗留下的便签与钥匙以确认残留触感",
+            "在耳畔雨声中产生熟悉呼唤的幻听，失控般想要从长椅上惊起冲向雨夜"
+          ],
+          "from": "2024-09-09T13:00:00.000Z",
+          "to": "2024-09-09T13:35:00.000Z",
+          "minutes": 35,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 264,
+          "calls": 7,
+          "playableMs": 18491
+        },
+        {
+          "turn": 46,
+          "attempt": 50,
+          "input": "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+          "options": [
+            "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+            "勉强睁开干涩沉重的眼皮，抬头确认大厅挂钟上的深夜时刻",
+            "把僵硬冰冷的手指伸进口袋，触摸文穗留下的便签与钥匙以确认残留触感",
+            "在耳畔雨声中产生熟悉呼唤的幻听，失控般想要从长椅上惊起冲向雨夜"
+          ],
+          "from": "2024-09-09T13:35:00.000Z",
+          "to": "2024-09-09T14:00:00.000Z",
+          "minutes": 25,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 229,
+          "calls": 7,
+          "playableMs": 21259
+        },
+        {
+          "turn": 47,
+          "attempt": 51,
+          "input": "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+          "options": [
+            "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+            "勉强睁开干涩沉重的眼皮，抬头确认大厅挂钟上的深夜时刻",
+            "把僵硬冰冷的手指伸进口袋，触摸文穗留下的便签与钥匙以确认残留触感",
+            "在耳畔雨声中产生熟悉呼唤的幻听，失控般想要从长椅上惊起冲向雨夜"
+          ],
+          "from": "2024-09-09T14:00:00.000Z",
+          "to": "2024-09-09T14:35:00.000Z",
+          "minutes": 35,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 280,
+          "calls": 7,
+          "playableMs": 21014
+        },
+        {
+          "turn": 48,
+          "attempt": 53,
+          "input": "继续闭紧双眼蜷缩在冰冷的长椅深处，任由意识在麻木中等待时间流逝",
+          "options": [
+            "继续保持闭目蜷缩，任由意识在冰冷与虚空中沉沦",
+            "勉强睁开干涩双眼，抬头确认大厅墙上流逝的深夜时刻",
+            "在口袋深处摸索文穗留下的便签与钥匙，确认最后残留的触感",
+            "在轰鸣雨声中误以为听见文穗呼喊，失控想要冲进无边暴雨之中"
+          ],
+          "from": "2024-09-09T14:35:00.000Z",
+          "to": "2024-09-09T15:00:00.000Z",
+          "minutes": 25,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 242,
+          "calls": 7,
+          "playableMs": 18924
+        },
+        {
+          "turn": 49,
+          "attempt": 54,
+          "input": "继续保持闭目蜷缩，任由意识在冰冷与虚空中沉沦",
+          "options": [
+            "继续蜷缩在长椅深处等待意识被冰冷彻底吞噬",
+            "勉强睁开干涩的眼皮确认墙上挂钟逼近午夜的时间",
+            "将手伸进口袋深处触摸文穗留下的钥匙与便签折痕",
+            "在狂暴雨声中产生文穗在门外敲门的幻听并失控想要冲向雨夜"
+          ],
+          "from": "2024-09-09T15:00:00.000Z",
+          "to": "2024-09-09T15:40:00.000Z",
+          "minutes": 40,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 278,
+          "calls": 7,
+          "playableMs": 20048
+        },
+        {
+          "turn": 50,
+          "attempt": 56,
+          "input": "继续蜷缩在长椅深处等待意识被冰冷彻底吞噬",
+          "options": [
+            "放弃所有挣扎，闭上双眼任由意识被冰冷与虚无彻底吞没",
+            "勉强睁开干涩的双眼，凝视走廊挂钟滑向午夜零点的指针",
+            "用僵硬的手指摸索口袋内文穗留下的钥匙与便签边缘",
+            "在雷雨轰鸣中误以为听见门外文穗的呼唤，失控试图冲入深夜暴雨"
+          ],
+          "from": "2024-09-09T15:40:00.000Z",
+          "to": "2024-09-09T16:00:00.000Z",
+          "minutes": 20,
+          "location": "police_station",
+          "stamina": 74,
+          "sanity": 58,
+          "deathNews": "delivered",
+          "knowledge": [
+            "know:home",
+            "know:school",
+            "know:supermarket",
+            "meet:touko",
+            "visit:school",
+            "meet:chen-huihui",
+            "visit:senpai-building",
+            "insight:touko-protective",
+            "observe:shaved-man",
+            "visit:old-man-building",
+            "insight:chen-huihui-social-strain",
+            "hear:accident-site"
+          ],
+          "facts": {
+            "shared-apron-missing": "atmosphere"
+          },
+          "chars": 267,
+          "calls": 6,
+          "playableMs": 20212,
+          "reset": "day-end"
+        }
+      ],
+      "stageCounts": {
+        "preparation": 50,
+        "writer": 47,
+        "protocol": 59,
+        "style-review": 59,
+        "fact-review": 59,
+        "state": 50,
+        "persistence": 50,
+        "commit": 50,
+        "repair": 9
+      },
+      "resetScene": [
+        {
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "你确实尝试了“继续蜷缩在长椅深处等待意识被冰冷彻底吞噬”。这次行动的后果留在了这一天里，却没能阻止时间走到尽头。",
+          "id": "94cbcab6-8eb6-4740-acf6-3d08982baed3:line:0"
+        },
+        {
+          "background": "black",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "午夜零点。雨没有停，但这一天到头了。",
+          "effect": "loop-transition",
+          "id": "94cbcab6-8eb6-4740-acf6-3d08982baed3:line:1"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "9月9日，早上8:00。闹钟响了。暴雨的第五天——和之前的每一次一模一样。",
+          "id": "94cbcab6-8eb6-4740-acf6-3d08982baed3:line:2"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "被子的另一半叠得整整齐齐。桌上会有还温着的早餐，和一张纸条。你已经知道上面写着什么。",
+          "id": "94cbcab6-8eb6-4740-acf6-3d08982baed3:line:3"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "这是第 2 次。你记得的一切都还在。但这个世界不记得。",
+          "id": "94cbcab6-8eb6-4740-acf6-3d08982baed3:line:4"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "重置前最后发生的事仍留在你的记忆里：蜷缩在长椅上沉溺于相依为命的日常记忆，挂钟咬合声中时间逼近午夜",
+          "id": "94cbcab6-8eb6-4740-acf6-3d08982baed3:line:5"
+        },
+        {
+          "background": "bedroom1-day",
+          "bgm": "silence",
+          "speaker": "旁白",
+          "emotion": "calm",
+          "text": "昨天约好的人、等候的位置和正在执行的计划都已被重置作废。你必须依据保留下来的记忆，重新决定今天怎么做。",
+          "id": "94cbcab6-8eb6-4740-acf6-3d08982baed3:line:6"
+        }
+      ]
+    }
+  ]
+}

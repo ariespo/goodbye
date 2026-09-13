@@ -98,8 +98,10 @@ const interactions = [
 
 describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
   it(`${label}: collects continuous real-model evidence (passing does not imply day completion)`, async () => {
-    const key = process.env.DEEPSEEK_API_KEY;
-    if (!key) throw new Error('DEEPSEEK_API_KEY is required');
+    const key = process.env.DAY_API_KEY ?? process.env.DEEPSEEK_API_KEY;
+    if (!key) throw new Error('DAY_API_KEY or DEEPSEEK_API_KEY is required');
+    const baseUrl = process.env.DAY_API_BASE_URL ?? 'https://api.deepseek.com/v1';
+    const model = process.env.DAY_MODEL ?? 'deepseek-v4-flash';
     vi.stubGlobal('AbortController', class { constructor() { return transferableAbortController(); } });
     let calls: Record<string, unknown>[] = [];
     let pending = 0;
@@ -131,7 +133,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
       invalidatePreplans();
     };
     const preset = { ...createDefaultPreset(), id: 'day-eval', createdAt: 0, updatedAt: 0 } as ChatPreset;
-    const settings = { api: { baseUrl: 'https://api.deepseek.com/v1', apiKey: key, model: 'deepseek-v4-flash' },
+    const settings = { api: { baseUrl, apiKey: key, model },
       activePresetId: preset.id, activeLorebookIds: [], userName: '李明', characterName: '文穗',
       playerGender: 'male', playerIdentityConfirmed: true, agentNarrativeMode: mode,
       formatPromptTemplate: DEFAULT_FORMAT_PROMPT } as AppSettings;
@@ -155,7 +157,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
     let successful = rows.filter(row => row.success).length;
     const flush = () => {
       const state = useGameStore.getState();
-      writeFileSync(file, JSON.stringify({ profile, mode, diagnosticStylePrompt: diagnostic, startState, finalState: snapshot(), stopReason,
+      writeFileSync(file, JSON.stringify({ profile, mode, baseUrl, model, diagnosticStylePrompt: diagnostic, startState, finalState: snapshot(), stopReason,
         successful, rows }, null, 2).replaceAll(key,'[redacted]'));
       writeFileSync(checkpoint, JSON.stringify({ game: state.game,
         tavern: { chats: state.tavern.chats, activeChatId: state.tavern.activeChatId, variables: state.tavern.variables },
@@ -224,6 +226,11 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
           playableMs:row.metrics?.playableMs,calls:calls.length,error:row.error,reset:row.resetReason}));
         flush();
         if (calls.some(call => call.status === 402)) { stopReason='provider-insufficient-balance'; flush(); break; }
+        if (!success && calls.some(call => typeof call.content === 'string'
+          && call.content.trim().startsWith('### **Proxy error (HTTP ')
+          && call.content.trim().endsWith('<!-- oai-proxy-error -->'))) {
+          stopReason='provider-proxy-error'; flush(); break;
+        }
         if (Number(snapshot().cycleCount)>1) break;
         if (live.game.endingPanel.pendingEndingId) { stopReason='ending-before-day-reset'; break; }
         if (consecutiveFailures>=6) { stopReason='blocked-six-attempts'; break; }

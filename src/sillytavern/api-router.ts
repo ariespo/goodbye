@@ -33,6 +33,18 @@ export function classifyHttpStatus(status: number): ApiErrorKind {
   return 'http4xx';
 }
 
+const PROXY_ERROR_PREFIX = '### **Proxy error (HTTP ';
+
+/** Some gateways report an upstream HTTP error inside a successful completion.
+ * Require the complete gateway wrapper, not a mention of an HTTP status in prose.
+ */
+function assertNoProxyErrorEnvelope(content: string): void {
+  const match = content.trim().match(/^### \*\*Proxy error \(HTTP ([45]\d{2})(?: [^\r\n()]*)?\)\*\*\r?\n[\s\S]*\n<!-- oai-proxy-error -->$/);
+  if (!match) return;
+  const status = Number(match[1]);
+  throw new ApiCallError(`网关返回代理错误（HTTP ${status}）`, classifyHttpStatus(status), status);
+}
+
 export function toApiCallError(cause: unknown): ApiCallError {
   if (cause instanceof ApiCallError) return cause;
   if (cause instanceof ContextBudgetError) return new ApiCallError(cause.message, 'context_budget');
@@ -358,6 +370,14 @@ export async function streamChatCompletion(
         { method: 'POST', body: serializedBody, signal: timeout.signal }
       );
 
+      // Gateways may ignore stream:true when serializing their error response.
+      if (/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (typeof content === 'string') assertNoProxyErrorEnvelope(content);
+        throw new ApiCallError('模型未返回流式正文', 'http4xx');
+      }
+
       const reader = response.body?.getReader();
       if (!reader) {
         throw new ApiCallError('响应无内容流', 'network');
@@ -366,6 +386,33 @@ export async function streamChatCompletion(
       const decoder = new TextDecoder();
       let buffer = '';
       let contentEmitted = false;
+      let pendingPrefix = '';
+      const emit = (token: string) => {
+        contentEmitted = true;
+        onFirstToken();
+        callbacks.onToken(token);
+      };
+      const receiveContent = (token: string) => {
+        if (contentEmitted) {
+          emit(token);
+          return;
+        }
+        pendingPrefix += token;
+        const candidate = pendingPrefix.trimStart();
+        // Hold only a potential gateway envelope. Ordinary prose streams as soon
+        // as its prefix diverges; a wrapped error stays eligible for safe retries.
+        if (PROXY_ERROR_PREFIX.startsWith(candidate) || candidate.startsWith(PROXY_ERROR_PREFIX)) return;
+        emit(pendingPrefix);
+        pendingPrefix = '';
+      };
+      const complete = async () => {
+        assertNoProxyErrorEnvelope(pendingPrefix);
+        if (pendingPrefix) emit(pendingPrefix);
+        if (!contentEmitted) {
+          throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
+        }
+        await callbacks.onComplete();
+      };
 
       try {
         while (true) {
@@ -380,10 +427,7 @@ export async function streamChatCompletion(
           for (const line of lines) {
             if (line.trim() === '') continue;
             if (line.trim() === 'data: [DONE]') {
-              if (!contentEmitted) {
-                throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
-              }
-              await callbacks.onComplete();
+              await complete();
               return;
             }
             if (line.startsWith('data: ')) {
@@ -391,11 +435,7 @@ export async function streamChatCompletion(
                 const data = JSON.parse(line.slice(6));
                 const delta = data.choices?.[0]?.delta;
                 const token = typeof delta?.content === 'string' ? delta.content : '';
-                if (token) {
-                  contentEmitted = true;
-                  onFirstToken();
-                  callbacks.onToken(token);
-                }
+                if (token) receiveContent(token);
                 // reasoning_content is private analysis, never playable prose.
               } catch {
                 // Ignore malformed JSON
@@ -407,10 +447,7 @@ export async function streamChatCompletion(
         reader.releaseLock();
       }
 
-      if (!contentEmitted) {
-        throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
-      }
-      await callbacks.onComplete();
+      await complete();
     } finally {
       timeout.dispose();
     }
@@ -489,6 +526,7 @@ export async function callSecondaryApi(
       const data = await response.json();
       const message = data.choices?.[0]?.message;
       const content = typeof message?.content === 'string' ? message.content : '';
+      assertNoProxyErrorEnvelope(content);
       if (content.trim()) return content;
       throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
     } finally {

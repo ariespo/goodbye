@@ -155,6 +155,84 @@ describe('reasoning_content compatibility', () => {
   });
 });
 
+describe('HTTP 200 gateway error envelopes', () => {
+  const gatewayError = '### **Proxy error (HTTP 503 Service Unavailable)**\nUpstream unavailable.\n```json\n{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}\n```\n<!-- oai-proxy-error -->';
+
+  it('retries a non-stream gateway envelope instead of returning it as model JSON', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(gatewayError))
+      .mockResolvedValueOnce(jsonResponse('{"approved":true}'));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await callSecondaryApi(config, [{ role: 'user', content: 'review' }], null)).toBe('{"approved":true}');
+  });
+
+  it('preserves the wrapped status and retry classification after non-stream retries are exhausted', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => jsonResponse(gatewayError)));
+    await expect(callSecondaryApi(config, [{ role: 'user', content: 'review' }], null))
+      .rejects.toMatchObject({ status: 503, kind: 'http5xx', retryable: true });
+  });
+
+  it('retries fragmented streaming envelopes before exposing any token or reporting completion', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(sseResponse([...gatewayError]))
+      .mockResolvedValueOnce(sseResponse(['真实', '正文']));
+    vi.stubGlobal('fetch', fetchMock);
+    const tokens: string[] = [];
+    const completions: string[] = [];
+    const retries: Array<{ status: number | null; kind: string }> = [];
+    await streamChatCompletion(config, [{ role: 'user', content: 'continue' }], null, {
+      onToken: token => tokens.push(token), onComplete: () => { completions.push(tokens.join('')); }, onError: vi.fn(),
+    }, undefined, { baseDelayMs: 1, onRetry: (_attempt, error) => { retries.push(error); } });
+    expect(tokens.join('')).toBe('真实正文');
+    expect(completions).toEqual(['真实正文']);
+    expect(retries).toMatchObject([{ status: 503, kind: 'http5xx' }]);
+  });
+
+  it('never reports a complete scene for an exhausted streaming gateway failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => sseResponse([gatewayError])));
+    const tokens: string[] = [];
+    let completed = false;
+    await expect(streamChatCompletion(config, [], null, {
+      onToken: token => tokens.push(token), onComplete: () => { completed = true; }, onError: vi.fn(),
+    }, undefined, { retries: 1, baseDelayMs: 1 })).rejects.toMatchObject({ status: 503, kind: 'http5xx' });
+    expect(tokens).toEqual([]);
+    expect(completed).toBe(false);
+  });
+
+  it('classifies a JSON gateway envelope returned to a streaming request instead of calling it empty prose', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ choices: [{ message: { content: gatewayError } }] }), {
+      status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    }));
+    let completed = false;
+    const tokens: string[] = [];
+    await expect(streamChatCompletion(config, [], null, {
+      onToken: token => tokens.push(token), onComplete: () => { completed = true; }, onError: vi.fn(),
+    }, undefined, { retries: 0 })).rejects.toMatchObject({ status: 503, kind: 'http5xx' });
+    expect(tokens).toEqual([]);
+    expect(completed).toBe(false);
+  });
+
+  it('keeps a wrapped 400 non-retryable rather than assuming every gateway envelope is a 503', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse(gatewayError.replace('HTTP 503 Service Unavailable', 'HTTP 400 Bad Request')))
+      .mockResolvedValueOnce(jsonResponse('must not retry')));
+    await expect(callSecondaryApi(config, [], null))
+      .rejects.toMatchObject({ status: 400, kind: 'http4xx', retryable: false });
+  });
+
+  it.each([
+    '对话|旁白|calm|屏幕上写着 HTTP 503 Service Unavailable。',
+    '### **Proxy error (HTTP 503 Service Unavailable)**\n这是角色抄在纸上的标题。',
+    '故事里出现了 <!-- oai-proxy-error --> 这段注释。',
+  ])('preserves ordinary text without a complete gateway envelope: %s', async text => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse(text)).mockResolvedValueOnce(sseResponse([...text])));
+    expect(await callSecondaryApi(config, [], null)).toBe(text);
+    const tokens: string[] = [];
+    await streamChatCompletion(config, [], null, { onToken: token => tokens.push(token), onComplete: vi.fn(), onError: vi.fn() });
+    expect(tokens.join('')).toBe(text);
+  });
+});
+
 describe('classifyHttpStatus / toApiCallError', () => {
   it('分类 HTTP 状态', () => {
     expect(classifyHttpStatus(429)).toBe('rate_limit');

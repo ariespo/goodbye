@@ -6,7 +6,7 @@ const summaries=[];
 for(const name of fs.readdirSync(root).filter(n=>n.endsWith('.json')&&!n.includes('checkpoint'))){
  const d=JSON.parse(fs.readFileSync(`${root}/${name}`));
  const accepted=d.rows.filter(r=>r.success),calls=d.rows.flatMap(r=>r.calls),texts=accepted.flatMap(r=>r.lines.map(l=>l.text||''));
- const s={name,diagnostic:d.diagnosticStylePrompt,stop:d.stopReason,collectionNote:d.collectionNote,attempts:d.rows.length,successful:d.successful,final:d.finalState,calls:calls.length,
+ const s={name,baseUrl:d.baseUrl,model:d.model,diagnostic:d.diagnosticStylePrompt,stop:d.stopReason,collectionNote:d.collectionNote,attempts:d.rows.length,successful:d.successful,final:d.finalState,calls:calls.length,
  foregroundMs:sum(d.rows.map(r=>r.metrics?.totalMs||0)),withBackgroundMs:sum(d.rows.map(r=>r.elapsedIncludingBackgroundMs||0)),
  playableMedianMs:quant(accepted.map(r=>r.metrics?.playableMs).filter(Number.isFinite),.5),playableP90Ms:quant(accepted.map(r=>r.metrics?.playableMs).filter(Number.isFinite),.9),
  acceptedChars:sum(texts.map(t=>t.length)),emptyTurns:accepted.filter(r=>!r.lines.length).map(r=>r.turn),zeroMinuteTurns:accepted.filter(r=>r.before.time===r.after.time).map(r=>r.turn),stateTurns:accepted.filter(r=>r.metrics?.stages?.some(s=>s.name==='state')).map(r=>r.turn),
