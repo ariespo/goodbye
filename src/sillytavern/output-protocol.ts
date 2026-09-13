@@ -32,12 +32,10 @@ export interface OutputRepairResult {
 
 function windowsPathRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
-  const pathPattern = /(?:^|[\s("'【])([A-Za-z]:\\[^\s|"'【】<>，。！？；：]+)/gu;
+  const pathPattern = /[A-Za-z]:\\[^\s|"'【】<>，。！？；：]+/gu;
   for (const match of text.matchAll(pathPattern)) {
-    const value = match[1];
-    if (!value || match.index === undefined) continue;
-    const start = match.index + match[0].length - value.length;
-    ranges.push([start, start + value.length]);
+    if (match.index === undefined) continue;
+    ranges.push([match.index, match.index + match[0].length]);
   }
   return ranges;
 }
