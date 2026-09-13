@@ -228,6 +228,42 @@ describe('validateAssertionAudit', () => {
       fields,
     ).approved).toBe(false);
   });
+
+  it('checks speaker authority for every repeated occurrence of one assertion quote', () => {
+    const fields = {
+      maintext: [
+        '对话|chen-huihui|calm|她买过牛奶。',
+        '对话|old-man|calm|她买过牛奶。',
+      ].join('\n'),
+    };
+    const source: AssertionSource = {
+      id: 'background:purchase', kind: 'background', text: '她买过牛奶。', speakerIds: ['chen-huihui'],
+    };
+
+    expect(validateAssertionAudit(
+      supportedAudit('maintext', '她买过牛奶。', source.id, '她买过牛奶。'),
+      [source],
+      fields,
+    ).approved).toBe(false);
+  });
+
+  it.each([
+    ['the same allowed speaker repeats it', ['chen-huihui', 'chen-huihui'], ['chen-huihui']],
+    ['both repeated speakers are allowed', ['chen-huihui', 'old-man'], ['chen-huihui', 'old-man']],
+  ])('allows repeated quote occurrences when %s', (_name, speakers, allowedSpeakers) => {
+    const fields = {
+      maintext: speakers.map(speaker => `对话|${speaker}|calm|她买过牛奶。`).join('\n'),
+    };
+    const source: AssertionSource = {
+      id: 'background:purchase', kind: 'background', text: '她买过牛奶。', speakerIds: allowedSpeakers,
+    };
+
+    expect(validateAssertionAudit(
+      supportedAudit('maintext', '她买过牛奶。', source.id, '她买过牛奶。'),
+      [source],
+      fields,
+    ).approved).toBe(true);
+  });
 });
 
 describe('extractNarrativeFields', () => {

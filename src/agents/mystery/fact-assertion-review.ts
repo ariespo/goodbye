@@ -173,13 +173,24 @@ export function buildAssertionSources(
   return sources;
 }
 
-function dialogueSpeaker(fieldText: string, quote: string): string | null {
-  const lines = fieldText.split(/\r?\n/).filter(line => line.includes(quote) || quote.includes(line));
-  for (const line of lines) {
-    const match = line.match(/^(?:对话|dialog|dialogue)[|｜]([^|｜]+)[|｜]/i);
-    if (match) return match[1]?.trim() ?? null;
+function dialogueSpeakersForQuote(fieldText: string, quote: string): string[] {
+  const quoteRanges: Array<{ start: number; end: number }> = [];
+  let offset = 0;
+  while (offset <= fieldText.length - quote.length) {
+    const index = fieldText.indexOf(quote, offset);
+    if (index < 0) break;
+    quoteRanges.push({ start: index, end: index + quote.length });
+    offset = index + Math.max(1, quote.length);
   }
-  return null;
+  const speakers: string[] = [];
+  for (const lineMatch of fieldText.matchAll(/[^\r\n]+/g)) {
+    const start = lineMatch.index ?? 0;
+    const end = start + lineMatch[0].length;
+    if (!quoteRanges.some(range => range.start < end && range.end > start)) continue;
+    const match = lineMatch[0].trim().match(/^(?:对话|dialog|dialogue)[|｜]([^|｜]+)[|｜]/i);
+    if (match?.[1]) speakers.push(match[1].trim());
+  }
+  return speakers;
 }
 
 function isNarrator(speaker: string): boolean {
@@ -329,9 +340,9 @@ export function validateAssertionAudit(
         badCitation = true;
         continue;
       }
-      const speaker = assertion.field === 'maintext' ? dialogueSpeaker(fieldText, quote) : null;
-      if (speaker && !isNarrator(speaker)
-        && Array.isArray(source.speakerIds) && !source.speakerIds.includes(speaker)) {
+      const speakers = assertion.field === 'maintext' ? dialogueSpeakersForQuote(fieldText, quote) : [];
+      if (speakers.some(speaker => !isNarrator(speaker)
+        && Array.isArray(source.speakerIds) && !source.speakerIds.includes(speaker))) {
         badCitation = true;
       }
     }
