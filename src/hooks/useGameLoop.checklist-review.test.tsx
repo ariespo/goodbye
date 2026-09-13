@@ -127,6 +127,23 @@ describe('asynchronous checklist authority', () => {
     unmount();
   });
 
+  it('discards a completed review after cancellation even when chat and scene have not changed', async () => {
+    let finishReview!: (review: FactReview) => void;
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockImplementation(() => new Promise(resolve => { finishReview = resolve; }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('坐下休息'); });
+    await waitFor(() => expect(reviewNarrativeAgainstWriterPacket).toHaveBeenCalledTimes(1));
+    const writesBeforeCancel = vi.mocked(saveChat).mock.calls.length;
+    const controller = useGameStore.getState().api.abortController!;
+    controller.abort();
+    await act(async () => { finishReview(approved); });
+    expect(JSON.stringify(useGameStore.getState().game.currentScene)).not.toContain(injectedDetail);
+    expect(JSON.stringify(useGameStore.getState().tavern.chats)).not.toContain(injectedDetail);
+    expect(saveChat).toHaveBeenCalledTimes(writesBeforeCancel);
+    expect(vi.mocked(reviewNarrativeAgainstWriterPacket).mock.calls[0][0].abortSignal).toBe(controller.signal);
+    unmount();
+  });
+
   it('does not replace chat state when a delayed checklist save finishes after switching chats', async () => {
     let finishSave!: () => void;
     vi.mocked(saveChat).mockImplementation(async chat => {

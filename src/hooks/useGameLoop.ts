@@ -567,16 +567,19 @@ export function useGameLoop() {
             preset: activePreset,
           }).then(async checklist => {
             const tags = serializeChecklistToTags(checklist, existing);
-            if (!tags.trim() || checklistTokenRef.current !== token) return;
+            if (!tags.trim() || checklistTokenRef.current !== token || abortController.signal.aborted
+              || useGameStore.getState().api.abortController !== abortController) return;
             const checklistReview = await reviewNarrativeAgainstWriterPacket({
               api: resolveAnalysisApi(settings),
               preset: activePreset,
               packet: preparedTurn.writerPacket,
               narrative: tags,
+              abortSignal: abortController.signal,
             });
             if (!checklistReview.approved) return;
             // 竞态防护：下一回合/重roll/切会话已发生则丢弃
-            if (checklistTokenRef.current !== token) return;
+            if (checklistTokenRef.current !== token || abortController.signal.aborted
+              || useGameStore.getState().api.abortController !== abortController) return;
             const state = useGameStore.getState();
             const chat = state.tavern.chats.find(c => c.id === state.tavern.activeChatId);
             const lastAssistant = chat ? [...chat.messages].reverse().find(m => m.role === 'assistant') : null;
@@ -600,7 +603,8 @@ export function useGameLoop() {
                   const latestChat = latest.tavern.chats.find(item => item.id === latest.tavern.activeChatId);
                   const latestAssistant = latestChat
                     ? [...latestChat.messages].reverse().find(message => message.role === 'assistant') : null;
-                  if (checklistTokenRef.current !== token || latestChat?.id !== chat.id || latestAssistant?.id !== token) {
+                  if (abortController.signal.aborted || latest.api.abortController !== abortController
+                    || checklistTokenRef.current !== token || latestChat?.id !== chat.id || latestAssistant?.id !== token) {
                     throw new DOMException('场景清单已失效', 'AbortError');
                   }
                 },
