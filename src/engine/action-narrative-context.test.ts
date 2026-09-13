@@ -238,6 +238,34 @@ describe('executed action narrative context', () => {
     });
     expect(executed?.sceneContract.destinationBackground).toBe('supermarket-day');
     expect(executed?.sceneContract.requiredEnRouteNpcIds).toEqual(['detective-a']);
+    expect(executed?.directive).toContain('street 场景遭遇');
+    expect(executed?.directive).toContain('detective-a');
+  });
+
+  it('does not replay a prior travel encounter when destination work resumes', () => {
+    const proposed = resolveActionNarrativeContext('前往便利店询问店员', morning, 0, {
+      currentLocationId: 'home', enRouteEncounterRoll: 0.1,
+    });
+    const first = resolveAction({
+      id: 'resume-at-store', cycleCount: 1, startTime: '2024-09-09T08:00:00',
+      currentLocationId: 'home', stamina: 100, sanity: 70,
+      steps: [{ id: 'ask', kind: 'inquiry', scope: 'normal', locationId: 'supermarket', completionSourceIds: [] }],
+      explicitBudgetMinutes: 20,
+    });
+    const resumed = resolveAction({
+      id: 'resume-at-store', cycleCount: 1, startTime: first.endTime,
+      currentLocationId: first.endLocationId,
+      stamina: first.resources.after.stamina,
+      sanity: first.resources.after.sanity,
+      steps: first.continuation!.steps,
+      continuation: first.continuation,
+    });
+
+    const executed = resolveExecutedActionNarrativeContext(proposed, resumed);
+    expect(executed?.enRouteNpcIds).toEqual([]);
+    expect(executed?.sceneContract.requiredEnRouteNpcIds).toEqual([]);
+    expect(executed?.directive).not.toContain('street 场景遭遇');
+    expect(executed?.directive).toContain('本次途中没有固定人物遭遇');
   });
 
   it('uses the executed end time when selecting the destination background', () => {

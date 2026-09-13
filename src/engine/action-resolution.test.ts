@@ -193,6 +193,35 @@ describe('resolveAction', () => {
     expect(result.continuation).toBeUndefined();
   });
 
+  it('keeps a budget-limited continuation when midnight is only a future boundary', () => {
+    const first = resolveAction({
+      ...deepInput,
+      startTime: '2024-09-09T17:00:00',
+      explicitBudgetMinutes: 5,
+      nextBoundary: { id: 'midnight', at: '2024-09-10T00:00:00' },
+    });
+
+    expect(first.endTime).toBe('2024-09-09T17:05:00');
+    expect(first.interruption?.id).toBe('explicit-budget');
+    expect(first.continuation?.completedMinutesByStep.work).toBe(5);
+    expect(first.resources.after.stamina).toBe(99);
+
+    const resumed = resolveAction({
+      ...deepInput,
+      startTime: first.endTime,
+      stamina: first.resources.after.stamina,
+      sanity: first.resources.after.sanity,
+      steps: first.continuation!.steps,
+      continuation: first.continuation,
+      nextBoundary: { id: 'midnight', at: '2024-09-10T00:00:00' },
+    });
+
+    expect(resumed.executedMinutes).toBe(100);
+    expect(resumed.resources.after.stamina).toBe(86);
+    expect(resumed.completedSourceIds).toEqual(['fact:school-result']);
+    expect(resumed.continuation).toBeUndefined();
+  });
+
   it('rejects stale or altered continuations', () => {
     const first = resolveAction({ ...deepInput, explicitBudgetMinutes: 30 });
     const continuation = first.continuation!;

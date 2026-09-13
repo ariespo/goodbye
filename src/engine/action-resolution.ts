@@ -544,7 +544,8 @@ export function resolveAction(input: ResolveActionInput): ResolvedActionOutcome 
     previousResolutionId: input.continuation?.previousResolutionId ?? null,
     appliedEventEffectIds: [...appliedEffects].sort(),
   }))}`;
-  const continuation = firstIncomplete && input.nextBoundary?.id !== 'midnight'
+  const interruptedByMidnight = reachedBoundary && input.nextBoundary?.id === 'midnight';
+  const continuation = firstIncomplete && !interruptedByMidnight
     ? {
         actionId: input.id,
         cycleCount: input.cycleCount,

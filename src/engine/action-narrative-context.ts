@@ -103,6 +103,12 @@ function npcPublicLabel(npcId: string): string {
   } as Record<string, string>)[npcId] ?? npcId;
 }
 
+function enRouteDirective(npcIds: string[]): string {
+  return npcIds.length > 0
+    ? `途中必须先在 street 场景遭遇${npcIds.map(npcPublicLabel).join('、')}，只能按其公开货车司机身份演绎，不得揭示侦探身份。`
+    : '本次途中没有固定人物遭遇，不得为了凑戏凭空添加侦探。';
+}
+
 /**
  * 将玩家的自然语言决定解析为确定性的目的地契约。
  * 概率事件使用稳定散列，同一次回合重试不会改变结果，也不能靠反复重试刷遭遇。
@@ -171,9 +177,7 @@ export function resolveActionNarrativeContext(
   const destinationNpcText = requiredNpcIds.length > 0
     ? requiredNpcIds.map(npcPublicLabel).join('、')
     : '无强制对话 NPC；不得凭空生成替代角色';
-  const enRouteText = enRouteNpcIds.length > 0
-    ? `途中必须先在 street 场景遭遇${enRouteNpcIds.map(npcPublicLabel).join('、')}，只能按其公开货车司机身份演绎，不得揭示侦探身份。`
-    : '本次途中没有固定人物遭遇，不得为了凑戏凭空添加侦探。';
+  const enRouteText = enRouteDirective(enRouteNpcIds);
   const schoolBoundary = location.id === 'school'
     ? (entryMode === 'exterior'
         ? '玩家只到校门/校外，没有进入学校；体育老师刘仁光不得出场。'
@@ -257,9 +261,15 @@ export function resolveExecutedActionNarrativeContext(
   const background = getLocationBackground(location, arrivalTime);
   const travelledToDestination = resolution.startLocationId !== proposed.locationId;
   const enRouteNpcIds = travelledToDestination ? [...proposed.enRouteNpcIds] : [];
-  const directive = background === proposed.background
+  const routeAdjustedDirective = travelledToDestination
     ? proposed.directive
-    : proposed.directive.split(proposed.background).join(background);
+    : proposed.directive.replace(
+        enRouteDirective(proposed.enRouteNpcIds),
+        enRouteDirective([]),
+      );
+  const directive = background === proposed.background
+    ? routeAdjustedDirective
+    : routeAdjustedDirective.split(proposed.background).join(background);
   const staminaSpent = Math.max(
     0,
     resolution.resources.before.stamina - resolution.resources.after.stamina,
