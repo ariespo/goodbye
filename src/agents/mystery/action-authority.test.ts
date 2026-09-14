@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildActionAuthorityInput, analyzeActionIntentPlan, selectPresentedActionFacts, projectExecutedPlan, buildActionOutcomeSources, type ActionAuthorityContext } from './action-authority';
 import { resolveAction, type ResolvedActionOutcome } from '../../engine/action-resolution';
 import { resolveActionNarrativeContext } from '../../engine/action-narrative-context';
+import { resolvePlayerActionIntent } from '../../engine/player-action-intent';
 import type { DirectorPlan, FactReview, WriterPacket } from './types';
 
 const context: ActionAuthorityContext = { cycleCount: 1, startTime: '2024-09-09T08:00:00',
@@ -617,6 +618,24 @@ it.each([
     { id: 'requested', kind: 'inquiry', scope: 'normal', locationId: 'school' },
     { id: 'extra', kind: 'investigation', scope: 'normal', locationId: destination },
   ] }, { ...context, currentLocationId: 'school', originalInput })).toThrow(/限制|追加|原地/);
+});
+
+it('lets an unpriced bound inquiry use the same inferred depth as free input', () => {
+  const originalInput = '向门卫核实文穗的去向';
+  const base = { ...context, originalInput, currentLocationId: 'school' };
+  const playerActionIntent = resolvePlayerActionIntent(originalInput, 'school', new Date(context.startTime))!;
+  const shortPlan: DirectorPlan = { ...plan, revelations: [], actionSteps: [{ id: 'question', kind: 'inquiry', scope: 'short', locationId: 'school' }] };
+  const free = buildActionAuthorityInput(shortPlan, base, 'same-depth');
+  const bound = buildActionAuthorityInput(shortPlan, { ...base, playerActionIntent }, 'same-depth');
+  expect(bound).toEqual(free);
+  expect(resolveAction(bound).executedMinutes).toBe(25);
+});
+
+it.each(['简短询问门卫', '深入询问门卫', '按普通强度询问门卫'])('preserves an explicitly requested depth: %s', originalInput => {
+  const playerActionIntent = resolvePlayerActionIntent(originalInput, 'school', new Date(context.startTime))!;
+  const wrongScope = playerActionIntent.steps[0].scope === 'short' ? 'normal' : 'short';
+  expect(() => buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [{ id: 'question', kind: 'inquiry', scope: wrongScope, locationId: 'school' }] },
+    { ...context, originalInput, currentLocationId: 'school', playerActionIntent }, 'wrong-depth')).toThrow();
 });
 
 it('preserves each completed journey encounter when later work is interrupted', () => {

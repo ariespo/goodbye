@@ -9,7 +9,8 @@ import {
   FACT_CRITIC_SYSTEM_PROMPT,
   buildWriterSystemPrompt,
 } from './prompts';
-import { NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
+import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
+import { buildActionAuditRequirements, validateActionAudit } from './action-audit';
 import { mergeRepairResiduals } from './repair-task';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 import type { ValidationError } from '../../sillytavern/output-protocol';
@@ -326,12 +327,13 @@ export function reviewNarrativeDeterministically(
 
 export function combineNarrativeReviews(reviews: FactReview[]): FactReview {
   const violations = reviews.flatMap(review => review.violations);
-  const factReview = reviews.find(review => review.assertionAudit || review.continuityAudit || review.continuityEffects);
+  const factReview = reviews.find(review => review.assertionAudit || review.actionAudit || review.continuityAudit || review.continuityEffects);
   return {
     approved: reviews.every(review => review.approved) && violations.length === 0,
     violations,
     corrections: violations.length === 0 ? [] : reviews.flatMap(review => review.corrections),
     assertionAudit: factReview?.assertionAudit,
+    actionAudit: factReview?.actionAudit,
     continuityAudit: factReview?.continuityAudit,
     continuityEffects: factReview?.continuityEffects,
   };
@@ -485,6 +487,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
   const narrativeFields = extractNarrativeFields(options.narrative);
   const assertionSources = buildAssertionSources(options.packet, narrativeFields);
   const scene = options.scene ?? maintextToScene(narrativeFields.maintext ?? options.narrative);
+  const actionRequirements = buildActionAuditRequirements(options.packet, options.continuityMode ?? 'playable');
   const memory = options.continuityMemory ?? normalizeWorldMemory({});
   const cycleCount = options.cycleCount ?? options.packet.resolvedAction?.cycleCount ?? 1;
   const resolvedEndTime = options.resolvedEndTime ?? options.packet.resolvedAction?.endTime
@@ -522,9 +525,11 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     `${options.api.baseUrl}|${options.api.model}`,
     [...messages],
     { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
-    NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT,
+    actionRequirements ? ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT : NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT,
     raw => {
       const value = parseNarrativeFactReview(raw, assertionSources, narrativeFields);
+      const actionReview = validateActionAudit(value.actionAudit, actionRequirements, scene.lines.map(line => line.text).join('\n'));
+      if (!actionReview.metadataValid) throw new Error(actionReview.metadataErrors.join('\n'));
       const continuityEvidence = buildCharacterContinuityCandidateEvidence({
         candidateText: options.narrative,
         scene,
@@ -544,10 +549,10 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       if (options.continuityMode !== 'auxiliary' && !continuity.approved) {
         throw new Error(continuity.violations.join('\n'));
       }
-      return { value, continuity };
+      return { value, continuity, actionReview };
     },
   );
-  const { value, continuity } = reviewed;
+  const { value, continuity, actionReview } = reviewed;
   const auditReview = validateAssertionAudit(
     value.assertionAudit as AssertionAudit,
     assertionSources,
@@ -568,13 +573,14 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
           : 'invalid-continuity-audit' as const,
         message,
       }));
-  const violations = [...sanitized.violations, ...auditReview.violations, ...continuityViolations];
+  const violations = [...sanitized.violations, ...auditReview.violations, ...continuityViolations, ...actionReview.violations];
   return {
     approved: violations.length === 0,
     violations,
     corrections: [...sanitized.corrections, ...auditReview.corrections,
-      ...continuityViolations.map(violation => violation.message)],
+      ...continuityViolations.map(violation => violation.message), ...actionReview.corrections],
     assertionAudit: value.assertionAudit,
+    actionAudit: actionRequirements ? value.actionAudit : null,
     continuityAudit: value.continuityAudit,
     ...(!auxiliaryHasEffects && violations.length === 0 && continuity.effects
       ? { continuityEffects: continuity.effects } : {}),

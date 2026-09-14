@@ -4,6 +4,7 @@ import {
   removeUngroundedNarrativeLines,
   reviewNarrativeAgainstWriterPacket,
   reviewNarrativeDeterministically,
+  snapshotFactRepairFormatFailure,
 } from './narrative-review';
 import { buildAssertionSources, extractNarrativeFields } from './fact-assertion-review';
 import { FIXED_BACKGROUND_FACTS, reviewBackgroundFactProposal } from '../../data/backgroundHistory';
@@ -894,5 +895,70 @@ describe('deterministic final narrative review', () => {
     expect(request).toContain(JSON.stringify(continuitySchema));
     expect(request).toContain('operation=accept');
     expect(request).toContain('operation=fulfill 或 cancel');
+  });
+});
+
+describe('same-call structured action review', () => {
+  const narrative = '<maintext>对话|旁白|calm|你问文穗有没有回复她，她明确拒绝回答，你仍未得到答案。</maintext>';
+  const quote = '你问文穗有没有回复她，她明确拒绝回答，你仍未得到答案。';
+  const packet = { ...completeEmptyAuthority,
+    actionIntentAudit: { originalInput: '问灯织文穗有没有回复她', startLocationId: 'senpai-building', planGoal: '询问回复',
+      plannedLocations: ['senpai-building'], plannedNpcIds: ['touko'], requestedStepCount: 1, extensionStepCount: 0,
+      approvedSteps: [{ id: 'ask', kind: 'inquiry', scope: 'normal', locationId: 'senpai-building' }], executedSteps: [] },
+    resolvedAction: { id: 'resolved', cycleCount: 1, startTime: '2024-09-09T08:00:00', endTime: '2024-09-09T08:55:00',
+      startLocationId: 'senpai-building', endLocationId: 'senpai-building', plannedMinutes: 55, executedMinutes: 55,
+      resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } }, completedSourceIds: [], eventEffectIds: [],
+      segments: [{ step: { id: 'ask', kind: 'inquiry', scope: 'normal', locationId: 'senpai-building', completionSourceIds: [] },
+        plannedMinutes: 55, executedMinutes: 55, cumulativeExecutedMinutes: 55, completed: true, staminaDelta: -7 }] },
+  } as WriterPacket;
+  const pass = { originalRequest: { status: 'pass', quote, reason: '具体问题及拒答均已演出。' },
+    followThrough: { status: 'not-applicable', quote: '', reason: '没有实际续展。' },
+    segments: [{ segmentId: 'segment:0', status: 'pass', quote, reason: '按实际发生过程复核。' }] };
+  const response = (actionAudit?: unknown) => JSON.stringify({ approved: true, violations: [], corrections: [],
+    assertionAudit: ordinaryAudit('maintext', quote, 'ordinary-present'), continuityAudit: emptyContinuityAudit,
+    ...(actionAudit === undefined ? {} : { actionAudit }) });
+  it('retries missing action metadata in the existing critic boundary', async () => {
+    let calls = 0;
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'test', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, complete: async () => ++calls === 1 ? response() : response(pass) });
+    expect(reviewed.approved).toBe(true);
+    expect(calls).toBe(2);
+  });
+  it.each(['quote', 'segmentId', 'not-applicable'])('leaves repeated invalid %s metadata at review failure, not Writer repair', async field => {
+    const invalid = structuredClone(pass);
+    if (field === 'quote') invalid.originalRequest.quote = '摘要里的话，并非可见正文。';
+    if (field === 'segmentId') invalid.segments[0].segmentId = 'invented';
+    if (field === 'not-applicable') invalid.originalRequest.status = 'not-applicable';
+    let calls = 0;
+    await expect(reviewNarrativeAgainstWriterPacket({ api: { baseUrl: `test-invalid-${field}`, apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, complete: async () => { calls += 1; return response(invalid); } })).rejects.toThrow();
+    expect(calls).toBe(2);
+  });
+  it('keeps failed request coverage for the existing repair and combined-review path', async () => {
+    const actionAudit = { ...pass, originalRequest: { status: 'fail', quote, reason: '原问题未得到具体回应，须明确呈现原问题和拒答，不能用安抚代替。' } };
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'test', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, complete: async () => response(actionAudit) });
+    expect(reviewed.approved).toBe(false);
+    expect(reviewed.actionAudit).toEqual(actionAudit);
+    expect(snapshotFactRepairFormatFailure({ draft: narrative, errors: [], review: reviewed }).review?.actionAudit).toEqual(actionAudit);
+    expect(combineNarrativeReviews([reviewed, { approved: true, violations: [], corrections: [] }]).actionAudit).toEqual(actionAudit);
+  });
+  it('runs valid action coverage in the same single critic call', async () => {
+    let calls = 0;
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'test', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, complete: async messages => {
+        calls += 1;
+        expect(messages[1].content).toContain('[ActionAuditRequirements]');
+        expect(messages[1].content).toContain('segment:0');
+        return response(pass);
+      } });
+    expect(reviewed.approved).toBe(true);
+    expect(reviewed.actionAudit).toEqual(pass);
+    expect(calls).toBe(1);
+  });
+  it('does not force the action report for auxiliary review of the same packet', async () => {
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'test', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, continuityMode: 'auxiliary', complete: async () => response() });
+    expect(reviewed.approved).toBe(true);
   });
 });

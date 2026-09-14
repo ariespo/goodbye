@@ -86,6 +86,10 @@ function inferScope(text: string): ActionScope {
   return 'normal';
 }
 
+function hasExplicitScope(text: string): boolean {
+  return inferScope(text) !== 'normal' || /(?:普通|常规)(?:强度|深度|问询|询问|调查|搜索|搜查)/u.test(text);
+}
+
 function inferKind(text: string): ActionStep['kind'] {
   if (/^(?:原地)?(?:休息|睡|小睡|躺下)/u.test(text)) return 'rest';
   if (/^(?:原地)?(?:等待|等到|等[半一二两三四五六七八九十\d])/u.test(text)) return 'wait';
@@ -215,7 +219,7 @@ function prepareActionAuthorityInput(
       throw new Error('后续阶段只能调查或旅行，不能追加休息、等待或事件。');
     }
     const inputScope = inferScope(clause);
-    const scope = !extension && expected && inputScope !== 'normal' ? inputScope
+    const scope = !extension && expected && hasExplicitScope(clause) ? inputScope
       : (!extension ? context.selection?.scope : undefined) ?? proposed?.scope ?? expected?.scope ?? 'normal';
     if (!['short', 'normal', 'deep'].includes(scope)) throw new Error('无效行动强度。');
     const stepId = proposed?.id ?? `work:${steps.length}`;
@@ -254,9 +258,11 @@ function prepareActionAuthorityInput(
     if (supplied.length && !proposed) throw new Error('导演行动阶段缺少玩家原始意图的必执行前缀。');
     const explicitKind = /调查|查看|检查|观察|搜查|翻找|搜寻|休息|睡|等待|询问|打听|问|交谈|对话|聊|拜访|探访|找|同步|商讨|交流|讨论|谈|梳理/u.test(clause)
       || expected.kind === 'travel';
+    // A normal default in an unpriced prose option is not an explicit player depth.
+    const explicitScope = hasExplicitScope(clause);
     if (proposed && !context.selection && (proposed.locationId !== expected.locationId
       || ((boundIntent || explicitKind) && proposed.kind !== expected.kind)
-      || (boundIntent && proposed.scope !== expected.scope))) {
+      || (boundIntent && explicitScope && proposed.scope !== inferScope(clause)))) {
       throw new Error('导演行动阶段与玩家原始意图的种类或目的地不匹配。');
     }
     addStep(proposed, expected, clause, false);

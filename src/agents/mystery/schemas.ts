@@ -259,10 +259,31 @@ const characterContinuityAuditSchema: Record<string, unknown> = {
   },
 };
 
+const actionAuditJudgmentProperties = {
+  status: { type: 'string', enum: ['pass', 'fail', 'not-applicable'] },
+  quote: { type: 'string' },
+  reason: { type: 'string', minLength: 1 },
+};
+const actionAuditJudgmentSchema = {
+  type: 'object', additionalProperties: false, required: ['status', 'quote', 'reason'],
+  properties: actionAuditJudgmentProperties,
+};
+export const ACTION_AUDIT_JSON_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['originalRequest', 'followThrough', 'segments'],
+  properties: {
+    originalRequest: actionAuditJudgmentSchema,
+    followThrough: actionAuditJudgmentSchema,
+    segments: { type: 'array', items: {
+      type: 'object', additionalProperties: false, required: ['segmentId', 'status', 'quote', 'reason'],
+      properties: { segmentId: { type: 'string' }, ...actionAuditJudgmentProperties },
+    } },
+  },
+};
+
 export const NARRATIVE_FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
-  required: ['approved', 'violations', 'corrections', 'assertionAudit', 'continuityAudit'],
+  required: ['approved', 'violations', 'corrections', 'assertionAudit', 'continuityAudit', 'actionAudit'],
   properties: {
     ...(FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>),
     assertionAudit: {
@@ -275,6 +296,7 @@ export const NARRATIVE_FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
       },
     },
     continuityAudit: characterContinuityAuditSchema,
+    actionAudit: { anyOf: [ACTION_AUDIT_JSON_SCHEMA, { type: 'null' }] },
   },
 };
 
@@ -384,5 +406,14 @@ export const NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT: ResponseFormat = {
     name: 'narrative_fact_review',
     strict: true,
     schema: NARRATIVE_FACT_REVIEW_JSON_SCHEMA,
+  },
+};
+
+export const ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT: ResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'narrative_fact_review', strict: true,
+    schema: { ...NARRATIVE_FACT_REVIEW_JSON_SCHEMA,
+      properties: { ...(NARRATIVE_FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>), actionAudit: ACTION_AUDIT_JSON_SCHEMA } },
   },
 };

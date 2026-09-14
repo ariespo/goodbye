@@ -282,6 +282,8 @@ export interface FactReview {
   violations: FactReviewViolation[];
   corrections: string[];
   assertionAudit?: import('./fact-assertion-review').AssertionAudit;
+  /** Required for playable reviews carrying both intent and deterministic execution. */
+  actionAudit?: import('./action-audit').ActionAudit | null;
   /** Optional only for legacy persisted reviews; every new live fact review must supply it. */
   continuityAudit?: import('../../memory/character-continuity').CharacterContinuityAudit;
   /** Program-validated effects for this exact candidate; never accepted from model output. */
