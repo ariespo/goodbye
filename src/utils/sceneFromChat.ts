@@ -15,13 +15,23 @@ export function rebuildSceneFromChat(chat: ChatSession | null | undefined): Scen
   if (!maintext) return null;
   const scene = maintext === OPENING_STORYLINE ? parseOpeningStoryline() : maintextToScene(maintext);
   const { actionOutcome } = acceptedActionUiFromMessage(lastAssistant, lastAssistant.parsed?.options ?? []);
+  const localObserve = lastAssistant.localAction === 'map-travel'
+    && typeof lastAssistant.parsed?.observe === 'string'
+    && lastAssistant.parsed.observe.trim()
+    ? lastAssistant.parsed.observe
+    : undefined;
   if (scene.lines.length > 0 && (
     scene.observe
     || scene.investigateItems !== undefined
     || scene.actionItems !== undefined
     || actionOutcome
+    || localObserve
   )) {
-    return { ...scene, ...(actionOutcome ? { actionOutcome } : {}) };
+    return {
+      ...scene,
+      ...(localObserve ? { observe: localObserve } : {}),
+      ...(actionOutcome ? { actionOutcome } : {}),
+    };
   }
   return null;
 }

@@ -303,6 +303,8 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
   const acceptedActionUi = acceptedActionUiFromMessage(lastAssistant, parsedContent.options);
   const scene = {
     ...parsedScene,
+    ...(lastAssistant?.localAction === 'map-travel' && typeof lastAssistant.parsed?.observe === 'string'
+      && lastAssistant.parsed.observe.trim() ? { observe: lastAssistant.parsed.observe } : {}),
     ...(acceptedActionUi.actionOutcome ? { actionOutcome: acceptedActionUi.actionOutcome } : {}),
   };
   const lineIndex = Math.max(

@@ -101,6 +101,7 @@ import {
   validatedOptionBinding,
   type ActionOptionBinding,
 } from '../utils/actionPresentation';
+import { resumeLocalMapTravelContinuation } from '../utils/localMapTravel';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -205,6 +206,7 @@ export function useGameLoop() {
   const store = useGameStore();
   const parseStateRef = useRef(createParseState());
   const sendingLockRef = useRef(false);
+  const localActionLockRef = useRef(false);
   // 异步场景清单补全的竞态令牌：值为目标 assistant 消息 id，入口动作会置空使旧回调作废
   const checklistTokenRef = useRef<string | null>(null);
 
@@ -1299,8 +1301,55 @@ export function useGameLoop() {
         liveStore.actions.addNotification({ type: 'warning', message: '这个选项已更新，请重新选择。', duration: 3000 });
         return false;
       }
+      if (stored.continuationId?.startsWith('map-travel:')) {
+        if (localActionLockRef.current) return false;
+        localActionLockRef.current = true;
+        liveStore.actions.setIsWaitingForAI(true);
+        void resumeLocalMapTravelContinuation(stored.continuationId)
+          .then(result => {
+            useGameStore.getState().actions.addNotification({
+              type: result.arrived ? 'success' : 'info',
+              message: result.arrived
+                ? `已抵达${result.destinationName}：体力${result.staminaDelta < 0 ? result.staminaDelta : `+${result.staminaDelta}`}，时间推进${result.executedMinutes}分钟`
+                : `移动已暂停：进行${result.executedMinutes}分钟，剩余${result.remainingMinutes}分钟`,
+              duration: 3200,
+            });
+          })
+          .catch(error => {
+            const current = useGameStore.getState();
+            current.actions.addNotification({
+              type: 'error',
+              message: `移动未完成：${error instanceof Error ? error.message : '保存失败'}`,
+              duration: 3600,
+            });
+            current.actions.setParsedContent({ options: [...current.api.parsedContent.options] });
+          })
+          .finally(() => {
+            localActionLockRef.current = false;
+            useGameStore.getState().actions.setIsWaitingForAI(false);
+          });
+        return true;
+      }
+      const settings = liveStore.tavern.settings;
+      if (!settings) {
+        liveStore.actions.addNotification({ type: 'error', message: '设置未加载', duration: 4000 });
+        return false;
+      }
+      if (!settings.api.apiKey || !settings.api.baseUrl) {
+        liveStore.actions.setShowApiGuide(true);
+        return false;
+      }
       void sendMessage(optionText, { resumeActionId: stored.continuationId });
       return true;
+    }
+    const settings = liveStore.tavern.settings;
+    if (!settings) {
+      liveStore.actions.addNotification({ type: 'error', message: '设置未加载', duration: 4000 });
+      return false;
+    }
+    if (!settings.api.apiKey || !settings.api.baseUrl) {
+      liveStore.actions.setShowApiGuide(true);
+      return false;
     }
     void sendMessage(optionText);
     return true;

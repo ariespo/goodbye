@@ -104,4 +104,25 @@ describe('ChoiceMenu action outcome', () => {
       optionIndex: 0, optionText: '继续调查', actionId: 'deep-search', continuationId: 'deep-search',
     });
   });
+
+  it('unlocks the same choice when runtime preflight reports that dispatch did not start', () => {
+    loopMocks.selectOption.mockReturnValueOnce(false).mockReturnValue(true);
+    useGameStore.setState(state => ({
+      game: { ...state.game, sceneComplete: true, isWaitingForAI: false },
+      api: {
+        ...state.api,
+        isStreaming: false,
+        parsedContent: { ...state.api.parsedContent, options: ['继续调查'], optionBindings: undefined },
+      },
+    }));
+
+    render(<ChoiceMenu />);
+    const choice = screen.getByRole('button', { name: /继续调查/ });
+    fireEvent.click(choice);
+    expect(choice).toBeEnabled();
+    fireEvent.click(choice);
+
+    expect(loopMocks.selectOption).toHaveBeenCalledTimes(2);
+    expect(choice).toBeDisabled();
+  });
 });

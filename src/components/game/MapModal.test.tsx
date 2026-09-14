@@ -262,6 +262,7 @@ describe('MapModal', () => {
         executedWorkMinutes: 0,
       },
     });
+    expect(rebuildSceneFromChat(savedChat)?.observe).toBe(savedChat.messages.at(-1)?.parsed?.observe);
     expect(useGameStore.getState().tavern.variables.location).toBe('home');
     expect(useGameStore.getState().game.gameStatus.time).toEqual(new Date('2024-09-09T08:00:00'));
 

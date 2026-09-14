@@ -181,6 +181,50 @@ describe('choice-screen save restoration', () => {
     expect(state.api.turnRecovery.phase).toBe('idle');
   });
 
+  it('restores the accepted local map arrival observation without changing saved resources or history', async () => {
+    const observe = '文穗平日上学的地方。可以确认她今天是否到校。';
+    const outcome = {
+      resolutionId: 'map-resolution', actionId: 'map-travel:home:school', executedMinutes: 10,
+      executedWorkMinutes: 0, executedTravelMinutes: 10, endTime: '2024-09-09T08:10:00',
+      staminaDelta: -4, sanityDelta: 0,
+    };
+    const mapParsed: ParsedContent = {
+      thinking: '', maintext: '场景|school-day\n对话|旁白|calm|你抵达了文穗的中学。',
+      options: [], summary: '抵达学校。', vars: {}, observe,
+      investigateItems: [], actionItems: [], actionOutcome: outcome,
+    };
+    const mapMessage: ChatMessage = {
+      id: 'map-assistant', role: 'assistant', localAction: 'map-travel', timestamp: 2,
+      content: `<maintext>${mapParsed.maintext}</maintext><option></option><sum>${mapParsed.summary}</sum><vars>{}</vars>`,
+      variables: { location: 'school', time: '2024-09-09T08:10:00' },
+      acceptedActionOutcome: outcome, parsed: mapParsed,
+    };
+    const history = [{
+      turnIndex: 0, timestamp: 2, summary: '抵达学校。',
+      gameStatus: { time: new Date('2024-09-09T08:10:00'), stamina: 96, sanity: 70, items: [] },
+      variables: mapMessage.variables,
+    }];
+    const save = createSave({
+      parsedContent: mapParsed,
+      gameStatus: { time: new Date('2024-09-09T08:10:00'), stamina: 96, sanity: 70, items: [] },
+      history,
+      currentState: {
+        bgm: null, background: 'school-day', character: null, speaker: '旁白', mood: 'calm',
+        effect: null, environment: 'outdoor-heavy-rain', item: null,
+      },
+    });
+    save.tavernState = { variables: mapMessage.variables, messages: [mapMessage] };
+
+    await loadGameFromSave(save);
+
+    const state = useGameStore.getState();
+    expect(state.game.currentScene?.observe).toBe(observe);
+    expect(state.api.parsedContent.observe).toBe(observe);
+    expect(state.game.gameStatus).toMatchObject({ stamina: 96, sanity: 70 });
+    expect(state.game.gameStatus.time).toEqual(new Date('2024-09-09T08:10:00'));
+    expect(state.game.history).toHaveLength(1);
+  });
+
   it('recovers options from the last AI response for legacy saves', () => {
     const recovered = resolveSavedParsedContent(createSave(), [assistantMessage]);
     expect(recovered.maintext).toBe(parsed.maintext);

@@ -10,7 +10,7 @@ import { streamChatCompletion } from '../sillytavern/api-router';
 import { runStateAgent } from '../agents/state/state-agent';
 import { saveChat } from '../sillytavern/database';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
-import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatSession } from '../sillytavern/types';
+import { createDefaultPreset, type AppSettings, type ChatMessage, type ChatPreset, type ChatSession } from '../sillytavern/types';
 import { buildInvestigationOpportunities } from '../engine/investigation-opportunities';
 import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
 import { maintextToScene } from '../engine/scene-parser';
@@ -18,6 +18,9 @@ import { rebuildSceneFromChat } from '../utils/sceneFromChat';
 import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
 import { candidateFingerprint } from '../memory/character-continuity';
 import { normalizeWorldMemory } from '../memory/world-memory';
+import { buildMapTravelTransaction, prepareMapTravel } from '../utils/mapTravel';
+import { commitGameTransaction } from '../utils/gameTransactionStore';
+import { resolveSavedParsedContent } from '../utils/gameSession';
 
 vi.mock('../agents/mystery', async original => ({ ...await original<typeof import('../agents/mystery')>(),
   prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(), reviewNarrativeAgainstWriterPacket: vi.fn(), reviewNarrativeStyle: vi.fn() }));
@@ -340,6 +343,123 @@ describe('resolved action at the real hook boundary', () => {
     expect(saveChat).not.toHaveBeenCalled();
     expect(prepareMysteryTurn).not.toHaveBeenCalled();
     expect(useGameStore.getState().ui.notifications.at(-1)?.message).toMatch(/地图移动已经结算/);
+    unmount();
+  });
+
+  it('resumes a reloaded map-origin continuation locally after the accepted boundary turn', async () => {
+    const startVariables = {
+      ...createDefaultVariables(), cycleCount: 1, location: 'home', time: '2024-09-09T15:55:00',
+      stamina: 100, sanity: 70, knowledgeEvents: [],
+    };
+    const startStatus = {
+      time: new Date(startVariables.time), stamina: 100, sanity: 70, items: [],
+    };
+    const partial = prepareMapTravel({
+      variables: startVariables,
+      gameStatus: startStatus,
+      destinationLocationId: 'school',
+    });
+    if (partial.kind !== 'travel') throw new Error('expected partial map travel');
+    const partialTransaction = buildMapTravelTransaction({
+      variables: startVariables,
+      gameStatus: startStatus,
+      prepared: partial,
+      knowledgeEvents: [],
+      endings: [],
+      endingsSeen: [],
+      hasEndingInProgress: false,
+    });
+    const handleBoundaryOption = '处理眼前的事情';
+    const partialParsed = {
+      thinking: '', maintext: '场景|street\n对话|旁白|calm|路程尚未完成。',
+      options: [handleBoundaryOption], summary: '移动暂停。', vars: {},
+      investigateItems: [], actionItems: [], actionOutcome: partial.publicOutcome,
+    };
+    const localMessages: ChatMessage[] = [{
+      id: 'map-user', role: 'user', content: '前往文穗的中学', timestamp: 1,
+      variables: startVariables, localAction: 'map-travel',
+    }, {
+      id: 'map-assistant', role: 'assistant',
+      content: `<maintext>${partialParsed.maintext}</maintext><option>${handleBoundaryOption}</option><sum>移动暂停。</sum><vars>{}</vars>`,
+      timestamp: 2, variables: partialTransaction.variables, localAction: 'map-travel',
+      acceptedActionOutcome: partial.publicOutcome, parsed: partialParsed,
+    }];
+    const partialScene = {
+      id: 'partial-map',
+      lines: [{ background: 'street', speaker: '旁白', emotion: 'calm' as const, text: '路程尚未完成。' }],
+      actionOutcome: partial.publicOutcome,
+    };
+    commitGameTransaction(partialTransaction, partialScene);
+    useGameStore.setState(state => ({
+      tavern: {
+        ...state.tavern,
+        variables: partialTransaction.variables,
+        chats: [{ ...state.tavern.chats[0], messages: localMessages, variables: partialTransaction.variables }],
+      },
+      api: { ...state.api, parsedContent: partialParsed },
+      game: { ...state.game, currentScene: partialScene, sceneComplete: true },
+    }));
+    vi.mocked(streamChatCompletion).mockImplementationOnce(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken('<maintext>场景|street\n对话|旁白|calm|警方通过电话明确告知你：文穗已经死亡。</maintext><option>稍作整理\n继续行动</option><sum>接到警方通知。</sum><vars>{}</vars>');
+      await callbacks.onComplete();
+    });
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    await act(async () => { await result.current.sendMessage(handleBoundaryOption); });
+    const afterBoundary = useGameStore.getState();
+    expect(afterBoundary.tavern.variables).toMatchObject({
+      time: '2024-09-09T16:00:00', location: 'home', stamina: 98, deathNews: 'delivered',
+    });
+    const resumeOption = afterBoundary.api.parsedContent.options[0];
+    const resumeBinding = afterBoundary.api.parsedContent.optionBindings?.[0];
+    expect(resumeOption).toMatch(/继续未完成的行动.*剩余5分钟/);
+    expect(resumeBinding).toMatchObject({ continuationId: partial.actionId });
+
+    const acceptedMessages = afterBoundary.tavern.chats[0].messages;
+    const reloadedParsed = resolveSavedParsedContent({ gameState: {} } as never, acceptedMessages);
+    const reloadedScene = rebuildSceneFromChat({ ...afterBoundary.tavern.chats[0], messages: acceptedMessages });
+    useGameStore.setState(state => ({
+      api: { ...state.api, parsedContent: reloadedParsed },
+      game: { ...state.game, currentScene: reloadedScene, sceneComplete: true },
+    }));
+    const callsBeforeResume = vi.mocked(streamChatCompletion).mock.calls.length;
+    let firstDispatch: boolean | undefined;
+    let repeatedDispatch: boolean | undefined;
+    act(() => {
+      firstDispatch = result.current.selectOption(resumeOption, resumeBinding);
+      repeatedDispatch = result.current.selectOption(resumeOption, resumeBinding);
+    });
+    expect(firstDispatch).toBe(true);
+    expect(repeatedDispatch).toBe(false);
+    await waitFor(() => expect(useGameStore.getState().tavern.variables.location).toBe('school'));
+
+    const arrived = useGameStore.getState();
+    expect(arrived.tavern.variables).toMatchObject({
+      time: '2024-09-09T16:05:00', location: 'school', stamina: 96, deathNews: 'delivered',
+    });
+    expect(arrived.tavern.variables.knowledgeEvents).toContain('visit:school');
+    expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledTimes(callsBeforeResume);
+    expect(rebuildSceneFromChat(arrived.tavern.chats[0])?.observe)
+      .toBe(arrived.tavern.chats[0].messages.at(-1)?.parsed?.observe);
+    unmount();
+  });
+
+  it('reports a missing API as a non-dispatch so the choice can be used after configuration', () => {
+    const optionText = '继续调查';
+    useGameStore.setState(state => ({
+      tavern: {
+        ...state.tavern,
+        settings: state.tavern.settings
+          ? { ...state.tavern.settings, api: { ...state.tavern.settings.api, apiKey: '' } }
+          : state.tavern.settings,
+      },
+      api: { ...state.api, parsedContent: { ...state.api.parsedContent, options: [optionText] } },
+    }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    expect(result.current.selectOption(optionText)).toBe(false);
+    expect(useGameStore.getState().ui.showApiGuide).toBe(true);
+    expect(streamChatCompletion).not.toHaveBeenCalled();
     unmount();
   });
 
