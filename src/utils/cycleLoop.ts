@@ -167,6 +167,8 @@ export async function startNextCycle(opts: {
         observe: '',
         investigateItems: [],
         actionItems: [],
+        actionOutcome: undefined,
+        optionBindings: undefined,
       },
     },
   }));

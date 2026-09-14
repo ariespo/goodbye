@@ -2,12 +2,17 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useGameStore } from '../../stores/gameStore';
 import { HudViewport } from './HudViewport';
 import { MapModal } from './MapModal';
+import { rebuildSceneFromChat } from '../../utils/sceneFromChat';
+
+const databaseMocks = vi.hoisted(() => ({ saveChat: vi.fn() }));
+
+vi.mock('../../sillytavern/database', () => ({ saveChat: databaseMocks.saveChat }));
 
 function mockMatchMedia(initialMatches: boolean) {
   const listeners = new Set<(event: MediaQueryListEvent) => void>();
@@ -53,6 +58,8 @@ describe('MapModal', () => {
     cleanup();
     media?.restore();
     media = null;
+    databaseMocks.saveChat.mockReset();
+    databaseMocks.saveChat.mockResolvedValue(undefined);
     useGameStore.setState(initialState, true);
   });
 
@@ -174,5 +181,215 @@ describe('MapModal', () => {
     expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\s+\.pixel-modal-header\s*\{[^}]*gap:\s*20px;[^}]*padding:\s*28px 56px 28px 50px;/);
     expect(styles).toMatch(/\.hud-design-canvas\s+\.map-modal-shell\s+\.pixel-modal-close\s*\{[^}]*top:\s*43px;[^}]*right:\s*56px;[^}]*width:\s*44px;[^}]*height:\s*44px;/);
     expect(styles).toMatch(/@media \(max-width: 700px\)[\s\S]*\.map-modal-shell\s*>\s*\.pixel-modal-frame\s*\{[^}]*position:\s*relative;[^}]*top:\s*auto;[^}]*left:\s*auto;[^}]*width:\s*100%/);
+  });
+
+  it('stops partial travel at the next event without granting arrival or a visit', async () => {
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showMap: true },
+      game: {
+        ...state.game,
+        gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T15:55:00'), stamina: 100, sanity: 70 },
+        history: [],
+      },
+      tavern: {
+        ...state.tavern,
+        activeChatId: 'chat-map-partial',
+        chats: [{
+          id: 'chat-map-partial', name: 'map partial', messages: [], characterName: '文穗', userName: '玩家',
+          presetId: null, lorebookIds: [], variables: state.tavern.variables, createdAt: 1, updatedAt: 1,
+        }],
+        variables: {
+          ...state.tavern.variables,
+          cycleCount: 1, location: 'home', time: '2024-09-09T15:55:00', deathNews: undefined,
+          knowledgeEvents: [],
+        },
+      },
+    }));
+
+    render(<MapModal />);
+    fireEvent.click(screen.getByRole('button', { name: '文穗的中学' }));
+    fireEvent.click(screen.getByRole('button', { name: '前往此处' }));
+
+    await waitFor(() => expect(useGameStore.getState().game.gameStatus.time).toEqual(new Date('2024-09-09T16:00:00')));
+    const state = useGameStore.getState();
+    expect(state.tavern.variables.location).toBe('home');
+    expect(state.tavern.variables.knowledgeEvents).not.toContain('visit:school');
+    expect(state.tavern.variables.actionContinuity?.continuation?.actionId).toMatch(/^map-travel:/);
+    expect(state.game.currentScene?.lines[0].text).toContain('路程尚未完成');
+    expect(state.game.currentScene?.lines[0].text).not.toContain('抵达文穗的中学');
+    const accepted = state.tavern.chats[0].messages.at(-1);
+    expect(accepted?.localAction).toBe('map-travel');
+    expect(accepted?.acceptedActionOutcome).toEqual(state.api.parsedContent.actionOutcome);
+    const rebuilt = rebuildSceneFromChat(state.tavern.chats[0]);
+    expect(rebuilt?.lines[0]).toMatchObject({ background: 'street', speaker: '旁白' });
+    expect(rebuilt?.character).toBeUndefined();
+    expect(rebuilt?.observe).toBeUndefined();
+    expect(rebuilt?.actionOutcome?.remaining?.totalMinutes).toBe(5);
+    expect(state.api.parsedContent.options).toEqual(['处理眼前的事情']);
+    expect(state.api.parsedContent.optionBindings).toBeUndefined();
+  });
+
+  it('persists the resolved travel before making it visible in the store', async () => {
+    let releaseSave: (() => void) | undefined;
+    databaseMocks.saveChat.mockImplementation(() => new Promise<void>(resolveSave => { releaseSave = resolveSave; }));
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showMap: true },
+      game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T08:00:00'), stamina: 100, sanity: 70 } },
+      tavern: {
+        ...state.tavern,
+        activeChatId: 'chat-map',
+        chats: [{
+          id: 'chat-map', name: 'map', messages: [], characterName: '文穗', userName: '玩家',
+          presetId: null, lorebookIds: [], variables: state.tavern.variables, createdAt: 1, updatedAt: 1,
+        }],
+        variables: { ...state.tavern.variables, cycleCount: 1, location: 'home', time: '2024-09-09T08:00:00' },
+      },
+    }));
+
+    render(<MapModal />);
+    fireEvent.click(screen.getByRole('button', { name: '文穗的中学' }));
+    fireEvent.click(screen.getByRole('button', { name: '前往此处' }));
+
+    await waitFor(() => expect(databaseMocks.saveChat).toHaveBeenCalledOnce());
+    const savedChat = databaseMocks.saveChat.mock.calls[0][0];
+    expect(savedChat.messages.at(-2)?.localAction).toBe('map-travel');
+    expect(savedChat.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      localAction: 'map-travel',
+      acceptedActionOutcome: {
+        executedMinutes: 10,
+        executedTravelMinutes: 10,
+        executedWorkMinutes: 0,
+      },
+    });
+    expect(useGameStore.getState().tavern.variables.location).toBe('home');
+    expect(useGameStore.getState().game.gameStatus.time).toEqual(new Date('2024-09-09T08:00:00'));
+
+    releaseSave?.();
+    await waitFor(() => expect(useGameStore.getState().tavern.variables.location).toBe('school'));
+    expect(useGameStore.getState().game.gameStatus.time).toEqual(new Date('2024-09-09T08:10:00'));
+    expect(useGameStore.getState().tavern.variables.knowledgeEvents).toContain('visit:school');
+    expect(useGameStore.getState().api.parsedContent).toMatchObject({
+      options: [],
+      optionBindings: undefined,
+      actionOutcome: { executedMinutes: 10, executedTravelMinutes: 10, executedWorkMinutes: 0 },
+    });
+  });
+
+  it('does not create repeated zero-minute travel when an event is already due', async () => {
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showMap: true },
+      game: {
+        ...state.game,
+        gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T16:00:00'), stamina: 100, sanity: 70 },
+        history: [],
+      },
+      tavern: {
+        ...state.tavern,
+        variables: { ...state.tavern.variables, cycleCount: 1, location: 'home', time: '2024-09-09T16:00:00', deathNews: 'pending' },
+      },
+    }));
+
+    render(<MapModal />);
+    fireEvent.click(screen.getByRole('button', { name: '文穗的中学' }));
+    fireEvent.click(screen.getByRole('button', { name: '前往此处' }));
+
+    await waitFor(() => expect(useGameStore.getState().ui.notifications).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringMatching(/既定事件需要先处理/) }),
+    ])));
+    expect(useGameStore.getState().tavern.variables.location).toBe('home');
+    expect(useGameStore.getState().game.history).toEqual([]);
+  });
+
+  it('keeps state and history unchanged when map persistence fails', async () => {
+    databaseMocks.saveChat.mockRejectedValueOnce(new Error('disk unavailable'));
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showMap: true },
+      game: {
+        ...state.game,
+        gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T08:00:00'), stamina: 100, sanity: 70 },
+        history: [],
+      },
+      tavern: {
+        ...state.tavern,
+        activeChatId: 'chat-map',
+        chats: [{
+          id: 'chat-map', name: 'map', messages: [], characterName: '文穗', userName: '玩家',
+          presetId: null, lorebookIds: [], variables: state.tavern.variables, createdAt: 1, updatedAt: 1,
+        }],
+        variables: { ...state.tavern.variables, cycleCount: 1, location: 'home', time: '2024-09-09T08:00:00' },
+      },
+    }));
+
+    render(<MapModal />);
+    fireEvent.click(screen.getByRole('button', { name: '文穗的中学' }));
+    fireEvent.click(screen.getByRole('button', { name: '前往此处' }));
+
+    await waitFor(() => expect(useGameStore.getState().ui.notifications).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringMatching(/disk unavailable/) }),
+    ])));
+    expect(useGameStore.getState().tavern.variables.location).toBe('home');
+    expect(useGameStore.getState().game.gameStatus.time).toEqual(new Date('2024-09-09T08:00:00'));
+    expect(useGameStore.getState().game.history).toEqual([]);
+  });
+
+  it('settles a rapid double click only once', async () => {
+    let releaseSave: (() => void) | undefined;
+    databaseMocks.saveChat.mockImplementation(() => new Promise<void>(resolveSave => { releaseSave = resolveSave; }));
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showMap: true },
+      game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T08:00:00'), stamina: 100, sanity: 70 } },
+      tavern: {
+        ...state.tavern,
+        activeChatId: 'chat-map',
+        chats: [{
+          id: 'chat-map', name: 'map', messages: [], characterName: '文穗', userName: '玩家',
+          presetId: null, lorebookIds: [], variables: state.tavern.variables, createdAt: 1, updatedAt: 1,
+        }],
+        variables: { ...state.tavern.variables, cycleCount: 1, location: 'home', time: '2024-09-09T08:00:00' },
+      },
+    }));
+
+    render(<MapModal />);
+    fireEvent.click(screen.getByRole('button', { name: '文穗的中学' }));
+    const button = screen.getByRole('button', { name: '前往此处' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(databaseMocks.saveChat).toHaveBeenCalledOnce());
+
+    releaseSave?.();
+    await waitFor(() => expect(useGameStore.getState().tavern.variables.location).toBe('school'));
+    expect(useGameStore.getState().tavern.variables.actionContinuity?.settledResolutionIds).toHaveLength(1);
+  });
+
+  it('does not commit a saved result after the active chat changes', async () => {
+    let releaseSave: (() => void) | undefined;
+    databaseMocks.saveChat.mockImplementation(() => new Promise<void>(resolveSave => { releaseSave = resolveSave; }));
+    useGameStore.setState(state => ({
+      ui: { ...state.ui, showMap: true },
+      game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T08:00:00'), stamina: 100, sanity: 70 } },
+      tavern: {
+        ...state.tavern,
+        activeChatId: 'chat-map',
+        chats: [{
+          id: 'chat-map', name: 'map', messages: [], characterName: '文穗', userName: '玩家',
+          presetId: null, lorebookIds: [], variables: state.tavern.variables, createdAt: 1, updatedAt: 1,
+        }],
+        variables: { ...state.tavern.variables, cycleCount: 1, location: 'home', time: '2024-09-09T08:00:00' },
+      },
+    }));
+
+    render(<MapModal />);
+    fireEvent.click(screen.getByRole('button', { name: '文穗的中学' }));
+    fireEvent.click(screen.getByRole('button', { name: '前往此处' }));
+    await waitFor(() => expect(databaseMocks.saveChat).toHaveBeenCalledOnce());
+    act(() => useGameStore.getState().actions.setActiveChatId('another-chat'));
+    releaseSave?.();
+
+    await waitFor(() => expect(useGameStore.getState().ui.notifications).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringMatching(/状态已经变化/) }),
+    ])));
+    expect(useGameStore.getState().tavern.variables.location).toBe('home');
+    expect(useGameStore.getState().game.history).toEqual([]);
   });
 });

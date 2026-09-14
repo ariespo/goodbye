@@ -97,7 +97,99 @@ describe('ActionPanel', () => {
     expect(screen.queryByText(/现实/)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /检查窗台/ }));
-    expect(loopMocks.performAction).toHaveBeenCalledWith('investigate', 0);
+    expect(loopMocks.performAction).toHaveBeenCalledWith('investigate', 0, 'legacy:action-panel-test:investigate:0', 'home');
+  });
+
+  it('shows the resolver quote for normal work plus actual travel without changing state when opened', () => {
+    const quotedScene: Scene = {
+      ...scene,
+      investigateItems: [{
+        ...scene.investigateItems![0],
+        time: '2分钟',
+        actionId: 'school-inquiry',
+        opportunityId: 'shared-school-absence',
+        kind: 'inquiry',
+        scope: 'normal',
+        locationId: 'school',
+      }],
+    };
+    const time = new Date('2024-09-09T08:00:00');
+    useGameStore.setState(state => ({
+      game: {
+        ...state.game,
+        currentScene: quotedScene,
+        gameStatus: { ...state.game.gameStatus, time, stamina: 100, sanity: 70 },
+        history: [],
+        actionPanel: { visible: true, type: 'investigate', content: '', selectedIndex: null },
+      },
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, location: 'home' } },
+    }));
+
+    render(<ActionPanel />);
+
+    expect(screen.getByLabelText('预计耗时')).toHaveTextContent('约65分钟');
+    expect(screen.getByText('含路程10分钟')).toBeInTheDocument();
+    expect(screen.getByText('体力 -11')).toBeInTheDocument();
+    expect(useGameStore.getState().game.gameStatus).toMatchObject({ stamina: 100, sanity: 70 });
+    expect(useGameStore.getState().game.gameStatus.time).toEqual(time);
+    expect(useGameStore.getState().game.history).toEqual([]);
+  });
+
+  it('shows 55 minutes for the same normal investigation at its current location', () => {
+    useGameStore.setState(state => ({
+      game: {
+        ...state.game,
+        currentScene: {
+          ...scene,
+          investigateItems: [{
+            ...scene.investigateItems![0], actionId: 'school-inquiry', kind: 'inquiry',
+            scope: 'normal', locationId: 'school',
+          }],
+        },
+        actionPanel: { visible: true, type: 'investigate', content: '', selectedIndex: null },
+      },
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, location: 'school' } },
+    }));
+
+    render(<ActionPanel />);
+
+    expect(screen.getByLabelText('预计耗时')).toHaveTextContent('约55分钟');
+    expect(screen.queryByText(/含路程/)).toBeNull();
+  });
+
+  it('migrates authored opening rows to program quotes instead of displaying legacy minutes', () => {
+    useGameStore.setState(state => ({
+      game: {
+        ...state.game,
+        currentScene: {
+          ...scene,
+          id: 'opening',
+          investigateItems: [{ ...scene.investigateItems![0], time: '3分钟' }],
+        },
+        actionPanel: { visible: true, type: 'investigate', content: '', selectedIndex: null },
+      },
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, location: 'home' } },
+    }));
+
+    render(<ActionPanel />);
+
+    expect(screen.getByLabelText('预计耗时')).toHaveTextContent('约55分钟');
+    expect(screen.queryByText('3分钟')).toBeNull();
+  });
+
+  it('shows an honest empty-checklist message', () => {
+    useGameStore.setState(state => ({
+      game: {
+        ...state.game,
+        currentScene: { ...scene, investigateItems: [] },
+        actionPanel: { visible: true, type: 'investigate', content: '当前清单暂无新的明确调查目标。', selectedIndex: null },
+      },
+    }));
+
+    render(<ActionPanel />);
+
+    expect(screen.getByText('当前清单暂无新的明确调查目标。')).toBeInTheDocument();
+    expect(screen.queryByText(/已经没有任何/)).toBeNull();
   });
 
   it('closes through the shared dialog header without changing other game state', () => {
@@ -178,7 +270,7 @@ describe('ActionPanel', () => {
     expect(screen.queryByText(/现实/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '执行行动 推开窗户' }));
 
-    expect(loopMocks.performAction).toHaveBeenCalledWith('actions', 0);
+    expect(loopMocks.performAction).toHaveBeenCalledWith('actions', 0, 'legacy:action-panel-test:act:0', 'home');
   });
 
   it('retains the final visible investigation payload for the full 220ms close phase', () => {

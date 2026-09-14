@@ -10,6 +10,12 @@ import { saveChat } from '../../sillytavern/database';
 import { findItemForInvestigation, getItemsForBackground } from '../../utils/itemAssetMatch';
 import type { ItemAsset } from '../../data/itemAssets';
 import { ItemViewer } from './ItemViewer';
+import { normalizeLocationId } from '../../data/locations';
+import {
+  resolveChecklistAction,
+  type ChecklistActionRow,
+  type ResolvedChecklistAction,
+} from '../../utils/actionPresentation';
 import {
   PixelModalContent,
   PixelModalHeader,
@@ -18,11 +24,7 @@ import {
   PixelModalStatus,
 } from '../ui/PixelModal';
 
-type PanelItemData = {
-  desc: string;
-  time?: string | number;
-  stamina?: number;
-  sanity?: number;
+type PanelItemData = ChecklistActionRow & {
   suspect?: string;
   style?: string;
 };
@@ -82,6 +84,9 @@ export function ActionPanel() {
   const setChats = useGameStore(state => state.actions.setChats);
   const addNotification = useGameStore(state => state.actions.addNotification);
   const background = useGameStore(state => state.game.currentState.background);
+  const gameStatus = useGameStore(state => state.game.gameStatus);
+  const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
+  const isTyping = useGameStore(state => state.game.isTyping);
   const [viewingItem, setViewingItem] = useState<ItemAsset | null>(null);
   const [lastVisiblePayload, setLastVisiblePayload] = useState<ActionPanelPayload | null>(
     () => actionPanel.visible ? { ...actionPanel } : null,
@@ -106,11 +111,12 @@ export function ActionPanel() {
     setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
   };
 
-  const handleSelectItem = (index: number) => {
+  const handleSelectItem = (index: number, expectedActionId?: string) => {
+    const expectedLocationId = normalizeLocationId(variables.location);
     if (panel.type === 'investigate' && currentScene?.investigateItems) {
-      performAction('investigate', index);
+      performAction('investigate', index, expectedActionId, expectedLocationId);
     } else if (panel.type === 'act' && currentScene?.actionItems) {
-      performAction('actions', index);
+      performAction('actions', index, expectedActionId, expectedLocationId);
     }
   };
 
@@ -187,17 +193,34 @@ export function ActionPanel() {
               {panel.type === 'investigate' && sceneItems.length > 0 && (
                 <SceneItemShelf items={sceneItems} onOpen={setViewingItem} />
               )}
-              {items.map((item, index) => (
-                <ActionPanelItem
+              {items.map((item, index) => {
+                const resolvedAction = tryResolvePanelAction(item, {
+                  sceneId: currentScene?.id ?? 'unknown-scene',
+                  itemIndex: index,
+                  type: panel.type === 'act' ? 'act' : 'investigate',
+                  currentLocationId: normalizeLocationId(variables.location),
+                  currentTime: gameStatus.time,
+                });
+                return <ActionPanelItem
                   key={`${index}-${item.desc}`}
                   index={index}
                   item={item}
                   linkedItem={panel.type === 'investigate' ? findItemForInvestigation(item.desc, background) : undefined}
                   onOpenItem={setViewingItem}
-                  onClick={() => handleSelectItem(index)}
+                  onClick={() => handleSelectItem(index, resolvedAction?.selection.actionId)}
                   actionType={panel.type === 'act' ? 'act' : 'investigate'}
-                />
-              ))}
+                  resolvedAction={resolvedAction}
+                  currentStamina={gameStatus.stamina}
+                  disabled={isWaitingForAI || isTyping}
+                />;
+              })}
+              {items.length === 0 && (
+                <p className="action-panel-empty" role="status">
+                  {panel.content.trim() || (panel.type === 'investigate'
+                    ? '当前清单暂无新的明确调查目标。'
+                    : '当前清单暂无可用行动。')}
+                </p>
+              )}
             </div>
           ) : (
             <ObserveContent
@@ -221,20 +244,31 @@ export function ActionPanel() {
   );
 }
 
-function ActionPanelItem({ index, item, linkedItem, onOpenItem, onClick, actionType }: {
+function ActionPanelItem({
+  index, item, linkedItem, onOpenItem, onClick, actionType, resolvedAction, currentStamina, disabled,
+}: {
   index: number;
   item: PanelItemData;
   linkedItem?: ItemAsset;
   onOpenItem: (item: ItemAsset) => void;
   onClick: () => void;
   actionType: 'investigate' | 'act';
+  resolvedAction: ResolvedChecklistAction | null;
+  currentStamina: number;
+  disabled: boolean;
 }) {
+  const quote = resolvedAction?.quote;
+  const selection = resolvedAction?.selection;
+  const staminaDelta = selection?.kind === 'rest' && selection.requestedMinutes
+    ? Math.min(120 - currentStamina, Math.round(12 * selection.requestedMinutes / 60))
+    : -(quote?.staminaCost ?? 0);
   return (
     <div className="action-panel-card">
       <PixelModalListItem
         data-cursor="pointer"
         className="action-panel-item"
         onClick={onClick}
+        disabled={disabled || !resolvedAction}
         aria-label={`执行${actionType === 'act' ? '行动' : '调查'} ${item.desc}`}
       >
         <span className="action-panel-item-icon" aria-hidden="true">
@@ -243,9 +277,21 @@ function ActionPanelItem({ index, item, linkedItem, onOpenItem, onClick, actionT
         <span className="action-panel-item-copy">
           <span className="action-panel-item-title">{item.desc}</span>
           <span className="action-panel-item-meta">
-            <MetaChip label="耗时" value={item.time ?? '--'} />
-            <MetaChip label="体力" value={`-${item.stamina ?? 0}`} />
-            <MetaChip label="理智" value={`-${item.sanity ?? 0}`} />
+            {quote ? (
+              <>
+                <PixelModalStatus className="action-panel-meta-chip" aria-label="预计耗时">
+                  约{quote.totalMinutes}分钟
+                </PixelModalStatus>
+                {quote.travelMinutes > 0 && (
+                  <PixelModalStatus className="action-panel-meta-chip">
+                    含路程{quote.travelMinutes}分钟
+                  </PixelModalStatus>
+                )}
+                <MetaChip label="体力" value={`${staminaDelta > 0 ? '+' : ''}${staminaDelta}`} />
+              </>
+            ) : (
+              <PixelModalStatus className="action-panel-meta-chip">行动信息已失效</PixelModalStatus>
+            )}
           </span>
         </span>
         <span className="action-panel-item-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
@@ -264,6 +310,17 @@ function ActionPanelItem({ index, item, linkedItem, onOpenItem, onClick, actionT
       )}
     </div>
   );
+}
+
+function tryResolvePanelAction(
+  item: PanelItemData,
+  input: Parameters<typeof resolveChecklistAction>[1],
+): ResolvedChecklistAction | null {
+  try {
+    return resolveChecklistAction(item, input);
+  } catch {
+    return null;
+  }
 }
 
 function SceneItemShelf({ items, onOpen }: { items: ItemAsset[]; onOpen: (item: ItemAsset) => void }) {

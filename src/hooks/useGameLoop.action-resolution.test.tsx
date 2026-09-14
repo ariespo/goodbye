@@ -135,6 +135,16 @@ describe('priced investigation menu acceptance', () => {
       .toEqual([{ kind: 'travel', planned: 10 }, { kind: 'investigation', planned: 55 }]);
     expect(resolved.completedSourceIds).toEqual(['fact:F002:atmosphere']);
     expect(state.tavern.variables.opportunityProgress?.completedIds).toContain(opportunity!.id);
+    const assistant = [...state.tavern.chats[0].messages].reverse().find(message => message.role === 'assistant');
+    expect(assistant?.acceptedActionOutcome).toMatchObject({
+      actionId: 'school-check',
+      executedMinutes: 65,
+      executedWorkMinutes: 55,
+      executedTravelMinutes: 10,
+      endTime: '2024-09-09T09:05:00',
+    });
+    expect(state.api.parsedContent.actionOutcome).toEqual(assistant?.acceptedActionOutcome);
+    expect(state.game.currentScene?.actionOutcome).toEqual(assistant?.acceptedActionOutcome);
     unmount();
   });
 
@@ -186,13 +196,26 @@ describe('priced investigation menu acceptance', () => {
     expect(interrupted.tavern.variables.mysteryKnowledge?.['shared-school-absence']).toBeUndefined();
     expect(interrupted.tavern.chats[0].messages.find(message => message.role === 'user')?.actionRequest?.selection?.opportunityId)
       .toBe(opportunity.id);
+    expect(interrupted.api.parsedContent.actionOutcome).toMatchObject({
+      executedMinutes: 30,
+      executedWorkMinutes: 20,
+      executedTravelMinutes: 10,
+      remaining: { workMinutes: 35, travelMinutes: 0, totalMinutes: 35 },
+    });
+    expect(interrupted.api.parsedContent.options[0]).toBe('处理眼前的事情');
+    expect(interrupted.api.parsedContent.optionBindings).toBeUndefined();
 
     const reloadedScene = rebuildSceneFromChat(interrupted.tavern.chats[0]);
     firstHook.unmount();
     useGameStore.setState(state => ({ game: { ...state.game, currentScene: reloadedScene } }));
     const resumedHook = renderHook(() => useGameLoop());
     await act(async () => { await resumedHook.result.current.sendMessage('接听警方电话'); });
-    await act(async () => { await resumedHook.result.current.sendMessage('继续未完成的调查', { resumeActionId }); });
+    const resumeOption = useGameStore.getState().api.parsedContent.options[0];
+    const resumeBinding = useGameStore.getState().api.parsedContent.optionBindings?.[0];
+    expect(resumeOption).toMatch(/继续未完成的行动.*剩余35分钟/);
+    expect(resumeBinding).toMatchObject({ continuationId: resumeActionId });
+    act(() => { resumedHook.result.current.selectOption(resumeOption, resumeBinding); });
+    await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(3));
 
     const final = useGameStore.getState().tavern.variables;
     expect(final).toMatchObject({
@@ -239,6 +262,111 @@ beforeEach(() => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('resolved action at the real hook boundary', () => {
+  it('rejects a stale checklist click before any model or preparation work starts', () => {
+    const menu = { ...maintextToScene('对话|旁白|calm|你看着房间。'), investigateItems: [{
+      desc: '检查房间', suspect: '无', style: '现实', time: '2分钟', stamina: 99, sanity: 99,
+    }] };
+    useGameStore.setState(state => ({ game: { ...state.game, currentScene: menu } }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    act(() => { result.current.performAction('investigate', 0, 'a-stale-action-id'); });
+
+    expect(prepareMysteryTurn).not.toHaveBeenCalled();
+    expect(streamChatCompletion).not.toHaveBeenCalled();
+    expect(useGameStore.getState().ui.notifications.at(-1)?.message).toContain('已更新');
+    unmount();
+  });
+
+  it('rejects a continuation binding that no longer matches the saved option and action', () => {
+    const optionText = '继续未完成的行动（剩余35分钟）';
+    useGameStore.setState(state => ({
+      api: {
+        ...state.api,
+        parsedContent: {
+          ...state.api.parsedContent,
+          options: [optionText],
+          optionBindings: [{ optionIndex: 0, optionText, actionId: 'school-check', continuationId: 'school-check' }],
+        },
+      },
+      tavern: {
+        ...state.tavern,
+        variables: {
+          ...state.tavern.variables,
+          actionContinuity: {
+            cycleCount: 1,
+            continuation: {
+              actionId: 'school-check', cycleCount: 1, steps: [], previousResolutionId: 'resolution-1',
+              stepsDigest: 'steps', resumableFromTime: '2024-09-09T16:00:00', expectedLocationId: 'school',
+              activeStepId: 'school-check', completedMinutesByStep: {}, chargedStaminaByStep: {},
+            },
+          },
+        },
+      },
+    }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    act(() => result.current.selectOption(optionText, {
+      optionIndex: 0, optionText, actionId: 'forged-action', continuationId: 'school-check',
+    }));
+
+    expect(prepareMysteryTurn).not.toHaveBeenCalled();
+    expect(streamChatCompletion).not.toHaveBeenCalled();
+    expect(useGameStore.getState().ui.notifications.at(-1)?.message).toContain('已更新');
+    unmount();
+  });
+
+  it('does not reroll through a settled local map pair into the preceding AI turn', async () => {
+    const state = useGameStore.getState();
+    const activeChat = state.tavern.chats[0];
+    useGameStore.setState(current => ({
+      tavern: {
+        ...current.tavern,
+        chats: [{
+          ...activeChat,
+          messages: [{
+            id: 'map-user', role: 'user', content: '前往文穗的中学', timestamp: 1,
+            variables: current.tavern.variables, localAction: 'map-travel',
+          }, {
+            id: 'map-assistant', role: 'assistant', content: '<maintext>对话|旁白|calm|你抵达了学校。</maintext>', timestamp: 2,
+            variables: current.tavern.variables, localAction: 'map-travel',
+          }],
+        }],
+      },
+    }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    await act(async () => { await result.current.reroll(); });
+
+    expect(saveChat).not.toHaveBeenCalled();
+    expect(prepareMysteryTurn).not.toHaveBeenCalled();
+    expect(useGameStore.getState().ui.notifications.at(-1)?.message).toMatch(/地图移动已经结算/);
+    unmount();
+  });
+
+  it('executes a reconstructed legacy menu row with the normal authoritative quote', async () => {
+    const menu = { ...maintextToScene('对话|旁白|calm|你看着房间。'), investigateItems: [{
+      desc: '检查房间', suspect: '无', style: '现实', time: '2分钟', stamina: 99, sanity: 99,
+    }] };
+    const actionId = `legacy:${menu.id}:investigate:0`;
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, complete: async messages =>
+      messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
+        ? JSON.stringify(approved)
+        : JSON.stringify({ turnGoal: '检查房间', tone: '克制',
+          beats: [{ id: 'b', purpose: '调查', description: '检查房间', locationId: 'home' }],
+          revelations: [], assetRequests: [],
+          actionSteps: [{ id: actionId, kind: 'investigation', scope: 'normal', locationId: 'home' }],
+          optionIntents: [{ id: 'o', intent: '继续调查', tone: '克制', expectedPressure: 'low' }] }) }));
+    useGameStore.setState(state => ({ game: { ...state.game, currentScene: menu } }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    act(() => { result.current.performAction('investigate', 0, actionId); });
+    await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(1));
+    expect(useGameStore.getState().tavern.variables).toMatchObject({
+      time: '2024-09-09T08:55:00', stamina: 93, sanity: 70,
+    });
+    unmount();
+  });
+
   it('does not persist NPC name knowledge from player input when accepted prose contains no introduction', async () => {
     useGameStore.setState(state => ({
       tavern: {

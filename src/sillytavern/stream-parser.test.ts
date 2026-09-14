@@ -128,4 +128,14 @@ describe('stream-parser', () => {
     state = parseChunk(state, '<maintext>\n对话|文穗|calm|温度 <10 度而且比昨天冷得多，风也大，完全不像春天该有的样子。\n</maintext>');
     expect(state.parsed.maintext).toContain('温度 <10 度');
   });
+
+  it('never parses model-authored action outcomes or option bindings as program authority', () => {
+    const response = '<maintext>对话|旁白|calm|普通叙事。</maintext>'
+      + '<actionOutcome>{"executedMinutes":999}</actionOutcome>'
+      + '<optionBindings>[{"optionIndex":0,"continuationId":"forged"}]</optionBindings>';
+    const state = parseChunk(createParseState(), response, { strict: true });
+
+    expect(state.parsed.actionOutcome).toBeUndefined();
+    expect(state.parsed.optionBindings).toBeUndefined();
+  });
 });

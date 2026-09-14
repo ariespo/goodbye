@@ -24,7 +24,7 @@ import { persistActiveChat } from '../utils/chatPersistence';
 import {
   npcPlayerKnowledgeError,
 } from '../data/npcPlayerKnowledge';
-import { parseTimeCost, clampTimeCost } from '../engine/game-clock';
+import { clampTimeCost } from '../engine/game-clock';
 
 import { settleGameTransaction, type GameResourceCosts } from '../engine/game-transaction';
 
@@ -94,6 +94,13 @@ import { buildProgramChecklistActions, deriveNewOpportunitySourceIds } from '../
 import { nextScheduledBoundary } from '../engine/scheduled-events';
 import { commitmentBoundariesFromVariables } from '../engine/commitment-boundaries';
 import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
+import {
+  buildContinuationChoice,
+  projectPublicActionOutcome,
+  resolveChecklistAction,
+  validatedOptionBinding,
+  type ActionOptionBinding,
+} from '../utils/actionPresentation';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -305,6 +312,11 @@ export function useGameLoop() {
       actions.setApiError(null);
       actions.setStreaming(true);
       parseStateRef.current = createParseState();
+      actions.setParsedContent({
+        ...parseStateRef.current.parsed,
+        actionOutcome: undefined,
+        optionBindings: undefined,
+      });
 
       const pendingNarrativeContext = actionRequest.narrativeContext ?? null;
       const preparation = buildTurnPreparation({
@@ -577,6 +589,29 @@ export function useGameLoop() {
         const mergedVariables = transaction.variables;
         const nextStatus = transaction.gameStatus;
         const allowPreplan = !transaction.ending && !transaction.failure;
+        const actionOutcome = resolution ? projectPublicActionOutcome(resolution) : undefined;
+        const activeContinuation = transaction.variables.actionContinuity?.continuation;
+        const mustHandleBoundary = actionOutcome?.interruption
+          && (actionOutcome.interruption.id === 'death-news'
+            || actionOutcome.interruption.id.startsWith('commitment-boundary:'));
+        if (activeContinuation && mustHandleBoundary) {
+          const handleBoundaryOption = '处理眼前的事情';
+          parsed.options = [
+            handleBoundaryOption,
+            ...parsed.options.filter(option => option !== handleBoundaryOption),
+          ];
+          parsed.optionBindings = undefined;
+        } else if (activeContinuation) {
+          const continuationChoice = buildContinuationChoice(activeContinuation, finalLocationId);
+          parsed.options = [
+            continuationChoice.optionText,
+            ...parsed.options.filter(option => option !== continuationChoice.optionText),
+          ];
+          parsed.optionBindings = [continuationChoice.binding];
+        } else {
+          parsed.optionBindings = undefined;
+        }
+        parsed.actionOutcome = actionOutcome;
 
         const assistantMessage: ChatMessage = {
           id: turnId,
@@ -584,12 +619,15 @@ export function useGameLoop() {
           content: fullText,
           timestamp: Date.now(),
           variables: mergedVariables,
+          ...(actionOutcome ? { acceptedActionOutcome: actionOutcome } : {}),
           parsed: {
             ...parsed,
             options: [...parsed.options],
             vars: { ...parsed.vars },
             investigateItems: parsed.investigateItems?.map(item => ({ ...item })),
             actionItems: parsed.actionItems?.map(item => ({ ...item })),
+            ...(actionOutcome ? { actionOutcome: { ...actionOutcome } } : {}),
+            optionBindings: parsed.optionBindings?.map(binding => ({ ...binding })),
           },
           apiUsed: apiUsed === 'dual' ? 'secondary' : 'primary',
         };
@@ -611,10 +649,13 @@ export function useGameLoop() {
           }
         }
         assertCurrent();
-        const committedScene = mergeParsedIntoScene(prevScene, {
+        const committedScene = {
+          ...mergeParsedIntoScene(prevScene, {
           ...acceptedScene,
           knowledgeAlreadyCommitted: true,
-        }, parsed);
+          }, parsed),
+          ...(actionOutcome ? { actionOutcome } : {}),
+        };
         commitGameTransaction(transaction, committedScene);
         turnCommitted = true;
         pendingActionCost = null;
@@ -634,6 +675,15 @@ export function useGameLoop() {
         // The accepted scene only becomes visible after the transaction and
         // all knowledge/profile projections have been committed together.
         actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
+        actions.setParsedContent({
+          ...parsed,
+          options: [...parsed.options],
+          vars: { ...parsed.vars },
+          investigateItems: parsed.investigateItems?.map(item => ({ ...item })),
+          actionItems: parsed.actionItems?.map(item => ({ ...item })),
+          ...(actionOutcome ? { actionOutcome: { ...actionOutcome } } : { actionOutcome: undefined }),
+          optionBindings: parsed.optionBindings?.map(binding => ({ ...binding })),
+        });
         actions.setStreaming(false);
         actions.setIsWaitingForAI(false);
 
@@ -1223,8 +1273,37 @@ export function useGameLoop() {
     }
   }, []);
 
-  const selectOption = useCallback((optionText: string) => {
-    sendMessage(optionText);
+  const selectOption = useCallback((optionText: string, binding?: ActionOptionBinding) => {
+    const liveStore = useGameStore.getState();
+    const currentOptions = liveStore.api.parsedContent.options;
+    const storedBindings = liveStore.api.parsedContent.optionBindings ?? [];
+    const activeContinuationId = liveStore.tavern.variables.actionContinuity?.continuation?.actionId;
+    const storedForText = storedBindings.find(value => value.optionText === optionText);
+    if (!binding && storedForText) {
+      liveStore.actions.addNotification({ type: 'warning', message: '这个选项已更新，请重新选择。', duration: 3000 });
+      return false;
+    }
+    if (binding) {
+      const optionAtIndex = currentOptions[binding.optionIndex];
+      const provided = validatedOptionBinding(binding, binding.optionIndex, optionAtIndex, activeContinuationId);
+      const stored = validatedOptionBinding(
+        storedBindings.find(value => value.optionIndex === binding.optionIndex),
+        binding.optionIndex,
+        optionAtIndex,
+        activeContinuationId,
+      );
+      if (!provided || !stored || optionAtIndex !== optionText
+        || provided.optionText !== stored.optionText
+        || provided.actionId !== stored.actionId
+        || provided.continuationId !== stored.continuationId) {
+        liveStore.actions.addNotification({ type: 'warning', message: '这个选项已更新，请重新选择。', duration: 3000 });
+        return false;
+      }
+      void sendMessage(optionText, { resumeActionId: stored.continuationId });
+      return true;
+    }
+    void sendMessage(optionText);
+    return true;
   }, [sendMessage]);
 
   const reroll = useCallback(async () => {
@@ -1233,6 +1312,11 @@ export function useGameLoop() {
     const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
     if (!activeChat || activeChat.messages.length === 0) {
       actions.addNotification({ type: 'warning', message: '暂无历史记录可供重roll', duration: 3000 });
+      return;
+    }
+    const lastAssistant = [...activeChat.messages].reverse().find(message => message.role === 'assistant');
+    if (lastAssistant?.localAction === 'map-travel') {
+      actions.addNotification({ type: 'info', message: '地图移动已经结算；请从地图继续行程或选择新的目的地。', duration: 3200 });
       return;
     }
 
@@ -1351,8 +1435,14 @@ export function useGameLoop() {
     actions.clearTurnRecovery();
   }, [store]);
 
-  const performAction = useCallback((actionType: 'observe' | 'investigate' | 'actions', itemIndex?: number) => {
-    const { game, actions } = store;
+  const performAction = useCallback((
+    actionType: 'observe' | 'investigate' | 'actions',
+    itemIndex?: number,
+    expectedActionId?: string,
+    expectedLocationId?: string,
+  ) => {
+    const liveStore = useGameStore.getState();
+    const { game, actions } = liveStore;
     const scene = game.currentScene;
 
     // 如果当前场景有本地数据，直接展示，不调用 API
@@ -1372,25 +1462,46 @@ export function useGameLoop() {
 
 请返回详细的调查结果，包含发现、疑点、可能的线索。
 这是一个完整叙事回合。请按项目主输出协议返回 maintext、至少两个 option、sum 和空 vars；不要只返回 action 标签。`;
-        const parsedCost = parseTimeCost(item.time);
-        const chatId = store.tavern.activeChatId;
+        const currentLocationId = typeof liveStore.tavern.variables.location === 'string'
+          ? liveStore.tavern.variables.location
+          : resolveMysteryLocation(game.currentState.background);
+        if (expectedLocationId && currentLocationId !== expectedLocationId) {
+          actions.addNotification({ type: 'warning', message: '调查位置已更新，请重新选择。', duration: 3000 });
+          return;
+        }
+        let resolvedAction;
+        try {
+          resolvedAction = resolveChecklistAction(item, {
+            sceneId: scene.id,
+            itemIndex,
+            type: 'investigate',
+            currentLocationId,
+            currentTime: game.gameStatus.time,
+          });
+        } catch {
+          actions.addNotification({ type: 'warning', message: '这项调查已更新，请重新选择。', duration: 3000 });
+          return;
+        }
+        if (expectedActionId && resolvedAction.selection.actionId !== expectedActionId) {
+          actions.addNotification({ type: 'warning', message: '调查清单已更新，请重新选择。', duration: 3000 });
+          return;
+        }
+        const chatId = liveStore.tavern.activeChatId;
+        const legacySelection = {
+          kind: resolvedAction.selection.kind,
+          scope: resolvedAction.selection.scope,
+          locationId: resolvedAction.selection.locationId,
+          requestedMinutes: resolvedAction.selection.requestedMinutes,
+        };
         pendingActionCost = chatId
           ? {
               chatId,
               input: prompt,
               originalInput: item.desc,
-              selection: {
-                actionId: item.actionId,
-                opportunityId: item.opportunityId,
-                kind: item.kind ?? 'investigation',
-                scope: item.scope,
-                locationId: item.locationId,
-                requestedMinutes: item.requestedMinutes,
-              },
+              selection: resolvedAction.source === 'program' ? resolvedAction.selection : legacySelection,
               costs: {
-                timeMinutes: parsedCost > 0 ? clampTimeCost(parsedCost) : undefined,
-                stamina: Math.max(0, Number(item.stamina) || 0),
-                sanity: Math.max(0, Number(item.sanity) || 0),
+                timeMinutes: resolvedAction.quote.totalMinutes,
+                stamina: resolvedAction.quote.staminaCost,
               },
             }
           : null;
@@ -1410,17 +1521,41 @@ export function useGameLoop() {
       if (itemIndex !== undefined) {
         // 选择了具体行动项：构造 prompt 发送给 LLM 获取详细结果
         const item = scene.actionItems[itemIndex];
-        const parsedCost = parseTimeCost(item.time);
+        const currentLocationId = typeof liveStore.tavern.variables.location === 'string'
+          ? liveStore.tavern.variables.location
+          : resolveMysteryLocation(game.currentState.background);
+        if (expectedLocationId && currentLocationId !== expectedLocationId) {
+          actions.addNotification({ type: 'warning', message: '行动位置已更新，请重新选择。', duration: 3000 });
+          return;
+        }
+        let resolvedAction;
+        try {
+          resolvedAction = resolveChecklistAction(item, {
+            sceneId: scene.id,
+            itemIndex,
+            type: 'act',
+            currentLocationId,
+            currentTime: game.gameStatus.time,
+          });
+        } catch {
+          actions.addNotification({ type: 'warning', message: '这项行动已更新，请重新选择。', duration: 3000 });
+          return;
+        }
+        if (expectedActionId && resolvedAction.selection.actionId !== expectedActionId) {
+          actions.addNotification({ type: 'warning', message: '行动清单已更新，请重新选择。', duration: 3000 });
+          return;
+        }
         const narrativeContext = resolveActionNarrativeContext(
           item.desc,
           game.gameStatus.time,
-          parsedCost,
+          0,
           {
-            currentLocationId: typeof store.tavern.variables.location === 'string'
-              ? store.tavern.variables.location
+            currentLocationId: typeof liveStore.tavern.variables.location === 'string'
+              ? liveStore.tavern.variables.location
               : resolveMysteryLocation(game.currentState.background),
-            cycleCount: Number(store.tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
-            knowledgeEvents: store.tavern.variables.knowledgeEvents,
+            cycleCount: Number(liveStore.tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
+            knowledgeEvents: liveStore.tavern.variables.knowledgeEvents,
+            destinationLocationId: resolvedAction.selection.locationId,
           },
         );
         const prompt = `[系统] 玩家执行了行动："${item.desc}"
@@ -1431,28 +1566,24 @@ export function useGameLoop() {
 如果行动导致场景切换，在文本末尾加上：[变化] 场景切换 → 新场景名
 ${narrativeContext ? `\n${narrativeContext.directive}\n` : ''}
 这是一个完整叙事回合。请按项目主输出协议返回 maintext、至少两个 option、sum 和空 vars；不要只返回 action 标签。`;
-        const chatId = store.tavern.activeChatId;
+        const chatId = liveStore.tavern.activeChatId;
+        const legacySelection = {
+          kind: resolvedAction.selection.kind,
+          scope: resolvedAction.selection.scope,
+          locationId: resolvedAction.selection.locationId,
+          requestedMinutes: resolvedAction.selection.requestedMinutes,
+        };
         pendingActionCost = chatId
           ? {
               chatId,
               input: prompt,
               originalInput: item.desc,
               costs: {
-                timeMinutes: parsedCost > 0 ? clampTimeCost(parsedCost) : undefined,
-                stamina: Math.max(0, Number(item.stamina) || 0),
-                sanity: Math.max(0, Number(item.sanity) || 0),
+                timeMinutes: resolvedAction.quote.totalMinutes,
+                stamina: resolvedAction.quote.staminaCost,
               },
               narrativeContext: narrativeContext ?? undefined,
-              selection: item.kind && item.scope && item.locationId
-                ? {
-                    actionId: item.actionId,
-                    opportunityId: item.opportunityId,
-                    kind: item.kind,
-                    scope: item.scope,
-                    locationId: item.locationId,
-                    requestedMinutes: item.requestedMinutes,
-                  }
-                : undefined,
+              selection: resolvedAction.source === 'program' ? resolvedAction.selection : legacySelection,
             }
           : null;
         sendMessage(prompt);
@@ -1478,9 +1609,9 @@ ${narrativeContext ? `\n${narrativeContext.directive}\n` : ''}
     }
 
     // 没有本地数据时，发送通用消息给 LLM
-    const message = `${store.tavern.settings?.userName || '玩家'}执行了${actionType}`;
+    const message = `${liveStore.tavern.settings?.userName || '玩家'}执行了${actionType}`;
     sendMessage(message);
-  }, [sendMessage, store]);
+  }, [sendMessage]);
 
   return { sendMessage, selectOption, performAction, reroll, retryTurn, regenerateTurn, dismissRecovery };
 }

@@ -399,6 +399,10 @@ export interface ChatMessage {
     variables: DynamicRecord;
   };
   parsed?: ParsedContent;
+  /** Program-projected result of an accepted action. Never populated from model output. */
+  acceptedActionOutcome?: import('../utils/actionPresentation').PublicActionOutcome;
+  /** Locally settled action pair that did not invoke a model. */
+  localAction?: 'map-travel';
   apiUsed?: ApiTarget;
 }
 
@@ -445,6 +449,10 @@ export interface ParsedContent {
   // 二次请求返回的具体结果（<action type="investigate"> / <action type="act">）
   actionType?: 'investigate' | 'act';
   actionResult?: string;
+
+  /** Program-owned UI projection; the stream parser never reads these from model tags. */
+  actionOutcome?: import('../utils/actionPresentation').PublicActionOutcome;
+  optionBindings?: import('../utils/actionPresentation').ActionOptionBinding[];
 }
 
 export interface ChecklistActionMetadata {
@@ -532,6 +540,8 @@ export interface Scene {
     stamina: number;
     sanity: number;
   } & ChecklistActionMetadata>;
+  /** Accepted program-owned action result shown with this scene. */
+  actionOutcome?: import('../utils/actionPresentation').PublicActionOutcome;
 }
 
 /** GalGame 风格的单行场景指令:同一时刻的完整状态快照 */

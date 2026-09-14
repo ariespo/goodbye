@@ -1,6 +1,7 @@
 import { OPENING_STORYLINE, parseOpeningStoryline } from '../engine/opening-storyline';
 import { maintextToScene } from '../engine/scene-parser';
 import type { ChatSession, Scene } from '../sillytavern/types';
+import { acceptedActionUiFromMessage } from './actionPresentation';
 
 /**
  * 从会话最后一条 assistant 消息重建可交互场景。
@@ -13,12 +14,14 @@ export function rebuildSceneFromChat(chat: ChatSession | null | undefined): Scen
   const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
   if (!maintext) return null;
   const scene = maintext === OPENING_STORYLINE ? parseOpeningStoryline() : maintextToScene(maintext);
+  const { actionOutcome } = acceptedActionUiFromMessage(lastAssistant, lastAssistant.parsed?.options ?? []);
   if (scene.lines.length > 0 && (
     scene.observe
     || scene.investigateItems !== undefined
     || scene.actionItems !== undefined
+    || actionOutcome
   )) {
-    return scene;
+    return { ...scene, ...(actionOutcome ? { actionOutcome } : {}) };
   }
   return null;
 }

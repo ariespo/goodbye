@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
 import { getCycleMetaOptions, handleCycleMetaOption } from '../../utils/cycleLoop';
 import { shouldShowChoiceMenu } from './choiceMenuVisibility';
+import {
+  readPublicActionOutcome,
+  validatedOptionBinding,
+  type PublicActionOutcome,
+} from '../../utils/actionPresentation';
 
 const TEXT_MAIN = '#e2ded6';
 const TEXT_DIM = '#8a8580';
@@ -20,6 +25,16 @@ export function ChoiceMenu() {
   const variables = useGameStore(state => state.tavern.variables);
   const endingsSeen = useGameStore(state => state.game.endingsSeen);
   const { selectOption, reroll } = useGameLoop();
+  const selectionLockRef = useRef(false);
+  const [selectionLocked, setSelectionLocked] = useState(false);
+
+  const actionOutcome = readPublicActionOutcome(parsedContent.actionOutcome);
+  const activeContinuationId = variables.actionContinuity?.continuation?.actionId;
+
+  useEffect(() => {
+    selectionLockRef.current = false;
+    setSelectionLocked(false);
+  }, [parsedContent]);
 
   const options = parsedContent.options;
   const metaOptions = useMemo(
@@ -38,13 +53,30 @@ export function ChoiceMenu() {
       className="choice-menu absolute bottom-[36%] left-1/2 z-20 flex -translate-x-1/2 flex-col gap-2"
       style={{ width: 'min(72vw, 760px)' }}
     >
+      {actionOutcome && <ActionOutcomeNotice outcome={actionOutcome} />}
       {options.map((option, index) => (
         <PixelChoiceBtn
           key={`${index}-${option}`}
           index={index}
           text={option}
-          disabled={isWaitingForAI}
-          onClick={() => selectOption(option)}
+          disabled={isWaitingForAI || selectionLocked}
+          onClick={() => {
+            if (selectionLockRef.current) return;
+            selectionLockRef.current = true;
+            setSelectionLocked(true);
+            const binding = validatedOptionBinding(
+              parsedContent.optionBindings?.find(value => (
+                value.optionIndex === index
+              )),
+              index,
+              option,
+              activeContinuationId,
+            );
+            if (!selectOption(option, binding)) {
+              selectionLockRef.current = false;
+              setSelectionLocked(false);
+            }
+          }}
         />
       ))}
       {metaOptions.map((option, index) => (
@@ -58,6 +90,41 @@ export function ChoiceMenu() {
       ))}
       {options.length > 0 && <RerollBtn disabled={isWaitingForAI} onClick={() => reroll()} />}
     </div>
+  );
+}
+
+function interruptionText(id: string): string {
+  if (id === 'death-news') return '到达既定时间点，行动已暂停。';
+  if (id === 'midnight') return '当天已结束，未完成行动不能跨轮回继续。';
+  if (id === 'explicit-budget') return '已用完本次明确投入的时间。';
+  if (id.startsWith('commitment-boundary:')) return '约定时间已到，行动已暂停。';
+  return '到达既定时间点，行动已暂停。';
+}
+
+function signedResource(value: number): string {
+  return `${value > 0 ? '+' : ''}${value}`;
+}
+
+function ActionOutcomeNotice({ outcome }: { outcome: PublicActionOutcome }) {
+  return (
+    <aside className="choice-action-outcome" aria-label="行动结果">
+      <div className="choice-action-outcome__headline">已进行{outcome.executedMinutes}分钟</div>
+      <div className="choice-action-outcome__details">
+        {outcome.executedWorkMinutes > 0 && <span>调查{outcome.executedWorkMinutes}分钟</span>}
+        {outcome.executedTravelMinutes > 0 && <span>路程{outcome.executedTravelMinutes}分钟</span>}
+        {outcome.staminaDelta !== 0 && <span>体力 {signedResource(outcome.staminaDelta)}</span>}
+        {outcome.sanityDelta !== 0 && <span>理智 {signedResource(outcome.sanityDelta)}</span>}
+      </div>
+      {outcome.interruption && (
+        <p className="choice-action-outcome__interruption">{interruptionText(outcome.interruption.id)}</p>
+      )}
+      {outcome.remaining && (
+        <div className="choice-action-outcome__remaining">
+          <span>剩余{outcome.remaining.totalMinutes}分钟</span>
+          {outcome.remaining.travelMinutes > 0 && <span>含路程{outcome.remaining.travelMinutes}分钟</span>}
+        </div>
+      )}
+    </aside>
   );
 }
 

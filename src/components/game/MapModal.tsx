@@ -10,17 +10,17 @@ import {
   type LocationIconKey,
 } from '../../data/locations';
 import {
-  addKnowledgeEvent,
   getCurrentLocationPresentation,
   getVisibleLocationPresentations,
 } from '../../data/playerKnowledge';
 import { saveChat } from '../../sillytavern/database';
-import type { Scene } from '../../sillytavern/types';
+import type { ChatMessage, ParsedContent, Scene } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
-import { settleGameTransaction } from '../../engine/game-transaction';
 import { commitGameTransaction } from '../../utils/gameTransactionStore';
 import { resolveSceneEnvironment } from '../../utils/sceneEnvironment';
+import { buildMapTravelTransaction, prepareMapTravel } from '../../utils/mapTravel';
+import { captureTurnState } from '../../utils/turnStateSnapshot';
 import { GameIcon } from '../ui/GameIcon';
 import {
   PixelModalAction,
@@ -91,8 +91,6 @@ function useMapPortalTarget(isNarrow: boolean) {
 export function MapModal() {
   const showMap = useGameStore(state => state.ui.showMap);
   const variables = useGameStore(state => state.tavern.variables);
-  const chats = useGameStore(state => state.tavern.chats);
-  const activeChatId = useGameStore(state => state.tavern.activeChatId);
   const gameStatus = useGameStore(state => state.game.gameStatus);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const isTyping = useGameStore(state => state.game.isTyping);
@@ -101,6 +99,7 @@ export function MapModal() {
   const visibleLocations = useMemo(() => getVisibleLocationPresentations(variables), [variables]);
   const [selectedLocationId, setSelectedLocationId] = useState(currentLocationId);
   const [isTraveling, setIsTraveling] = useState(false);
+  const travelRequestRef = useRef<string | null>(null);
   const mapViewportRef = useRef<HTMLDivElement>(null);
   const isNarrowMapViewport = useNarrowMapViewport();
   const mapPortalTarget = useMapPortalTarget(isNarrowMapViewport);
@@ -130,7 +129,16 @@ export function MapModal() {
     [currentLocation.id, selectedLocation.id],
   );
   const isCurrentLocation = selectedLocation.id === currentLocation.id;
-  const lacksStamina = !!estimate && gameStatus.stamina < estimate.staminaCost;
+  const preview = useMemo(() => {
+    if (isCurrentLocation || !selectedPresentation.canTravel) return null;
+    try {
+      const prepared = prepareMapTravel({ variables, gameStatus, destinationLocationId: selectedLocation.id });
+      return prepared.kind === 'travel' ? prepared : null;
+    } catch {
+      return null;
+    }
+  }, [gameStatus, isCurrentLocation, selectedLocation.id, selectedPresentation.canTravel, variables]);
+  const lacksStamina = !!preview && gameStatus.stamina < preview.quote.staminaCost;
   const isOnlyRumored = !selectedPresentation.canTravel;
   const travelUnavailable = isCurrentLocation || isOnlyRumored || lacksStamina || isWaitingForAI || isTyping || isTraveling;
   const travelLabel = isTraveling
@@ -148,6 +156,7 @@ export function MapModal() {
   const closeMap = () => actions.toggleModal('map');
 
   const handleTravel = async () => {
+    if (travelRequestRef.current) return;
     const travel = estimateTravel(currentLocation.id, selectedLocation.id);
     if (!selectedPresentation.canTravel) {
       actions.addNotification({ type: 'info', message: '目前只有模糊线索，需要先确认准确位置', duration: 2800 });
@@ -161,80 +170,195 @@ export function MapModal() {
       actions.addNotification({ type: 'warning', message: '当前演出尚未结束，暂时无法移动', duration: 2600 });
       return;
     }
-    if (gameStatus.stamina < travel.staminaCost) {
-      actions.addNotification({ type: 'error', message: `体力不足，还需要 ${travel.staminaCost} 点体力`, duration: 3000 });
+    const quotedStamina = preview?.quote.staminaCost ?? travel.staminaCost;
+    if (gameStatus.stamina < quotedStamina) {
+      actions.addNotification({ type: 'error', message: `体力不足，还需要 ${quotedStamina} 点体力`, duration: 3000 });
       return;
     }
 
+    const requestId = crypto.randomUUID();
+    travelRequestRef.current = requestId;
     setIsTraveling(true);
-    const liveState = useGameStore.getState();
-    const transaction = settleGameTransaction({
-      variables: liveState.tavern.variables,
-      gameStatus: liveState.game.gameStatus,
-      variablePatch: {
-        location: selectedLocation.id,
-        knowledgeEvents: addKnowledgeEvent(liveState.tavern.variables.knowledgeEvents, `visit:${selectedLocation.id}`),
-      },
-      costs: {
-        timeMinutes: travel.timeMinutes,
-        stamina: travel.staminaCost,
-      },
-      endings: liveState.game.endings,
-      endingsSeen: liveState.game.endingsSeen,
-      hasEndingInProgress: liveState.game.endingPanel.visible
-        || !!liveState.game.endingPanel.pendingEndingId,
-    });
-    const nextTime = transaction.gameStatus.time;
-    const nextStamina = transaction.gameStatus.stamina;
-    const nextBackground = getLocationBackground(selectedLocation, nextTime);
-    const nextVariables = transaction.variables;
-    const arrivalScene: Scene = {
-      id: `travel-${selectedLocation.id}-${nextTime.getTime()}`,
-      lines: [
-        {
-          background: nextBackground,
-          speaker: '旁白',
-          emotion: 'calm',
-          text: `你冒雨抵达${selectedPresentation.name}。路上用了${travel.timeMinutes}分钟，体力下降${travel.staminaCost}点。`,
+    try {
+      const liveState = useGameStore.getState();
+      const captured = {
+        activeChatId: liveState.tavern.activeChatId,
+        cycleCount: Number(liveState.tavern.variables.cycleCount ?? 1),
+        location: liveState.tavern.variables.location,
+        time: liveState.game.gameStatus.time.getTime(),
+        stamina: liveState.game.gameStatus.stamina,
+        sanity: liveState.game.gameStatus.sanity,
+      };
+      const isCapturedCurrent = () => {
+        const current = useGameStore.getState();
+        return travelRequestRef.current === requestId
+          && current.tavern.activeChatId === captured.activeChatId
+          && Number(current.tavern.variables.cycleCount ?? 1) === captured.cycleCount
+          && current.tavern.variables.location === captured.location
+          && current.game.gameStatus.time.getTime() === captured.time
+          && current.game.gameStatus.stamina === captured.stamina
+          && current.game.gameStatus.sanity === captured.sanity;
+      };
+      const prepared = prepareMapTravel({
+        variables: liveState.tavern.variables,
+        gameStatus: liveState.game.gameStatus,
+        destinationLocationId: selectedLocation.id,
+      });
+      if (prepared.kind === 'boundary-due') {
+        actions.addNotification({
+          type: 'warning', message: '既定事件需要先处理，暂时不能开始新的移动。', duration: 3200,
+        });
+        return;
+      }
+      const transaction = buildMapTravelTransaction({
+        variables: liveState.tavern.variables,
+        gameStatus: liveState.game.gameStatus,
+        prepared,
+        knowledgeEvents: liveState.tavern.variables.knowledgeEvents,
+        endings: liveState.game.endings,
+        endingsSeen: liveState.game.endingsSeen,
+        hasEndingInProgress: liveState.game.endingPanel.visible
+          || !!liveState.game.endingPanel.pendingEndingId,
+      });
+      const arrived = prepared.outcome.endLocationId === selectedLocation.id;
+      const nextTime = transaction.gameStatus.time;
+      const nextVariables = transaction.variables;
+      const nextBackground = arrived ? getLocationBackground(selectedLocation, nextTime) : 'street';
+      const remaining = prepared.publicOutcome.remaining?.totalMinutes ?? 0;
+      const staminaDelta = prepared.publicOutcome.staminaDelta;
+      const resultText = arrived
+        ? `你冒雨抵达${selectedPresentation.name}。路上用了${prepared.publicOutcome.executedTravelMinutes}分钟，体力${staminaDelta < 0 ? `下降${-staminaDelta}` : `变化${staminaDelta}`}点。`
+        : `你朝${selectedPresentation.name}行进了${prepared.publicOutcome.executedTravelMinutes}分钟，但既定时间点已经到来，路程尚未完成。剩余约${remaining}分钟。`;
+      const resultScene: Scene = {
+        id: `travel-${prepared.outcome.id}`,
+        lines: [{ background: nextBackground, speaker: '旁白', emotion: 'calm', text: resultText }],
+        ...(arrived ? { observe: selectedPresentation.description } : {}),
+        actionOutcome: prepared.publicOutcome,
+      };
+
+      const activeChat = liveState.tavern.chats.find(chat => chat.id === liveState.tavern.activeChatId);
+      if (!activeChat) throw new Error('未找到当前会话，无法保存移动结果');
+      const mapMaintext = `场景|${nextBackground}\n对话|旁白|calm|${resultText}`;
+      const mapParsed: ParsedContent = {
+        thinking: '',
+        maintext: mapMaintext,
+        options: arrived ? [] : ['处理眼前的事情'],
+        summary: arrived
+          ? `从${currentPresentation.name}移动到${selectedPresentation.name}`
+          : `前往${selectedPresentation.name}，已行进${prepared.publicOutcome.executedTravelMinutes}分钟`,
+        vars: {},
+        observe: arrived ? selectedPresentation.description : undefined,
+        investigateItems: [],
+        actionItems: [],
+        actionOutcome: prepared.publicOutcome,
+        optionBindings: undefined,
+      };
+      const localRequest: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: `前往${selectedPresentation.name}`,
+        timestamp: Date.now(),
+        variables: { ...liveState.tavern.variables },
+        localAction: 'map-travel',
+        actionRequest: {
+          inputOrigin: 'menu',
+          originalInput: `前往${selectedPresentation.name}`,
+          selection: {
+            actionId: prepared.actionId,
+            kind: 'travel',
+            scope: 'short',
+            locationId: selectedLocation.id,
+          },
         },
-      ],
-      observe: selectedPresentation.description,
-    };
+        turnState: captureTurnState({
+          gameStatus: liveState.game.gameStatus,
+          currentState: liveState.game.currentState,
+          currentScene: liveState.game.currentScene,
+          currentLineIndex: liveState.game.currentLineIndex,
+          sceneComplete: liveState.game.sceneComplete,
+          variables: liveState.tavern.variables,
+        }),
+      };
+      const acceptedMessage: ChatMessage = {
+        id: `map-${prepared.outcome.id}`,
+        role: 'assistant',
+        content: `<maintext>\n${mapMaintext}\n</maintext><option>${mapParsed.options.join('\n')}</option><sum>${mapParsed.summary}</sum><vars>{}</vars>`,
+        timestamp: Date.now(),
+        variables: nextVariables,
+        localAction: 'map-travel',
+        acceptedActionOutcome: prepared.publicOutcome,
+        parsed: mapParsed,
+      };
+      const baseMessages = activeChat.messages.at(-1)?.role === 'user'
+        && liveState.api.turnRecovery.phase !== 'idle'
+        ? activeChat.messages.slice(0, -1)
+        : activeChat.messages;
+      const updatedChat = {
+        ...activeChat,
+        messages: [...baseMessages, localRequest, acceptedMessage],
+        variables: nextVariables,
+        updatedAt: Date.now(),
+      };
+      const persistenceAbort = new AbortController();
+      await saveChat(updatedChat, {
+        signal: persistenceAbort.signal,
+        assertCurrent: () => {
+          if (!isCapturedCurrent()) throw new Error('地图状态已经变化，本次移动结果未提交。');
+        },
+      });
 
-    commitGameTransaction(transaction);
-    actions.setCurrentScene(arrivalScene);
-    actions.setCurrentState({
-      background: nextBackground,
-      character: null,
-      speaker: '旁白',
-      mood: 'calm',
-      effect: null,
-      item: null,
-      environment: resolveSceneEnvironment(nextBackground),
-    });
-    actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
-    actions.addHistorySnapshot({
-      turnIndex: useGameStore.getState().game.history.length,
-      timestamp: Date.now(),
-      summary: `从${currentPresentation.name}移动到${selectedPresentation.name}`,
-      gameStatus: { ...gameStatus, time: nextTime, stamina: nextStamina },
-      variables: nextVariables,
-    });
+      const latest = useGameStore.getState();
+      const stillCurrent = isCapturedCurrent();
+      if (!stillCurrent) {
+        actions.addNotification({ type: 'warning', message: '地图状态已经变化，本次移动结果未提交。', duration: 3200 });
+        return;
+      }
 
-    const activeChat = chats.find(chat => chat.id === activeChatId);
-    if (activeChat) {
-      const updatedChat = { ...activeChat, variables: nextVariables, updatedAt: Date.now() };
-      await saveChat(updatedChat);
-      actions.setChats(chats.map(chat => chat.id === updatedChat.id ? updatedChat : chat));
+      commitGameTransaction(transaction, resultScene);
+      actions.setParsedContent(mapParsed);
+      actions.clearTurnRecovery();
+      actions.setCurrentState({
+        background: nextBackground,
+        character: null,
+        speaker: '旁白',
+        mood: 'calm',
+        effect: null,
+        item: null,
+        environment: resolveSceneEnvironment(nextBackground),
+      });
+      actions.setActionPanel({ visible: false, type: null, content: '', selectedIndex: null });
+      actions.addHistorySnapshot({
+        turnIndex: latest.game.history.length,
+        timestamp: Date.now(),
+        summary: arrived
+          ? `从${currentPresentation.name}移动到${selectedPresentation.name}`
+          : `前往${selectedPresentation.name}，已行进${prepared.publicOutcome.executedTravelMinutes}分钟`,
+        gameStatus: transaction.gameStatus,
+        variables: nextVariables,
+      });
+      actions.setChats(liveState.tavern.chats.map(chat => chat.id === updatedChat.id ? updatedChat : chat));
+      actions.addNotification({
+        type: arrived ? 'success' : 'info',
+        message: arrived
+          ? `已抵达${selectedPresentation.name}：体力${staminaDelta < 0 ? staminaDelta : `+${staminaDelta}`}，时间推进${prepared.outcome.executedMinutes}分钟`
+          : `移动已暂停：进行${prepared.outcome.executedMinutes}分钟，剩余${remaining}分钟`,
+        duration: 3200,
+      });
+      travelRequestRef.current = null;
+      setIsTraveling(false);
+      closeMap();
+    } catch (error) {
+      actions.addNotification({
+        type: 'error',
+        message: `移动未完成：${error instanceof Error ? error.message : '保存失败'}`,
+        duration: 3600,
+      });
+    } finally {
+      if (travelRequestRef.current === requestId) {
+        travelRequestRef.current = null;
+        setIsTraveling(false);
+      }
     }
-
-    actions.addNotification({
-      type: 'success',
-      message: `已抵达${selectedPresentation.name}：-${travel.staminaCost}体力，时间推进${travel.timeMinutes}分钟`,
-      duration: 3200,
-    });
-    setIsTraveling(false);
-    closeMap();
   };
 
   const dialog = (
@@ -243,6 +367,7 @@ export function MapModal() {
       onClose={closeMap}
       labelledBy="map-modal-title"
       className="map-modal-shell"
+      closeBlocked={isTraveling}
     >
       <PixelModalHeader
         titleId="map-modal-title"
@@ -300,6 +425,7 @@ export function MapModal() {
                 aria-label={`${location.name}${current ? '，当前位置' : ''}`}
                 title={location.name}
                 onClick={() => setSelectedLocationId(location.id)}
+                disabled={isTraveling}
                 className="map-location-node group absolute h-12 w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f2f2f0]"
                 data-knowledge-stage={location.stage}
                 style={{ left: `${mapPosition.x}%`, top: `${mapPosition.y}%`, cursor: 'pointer', opacity: location.stage === 'rumored' ? 0.72 : 1 }}
@@ -360,8 +486,8 @@ export function MapModal() {
           {!isCurrentLocation && estimate && selectedPresentation.canTravel && (
             <>
               <TravelChip label="距离" value={`${estimate.distanceKm.toFixed(1)} km`} />
-              <TravelChip label="时间" value={`${estimate.timeMinutes} 分钟`} />
-              <TravelChip label="体力" value={`-${estimate.staminaCost}`} danger={lacksStamina} />
+              <TravelChip label="预计耗时" value={`${preview?.quote.totalMinutes ?? estimate.timeMinutes} 分钟`} />
+              <TravelChip label="体力" value={`-${preview?.quote.staminaCost ?? estimate.staminaCost}`} danger={lacksStamina} />
             </>
           )}
         </div>

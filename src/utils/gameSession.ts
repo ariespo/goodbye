@@ -17,6 +17,7 @@ import { IDLE_TURN_RECOVERY, useGameStore } from '../stores/gameStore';
 import { invalidatePreplans } from '../agents/mystery';
 import { resolveSceneEnvironment } from './sceneEnvironment';
 import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
+import { acceptedActionUiFromMessage, readPublicActionOutcome } from './actionPresentation';
 
 export const OPENING_ASSISTANT_CONTENT =
   `<maintext>\n${OPENING_MAINTEXT}\n</maintext>\n${OPENING_PANELS}\n<sum>开局:暴雨第五天，文穗临时不去学校且暂时联系不上</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
@@ -81,27 +82,37 @@ function abortActiveStream() {
 }
 
 function cloneParsedContent(content: ParsedContent): ParsedContent {
+  const actionOutcome = readPublicActionOutcome(content.actionOutcome);
+  const base = { ...content };
+  const optionBindings = base.optionBindings;
+  delete base.actionOutcome;
+  delete base.optionBindings;
   return {
-    ...content,
+    ...base,
     options: [...content.options],
     vars: { ...content.vars },
     investigateItems: content.investigateItems?.map(item => ({ ...item })),
     actionItems: content.actionItems?.map(item => ({ ...item })),
+    ...(actionOutcome ? { actionOutcome } : {}),
+    optionBindings: optionBindings?.map(binding => ({ ...binding })),
   };
 }
 
 /** Restore the accepted response that drives choices and free input. */
 export function resolveSavedParsedContent(save: SaveSlot, messages: ChatMessage[]): ParsedContent {
-  if (save.gameState?.parsedContent) {
-    return cloneParsedContent(save.gameState.parsedContent);
-  }
-
   const lastAssistant = [...messages].reverse().find(message => message.role === 'assistant');
-  if (lastAssistant?.parsed) {
-    return cloneParsedContent(lastAssistant.parsed);
-  }
-
-  return parseChunk(createParseState(), lastAssistant?.content ?? '').parsed;
+  const base = save.gameState?.parsedContent
+    ? cloneParsedContent(save.gameState.parsedContent)
+    : lastAssistant?.parsed
+      ? cloneParsedContent(lastAssistant.parsed)
+      : parseChunk(createParseState(), lastAssistant?.content ?? '').parsed;
+  const withoutActionUi = { ...base };
+  delete withoutActionUi.actionOutcome;
+  delete withoutActionUi.optionBindings;
+  return {
+    ...withoutActionUi,
+    ...acceptedActionUiFromMessage(lastAssistant, base.options),
+  };
 }
 
 /**
@@ -286,9 +297,14 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
   const maintext = lastAssistant?.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim()
     || OPENING_STORYLINE;
-  const scene = maintext === OPENING_STORYLINE || maintext === OPENING_MAINTEXT
+  const parsedScene = maintext === OPENING_STORYLINE || maintext === OPENING_MAINTEXT
     ? parseOpeningStoryline()
     : maintextToScene(maintext);
+  const acceptedActionUi = acceptedActionUiFromMessage(lastAssistant, parsedContent.options);
+  const scene = {
+    ...parsedScene,
+    ...(acceptedActionUi.actionOutcome ? { actionOutcome: acceptedActionUi.actionOutcome } : {}),
+  };
   const lineIndex = Math.max(
     0,
     Math.min(save.gameState?.currentLineIndex ?? 0, Math.max(0, scene.lines.length - 1)),

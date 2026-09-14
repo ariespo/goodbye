@@ -4,11 +4,13 @@ import {
   settleCycleVariables,
   getCycleMetaOptions,
   buildCycleOpeningMaintext,
+  startNextCycle,
   STAY_OPTION_TEXT,
   GOODBYE_OPTION_TEXT,
 } from './cycleLoop';
 import { createDefaultVariables } from '../sillytavern/vars-merger';
 import { normalizeWorldMemory } from '../memory/world-memory';
+import { useGameStore } from '../stores/gameStore';
 
 describe('checkCycleFailure', () => {
   const base = { stamina: 50, sanity: 50, time: new Date(2024, 8, 9, 15, 0) };
@@ -164,5 +166,38 @@ describe('buildCycleOpeningMaintext', () => {
     expect(text).toContain('早上8:00');
     expect(text).toContain('重置作废');
     expect(text).toContain('赵刚没有赴约');
+  });
+});
+
+describe('cycle action UI reset', () => {
+  it('clears the prior day outcome and continuation binding from the live scene bridge', async () => {
+    const baseline = useGameStore.getState();
+    useGameStore.setState(state => ({
+      tavern: { ...state.tavern, activeChatId: null, chats: [] },
+      api: {
+        ...state.api,
+        parsedContent: {
+          ...state.api.parsedContent,
+          options: ['继续未完成的行动'],
+          actionOutcome: {
+            resolutionId: 'old', actionId: 'old-action', executedMinutes: 30,
+            executedWorkMinutes: 30, executedTravelMinutes: 0,
+            endTime: '2024-09-09T16:00:00', staminaDelta: -4, sanityDelta: 0,
+          },
+          optionBindings: [{
+            optionIndex: 0, optionText: '继续未完成的行动',
+            actionId: 'old-action', continuationId: 'old-action',
+          }],
+        },
+      },
+    }));
+
+    await startNextCycle({ variables: { ...createDefaultVariables(), cycleCount: 2 }, reason: 'day-end' });
+
+    const parsed = useGameStore.getState().api.parsedContent;
+    expect(parsed.options).toEqual([]);
+    expect(parsed.actionOutcome).toBeUndefined();
+    expect(parsed.optionBindings).toBeUndefined();
+    useGameStore.setState(baseline, true);
   });
 });

@@ -34,6 +34,9 @@ export function FreeActionDialog({ open, onClose }: { open: boolean; onClose: ()
       <button type="button" className="free-action-dialog__backdrop" aria-label="关闭自由行动" onClick={onClose} />
       <PixelFrame variant="panel" className="free-action-dialog__panel">
         <div className="free-action-dialog__title"><span>自由</span><small>输入你想做的事</small></div>
+        <p className="free-action-dialog__policy">
+          简短询问 20–30 分钟 · 一般调查 45–60 分钟 · 深入调查 90–120 分钟；路程另计。
+        </p>
         <textarea
           ref={inputRef}
           aria-label="自由行动"
