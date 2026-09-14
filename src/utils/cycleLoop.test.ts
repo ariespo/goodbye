@@ -8,6 +8,7 @@ import {
   GOODBYE_OPTION_TEXT,
 } from './cycleLoop';
 import { createDefaultVariables } from '../sillytavern/vars-merger';
+import { normalizeWorldMemory } from '../memory/world-memory';
 
 describe('checkCycleFailure', () => {
   const base = { stamina: 50, sanity: 50, time: new Date(2024, 8, 9, 15, 0) };
@@ -30,7 +31,7 @@ describe('checkCycleFailure', () => {
 describe('settleCycleVariables', () => {
   const current = {
     ...createDefaultVariables(),
-    cycleCount: 2,
+    cycleCount: 3,
     stamina: 0,
     sanity: 12,
     tripProgress: 40,
@@ -46,7 +47,27 @@ describe('settleCycleVariables', () => {
     knowledgeEvents: ['know:home', 'meet:old-man'],
     mysteryKnowledge: { 'fact-1': 'clue' },
     playerNameKnownByNpcIds: ['detective-b'],
-    worldMemory: { ...createDefaultVariables().worldMemory, softCanonFacts: [{ factId: 'soft:coffee' }] },
+    worldMemory: {
+      ...normalizeWorldMemory({ cycleCount: 3 }),
+      events: [{ eventId: 'turn:old', turnId: 'old', turnIndex: 1, cycleCount: 3, occurredAt: '2024-09-09T09:00:00', locationId: 'school', actorIds: ['detective-a'], kind: 'narrative-turn' as const, summary: '旧回合', evidenceLineIds: [], factIds: [], tags: [], salience: 0.5, createdAt: 1 }],
+      cognition: [
+        ...normalizeWorldMemory({ cycleCount: 3 }).cognition,
+        { cognitionId: 'player|fact:fact-1', observerId: 'player', propositionId: 'fact:fact-1', status: 'believed' as const, confidence: 0.8, sourceEventIds: ['turn:old'], firstLearnedTurn: 1, lastUpdatedTurn: 1, summary: '玩家记得事实', provenance: 'accepted-turn' as const, scope: 'durable' as const, acquiredCycle: 3 },
+        { cognitionId: 'detective-b|fact:fact-1', observerId: 'detective-b', propositionId: 'fact:fact-1', status: 'heard' as const, confidence: 1, sourceEventIds: ['turn:old'], firstLearnedTurn: 1, lastUpdatedTurn: 1, summary: '林静当天听过', provenance: 'accepted-turn' as const, scope: 'day' as const, acquiredCycle: 3 },
+        { cognitionId: 'detective-b|expression:player-name', observerId: 'detective-b', propositionId: 'expression:player-name', subjectId: 'player', status: 'confirmed' as const, confidence: 1, sourceEventIds: ['turn:old'], firstLearnedTurn: 1, lastUpdatedTurn: 1, summary: '公开姓名权限', identityScope: 'full-name' as const, provenance: 'accepted-turn' as const, scope: 'day' as const, acquiredCycle: 3 },
+      ],
+      softCanonFacts: [{ factId: 'soft:coffee', text: '慧慧记得玩家常买无糖咖啡。', characterIds: ['chen-huihui'], locationIds: ['supermarket'], level: 'soft' as const, privacy: 'common' as const, timeScope: 'pre-game' as const, source: 'director' as const, createdTurn: 1 }],
+      disclosures: [{ id: 'disclosure:old:0', cycleCount: 3, speakerId: 'player', listenerIds: ['detective-b'], propositionId: 'fact:fact-1', sourceEventId: 'turn:old', evidenceQuote: '我知道这个事实', evidenceSpans: [{ lineIndex: 0, quote: '我知道这个事实' }] }],
+      commitments: [
+        { id: 'commitment:active', cycleCount: 3, actorId: 'detective-b', recipientId: 'player', action: '交出记录', locationId: 'school', dueAt: '2024-09-09T10:00:00', status: 'active' as const, sourceEventId: 'turn:old', evidenceQuote: '我会交出记录' },
+        { id: 'commitment:fulfilled', cycleCount: 3, actorId: 'detective-a', recipientId: 'player', action: '交出照片', locationId: 'school', dueAt: '2024-09-09T09:30:00', status: 'fulfilled' as const, sourceEventId: 'turn:old', evidenceQuote: '我会交出照片', statusSourceEventId: 'turn:done' },
+      ],
+      acknowledgedCommitmentBoundaryIds: ['commitment-boundary:commitment:active'],
+    },
+    actionContinuity: { cycleCount: 3, lastResolutionId: 'old', appliedEventEffectIds: ['effect:old'] },
+    actionContinuation: { actionId: 'old' },
+    opportunityProgress: { cycleCount: 3, completedIds: [], noProgressByTopic: {} },
+    eventEffectIds: ['effect:old'],
     stayStreak: 1,
     stayedEver: false,
   };
@@ -59,13 +80,20 @@ describe('settleCycleVariables', () => {
     expect(next.routesLockedEver).toEqual(['A']);
     expect(next.knowledgeEvents).toContain('meet:old-man');
     expect(next.mysteryKnowledge).toEqual({ 'fact-1': 'clue' });
-    expect(next.playerNameKnownByNpcIds).toEqual(['detective-b']);
-    expect(next.worldMemory.softCanonFacts).toEqual([{ factId: 'soft:coffee' }]);
+    expect(next.playerNameKnownByNpcIds).toEqual([]);
+    expect(next.worldMemory.softCanonFacts).toContainEqual(expect.objectContaining({ factId: 'soft:coffee' }));
+    expect(next.worldMemory.events).toContainEqual(expect.objectContaining({ eventId: 'turn:old' }));
+    expect(next.worldMemory.cognition).toContainEqual(expect.objectContaining({ cognitionId: 'player|fact:fact-1' }));
+    expect(next.worldMemory.cognition.some((item: { cognitionId: string }) => item.cognitionId === 'detective-b|fact:fact-1')).toBe(false);
+    expect(next.worldMemory.disclosures).toHaveLength(1);
+    expect(next.worldMemory.commitments).toContainEqual(expect.objectContaining({ id: 'commitment:active', status: 'expired', expiredReason: 'reset' }));
+    expect(next.worldMemory.commitments).toContainEqual(expect.objectContaining({ id: 'commitment:fulfilled', status: 'fulfilled' }));
+    expect(next.worldMemory.acknowledgedCommitmentBoundaryIds).toEqual([]);
   });
 
   it('重置当日状态且 cycleCount+1', () => {
     const next = settleCycleVariables(current);
-    expect(next.cycleCount).toBe(3);
+    expect(next.cycleCount).toBe(4);
     expect(next.stamina).toBe(100);
     expect(next.sanity).toBe(70);
     expect(next.tripProgress).toBe(0);
@@ -76,6 +104,10 @@ describe('settleCycleVariables', () => {
     expect(next.suspicion['old-man']).toBe(50);
     expect(next.loopSuspicionStart['old-man']).toBe(50);
     expect(next.time).toBe('2024-09-09T08:00:00');
+    expect(next.actionContinuity).toBeUndefined();
+    expect(next.actionContinuation).toBeUndefined();
+    expect(next.opportunityProgress).toBeUndefined();
+    expect(next.eventEffectIds).toBeUndefined();
   });
 
   it('stayed 累加 stayStreak，满3轮标记 stayedEver', () => {

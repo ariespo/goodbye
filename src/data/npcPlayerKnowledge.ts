@@ -143,6 +143,19 @@ const SPEAKER_TO_NPC: Array<[RegExp, string]> = [
   [/^(?:林静|新来的护士|陌生护士|护士|detective-b)$/i, 'detective-b'],
 ];
 
+const SPEAKER_TO_CHARACTER: Array<[RegExp, string | null]> = [
+  [/^(?:旁白|叙述|narrator)$/i, null],
+  [/^(?:玩家|你|player|user|\{\{user\}\})$/i, 'player'],
+  ...SPEAKER_TO_NPC,
+];
+
+/** Canonicalize a protocol speaker label without substring inference. */
+export function characterIdFromSpeaker(speaker: string): string | null {
+  const normalized = speaker.trim();
+  const match = SPEAKER_TO_CHARACTER.find(([pattern]) => pattern.test(normalized));
+  return match?.[1] ?? null;
+}
+
 export function npcPlayerKnowledgeError(
   lines: ReadonlyArray<{ speaker: string; text: string }>,
   identity: PlayerIdentity | undefined,
@@ -152,7 +165,7 @@ export function npcPlayerKnowledgeError(
   const byNpc = new Map(briefs.map(brief => [brief.npcId, brief]));
   const familyName = familyNameOf(identity.name);
   for (const line of lines) {
-    const npcId = SPEAKER_TO_NPC.find(([pattern]) => pattern.test(line.speaker.trim()))?.[1];
+    const npcId = characterIdFromSpeaker(line.speaker);
     if (!npcId) continue;
     const brief = byNpc.get(npcId);
     if (!brief) continue;

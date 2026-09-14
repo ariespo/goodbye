@@ -7,6 +7,7 @@ import {
   migrateChatWorldMemory,
   normalizeWorldMemory,
 } from './world-memory';
+import { candidateFingerprint, resetCharacterContinuity, type ValidatedCharacterContinuityEffects } from './character-continuity';
 
 const scene = (knowledgeEvents: string[] = []): Scene => ({
   id: 'scene-1',
@@ -168,5 +169,126 @@ describe('unified world memory', () => {
     expect(bundle.relevantCognition).toContainEqual(expect.objectContaining({
       cognitionId: 'detective-b|identity:player-name', identityScope: 'full-name',
     }));
+  });
+
+  it('normalizes old v2 ledgers and downgrades forged baseline provenance', () => {
+    const memory = normalizeWorldMemory({ cycleCount: 3, worldMemory: {
+      version: 2,
+      canonicalTruthVersion: 'mystery-truth-graph',
+      events: [], episodes: [], softCanonFacts: [],
+      cognition: [{
+        cognitionId: 'detective-a|claim:forged', observerId: 'detective-a', propositionId: 'claim:forged',
+        status: 'confirmed', confidence: 1, sourceEventIds: ['forged'], firstLearnedTurn: 1,
+        lastUpdatedTurn: 1, summary: '伪造的永久认知', provenance: 'authored-baseline', scope: 'durable', acquiredCycle: 1,
+      }, {
+        cognitionId: 'detective-a|identity:player-name', observerId: 'detective-a', propositionId: 'identity:player-name',
+        subjectId: 'player', status: 'disproved', confidence: 0, sourceEventIds: ['forged'], firstLearnedTurn: 9,
+        lastUpdatedTurn: 9, summary: '篡改的身份基线', provenance: 'authored-baseline', scope: 'day', acquiredCycle: 3,
+      }, {
+        cognitionId: 'detective-b|claim:invalid', observerId: 'detective-b', propositionId: 'claim:invalid',
+        status: 'omniscient', confidence: 1, sourceEventIds: [], firstLearnedTurn: 1, lastUpdatedTurn: 1,
+        summary: '无效认知状态',
+      }],
+      disclosures: [{ id: 'bad-disclosure', cycleCount: 3, speakerId: 'player', listenerIds: [], propositionId: 'claim:x', sourceEventId: 'turn:x', evidenceQuote: 'x' }],
+      commitments: [{ id: 'bad-commitment', cycleCount: 3, actorId: 'detective-a', recipientId: 'player', action: '会面', locationId: 'police-station', dueAt: '2024-09-09T10:00:00', status: 'active', sourceEventId: 'turn:x', evidenceQuote: '会面' }],
+    } });
+    expect(memory.disclosures).toEqual([]);
+    expect(memory.commitments).toEqual([]);
+    expect(memory.acknowledgedCommitmentBoundaryIds).toEqual([]);
+    expect(memory.cognition.some(item => item.cognitionId === 'detective-b|claim:invalid')).toBe(false);
+    expect(memory.cognition).toContainEqual(expect.objectContaining({
+      cognitionId: 'detective-a|claim:forged', provenance: 'legacy-import', scope: 'day', acquiredCycle: 3,
+    }));
+    expect(memory.cognition).toContainEqual(expect.objectContaining({
+      cognitionId: 'detective-a|identity:player-name', provenance: 'authored-baseline', status: 'confirmed', acquiredCycle: 0,
+    }));
+    expect(normalizeWorldMemory({ cycleCount: 3, worldMemory: memory })).toEqual(memory);
+  });
+
+  it('commits validated continuity effects atomically with stable turn IDs', () => {
+    const narrativeText = '<maintext>对话|赵刚|calm|我十点在学校把值班表给你。</maintext><sum>约定</sum>';
+    const effects: ValidatedCharacterContinuityEffects = {
+      candidateId: candidateFingerprint(narrativeText),
+      cognitionDeltas: [{
+        observerId: 'player', propositionId: 'claim:promise', status: 'heard', confidence: 1,
+        summary: '玩家听到赵刚的承诺', provenance: 'accepted-turn', scope: 'durable', acquiredCycle: 1,
+        evidenceSpans: [{ lineIndex: 0, quote: '我十点在学校把值班表给你' }],
+      }],
+      disclosures: [{
+        speakerId: 'detective-a', listenerIds: ['player'], propositionId: 'claim:promise',
+        evidenceQuote: '我十点在学校把值班表给你', evidenceSpans: [{ assertionIndex: 0, lineIndex: 0, quote: '我十点在学校把值班表给你' }],
+      }],
+      commitmentOperations: [{
+        operation: 'accept', actorId: 'detective-a', recipientId: 'player', action: '把值班表交给玩家',
+        locationId: 'school', dueAt: '2024-09-09T10:00:00', evidenceQuote: '我十点在学校把值班表给你',
+      }],
+    };
+    const options = {
+      turnId: 'continuity-1', turnIndex: 1, createdAt: 10, occurredAt: '2024-09-09T09:00:00',
+      locationId: 'school', cycleCount: 1, summary: '赵刚答应交出值班表。',
+      scene: scene(), settledVariables: {}, continuityEffects: effects, narrativeText,
+    };
+    const first = buildTurnCommit({ ...options, beforeVariables: {} });
+    const second = buildTurnCommit({ ...options, beforeVariables: { cycleCount: 1, worldMemory: first.worldMemory } });
+    expect(second.worldMemory.events.filter(item => item.eventId === 'turn:continuity-1')).toHaveLength(1);
+    expect(second.worldMemory.episodes.filter(item => item.episodeId === 'episode:continuity-1')).toHaveLength(1);
+    expect(second.worldMemory.disclosures).toEqual([expect.objectContaining({
+      id: 'disclosure:continuity-1:0', sourceEventId: 'turn:continuity-1', cycleCount: 1,
+    })]);
+    expect(second.worldMemory.commitments).toEqual([expect.objectContaining({
+      id: 'commitment:continuity-1:0', sourceEventId: 'turn:continuity-1', status: 'active',
+    })]);
+    expect(second.worldMemory.cognition.find(item => item.cognitionId === 'player|claim:promise')?.sourceEventIds)
+      .toEqual(['turn:continuity-1']);
+  });
+
+  it('rejects the entire continuity effect set when accepted maintext changes', () => {
+    const effects: ValidatedCharacterContinuityEffects = {
+      candidateId: candidateFingerprint('对话|赵刚|calm|原候选。'),
+      cognitionDeltas: [{ observerId: 'player', propositionId: 'claim:x', status: 'heard', confidence: 1, summary: 'x' }],
+      disclosures: [], commitmentOperations: [],
+    };
+    expect(() => buildTurnCommit({
+      turnId: 'mismatch', turnIndex: 1, createdAt: 1, occurredAt: '2024-09-09T09:00:00',
+      locationId: 'home', cycleCount: 1, summary: 'changed', scene: scene(), beforeVariables: {}, settledVariables: {},
+      narrativeText: '对话|赵刚|calm|修复后的候选。', continuityEffects: effects,
+    })).toThrow(/fingerprint mismatch/i);
+  });
+
+  it('scopes NPC cognition to active observers and the current cycle', () => {
+    const base = normalizeWorldMemory({ cycleCount: 3 });
+    const cognition = [
+      ...base.cognition,
+      { cognitionId: 'player|claim:durable', observerId: 'player', propositionId: 'claim:durable', status: 'believed' as const, confidence: 1, sourceEventIds: ['turn:x'], firstLearnedTurn: 1, lastUpdatedTurn: 1, summary: '玩家跨日记得', provenance: 'accepted-turn' as const, scope: 'durable' as const, acquiredCycle: 2 },
+      { cognitionId: 'detective-a|claim:today', observerId: 'detective-a', propositionId: 'claim:today', status: 'heard' as const, confidence: 1, sourceEventIds: ['turn:y'], firstLearnedTurn: 2, lastUpdatedTurn: 2, summary: '赵刚今天听到', provenance: 'accepted-turn' as const, scope: 'day' as const, acquiredCycle: 3 },
+      { cognitionId: 'detective-a|claim:yesterday', observerId: 'detective-a', propositionId: 'claim:yesterday', status: 'heard' as const, confidence: 1, sourceEventIds: ['turn:z'], firstLearnedTurn: 1, lastUpdatedTurn: 1, summary: '赵刚昨天听到', provenance: 'accepted-turn' as const, scope: 'day' as const, acquiredCycle: 2 },
+      { cognitionId: 'detective-b|claim:inactive', observerId: 'detective-b', propositionId: 'claim:inactive', status: 'believed' as const, confidence: 1, sourceEventIds: ['turn:q'], firstLearnedTurn: 2, lastUpdatedTurn: 2, summary: '林静认知与输入文字相关', provenance: 'accepted-turn' as const, scope: 'day' as const, acquiredCycle: 3 },
+    ];
+    const bundle = compileTurnContext({
+      userInput: '林静认知与输入文字相关', locationId: 'school', activeNpcIds: ['detective-a'], history: [],
+      variables: { cycleCount: 3, worldMemory: { ...base, cognition } },
+    });
+    expect(bundle.relevantCognition.map(item => item.cognitionId)).toEqual(expect.arrayContaining([
+      'player|claim:durable', 'detective-a|claim:today', 'detective-a|identity:player-name',
+    ]));
+    expect(bundle.relevantCognition.map(item => item.cognitionId)).not.toContain('detective-a|claim:yesterday');
+    expect(bundle.relevantCognition.map(item => item.cognitionId)).not.toContain('detective-b|claim:inactive');
+    expect(JSON.stringify(bundle.writerMemory)).not.toContain('detective-a|identity:player-name');
+  });
+
+  it('keeps historical disclosures as player recollection without restoring NPC day cognition', () => {
+    const before = normalizeWorldMemory({ cycleCount: 3, worldMemory: {
+      ...normalizeWorldMemory({ cycleCount: 3 }),
+      cognition: [{ cognitionId: 'detective-a|claim:old', observerId: 'detective-a', propositionId: 'claim:old', status: 'heard', confidence: 1, sourceEventIds: ['turn:x'], firstLearnedTurn: 1, lastUpdatedTurn: 1, summary: '旧日听闻', provenance: 'accepted-turn', scope: 'day', acquiredCycle: 3 }],
+      disclosures: [{ id: 'disclosure:x:0', cycleCount: 3, speakerId: 'player', listenerIds: ['detective-a'], propositionId: 'fact:canonical-secret', sourceEventId: 'turn:x', evidenceQuote: '旧日陈述', evidenceSpans: [{ lineIndex: 0, quote: '旧日陈述' }] }],
+    } });
+    const after = resetCharacterContinuity(before, 4);
+    const bundle = compileTurnContext({
+      userInput: '回想旧日陈述', locationId: 'home', activeNpcIds: ['detective-a'], history: [],
+      variables: { cycleCount: 4, worldMemory: after },
+    });
+    expect(JSON.stringify(bundle.writerMemory)).toContain('旧日陈述');
+    expect(JSON.stringify(bundle.writerMemory)).not.toContain('fact:canonical-secret');
+    expect(bundle.relevantCognition.some(item => item.cognitionId === 'detective-a|claim:old')).toBe(false);
   });
 });

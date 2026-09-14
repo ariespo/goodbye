@@ -1,5 +1,15 @@
 import { ContextBudgetError, estimateTokens, DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from '../sillytavern/token-budget';
 import type { ChatMessage, ChatSession, Scene, TurnSnapshot } from '../sillytavern/types';
+import { characterIdFromSpeaker } from '../data/npcPlayerKnowledge';
+import { getLocationById } from '../data/locations';
+import {
+  candidateFingerprint,
+  cognitionIsPublicPlayerNamePermission,
+  commitmentIdFromBoundaryId,
+  type CommitmentRecord,
+  type DisclosureRecord,
+  type ValidatedCharacterContinuityEffects,
+} from './character-continuity';
 import {
   BACKGROUND_HISTORY_VERSION,
   FIXED_BACKGROUND_FACTS,
@@ -20,6 +30,9 @@ export type CognitionStatus =
   | 'believed'
   | 'confirmed'
   | 'disproved';
+
+export type CognitionProvenance = 'authored-baseline' | 'accepted-turn' | 'legacy-import';
+export type CognitionScope = 'day' | 'durable';
 
 export interface WorldEventRecord {
   eventId: string;
@@ -50,6 +63,10 @@ export interface CognitionRecord {
   lastUpdatedTurn: number;
   summary: string;
   identityScope?: 'full-name' | 'familiar-honorific' | 'family-nickname' | 'guardian-formal' | 'unknown';
+  provenance?: CognitionProvenance;
+  scope?: CognitionScope;
+  acquiredCycle?: number;
+  evidenceSpans?: Array<{ assertionIndex?: number; lineIndex: number; quote: string }>;
 }
 
 export interface CognitionDelta {
@@ -60,6 +77,10 @@ export interface CognitionDelta {
   confidence: number;
   summary: string;
   identityScope?: CognitionRecord['identityScope'];
+  provenance?: CognitionProvenance;
+  scope?: CognitionScope;
+  acquiredCycle?: number;
+  evidenceSpans?: CognitionRecord['evidenceSpans'];
 }
 
 export interface EpisodeMemoryRecord {
@@ -84,6 +105,9 @@ export interface WorldMemoryState {
   cognition: CognitionRecord[];
   episodes: EpisodeMemoryRecord[];
   softCanonFacts: BackgroundFactRecord[];
+  disclosures?: DisclosureRecord[];
+  commitments?: CommitmentRecord[];
+  acknowledgedCommitmentBoundaryIds?: string[];
 }
 
 export interface ContextTokenBudget {
@@ -133,6 +157,83 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function isAuthoredBaselineCognitionId(cognitionId: string): boolean {
+  if (Object.hasOwn(ESTABLISHED_PLAYER_NAME_SCOPES, cognitionId.split('|')[0])
+    && cognitionId.endsWith('|identity:player-name')) return true;
+  return FIXED_NPC_BACKGROUND_COGNITION.some(item => cognitionId === `${item.npcId}|background:${item.factId}`);
+}
+
+function normalizeEvidenceSpans(value: unknown): NonNullable<CognitionRecord['evidenceSpans']> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(item => {
+    const span = asRecord(item);
+    if (!Number.isSafeInteger(span.lineIndex) || typeof span.quote !== 'string' || !span.quote.trim()) return [];
+    return [{
+      ...(Number.isSafeInteger(span.assertionIndex) ? { assertionIndex: Number(span.assertionIndex) } : {}),
+      lineIndex: Number(span.lineIndex), quote: span.quote,
+    }];
+  });
+}
+
+function normalizeStoredCognition(value: unknown, saveCycle: number): CognitionRecord | null {
+  const item = asRecord(value);
+  if (typeof item.cognitionId !== 'string' || typeof item.observerId !== 'string'
+    || typeof item.propositionId !== 'string' || typeof item.status !== 'string'
+    || !['observed', 'heard', 'inferred', 'suspected', 'believed', 'confirmed', 'disproved'].includes(item.status)
+    || typeof item.summary !== 'string' || typeof item.confidence !== 'number'
+    || !Number.isFinite(item.confidence)) return null;
+  if (isAuthoredBaselineCognitionId(item.cognitionId)) return null;
+  const player = item.observerId === 'player';
+  const provenance: CognitionProvenance = item.provenance === 'accepted-turn'
+    ? 'accepted-turn' : 'legacy-import';
+  const acquiredCycle = provenance === 'accepted-turn'
+    && Number.isSafeInteger(item.acquiredCycle) && Number(item.acquiredCycle) > 0
+    ? Number(item.acquiredCycle) : saveCycle;
+  const evidenceSpans = normalizeEvidenceSpans(item.evidenceSpans);
+  return {
+    ...(item as unknown as CognitionRecord),
+    sourceEventIds: uniqueStrings(item.sourceEventIds),
+    ...(evidenceSpans.length ? { evidenceSpans } : {}),
+    provenance,
+    scope: player ? 'durable' : 'day',
+    acquiredCycle,
+  };
+}
+
+function normalizeDisclosure(value: unknown): DisclosureRecord | null {
+  const item = asRecord(value);
+  if (typeof item.id !== 'string' || !item.id.trim() || !Number.isSafeInteger(item.cycleCount)
+    || typeof item.speakerId !== 'string' || typeof item.propositionId !== 'string'
+    || typeof item.sourceEventId !== 'string' || typeof item.evidenceQuote !== 'string') return null;
+  const listenerIds = uniqueStrings(item.listenerIds);
+  if (listenerIds.length === 0) return null;
+  return {
+    id: item.id, cycleCount: Number(item.cycleCount), speakerId: item.speakerId,
+    listenerIds, propositionId: item.propositionId, sourceEventId: item.sourceEventId,
+    evidenceQuote: item.evidenceQuote, evidenceSpans: normalizeEvidenceSpans(item.evidenceSpans),
+  };
+}
+
+function normalizeCommitment(value: unknown): CommitmentRecord | null {
+  const item = asRecord(value);
+  if (typeof item.id !== 'string' || !item.id.trim() || !Number.isSafeInteger(item.cycleCount)
+    || typeof item.actorId !== 'string' || typeof item.recipientId !== 'string'
+    || typeof item.action !== 'string' || !item.action.trim() || typeof item.locationId !== 'string'
+    || !getLocationById(item.locationId)
+    || typeof item.dueAt !== 'string' || !Number.isFinite(new Date(item.dueAt).getTime())
+    || !['active', 'fulfilled', 'cancelled', 'expired'].includes(String(item.status))
+    || typeof item.sourceEventId !== 'string' || typeof item.evidenceQuote !== 'string') return null;
+  return {
+    id: item.id, cycleCount: Number(item.cycleCount), actorId: item.actorId,
+    recipientId: item.recipientId, action: item.action, locationId: item.locationId,
+    dueAt: item.dueAt, status: item.status as CommitmentRecord['status'],
+    sourceEventId: item.sourceEventId, evidenceQuote: item.evidenceQuote,
+    ...(typeof item.statusSourceEventId === 'string' ? { statusSourceEventId: item.statusSourceEventId } : {}),
+    ...(typeof item.statusEvidenceQuote === 'string' ? { statusEvidenceQuote: item.statusEvidenceQuote } : {}),
+    ...(item.expiredReason === 'reset' || item.expiredReason === 'missed' ? { expiredReason: item.expiredReason } : {}),
+  };
+}
+
 function statusForKnowledgeEvent(eventId: string): CognitionStatus {
   if (eventId.startsWith('hear:')) return 'heard';
   if (eventId.startsWith('insight:')) return 'inferred';
@@ -159,6 +260,9 @@ export function createEmptyWorldMemory(canonicalTruthVersion = 'mystery-truth-gr
     cognition: [],
     episodes: [],
     softCanonFacts: [],
+    disclosures: [],
+    commitments: [],
+    acknowledgedCommitmentBoundaryIds: [],
   };
 }
 
@@ -167,6 +271,8 @@ export function normalizeWorldMemory(
   legacyEpisodes: EpisodeMemoryRecord[] = [],
 ): WorldMemoryState {
   const stored = asRecord(variables.worldMemory);
+  const saveCycle = Number.isSafeInteger(variables.cycleCount) && Number(variables.cycleCount) > 0
+    ? Number(variables.cycleCount) : 1;
   const memory: WorldMemoryState = {
     version: WORLD_MEMORY_VERSION,
     canonicalTruthVersion: typeof stored.canonicalTruthVersion === 'string'
@@ -174,8 +280,9 @@ export function normalizeWorldMemory(
       : 'mystery-truth-graph',
     events: Array.isArray(stored.events) ? (stored.events.filter(item => item && typeof item === 'object') as WorldEventRecord[])
       .map(item => ({ ...item, actorIds: uniqueStrings(item.actorIds), evidenceLineIds: uniqueStrings(item.evidenceLineIds), factIds: uniqueStrings(item.factIds), tags: uniqueStrings(item.tags) })) : [],
-    cognition: Array.isArray(stored.cognition) ? (stored.cognition.filter(item => item && typeof item === 'object') as CognitionRecord[])
-      .map(item => ({ ...item, sourceEventIds: uniqueStrings(item.sourceEventIds) })) : [],
+    cognition: Array.isArray(stored.cognition)
+      ? stored.cognition.map(item => normalizeStoredCognition(item, saveCycle)).filter((item): item is CognitionRecord => item !== null)
+      : [],
     episodes: Array.isArray(stored.episodes) ? (stored.episodes.filter(item => item && typeof item === 'object') as EpisodeMemoryRecord[])
       .map(item => ({ ...item, actorIds: uniqueStrings(item.actorIds), factIds: uniqueStrings(item.factIds), cognitionIds: uniqueStrings(item.cognitionIds), unresolvedTags: uniqueStrings(item.unresolvedTags) })) : [],
     softCanonFacts: Array.isArray(stored.softCanonFacts)
@@ -190,6 +297,13 @@ export function normalizeWorldMemory(
         }).approved)
         .map(item => ({ ...item, characterIds: uniqueStrings(item.characterIds), locationIds: uniqueStrings(item.locationIds) }))
       : [],
+    disclosures: Array.isArray(stored.disclosures)
+      ? stored.disclosures.map(normalizeDisclosure).filter((item): item is DisclosureRecord => item !== null)
+      : [],
+    commitments: Array.isArray(stored.commitments)
+      ? stored.commitments.map(normalizeCommitment).filter((item): item is CommitmentRecord => item !== null)
+      : [],
+    acknowledgedCommitmentBoundaryIds: uniqueStrings(stored.acknowledgedCommitmentBoundaryIds),
   };
 
   const turnIndex = memory.episodes.reduce((max, item) => Math.max(max, Number(item.turnIndex) || 0), 0);
@@ -205,6 +319,7 @@ export function normalizeWorldMemory(
       firstLearnedTurn: 0,
       lastUpdatedTurn: turnIndex,
       summary: `玩家认知事件：${eventId}`,
+      provenance: 'legacy-import', scope: 'durable', acquiredCycle: saveCycle,
     });
   }
 
@@ -221,6 +336,7 @@ export function normalizeWorldMemory(
       firstLearnedTurn: 0,
       lastUpdatedTurn: turnIndex,
       summary: `玩家对案件事实 ${factId} 的认知层级为 ${String(level)}`,
+      provenance: 'legacy-import', scope: 'durable', acquiredCycle: saveCycle,
     });
   }
 
@@ -239,14 +355,19 @@ export function normalizeWorldMemory(
       lastUpdatedTurn: turnIndex,
       summary: `${npcId} 知道如何称呼玩家`,
       identityScope: establishedScope,
+      provenance: 'authored-baseline', scope: 'durable', acquiredCycle: 0,
     });
   }
   for (const npcId of learnedNpcIds) {
-    if (memory.cognition.some(item => item.cognitionId === `${npcId}|identity:player-name`)) continue;
+    const isUndercoverDetective = npcId === 'detective-a' || npcId === 'detective-b';
+    const propositionId = isUndercoverDetective ? 'expression:player-name' : 'identity:player-name';
+    const cognitionId = `${npcId}|${propositionId}`;
+    if (memory.cognition.some(item => item.cognitionId === cognitionId)
+      || (!isUndercoverDetective && Object.hasOwn(ESTABLISHED_PLAYER_NAME_SCOPES, npcId))) continue;
     upsertCognition(memory.cognition, {
-      cognitionId: `${npcId}|identity:player-name`,
+      cognitionId,
       observerId: npcId,
-      propositionId: 'identity:player-name',
+      propositionId,
       subjectId: 'player',
       status: 'confirmed',
       confidence: 1,
@@ -255,6 +376,7 @@ export function normalizeWorldMemory(
       lastUpdatedTurn: turnIndex,
       summary: `${npcId} 已从明确介绍中得知玩家姓名`,
       identityScope: 'full-name',
+      provenance: 'legacy-import', scope: 'day', acquiredCycle: saveCycle,
     });
   }
 
@@ -272,6 +394,7 @@ export function normalizeWorldMemory(
       firstLearnedTurn: 0,
       lastUpdatedTurn: turnIndex,
       summary: FIXED_BACKGROUND_FACTS.find(fact => fact.factId === baseline.factId)?.text ?? baseline.factId,
+      provenance: 'authored-baseline', scope: 'durable', acquiredCycle: 0,
     });
   }
 
@@ -280,6 +403,7 @@ export function normalizeWorldMemory(
       memory.episodes.push(episode);
     }
   }
+  memory.cognition.sort((left, right) => left.cognitionId.localeCompare(right.cognitionId));
   return memory;
 }
 
@@ -350,6 +474,8 @@ export function compileTurnContext(options: {
   fixedPromptText?: string;
 }): TurnContextBundle {
   const memory = normalizeWorldMemory(options.variables, legacyEpisodesFromMessages(options.history));
+  const currentCycle = Number.isSafeInteger(Number(options.variables.cycleCount))
+    ? Math.max(1, Number(options.variables.cycleCount)) : 1;
   let recentMessages = options.history.filter(message => message.role !== 'system').slice(-4);
   const terms = [...new Set([options.locationId, ...options.activeNpcIds, ...options.userInput.split(/[\s，。！？、]+/u)])]
     .filter(term => term.length > 1);
@@ -363,9 +489,10 @@ export function compileTurnContext(options: {
     .map(entry => entry.item);
   let relevantCognition = memory.cognition.filter(item => (
     item.observerId === 'player'
-    || options.activeNpcIds.includes(item.observerId)
-    || (item.subjectId ? options.activeNpcIds.includes(item.subjectId) : false)
-    || scoreText(`${item.propositionId} ${item.summary}`, terms) > 0
+    || (options.activeNpcIds.includes(item.observerId) && (
+      item.provenance === 'authored-baseline'
+      || (item.scope === 'day' && item.acquiredCycle === currentCycle)
+    ))
   )).slice(-40);
   const fixedBackgroundFacts = relevantFixedBackgroundFacts(options.locationId, options.activeNpcIds);
   const relevantSoftFacts = memory.softCanonFacts.filter(fact => (
@@ -406,6 +533,16 @@ export function compileTurnContext(options: {
     ...relevantCognition.map(item => item.cognitionId),
     ...relevantBackgroundFacts.map(item => item.factId),
   ];
+  const relevantDisclosures = (memory.disclosures ?? []).filter(item => (
+    item.speakerId === 'player' || item.listenerIds.includes('player')
+    || (item.cycleCount === currentCycle && (
+      options.activeNpcIds.includes(item.speakerId)
+      || item.listenerIds.some(listenerId => options.activeNpcIds.includes(listenerId))
+    ))
+  ));
+  const activeCommitments = (memory.commitments ?? []).filter(item => (
+    item.status === 'active' && item.cycleCount === currentCycle
+  ));
   const baseMemoryProjection = {
     selectedIds,
     episodes: relevantEpisodes.map(({ episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }) => (
@@ -414,9 +551,20 @@ export function compileTurnContext(options: {
     cognition: relevantCognition.map(({ cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }) => (
       { cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }
     )),
+    disclosures: relevantDisclosures.map(({ cycleCount, speakerId, listenerIds, evidenceQuote }) => (
+      { cycleCount, speakerId, listenerIds, evidenceQuote }
+    )),
+    commitments: activeCommitments
+      .map(({ actorId, recipientId, action, locationId, dueAt, evidenceQuote }) => (
+        { actorId, recipientId, action, locationId, dueAt, evidenceQuote }
+      )),
   };
   const directorMemory = {
     ...baseMemoryProjection,
+    disclosures: relevantDisclosures.map(({ id, cycleCount, speakerId, listenerIds, propositionId, evidenceQuote }) => (
+      { id, cycleCount, speakerId, listenerIds, propositionId, evidenceQuote }
+    )),
+    commitments: activeCommitments,
     backgroundFacts: relevantBackgroundFacts,
     backgroundCognition: FIXED_NPC_BACKGROUND_COGNITION.filter(item => options.activeNpcIds.includes(item.npcId)),
   };
@@ -473,20 +621,6 @@ export function compileTurnContext(options: {
   };
 }
 
-function actorIdFromSpeaker(speaker: string): string | null {
-  const normalized = speaker.trim().toLowerCase();
-  const aliases: Array<[RegExp, string]> = [
-    [/(?:陈慧慧|店员|chen-huihui)/i, 'chen-huihui'],
-    [/(?:文穗|fumi)/i, 'fumi'],
-    [/(?:灯织|学姐|touko)/i, 'touko'],
-    [/(?:周德明|周大爷|old-man)/i, 'old-man'],
-    [/(?:刘仁光|体育老师|liu-renguang)/i, 'liu-renguang'],
-    [/(?:赵刚|货车司机|detective-a)/i, 'detective-a'],
-    [/(?:林静|护士|detective-b)/i, 'detective-b'],
-  ];
-  return aliases.find(([pattern]) => pattern.test(normalized))?.[1] ?? null;
-}
-
 export function buildTurnCommit(options: {
   turnId: string;
   turnIndex: number;
@@ -503,7 +637,13 @@ export function buildTurnCommit(options: {
   cognitionDeltas?: CognitionDelta[];
   approvedBackgroundFactProposals?: BackgroundFactProposal[];
   narrativeText?: string;
+  continuityEffects?: ValidatedCharacterContinuityEffects;
+  encounteredCommitmentBoundaryId?: string;
 }): TurnCommit {
+  if (options.continuityEffects
+    && candidateFingerprint(options.narrativeText ?? '') !== options.continuityEffects.candidateId) {
+    throw new Error('character continuity candidate fingerprint mismatch');
+  }
   const memory = normalizeWorldMemory(options.beforeVariables);
   const knowledgeEvents = uniqueStrings(options.settledVariables.knowledgeEvents);
   const previousKnowledgeEvents = new Set(uniqueStrings(options.beforeVariables.knowledgeEvents));
@@ -511,8 +651,7 @@ export function buildTurnCommit(options: {
   const beforeFacts = asRecord(options.beforeVariables.mysteryKnowledge);
   const mysteryKnowledge = asRecord(options.settledVariables.mysteryKnowledge);
   const changedFactIds = Object.keys(mysteryKnowledge).filter(id => mysteryKnowledge[id] !== beforeFacts[id]);
-  const playerNameKnownByNpcIds = uniqueStrings(options.settledVariables.playerNameKnownByNpcIds);
-  const actorIds = [...new Set(options.scene.lines.map(line => actorIdFromSpeaker(line.speaker)).filter((id): id is string => !!id))];
+  const actorIds = [...new Set(options.scene.lines.map(line => characterIdFromSpeaker(line.speaker)).filter((id): id is string => !!id))];
   const evidenceLineIds = options.scene.lines
     .filter(line => line.knowledgeEvents?.length)
     .map((line, index) => line.id ?? `${options.turnId}:line:${index}`);
@@ -549,6 +688,7 @@ export function buildTurnCommit(options: {
       firstLearnedTurn: options.turnIndex,
       lastUpdatedTurn: options.turnIndex,
       summary: `玩家在本回合获得认知：${eventId}`,
+      provenance: 'accepted-turn', scope: 'durable', acquiredCycle: options.cycleCount,
     });
   }
   for (const factId of changedFactIds) {
@@ -566,31 +706,12 @@ export function buildTurnCommit(options: {
       firstLearnedTurn: options.turnIndex,
       lastUpdatedTurn: options.turnIndex,
       summary: `玩家对案件事实 ${factId} 的认知更新为 ${String(level)}`,
+      provenance: 'accepted-turn', scope: 'durable', acquiredCycle: options.cycleCount,
     });
   }
-  for (const npcId of options.introducedPlayerNameToNpcIds ?? []) {
-    const isUndercoverDetective = npcId === 'detective-a' || npcId === 'detective-b';
-    const cognitionId = isUndercoverDetective
-      ? `${npcId}|expression:player-name`
-      : `${npcId}|identity:player-name`;
-    cognitionIds.push(cognitionId);
-    upsertCognition(memory.cognition, {
-      cognitionId,
-      observerId: npcId,
-      propositionId: isUndercoverDetective ? 'expression:player-name' : 'identity:player-name',
-      subjectId: 'player',
-      status: 'confirmed',
-      confidence: 1,
-      sourceEventIds: [rootEvent.eventId],
-      firstLearnedTurn: options.turnIndex,
-      lastUpdatedTurn: options.turnIndex,
-      summary: isUndercoverDetective
-        ? `${npcId} 的公开身份在玩家主动介绍后获准使用玩家姓名；其真实调查认知未发生变化`
-        : `${npcId} 在本回合得知玩家姓名`,
-      identityScope: 'full-name',
-    });
-  }
-  for (const delta of options.cognitionDeltas ?? []) {
+  // The deprecated introducedPlayerNameToNpcIds hint is intentionally non-authoritative.
+  // Only continuity effects validated against rendered audience evidence may grant name use.
+  for (const delta of [...(options.cognitionDeltas ?? []), ...(options.continuityEffects?.cognitionDeltas ?? [])]) {
     const cognitionId = `${delta.observerId}|${delta.propositionId}`;
     cognitionIds.push(cognitionId);
     upsertCognition(memory.cognition, {
@@ -605,6 +726,10 @@ export function buildTurnCommit(options: {
       lastUpdatedTurn: options.turnIndex,
       summary: delta.summary,
       identityScope: delta.identityScope,
+      provenance: delta.provenance ?? 'accepted-turn',
+      scope: delta.scope ?? (delta.observerId === 'player' ? 'durable' : 'day'),
+      acquiredCycle: delta.acquiredCycle ?? options.cycleCount,
+      ...(delta.evidenceSpans?.length ? { evidenceSpans: structuredClone(delta.evidenceSpans) } : {}),
     });
   }
 
@@ -639,7 +764,70 @@ export function buildTurnCommit(options: {
         firstLearnedTurn: options.turnIndex,
         lastUpdatedTurn: options.turnIndex,
         summary: proposal.text,
+        provenance: 'accepted-turn', scope: 'day', acquiredCycle: options.cycleCount,
       });
+    }
+  }
+
+  for (const [index, disclosure] of (options.continuityEffects?.disclosures ?? []).entries()) {
+    const id = `disclosure:${options.turnId}:${index}`;
+    if (!(memory.disclosures ?? []).some(item => item.id === id)) {
+      (memory.disclosures ??= []).push({
+        ...structuredClone(disclosure),
+        id,
+        cycleCount: options.cycleCount,
+        sourceEventId: rootEvent.eventId,
+      });
+    }
+  }
+
+  for (const [index, operation] of (options.continuityEffects?.commitmentOperations ?? []).entries()) {
+    if (operation.operation === 'accept') {
+      const id = `commitment:${options.turnId}:${index}`;
+      if (!(memory.commitments ?? []).some(item => item.id === id)) {
+        (memory.commitments ??= []).push({
+          id,
+          cycleCount: options.cycleCount,
+          actorId: operation.actorId,
+          recipientId: operation.recipientId,
+          action: operation.action,
+          locationId: operation.locationId,
+          dueAt: operation.dueAt,
+          status: 'active',
+          sourceEventId: rootEvent.eventId,
+          evidenceQuote: operation.evidenceQuote,
+        });
+      }
+      continue;
+    }
+    const commitment = (memory.commitments ?? []).find(item => item.id === operation.existingCommitmentId);
+    if (commitment?.status === 'active' && commitment.cycleCount === options.cycleCount
+      && commitment.actorId === operation.actorId && commitment.recipientId === operation.recipientId) {
+      commitment.status = operation.operation === 'fulfill' ? 'fulfilled' : 'cancelled';
+      commitment.statusSourceEventId = rootEvent.eventId;
+      commitment.statusEvidenceQuote = operation.evidenceQuote;
+      delete commitment.expiredReason;
+    }
+  }
+
+  const encounteredCommitmentId = options.encounteredCommitmentBoundaryId
+    ? commitmentIdFromBoundaryId(options.encounteredCommitmentBoundaryId) : null;
+  if (encounteredCommitmentId && (memory.commitments ?? []).some(item => (
+    item.id === encounteredCommitmentId && item.status === 'active' && item.cycleCount === options.cycleCount
+  ))) {
+    memory.acknowledgedCommitmentBoundaryIds = uniqueStrings([
+      ...(memory.acknowledgedCommitmentBoundaryIds ?? []), options.encounteredCommitmentBoundaryId!,
+    ]);
+  }
+  const occurredClock = new Date(options.occurredAt).getTime();
+  if (Number.isFinite(occurredClock)) {
+    for (const commitment of memory.commitments ?? []) {
+      if (commitment.status === 'active' && commitment.cycleCount === options.cycleCount
+        && new Date(commitment.dueAt).getTime() < occurredClock) {
+        commitment.status = 'expired';
+        commitment.expiredReason = 'missed';
+        commitment.statusSourceEventId = rootEvent.eventId;
+      }
     }
   }
 
@@ -658,6 +846,11 @@ export function buildTurnCommit(options: {
     createdAt: options.createdAt,
   };
   if (!memory.episodes.some(item => item.episodeId === episode.episodeId)) memory.episodes.push(episode);
+
+  const playerNameKnownByNpcIds = uniqueStrings(memory.cognition.filter(item => (
+    item.provenance !== 'authored-baseline'
+    && cognitionIsPublicPlayerNamePermission(item, options.cycleCount)
+  )).map(item => item.observerId));
 
   return {
     turnId: options.turnId,

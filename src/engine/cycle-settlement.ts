@@ -1,5 +1,7 @@
 import { createDefaultVariables, setVariablePath } from '../sillytavern/vars-merger';
 import type { DynamicRecord } from '../sillytavern/types';
+import { normalizeWorldMemory } from '../memory/world-memory';
+import { cognitionIsPublicPlayerNamePermission, resetCharacterContinuity } from '../memory/character-continuity';
 
 const INHERITED_KEYS = [
   'unlockedClues',
@@ -12,8 +14,6 @@ const INHERITED_KEYS = [
   'knowledgeEvents',
   'mysteryKnowledge',
   'suspicion',
-  'worldMemory',
-  'playerNameKnownByNpcIds',
 ] as const;
 
 export function settleCycleVariables(
@@ -25,6 +25,12 @@ export function settleCycleVariables(
     if (current[key] !== undefined) next = setVariablePath(next, key, current[key]);
   }
   next.cycleCount = Number(current.cycleCount ?? 1) + 1;
+  const resetMemory = resetCharacterContinuity(normalizeWorldMemory(current), next.cycleCount);
+  next.worldMemory = resetMemory;
+  next.playerNameKnownByNpcIds = resetMemory.cognition.filter(record => (
+    record.provenance !== 'authored-baseline'
+    && cognitionIsPublicPlayerNamePermission(record, next.cycleCount)
+  )).map(record => record.observerId);
   next.stayStreak = opts.stayed ? Number(current.stayStreak ?? 0) + 1 : 0;
   next.stayedEver = Boolean(current.stayedEver) || Number(next.stayStreak) >= 3;
   next.loopSuspicionStart = typeof next.suspicion === 'object' && next.suspicion !== null
