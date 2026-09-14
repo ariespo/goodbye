@@ -19,6 +19,20 @@ import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
 import { maintextToScene } from '../engine/scene-parser';
 import type { TruthContext } from '../agents/mystery/types';
 
+const actionResolutionCapture = vi.hoisted(() => ({
+  traces: [] as Array<{ inputId: string; outputResolutionId: string; resumed: boolean }>,
+}));
+
+vi.mock('../engine/action-resolution', async importOriginal => {
+  const actual = await importOriginal<typeof import('../engine/action-resolution')>();
+  return { ...actual, resolveAction: (input: Parameters<typeof actual.resolveAction>[0]) => {
+    const output = actual.resolveAction(input);
+    actionResolutionCapture.traces.push({ inputId: input.id, outputResolutionId: output.id,
+      resumed: input.continuation !== undefined });
+    return output;
+  } };
+});
+
 vi.mock('../agents/mystery', async importOriginal => ({
   ...await importOriginal<typeof import('../agents/mystery')>(), prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(),
   reviewNarrativeAgainstWriterPacket: vi.fn(),
@@ -82,6 +96,7 @@ async function configureCycle(mode: 'standard' | 'legacy', cycleCount: number, t
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  actionResolutionCapture.traces.length = 0;
   vi.stubGlobal('fetch', () => { throw new Error('Unexpected live HTTP in day-contract fixture'); });
   invalidatePreplans();
   const variables = { ...createDefaultVariables(), time: '2024-09-09T08:00:00' };
@@ -157,15 +172,25 @@ describe('narrative day contract at the playable commit boundary', () => {
       game: { ...state.game, endingCheckContext: variablesToEndingContext(neutral) as typeof state.game.endingCheckContext } }));
     const settings = useGameStore.getState().tavern.settings;
     const preset = useGameStore.getState().tavern.presets[0]!;
-    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options,
-      mode: mode === 'legacy' ? 'standard' : mode, api: settings.api, preset,
-      complete: async messages => messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
-        ? JSON.stringify({ approved: true, violations: [], corrections: [] })
-        : JSON.stringify({ turnGoal: '深入核对旧记录', tone: '克制',
-          beats: [{ id: 'b', purpose: '调查', description: '在家深入核对旧记录', locationId: 'home' }], revelations: [],
-          actionSteps: [{ id: 'home-records', kind: 'investigation', scope: 'deep', locationId: 'home' }],
-          optionIntents: [{ id: 'continue', intent: '继续核对', tone: '谨慎', expectedPressure: 'medium' }], assetRequests: [] }),
-    }));
+    vi.mocked(prepareMysteryTurn).mockImplementation(async options => {
+      const dynamicPrepared = await prepareActual({ ...options,
+        mode: mode === 'legacy' ? 'standard' : mode, api: settings.api, preset,
+        complete: async messages => messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
+          ? JSON.stringify({ approved: true, violations: [], corrections: [] })
+          : JSON.stringify({ turnGoal: options.actionAuthority?.resumeActionId ? '继续核对旧记录'
+            : options.actionAuthority?.originalInput.includes('接听') ? '接听固定电话' : '深入核对旧记录', tone: '克制',
+            beats: [{ id: 'b', purpose: '调查', description: options.actionAuthority?.originalInput.includes('接听')
+              ? '接听警方电话' : '在家深入核对旧记录', locationId: 'home' }], revelations: [],
+            ...(!options.actionAuthority?.resumeActionId && !options.actionAuthority?.originalInput.includes('接听')
+              ? { actionSteps: [{ id: 'home-records', kind: 'investigation', scope: 'deep', locationId: 'home' }] }
+              : {}),
+            optionIntents: [{ id: 'continue', intent: '继续核对', tone: '谨慎', expectedPressure: 'medium' }],
+            assetRequests: [] }),
+      });
+      dynamicPrepared.reviewPolicy.narrative = false;
+      dynamicPrepared.reviewPolicy.style = false;
+      return dynamicPrepared;
+    });
     draft = '<maintext>场景|home-day\n对话|旁白|calm|你开始深入核对旧记录，广播报时后仍有大半没有查完。</maintext><option>处理眼前的事情\n停下来</option><sum>调查被固定事件打断。</sum><vars>{}</vars>';
     const { result, unmount } = renderHook(() => useGameLoop());
     await act(async () => { await result.current.sendMessage('在家深入调查旧记录'); });
@@ -180,6 +205,36 @@ describe('narrative day contract at the playable commit boundary', () => {
     expect(state.tavern.variables.actionContinuity?.continuation?.actionId).toBe(resolved?.continuation?.actionId);
     expect(state.tavern.variables.mysteryKnowledge?.['a-murder-staged-fall']).toBeUndefined();
     expect(state.game.endingPanel.pendingEndingId).toBeNull();
+
+    const continuationId = resolved!.continuation!.actionId;
+    draft = '<maintext>场景|home-day\n对话|旁白|calm|你接起电话，警方明确告知文穗已经死亡。</maintext><option>处理眼前的事情\n停下来</option><sum>死讯已经送达。</sum><vars>{}</vars>';
+    await act(async () => { await result.current.sendMessage('接听电话，处理眼前的固定事件。'); });
+    expect(useGameStore.getState().game.history).toHaveLength(2);
+    const optionState = useGameStore.getState();
+    const resumeOption = optionState.api.parsedContent.options[0];
+    const resumeBinding = optionState.api.parsedContent.optionBindings?.[0];
+    expect(resumeOption).toMatch(/继续未完成的行动.*剩余75分钟/u);
+    expect(resumeBinding).toMatchObject({ continuationId });
+
+    draft = '<maintext>场景|home-day\n对话|旁白|calm|你回到桌前，把剩余旧记录逐项核对完毕。</maintext><option>整理记录\n暂时休息</option><sum>旧记录核对完成。</sum><vars>{}</vars>';
+    let selected = false;
+    act(() => { selected = result.current.selectOption(resumeOption, resumeBinding); });
+    expect(selected).toBe(true);
+    await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(3));
+    const final = useGameStore.getState();
+    const resolvedActions = vi.mocked(runStateAgent).mock.calls
+      .map(call => call[0].resolvedAction).filter(value => value !== undefined);
+    const resumed = resolvedActions.at(-1)!;
+    const partialTrace = actionResolutionCapture.traces.find(trace => trace.outputResolutionId === resolved?.id);
+    const resumedTrace = actionResolutionCapture.traces.find(trace => trace.outputResolutionId === resumed.id);
+    expect(resumed).toMatchObject({ plannedMinutes: 75, executedMinutes: 75 });
+    expect(resumed.continuation).toBeUndefined();
+    expect(final.tavern.variables).toMatchObject({ time: '2024-09-09T17:15:00', deathNews: 'delivered' });
+    expect(final.tavern.variables.actionContinuity?.continuation).toBeNull();
+    expect(resolvedActions.flatMap(item => item?.eventEffectIds ?? [])
+      .filter(effectId => effectId === 'death-news:cycle:3')).toHaveLength(1);
+    expect(partialTrace).toMatchObject({ inputId: continuationId, resumed: false });
+    expect(resumedTrace).toMatchObject({ inputId: continuationId, resumed: true });
     unmount();
   });
 

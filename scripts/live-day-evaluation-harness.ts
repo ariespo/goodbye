@@ -213,13 +213,20 @@ export function assessSourceGroundingEvidence(input: {
   reviews: readonly unknown[];
   required?: { text: RegExp; sourceId: string; sourceQuote: RegExp };
   forbidden?: RegExp;
+  rejectionPattern?: RegExp;
   requireDisposition?: boolean;
 }): { passed: boolean; reasons: string[]; evidence: Record<string, unknown> } {
-  const assertions = input.reviews.flatMap(review => {
+  const content = input.acceptedContent ?? '';
+  const acceptedCandidateReviews = content.length > 0
+    ? input.reviews.filter(review => asRecord(review).reviewedCandidate === content) : [];
+  const assertions = acceptedCandidateReviews.flatMap(review => {
     const audit = asRecord(asRecord(review).assertionAudit);
     return Array.isArray(audit.assertions) ? audit.assertions.map(asRecord) : [];
   });
-  const content = input.acceptedContent ?? '';
+  const currentAttemptAssertions = input.reviews.flatMap(review => {
+    const audit = asRecord(asRecord(review).assertionAudit);
+    return Array.isArray(audit.assertions) ? audit.assertions.map(asRecord) : [];
+  });
   const supported = input.required ? assertions.find(assertion => assertion.status === 'supported'
     && typeof assertion.quote === 'string' && input.required!.text.test(assertion.quote)
     && (Array.isArray(assertion.citations) ? assertion.citations.map(asRecord) : []).some(citation => (
@@ -227,16 +234,33 @@ export function assessSourceGroundingEvidence(input: {
       && typeof citation.quote === 'string' && input.required!.sourceQuote.test(citation.quote)
     ))) : undefined;
   const forbiddenPresent = input.forbidden ? input.forbidden.test(content) : false;
-  const unsupportedAssertions = assertions.filter(assertion => assertion.status === 'unsupported');
+  const unsupportedAssertions = currentAttemptAssertions.filter(assertion => assertion.status === 'unsupported');
+  const rejectionPattern = input.rejectionPattern ?? input.forbidden;
+  const relevantSemanticRejection = rejectionPattern ? input.reviews.some(review => {
+    const record = asRecord(review);
+    const audit = asRecord(record.assertionAudit);
+    const reviewAssertions = Array.isArray(audit.assertions) ? audit.assertions.map(asRecord) : [];
+    const rejectionText = [
+      ...reviewAssertions.filter(assertion => assertion.status === 'unsupported')
+        .map(assertion => `${assertion.quote ?? ''} ${assertion.proposition ?? ''} ${assertion.reason ?? ''}`),
+      ...(Array.isArray(record.violations) ? record.violations.map(item => JSON.stringify(item)) : []),
+      ...(Array.isArray(record.corrections) ? record.corrections.map(String) : []),
+    ].join('\n');
+    return record.approved === false && rejectionPattern.test(rejectionText);
+  }) : false;
   const reasons: string[] = [];
+  if (content.length > 0 && acceptedCandidateReviews.length === 0) {
+    reasons.push('accepted content has no review tied to the current accepted candidate');
+  }
   if (input.required && !input.required.text.test(content)) reasons.push('accepted content omits the required grounded assertion');
   if (input.required && !supported) reasons.push('required assertion lacks exact supported source evidence');
   if (forbiddenPresent) reasons.push('accepted content contains the forbidden unsupported addition');
-  if (input.requireDisposition && content.length === 0 && unsupportedAssertions.length === 0) {
-    reasons.push('probe produced neither corrected accepted content nor an explicit unsupported assertion');
+  if (input.requireDisposition && content.length === 0 && !relevantSemanticRejection) {
+    reasons.push('current attempt produced neither corrected accepted content nor a relevant semantic rejection');
   }
   return { passed: reasons.length === 0, reasons, evidence: {
-    accepted: content.length > 0, supportedQuote: supported?.quote ?? null,
+    accepted: content.length > 0, acceptedCandidateReviewCount: acceptedCandidateReviews.length,
+    relevantSemanticRejection, supportedQuote: supported?.quote ?? null,
     supportedCitations: supported?.citations ?? [], forbiddenPresent,
     unsupportedAssertions: unsupportedAssertions
       .map(assertion => ({ quote: assertion.quote, proposition: assertion.proposition, reason: assertion.reason })),

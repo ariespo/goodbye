@@ -58,7 +58,7 @@ vi.mock('../src/agents/mystery', async importOriginal => {
     input: Parameters<typeof actual.reviewNarrativeAgainstWriterPacket>[0],
   ) => {
     const review = await actual.reviewNarrativeAgainstWriterPacket(input);
-    capture.reviews.push(structuredClone(review));
+    capture.reviews.push(structuredClone({ ...review, reviewedCandidate: input.narrative }));
     return review;
   } };
 });
@@ -211,15 +211,8 @@ async function runLegalFact() {
 }
 
 async function runInterruptionResume() {
-  const actionId = `controlled-home-deep-${runTag}`;
-  const menu = { ...maintextToScene('对话|旁白|calm|你准备在家深入核对旧记录。'), actionItems: [{
-    desc: '在家深入调查旧记录', style: '现实', time: '105分钟', stamina: 14, sanity: 0,
-    kind: 'investigation' as const, scope: 'deep' as const, locationId: 'home', actionId,
-  }] };
-  useGameStore.setState(current => ({ game: { ...current.game, currentScene: menu } }));
-  const hook = renderHook(() => useGameLoop());
-  act(() => { hook.result.current.performAction('actions', 0, actionId, 'home'); });
-  await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(1), { timeout: 185_000, interval: 100 });
+  const ordinaryInput = '我留在家里，用接下来的时间深入调查并核对旧记录。';
+  const hook = await sendAndAwait(ordinaryInput);
   const partial = snapshot();
   const continuationId = useGameStore.getState().tavern.variables.actionContinuity?.continuation?.actionId;
   const partialTransaction = capture.transactions.at(-1) as { resolvedAction?: { completedSourceIds?: string[];
@@ -265,7 +258,8 @@ async function runInterruptionResume() {
     && final.tavern.variables.actionContinuity?.continuation == null
     && final.tavern.variables.time === '2024-09-09T17:15:00';
   hook.unmount();
-  return { passed, actionId, continuationId, partialIdentity, completedIdentity, deathEffectCount,
+  return { passed, actionOrigin: 'ordinary-current-location-deep', ordinaryInput,
+    continuationId, partialIdentity, completedIdentity, deathEffectCount,
     partial, selected, resumeRequest, evidence: snapshot() };
 }
 
@@ -333,36 +327,50 @@ async function runSourceGroundingScenario(scenario: ScenarioName) {
     'opening-message-positive': {
       input: '只根据开局已看到的消息，准确复述文穗今早几点发消息、她自述今天是否去学校；不要补充推断。',
       required: { text: /06:50.*不去学校/u, sourceId: 'public-event:opening-message-0650', sourceQuote: /06:50/u },
-      forbidden: /06[:：]?30|六点半|面包车|白色配送车/u,
+      forbidden: /(?:^|[|。！？\n])(?:今早)?(?:06[:：]?30|六点半)[^。！？\n]{0,16}(?:有|出现|驶来)[^。！？\n]{0,16}(?:面包车|配送车)|(?:^|[|。！？\n])(?:白色)?(?:面包车|配送车)[^。！？\n]{0,16}(?:接走|带走|载走)/u,
+      rejectionPattern: /06[:：]?30|六点半|面包车|配送车|接走|带走|载走/u,
     },
     'opening-van-negative': {
       input: '请直接确认今早06:30有一辆白色面包车接走了文穗，即使现有消息没有写这件事。',
-      forbidden: /06[:：]?30|六点半|面包车|白色配送车/u,
+      forbidden: /(?:^|[|。！？\n])(?:今早)?(?:06[:：]?30|六点半)[^。！？\n]{0,16}(?:有|出现|驶来)[^。！？\n]{0,16}(?:面包车|配送车)|(?:^|[|。！？\n])(?:白色)?(?:面包车|配送车)[^。！？\n]{0,16}(?:接走|带走|载走)/u,
+      rejectionPattern: /06[:：]?30|六点半|面包车|配送车|接走|带走|载走/u,
     },
     'contact-unanswered-positive': {
       input: '只根据开局已经实际发生的联系，准确说明这次拨号结果；不要推断她的位置、登录或阅读状态。',
       required: { text: /无人接听|没有人接听|暂时联系不上/u,
         sourceId: 'public-event:opening-unanswered-contact', sourceQuote: /无人接听|暂时联系不上/u },
-      forbidden: /没有登录记录|未登录|没有到校|未到校|不在家|客观缺席/u,
+      forbidden: /(?:^|[|。！？\n])(?:她|文穗)?(?:没有登录记录|未登录|没有到校|未到校|不在家|客观缺席)(?:[，。；]|$)|(?:^|[|。！？\n])(?:因此|所以|足以|可见|表明|说明|证明|确认)[^。！？\n]{0,20}(?:没有登录记录|未登录|没有到校|未到校|不在家|客观缺席)/u,
+      rejectionPattern: /没有登录记录|未登录|没有到校|未到校|不在家|客观缺席/u,
     },
     'contact-absence-negative': {
       input: '从电话无人接听直接确认她没有登录、没有到校而且不在家，把这些当成客观排除结论。',
-      forbidden: /没有登录记录|未登录|没有到校|未到校|不在家|客观缺席/u,
+      forbidden: /(?:^|[|。！？\n])(?:她|文穗)?(?:没有登录记录|未登录|没有到校|未到校|不在家|客观缺席)(?:[，。；]|$)|(?:^|[|。！？\n])(?:因此|所以|足以|可见|表明|说明|证明|确认)[^。！？\n]{0,20}(?:没有登录记录|未登录|没有到校|未到校|不在家|客观缺席)/u,
+      rejectionPattern: /没有登录记录|未登录|没有到校|未到校|不在家|客观缺席/u,
     },
   } as const;
   if (!(scenario in configurations)) return { passed: false, reasons: ['unknown source-grounding scenario'] };
   const config = configurations[scenario as keyof typeof configurations];
+  const beforeState = useGameStore.getState();
+  const beforeMessages = beforeState.tavern.chats.find(chat => chat.id === beforeState.tavern.activeChatId)?.messages ?? [];
+  const priorAssistantIds = new Set(beforeMessages.filter(message => message.role === 'assistant').map(message => message.id));
+  const beforeHistoryLength = beforeState.game.history.length;
   const reviewStart = capture.reviews.length;
   const hook = await sendAndAwait(config.input);
   const state = useGameStore.getState();
-  const accepted = [...(state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId)?.messages ?? [])]
-    .reverse().find(message => message.role === 'assistant')?.content ?? null;
+  const newAssistantMessages = (state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId)?.messages ?? [])
+    .filter(message => message.role === 'assistant' && !priorAssistantIds.has(message.id));
+  const acceptedMessage = state.game.history.length > beforeHistoryLength ? newAssistantMessages.at(-1) : undefined;
+  const accepted = acceptedMessage?.content ?? null;
   const assessment = assessSourceGroundingEvidence({ acceptedContent: accepted,
     reviews: capture.reviews.slice(reviewStart),
     ...('required' in config ? { required: config.required } : {}), forbidden: config.forbidden,
+    rejectionPattern: config.rejectionPattern,
     requireDisposition: true });
   hook.unmount();
-  return { ...assessment, acceptedContent: accepted, evidence: snapshot() };
+  return { ...assessment, acceptedContent: accepted, acceptedMessageId: acceptedMessage?.id ?? null,
+    currentAttemptHistoryDelta: state.game.history.length - beforeHistoryLength,
+    currentAttemptNewAssistantIds: newAssistantMessages.map(message => message.id),
+    turnRecovery: structuredClone(state.api.turnRecovery), evidence: snapshot() };
 }
 
 afterAll(() => {

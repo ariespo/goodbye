@@ -184,16 +184,43 @@ describe('live day evidence snapshots', () => {
   });
 
   it('requires exact supported source evidence and rejects unsupported additions in accepted prose', () => {
-    const review = { assertionAudit: { assertions: [{ status: 'supported', quote: '06:50文穗发来消息说今天不去学校。',
+    const accepted = '06:50文穗发来消息说今天不去学校。';
+    const review = { approved: true, reviewedCandidate: accepted,
+      assertionAudit: { assertions: [{ status: 'supported', quote: accepted,
       citations: [{ sourceId: 'public-event:opening-message-0650', quote: '今早06:50文穗发来聊天消息' }] }] } };
-    expect(assessSourceGroundingEvidence({ acceptedContent: '06:50文穗发来消息说今天不去学校。', reviews: [review],
+    expect(assessSourceGroundingEvidence({ acceptedContent: accepted, reviews: [review],
       required: { text: /06:50.*不去学校/u, sourceId: 'public-event:opening-message-0650', sourceQuote: /06:50/u },
       forbidden: /06:30|面包车/u })).toMatchObject({ passed: true });
     expect(assessSourceGroundingEvidence({ acceptedContent: '她发过消息。', reviews: [review],
       required: { text: /06:50.*不去学校/u, sourceId: 'public-event:opening-message-0650', sourceQuote: /06:50/u } }).passed)
       .toBe(false);
+    expect(assessSourceGroundingEvidence({ acceptedContent: accepted, reviews: [
+      { ...review, reviewedCandidate: '被拒绝的旧候选。' },
+      { approved: true, reviewedCandidate: accepted, assertionAudit: { assertions: [] } },
+    ], required: { text: /06:50.*不去学校/u, sourceId: 'public-event:opening-message-0650', sourceQuote: /06:50/u } }).passed)
+      .toBe(false);
     expect(assessSourceGroundingEvidence({ acceptedContent: '06:30有面包车接走了文穗。', reviews: [review],
       forbidden: /06:30|面包车/u }).passed).toBe(false);
+  });
+
+  it('does not reuse a seeded opening or rejected candidate as current-attempt acceptance', () => {
+    const forbidden = /06:30|面包车/u;
+    expect(assessSourceGroundingEvidence({ acceptedContent: '开局场景仍在这里。', reviews: [], forbidden,
+      requireDisposition: true }).passed).toBe(false);
+    expect(assessSourceGroundingEvidence({ acceptedContent: null, reviews: [], forbidden,
+      requireDisposition: true }).passed).toBe(false);
+    expect(assessSourceGroundingEvidence({ acceptedContent: '现有资料只记录06:50消息。', reviews: [{
+      approved: true, reviewedCandidate: '现有资料只记录06:50消息。', assertionAudit: { assertions: [] },
+    }], forbidden, requireDisposition: true })).toMatchObject({ passed: true,
+      evidence: { acceptedCandidateReviewCount: 1, relevantSemanticRejection: false } });
+    expect(assessSourceGroundingEvidence({ acceptedContent: null, reviews: [{
+      approved: false, reviewedCandidate: '06:30有面包车接走了文穗。',
+      assertionAudit: { assertions: [{ status: 'unsupported', quote: '06:30有面包车接走了文穗。' }] },
+    }], forbidden, requireDisposition: true })).toMatchObject({ passed: true,
+      evidence: { accepted: false, relevantSemanticRejection: true } });
+    expect(assessSourceGroundingEvidence({ acceptedContent: null, reviews: [{
+      approved: false, reviewedCandidate: '<malformed>', violations: [{ message: '主输出协议缺少标签' }],
+    }], forbidden, requireDisposition: true }).passed).toBe(false);
   });
   it('resolves the current first option through validated stored metadata', () => {
     const validate = (value: unknown, index: number, text: string, active?: string) => {
