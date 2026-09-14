@@ -67,3 +67,52 @@ exit 0
 git diff --check -- src/agents/mystery/action-authority.ts src/agents/mystery/action-authority.test.ts
 exit 0 (Git emitted only the repository's LF-to-CRLF working-copy notices)
 ```
+
+## Round 3: positioned whole-action totals
+
+The next read-only probe covered these two inputs with deep investigation followed by a 60-minute rest:
+
+```text
+先深入调查房间，再休息一小时，总共两小时
+我最多两小时，先深入调查房间，再休息一小时
+```
+
+Before the fix, both produced the same failure:
+
+```text
+{"budget":60,"requestedMinutes":[null,60],"executedMinutes":60,
+ "segments":[{"id":"deep","executedMinutes":60,"completed":false}]}
+```
+
+The parser now distinguishes two bounded whole-action forms:
+
+- leading cap words remain whole-action limits and accept an optional first-person `我` prefix;
+- semantically explicit total words `总共` and `总计` are also recognized at a comma/semicolon-delimited trailing position.
+
+Other cap words are not searched indiscriminately through child clauses, so the round-2 `再只用五分钟等待` case remains local.
+
+RED evidence:
+
+```text
+npx vitest run src/agents/mystery/action-authority.test.ts
+2 failed | 28 passed
+expected 60 to be 120
+```
+
+GREEN evidence:
+
+```text
+npx vitest run src/agents/mystery/action-authority.test.ts
+30 tests passed
+
+npx vitest run --config .codex-test-tmp/vitest.config.ts --reporter=verbose
+TASK4_AGGREGATE_PROBE_trailing-total {"budget":120,"requestedMinutes":[null,60],"executedMinutes":120,"segments":[{"id":"deep","executedMinutes":105,"completed":true},{"id":"rest","executedMinutes":15,"completed":false}]}
+TASK4_AGGREGATE_PROBE_first-person-prefix {"budget":120,"requestedMinutes":[null,60],"executedMinutes":120,"segments":[{"id":"deep","executedMinutes":105,"completed":true},{"id":"rest","executedMinutes":15,"completed":false}]}
+2 tests passed
+
+npx eslint src/agents/mystery/action-authority.ts src/agents/mystery/action-authority.test.ts
+exit 0
+
+git diff --check -- src/agents/mystery/action-authority.ts src/agents/mystery/action-authority.test.ts
+exit 0 (LF-to-CRLF working-copy notices only)
+```

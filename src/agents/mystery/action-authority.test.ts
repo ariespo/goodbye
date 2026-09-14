@@ -85,6 +85,21 @@ describe('trusted action input adapter', () => {
       expect.objectContaining({ step: expect.objectContaining({ id: 'rest' }), executedMinutes: 15, completed: false }),
     ]));
   });
+  it.each([
+    '先深入调查房间，再休息一小时，总共两小时',
+    '我最多两小时，先深入调查房间，再休息一小时',
+  ])('recognizes a clearly whole-action cap outside the bare leading form: %s', originalInput => {
+    const input = buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [
+      { id: 'deep', kind: 'investigation', scope: 'deep', locationId: 'home' },
+      { id: 'rest', kind: 'rest', scope: 'normal', locationId: 'home' },
+    ] }, { ...context, originalInput }, 'positioned-cap');
+    expect(input.explicitBudgetMinutes).toBe(120);
+    expect(input.steps.map(step => step.requestedMinutes)).toEqual([undefined, 60]);
+    expect(resolveAction(input).segments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ step: expect.objectContaining({ id: 'deep' }), executedMinutes: 105, completed: true }),
+      expect.objectContaining({ step: expect.objectContaining({ id: 'rest' }), executedMinutes: 15, completed: false }),
+    ]));
+  });
   it('keeps separate stage durations additive when no overall cap is present', () => {
     const input = buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [
       { id: 'rest', kind: 'rest', scope: 'normal', locationId: 'home' },

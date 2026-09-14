@@ -48,7 +48,9 @@ function summedDurations(matches: RegExpMatchArray[]): number | undefined {
 }
 
 function explicitDuration(text: string): number | undefined {
-  const aggregateCap = text.match(/^\s*(?:只用|只花|最多|总共|总计|限定|预算|给自己)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/u);
+  const leadingCap = text.match(/^\s*(?:我\s*)?(?:只用|只花|最多|总共|总计|限定|预算|给自己)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/u);
+  const explicitTotal = text.match(/(?:^|[，,；;])\s*(?:我\s*)?(?:总共|总计)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/u);
+  const aggregateCap = leadingCap ?? explicitTotal;
   if (aggregateCap) return summedDurations([aggregateCap]);
   return summedDurations([...text.matchAll(/(?:用|花|休息|等待|等)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)]);
 }
