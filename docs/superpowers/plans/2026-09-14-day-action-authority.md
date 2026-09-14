@@ -380,8 +380,8 @@ it('does not grant a stranger yesterday’s introduction after reset', () => {
 
 **Interfaces:** Scene/ParsedContent action items and choice metadata carry program `opportunityId`, `scope`, quoted total/work/travel minutes and resource quote. Existing `time` string is a display projection for old UI compatibility. Selected action passes stable ID/validated steps rather than asking `parseTimeCost` to recreate authority. `ResolvedActionOutcome` supplies actual elapsed minutes and optional remaining quote.
 
-- [ ] Write red UI tests: normal investigation55 plus travel15 displays70; same-location shows55; opening panels leaves clock/resources/history unchanged; interrupted action displays “已进行30分钟” and explicit remaining work75; selecting continuation passes its ID once. Free input shows20–30/45–60/90–120 policy and travel addition; it does not request a blocking approval on each attempt.
-- [ ] Run ActionPanel/MapModal/ChoiceMenu tests and verify red. Render quotes from `quoteActionSteps`; display exact executed result from resolution, not Writer numbers. Preserve existing mobile layout/accessibility/keyboard behavior.
+- [x] Write red UI tests: normal investigation55 plus travel15 displays70; same-location shows55; opening panels leaves clock/resources/history unchanged; interrupted action displays “已进行30分钟” and explicit remaining work75; selecting continuation passes its ID once. Free input shows20–30/45–60/90–120 policy and travel addition; it does not request a blocking approval on each attempt.
+- [x] Run ActionPanel/MapModal/ChoiceMenu tests and verify red. Render quotes from `quoteActionSteps`; display exact executed result from resolution, not Writer numbers. Preserve existing mobile layout/accessibility/keyboard behavior.
 
 ```tsx
 <span aria-label="预计耗时">约{quote.totalMinutes}分钟</span>
@@ -389,8 +389,8 @@ it('does not grant a stranger yesterday’s introduction after reset', () => {
 {resolved && <span>已进行{resolved.executedMinutes}分钟</span>}
 ```
 
-- [ ] Use existing choice/result surfaces to show interruption reason and remaining action clearly, with cancel/change-plan possible. Revalidate quote at actual start if clock/location changed, and visibly report actual result; never quietly charge stale menu price. Map travel-only actions are represented as travel steps, not work plus duplicate travel.
-- [ ] Rerun focused UI tests and inspect in browser at desktop/mobile sizes; root records screenshots of quote+actual+continuation and verifies local free panels. Commit after review.
+- [x] Use existing choice/result surfaces to show interruption reason and remaining action clearly, with cancel/change-plan possible. Revalidate quote at actual start if clock/location changed, and visibly report actual result; never quietly charge stale menu price. Map travel-only actions are represented as travel steps, not work plus duplicate travel.
+- [x] Rerun focused UI tests and inspect in browser at desktop/mobile sizes; root records screenshots of quote+actual+continuation and verifies local free panels. Commit after review.
 
 ### Task 8: acceptance tests and real model evidence
 
