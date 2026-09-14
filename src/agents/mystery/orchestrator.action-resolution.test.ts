@@ -5,13 +5,14 @@ import { createDefaultVariables } from '../../sillytavern/vars-merger';
 import { createDefaultPreset, type AppSettings, type ChatPreset } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
 
-function request(mode: 'standard' | 'legacy', pending = false) {
+function request(mode: 'standard' | 'legacy', pending = false, override: { time?: string; location?: string; userInput?: string; knowledgeEvents?: string[] } = {}) {
   const game = useGameStore.getState().game;
-  const time = pending ? '2024-09-09T16:00:00' : '2024-09-09T08:00:00';
-  return buildTurnPreparation({ userInput: '调查房间',
+  const time = override.time ?? (pending ? '2024-09-09T16:00:00' : '2024-09-09T08:00:00');
+  return buildTurnPreparation({ userInput: override.userInput ?? '调查房间',
     settings: { api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, userName: '玩家', characterName: '文穗', agentNarrativeMode: mode } as AppSettings,
     activePreset: { ...createDefaultPreset(), id: 'p', createdAt: 0, updatedAt: 0 } as ChatPreset,
-    variables: { ...createDefaultVariables(), time, location: 'home', ...(pending ? { deathNews: 'pending' } : {}) },
+    variables: { ...createDefaultVariables(), time, location: override.location ?? 'home', knowledgeEvents: override.knowledgeEvents,
+      ...(pending ? { deathNews: 'pending' } : {}) },
     gameStatus: { ...game.gameStatus, time: new Date(time), stamina: 100, sanity: 70 },
     currentState: { ...game.currentState, background: 'home-day' }, endingCheckContext: game.endingCheckContext, history: [],
   }).request;
@@ -29,6 +30,25 @@ const complete: NonNullable<Parameters<typeof prepareMysteryTurn>[0]['complete']
 };
 
 describe('action resolution before Writer construction', () => {
+  it('keeps the completed supermarket interaction when the next travel leg is interrupted', async () => {
+    const prepared = await prepareMysteryTurn({ ...request('standard', false, { time: '2024-09-09T15:00:00', location: 'supermarket',
+      userInput: '先调查便利店，再去学校调查', knowledgeEvents: ['meet:chen-huihui'] }), complete: async (messages, ...rest) => {
+      const result = JSON.parse(await complete(messages, ...rest));
+      if (result.beats) Object.assign(result, { beats: [
+        { id: 'store', purpose: '调查', description: '询问店员', locationId: 'supermarket', speakerIds: ['chen-huihui'] },
+        { id: 'school', purpose: '调查', description: '询问门卫', locationId: 'school', speakerIds: ['school-guard'] },
+      ], actionSteps: [
+        { id: 'a', kind: 'investigation', scope: 'normal', locationId: 'supermarket' },
+        { id: 'b', kind: 'investigation', scope: 'normal', locationId: 'school' },
+      ] });
+      return JSON.stringify(result);
+    } });
+    expect(prepared.writerPacket.resolvedAction).toMatchObject({ executedMinutes: 60, endLocationId: 'supermarket' });
+    expect(prepared.directorPlan.beats[0].speakerIds).toContain('chen-huihui');
+    expect(prepared.directorPlan.beats.flatMap(beat => beat.speakerIds ?? [])).not.toContain('school-guard');
+    expect(prepared.executedContext?.activeNpcIds).toEqual([]);
+    expect(prepared.writerPacket.sceneContract).toBeUndefined();
+  });
   it('repairs malformed action proposals from providers without schema enforcement before review', async () => {
     let calls = 0;
     const prepared = await prepareMysteryTurn({ ...request('standard'), complete: async (messages, ...rest) => {

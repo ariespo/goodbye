@@ -38,14 +38,23 @@ function durationNumber(raw: string): number | undefined {
   return undefined;
 }
 
-function explicitDuration(text: string): number | undefined {
-  const matches = [...text.matchAll(/(?:只用|只花|最多|总共|总计|限定|预算|给自己|用|花|休息|等待|等)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)];
+function summedDurations(matches: RegExpMatchArray[]): number | undefined {
   const minutes = matches.map(match => {
     const value = durationNumber(match[1]);
     return value === undefined ? NaN : value * (match[2] === '小时' ? 60 : 1);
   });
   return minutes.length && minutes.every(value => Number.isFinite(value) && value > 0)
     ? minutes.reduce((sum, value) => sum + value, 0) : undefined;
+}
+
+function explicitDuration(text: string): number | undefined {
+  const aggregateCap = [...text.matchAll(/(?:只用|只花|最多|总共|总计|限定|预算|给自己)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)];
+  if (aggregateCap.length) return summedDurations(aggregateCap.slice(0, 1));
+  return summedDurations([...text.matchAll(/(?:用|花|休息|等待|等)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)]);
+}
+
+function explicitStageDuration(text: string): number | undefined {
+  return summedDurations([...text.matchAll(/(?:休息|等待|等)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)]);
 }
 
 function actionClauses(text: string): string[] {
@@ -136,7 +145,7 @@ export function buildActionAuthorityInput(
       && (!Array.isArray(proposed.completionSourceIds) || proposed.completionSourceIds.some(source => !allowedSources.has(source)))) {
       throw new Error('行动结果引用了未授权的事实来源。');
     }
-    const duration = context.inputOrigin === 'menu' ? undefined : explicitDuration(clause);
+    const duration = context.inputOrigin === 'menu' ? undefined : explicitStageDuration(clause);
     steps.push({ id: stepId, kind, scope, locationId: registered.locationId, completionSourceIds: [],
       ...((kind === 'rest' || kind === 'wait') ? { requestedMinutes: duration ?? 60 } : {}) });
     location = registered.locationId;
@@ -176,10 +185,11 @@ export function buildActionAuthorityInput(
   const lastWork = workSteps.at(-1);
   if (lastWork) {
     lastWork.completionSourceIds.push(...workKnowledgeSources);
-    if (context.proposedScene?.locationId === context.currentLocationId) {
-      lastWork.completionSourceIds.push(...arrivalSources);
-    }
     lastWork.completionSourceIds = [...new Set(lastWork.completionSourceIds)];
+  }
+  if (context.proposedScene?.locationId === context.currentLocationId) {
+    const introductionWork = workSteps.find(step => step.locationId === context.currentLocationId);
+    if (introductionWork) introductionWork.completionSourceIds = [...new Set([...introductionWork.completionSourceIds, ...arrivalSources])];
   }
   return { ...base, steps, explicitBudgetMinutes: context.inputOrigin === 'menu' ? undefined : explicitDuration(context.originalInput) };
 }
@@ -236,6 +246,7 @@ export function projectExecutedPlan(
   plan: DirectorPlan,
   resolution: ResolvedActionOutcome,
   presentNpcIds: readonly string[] = [],
+  segmentNpcIdsByLocation: Readonly<Record<string, readonly string[]>> = {},
 ): DirectorPlan {
   const completed = new Set(resolution.completedSourceIds);
   const partial = resolution.executedMinutes < resolution.plannedMinutes
@@ -244,7 +255,11 @@ export function projectExecutedPlan(
   const withheldOutcome = plan.revelations.some(fact => !completed.has(`fact:${fact.factId}:${fact.level}`))
     || (plan.knowledgeEvents ?? []).some(event => !completed.has(`accepted-event:${event.eventId}`));
   const rewriteBeats = partial || nonWork || withheldOutcome;
-  const approvedPresentNpcIds = [...new Set(presentNpcIds)];
+  const castForSegment = (locationId: string) => {
+    const allowed = new Set(segmentNpcIdsByLocation[locationId] ?? (locationId === resolution.endLocationId ? presentNpcIds : []));
+    return [...new Set(plan.beats.filter(beat => !beat.locationId || beat.locationId === locationId)
+      .flatMap(beat => beat.speakerIds ?? []).filter(npcId => allowed.has(npcId)))];
+  };
   const beats = rewriteBeats ? resolution.segments.map((segment, index) => ({
     id: `executed:${index}`, purpose: segment.step.kind === 'event' ? '传达定时事件' : '演绎已执行的行动片段',
     description: executedSegmentDescription(segment),
@@ -253,8 +268,7 @@ export function projectExecutedPlan(
       ? resolution.startLocationId : segment.step.locationId } : {}),
     speakerIds: !nonWork && segment.executedMinutes > 0
       && ['inquiry', 'investigation', 'search'].includes(segment.step.kind)
-      && segment.step.locationId === resolution.endLocationId
-      ? [...approvedPresentNpcIds] : [],
+      ? castForSegment(segment.step.locationId) : [],
   })) : plan.beats.map(cloneBeat);
   if (!beats.length) beats.push({ id: 'boundary', purpose: '行动在事件边界暂停',
     description: '尚未执行新的调查。说明当前事件打断，保留后续选择。', speakerIds: [] });
@@ -278,11 +292,11 @@ export function projectExecutedPlan(
   };
 }
 
-export function buildActionOutcomeSources(resolution: ResolvedActionOutcome): NonNullable<WriterPacket['authorizedActionOutcomes']> {
+export function buildActionOutcomeSources(resolution: ResolvedActionOutcome, retainedTransit = false): NonNullable<WriterPacket['authorizedActionOutcomes']> {
   const before = resolution.resources.before;
   const after = resolution.resources.after;
   const locationName = getLocationById(resolution.endLocationId)?.name ?? resolution.endLocationId;
-  const inTransit = resolution.segments.some(segment => segment.step.kind === 'travel' && !segment.completed);
+  const inTransit = retainedTransit || resolution.segments.some(segment => segment.step.kind === 'travel' && !segment.completed);
   const locationOutcome = inTransit
     ? `玩家仍在途中，尚未抵达目的地；地图锚点暂保留${locationName}（${resolution.endLocationId}）。`
     : `行动结束时，玩家位于${locationName}（${resolution.endLocationId}）。`;

@@ -10,6 +10,16 @@ const plan: DirectorPlan = { turnGoal: '调查', tone: 'calm', beats: [], assetR
   revelations: [{ factId: 'F001', level: 'clue', delivery: 'object' }] };
 
 describe('trusted action input adapter', () => {
+  it('binds a current-location introduction to work there before a later compound destination', () => {
+    const proposedScene = resolveActionNarrativeContext('调查便利店', new Date(context.startTime), 0, {
+      currentLocationId: 'supermarket', cycleCount: 1, knowledgeEvents: [], enRouteEncounterRoll: 1,
+    });
+    const input = buildActionAuthorityInput({ ...plan, revelations: [],
+      knowledgeEvents: [{ eventId: 'meet:chen-huihui', evidence: '交谈时认出便利店店员陈慧慧。' }],
+    }, { ...context, currentLocationId: 'supermarket', originalInput: '先调查便利店，再去学校调查', proposedScene }, 'meeting');
+    expect(input.steps.find(step => step.locationId === 'supermarket')?.completionSourceIds).toEqual(['accepted-event:meet:chen-huihui']);
+    expect(input.steps.find(step => step.locationId === 'school')?.completionSourceIds).toEqual([]);
+  });
   it.each(['休息一会儿', '等待一会儿'])('gives %s a program-owned duration even without model prices', text => {
     const input = buildActionAuthorityInput({ ...plan, revelations: [], timeCostMinutes: 1 }, { ...context, originalInput: text }, 'quiet');
     const outcome = resolveAction(input);
@@ -59,6 +69,30 @@ describe('trusted action input adapter', () => {
     const result = buildActionAuthorityInput(plan, { ...context, originalInput: '只用五分钟调查完所有事情' }, 'r');
     expect(result.explicitBudgetMinutes).toBe(5);
     expect(result.steps[0].scope).toBe('normal');
+  });
+  it('uses an overall cap without adding a nested rest duration to it', () => {
+    const input = buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [
+      { id: 'deep', kind: 'investigation', scope: 'deep', locationId: 'home' },
+      { id: 'rest', kind: 'rest', scope: 'normal', locationId: 'home' },
+    ] }, { ...context, originalInput: '最多两小时，先深入调查房间，再休息一小时' }, 'capped-compound');
+    expect(input.explicitBudgetMinutes).toBe(120);
+    expect(input.steps[1]).toMatchObject({ kind: 'rest', requestedMinutes: 60 });
+
+    const outcome = resolveAction(input);
+    expect(outcome.executedMinutes).toBe(120);
+    expect(outcome.segments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ step: expect.objectContaining({ id: 'deep' }), executedMinutes: 105, completed: true }),
+      expect.objectContaining({ step: expect.objectContaining({ id: 'rest' }), executedMinutes: 15, completed: false }),
+    ]));
+  });
+  it('keeps separate stage durations additive when no overall cap is present', () => {
+    const input = buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [
+      { id: 'rest', kind: 'rest', scope: 'normal', locationId: 'home' },
+      { id: 'wait', kind: 'wait', scope: 'normal', locationId: 'home' },
+    ] }, { ...context, originalInput: '先休息一小时，再等待半小时' }, 'uncapped-compound');
+    expect(input.explicitBudgetMinutes).toBe(90);
+    expect(input.steps.map(step => step.requestedMinutes)).toEqual([60, 30]);
+    expect(resolveAction(input).executedMinutes).toBe(90);
   });
   it('does not turn a historical time mentioned in a question into a budget', () => {
     expect(buildActionAuthorityInput(plan, { ...context, originalInput: '询问两小时前发生了什么' }, 'r').explicitBudgetMinutes).toBeUndefined();

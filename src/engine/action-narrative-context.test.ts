@@ -218,6 +218,17 @@ describe('executed action narrative context', () => {
     expect(resolveExecutedActionNarrativeContext(proposed, resolution)).toBeNull();
   });
 
+  it('selects a requested destination clause from compound input', () => {
+    const context = resolveActionNarrativeContext('先调查便利店，再去学校调查', morning, 0, {
+      currentLocationId: 'supermarket', destinationLocationId: 'school',
+      enRouteEncounterRoll: 1, schoolEncounterRoll: 0,
+    });
+    expect(context).toMatchObject({
+      locationId: 'school', entryMode: 'exterior', requiredNpcIds: ['school-guard'],
+      forbiddenNpcIds: ['liu-renguang'],
+    });
+  });
+
   it('rebuilds the proposed scene from the real arrival clock and charged resources', () => {
     const proposed = resolveActionNarrativeContext('前往便利店询问店员', morning, 0, {
       currentLocationId: 'home', enRouteEncounterRoll: 0.1,
@@ -265,6 +276,30 @@ describe('executed action narrative context', () => {
     expect(executed?.enRouteNpcIds).toEqual([]);
     expect(executed?.sceneContract.requiredEnRouteNpcIds).toEqual([]);
     expect(executed?.directive).not.toContain('street 场景遭遇');
+    expect(executed?.directive).toContain('本次途中没有固定人物遭遇');
+  });
+
+  it('does not replay an en-route encounter after resuming a partly completed journey', () => {
+    const proposed = resolveActionNarrativeContext('前往学校调查文穗的情况', morning, 0, {
+      currentLocationId: 'home', enRouteEncounterRoll: 0.1,
+    });
+    const resumed: import('./action-resolution').ResolvedActionOutcome = {
+      id: 'resumed-school', cycleCount: 1,
+      startTime: '2025-09-09T08:05:00', endTime: '2025-09-09T09:05:00',
+      startLocationId: 'home', endLocationId: 'school', plannedMinutes: 60, executedMinutes: 60,
+      segments: [
+        { step: { id: '__travel__:0:home:school:work%3A0', kind: 'travel', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+          plannedMinutes: 10, executedMinutes: 5, cumulativeExecutedMinutes: 10, staminaDelta: -2, completed: true },
+        { step: { id: 'work:0', kind: 'investigation', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+          plannedMinutes: 55, executedMinutes: 55, cumulativeExecutedMinutes: 55, staminaDelta: -7, completed: true },
+      ],
+      resources: { before: { stamina: 98, sanity: 58 }, after: { stamina: 89, sanity: 58 } },
+      completedSourceIds: [], eventEffectIds: [],
+    };
+
+    const executed = resolveExecutedActionNarrativeContext(proposed, resumed);
+    expect(executed?.enRouteNpcIds).toEqual([]);
+    expect(executed?.sceneContract.requiredEnRouteNpcIds).toEqual([]);
     expect(executed?.directive).toContain('本次途中没有固定人物遭遇');
   });
 

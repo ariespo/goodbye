@@ -60,6 +60,7 @@ export interface PrepareMysteryTurnOptions {
   /** 后台预规划调用时标记为 true，仅影响编排日志展示。 */
   speculative?: boolean;
   actionAuthority?: ActionAuthorityContext;
+  pendingActionSceneContext?: import('../../engine/action-scene-continuity').PendingActionSceneContext;
   executionFingerprint?: string;
   projectExecution?: (resolution: ResolvedActionOutcome) => ExecutedTurnProjection;
 }
@@ -67,6 +68,7 @@ export interface PrepareMysteryTurnOptions {
 export interface PreparedMysteryTurn {
   /** Program-only authorization for unfinished work; never serialized to model messages. */
   pendingActionAuthorization?: import('./pending-action-authorization').PendingActionAuthorization | null;
+  pendingActionSceneContext?: import('../../engine/action-scene-continuity').ActionSceneContinuity | null;
   executedContext?: ExecutedTurnProjection;
   brief: MysteryBrief;
   directorPlan: DirectorPlan;
@@ -702,6 +704,7 @@ async function runMysteryPipeline(
   let executedContext: ExecutedTurnProjection | undefined;
   let resolvedAction: ResolvedActionOutcome | undefined;
   let pendingActionAuthorization: PendingActionAuthorization | null | undefined;
+  let pendingActionSceneContext: PreparedMysteryTurn['pendingActionSceneContext'];
   let writerBrief = brief;
   let writerTurnContext = options.turnContext;
   let writerPresentation = options.presentationContext;
@@ -714,6 +717,10 @@ async function runMysteryPipeline(
       previous: options.actionAuthority.resumeActionId && options.actionAuthority.deathNews !== 'pending'
         ? options.actionAuthority.pendingAuthorization : undefined });
     executedContext = options.projectExecution(resolvedAction);
+    const sceneCandidate = executedContext.pendingActionSceneContext ?? options.pendingActionSceneContext;
+    if (resolvedAction.continuation && !sceneCandidate) throw new MysteryPipelineBlockedError('未完成行动缺少原场景约束。');
+    pendingActionSceneContext = resolvedAction.continuation && sceneCandidate
+      ? { ...structuredClone(sceneCandidate), actionId: resolvedAction.continuation.actionId } : null;
     writerTurnContext = executedContext.turnContext;
     writerPresentation = executedContext.presentationContext;
     const currentBrief = buildAliasedMysteryBrief(buildMysteryBrief(MYSTERY_TRUTH_GRAPH, executedContext.truthContext), factAliases);
@@ -740,7 +747,7 @@ async function runMysteryPipeline(
     if (isNonWorkResolution(resolvedAction)) {
       writerBrief = { ...writerBrief, sceneContract: undefined, npcPlayerKnowledge: [], characterPerformances: [] };
     }
-    directorPlan = projectExecutedPlan(directorPlan, resolvedAction, executedContext.activeNpcIds);
+    directorPlan = projectExecutedPlan(directorPlan, resolvedAction, executedContext.activeNpcIds, executedContext.segmentNpcIdsByLocation);
     hardReview = reviewDirectorPlan(directorPlan, writerBrief, writerTurnContext);
     observe.setDirectorPlan(directorPlan);
     observe.setHardReview(hardReview);
@@ -749,7 +756,7 @@ async function runMysteryPipeline(
   const writerPacket = buildWriterPacket(directorPlan, writerBrief, writerTurnContext);
   if (resolvedAction) {
     writerPacket.resolvedAction = resolvedAction;
-    writerPacket.authorizedActionOutcomes = buildActionOutcomeSources(resolvedAction);
+    writerPacket.authorizedActionOutcomes = buildActionOutcomeSources(resolvedAction, executedContext?.narrativeBackground === 'street');
   }
   writerPacket.continuityContext = { ...writerPresentation };
   const writerSystem = buildWriterSystemPrompt(options.formatPrompt);
@@ -762,6 +769,7 @@ async function runMysteryPipeline(
     brief: writerBrief,
     executedContext,
     pendingActionAuthorization,
+    pendingActionSceneContext,
     directorPlan,
     hardReview,
     semanticReview: reviewPolicy.semantic ? semanticReview : null,

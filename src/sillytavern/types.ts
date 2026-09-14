@@ -29,6 +29,7 @@ export interface DynamicRecord extends Record<string, unknown> {
     appliedEventEffectIds?: string[];
     continuation?: import('../engine/action-resolution').ActionContinuation | null;
     pendingAuthorization?: import('../agents/mystery/pending-action-authorization').PendingActionAuthorization | null;
+    sceneContext?: import('../engine/action-scene-continuity').ActionSceneContinuity | null;
   };
   worldMemory?: import('../memory/world-memory').WorldMemoryState | {
     cognition?: unknown[];

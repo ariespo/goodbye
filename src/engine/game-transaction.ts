@@ -30,6 +30,7 @@ export interface GameTransactionInput {
   /** Program-owned immutable result; model patches and menu costs cannot override it. */
   resolvedAction?: ResolvedActionOutcome;
   pendingActionAuthorization?: import('../agents/mystery/pending-action-authorization').PendingActionAuthorization | null;
+  pendingActionSceneContext?: import('./action-scene-continuity').ActionSceneContinuity | null;
 }
 
 export interface GameTransactionResult {
@@ -167,6 +168,9 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
       pendingAuthorization: resolved.continuation
         ? input.pendingActionAuthorization ?? null
         : retainedContinuation ? prior?.pendingAuthorization ?? null : null,
+      sceneContext: resolved.continuation
+        ? input.pendingActionSceneContext ?? null
+        : retainedContinuation ? prior?.sceneContext ?? null : null,
     };
   }
   if (

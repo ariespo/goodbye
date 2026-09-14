@@ -464,6 +464,7 @@ export function useGameLoop() {
           variablePatch,
           resolvedAction: resolution,
           pendingActionAuthorization: preparedTurn?.pendingActionAuthorization,
+          pendingActionSceneContext: preparedTurn?.pendingActionSceneContext,
           costs: {
             timeMinutes: finitePositive(explicitCosts?.timeMinutes) ? explicitCosts!.timeMinutes : llmCost ?? 10,
             stamina: explicitCosts?.stamina,

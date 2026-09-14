@@ -10,8 +10,15 @@ import { OPENING_MAINTEXT, OPENING_PUBLIC_CONTINUITY } from '../../engine/openin
 import { translateForDirector } from '../../engine/variable-thresholds';
 import { buildPlayerKnowledgeBrief } from '../../data/playerKnowledge';
 import { evaluatePlayerIntent } from '../../engine/player-intent-policy';
-import { resolveActionNarrativeContext, resolveExecutedActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
+import { resolveExecutedActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
 import type { ResolvedActionOutcome } from '../../engine/action-resolution';
+import {
+  buildPendingActionSceneContext,
+  pendingSceneContextFromSaved,
+  selectContinuationSceneContext,
+  type ActionSceneContinuity,
+  type PendingActionSceneContext,
+} from '../../engine/action-scene-continuity';
 import type { ActionAuthorityContext } from './action-authority';
 import { isNonWorkResolution } from './action-authority';
 import { compileTurnContext, type TurnContextBundle } from '../../memory/world-memory';
@@ -104,6 +111,10 @@ export interface ExecutedTurnProjection {
   narrativeBackground: string | null;
   mysteryLocation: string;
   activeNpcIds: string[];
+  /** Cast for work actually executed at each location, independent of the physical end anchor. */
+  segmentNpcIdsByLocation?: Record<string, string[]>;
+  /** Program-only original scene contracts for a possible unfinished action. */
+  pendingActionSceneContext?: PendingActionSceneContext;
   npcPlayerKnowledge: ReturnType<typeof buildNpcPlayerKnowledgeBrief>;
   knownByNpcIds: Set<string>;
   contextBundle: TurnContextBundle;
@@ -126,31 +137,34 @@ function hasOfficialOpeningHistory(history: ChatMessage[]): boolean {
 }
 
 /** Both foreground and speculative callers use the identical authority inputs. */
-function buildProjection(input: TurnPreparationInput, execution?: {
-  resolution: ResolvedActionOutcome; proposed: ActionNarrativeContext | null;
+interface ProjectionSceneState {
+  proposed: ActionNarrativeContext | null;
+  pendingActionSceneContext: PendingActionSceneContext;
+  savedContinuation?: import('../../engine/action-resolution').ActionContinuation;
+}
+
+function buildProjection(input: TurnPreparationInput, sceneState: ProjectionSceneState, execution?: {
+  resolution: ResolvedActionOutcome;
 }) {
   const { userInput, settings, activePreset, history } = input;
-  const pendingNarrativeContext = input.pendingNarrativeContext ?? null;
   const tavern = { variables: input.variables };
   const game = { gameStatus: input.gameStatus, currentState: input.currentState, endingCheckContext: input.endingCheckContext };
-  const currentLocationId = typeof tavern.variables.location === 'string'
-    ? tavern.variables.location
-    : resolveMysteryLocation(game.currentState.background);
-  const proposed = pendingNarrativeContext ?? resolveActionNarrativeContext(
-    userInput,
-    game.gameStatus.time,
-    0,
-    {
-      currentLocationId,
-      cycleCount: Number(tavern.variables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
-      knowledgeEvents: tavern.variables.knowledgeEvents,
-    },
-  );
-  let actionNarrativeContext = execution
-    ? resolveExecutedActionNarrativeContext(execution.proposed, execution.resolution) : proposed;
+  const proposed = sceneState.proposed;
   const resolution = execution?.resolution;
-  const transit = !!resolution?.segments.some(segment => segment.step.kind === 'travel' && !segment.completed);
   const nonWork = !!resolution && isNonWorkResolution(resolution);
+  const resolutionTransit = !!resolution?.segments.some(segment => segment.step.kind === 'travel'
+    && segment.executedMinutes > 0 && !segment.completed);
+  const savedActiveStep = sceneState.savedContinuation?.steps
+    .find(step => step.id === sceneState.savedContinuation?.activeStepId);
+  const savedTransit = !!resolution && nonWork && savedActiveStep?.kind === 'travel'
+    && (sceneState.savedContinuation?.completedMinutesByStep[savedActiveStep.id] ?? 0) > 0;
+  const transit = resolutionTransit || savedTransit;
+  const executionContext = resolution && !transit
+    ? sceneState.pendingActionSceneContext.contextsByLocation[resolution.endLocationId] ?? proposed
+    : proposed;
+  let actionNarrativeContext = resolution
+    ? resolveExecutedActionNarrativeContext(executionContext, resolution) : proposed;
+  if (transit) actionNarrativeContext = null;
   if (nonWork) actionNarrativeContext = null;
   if (resolution && actionNarrativeContext && resolution.segments.some(segment => !segment.completed)) {
     const earned = new Set(resolution.completedSourceIds);
@@ -184,6 +198,18 @@ function buildProjection(input: TurnPreparationInput, execution?: {
     ...(actionNarrativeContext?.requiredNpcIds ?? []),
     ...(actionNarrativeContext?.enRouteNpcIds ?? []),
   ])];
+  const segmentNpcIdsByLocation: Record<string, string[]> = {};
+  if (resolution) {
+    for (const segment of resolution.segments) {
+      if (segment.executedMinutes <= 0 || !['inquiry', 'investigation', 'search'].includes(segment.step.kind)) continue;
+      const locationId = segment.step.locationId;
+      const originalContext = sceneState.pendingActionSceneContext.contextsByLocation[locationId];
+      segmentNpcIdsByLocation[locationId] = [...new Set([
+        ...(npcIdsByLocation[locationId] ?? []),
+        ...(originalContext?.requiredNpcIds ?? []),
+      ])];
+    }
+  }
   const playerIdentity = readConfirmedPlayerIdentity(settings);
   const introducesPlayerName = doesPlayerIntroduceName(userInput, playerIdentity);
   const knownByNpcIds = new Set(Array.isArray(narrativeVariables.playerNameKnownByNpcIds)
@@ -246,7 +272,9 @@ function buildProjection(input: TurnPreparationInput, execution?: {
   const recentHistory = contextBundle.recentMessages.map(message => ({ role: message.role, content: message.content }));
   const analysisApi = resolveAnalysisApi(settings);
 
-  const request: Omit<PrepareMysteryTurnOptions, 'abortSignal' | 'speculative'> = {
+  const request: Omit<PrepareMysteryTurnOptions, 'abortSignal' | 'speculative'> & {
+    pendingActionSceneContext?: PendingActionSceneContext;
+  } = {
     mode: agentMode,
     api: analysisApi,
     preset: activePreset,
@@ -286,22 +314,62 @@ function buildProjection(input: TurnPreparationInput, execution?: {
       contextSelectionIds: contextBundle.selectedIds,
     },
     formatPrompt: settings.formatPromptTemplate,
+    pendingActionSceneContext: structuredClone(sceneState.pendingActionSceneContext),
 
   };
   return { request, actionNarrativeContext, narrativeVariables, narrativeBackground, intentPolicy,
     hadPendingDeathNews, mysteryLocation, activeNpcIds, playerIdentity, introducesPlayerName,
-    knownByNpcIds, npcPlayerKnowledge, contextBundle };
+    knownByNpcIds, npcPlayerKnowledge, contextBundle, segmentNpcIdsByLocation };
 }
 
 /** The callback and its immutable source snapshot stay in the in-memory preparation cache. */
 export function buildTurnPreparation(input: TurnPreparationInput) {
   const snapshot = structuredClone(input);
-  const prepared = buildProjection(snapshot);
   const cycleCount = Number(snapshot.variables.cycleCount ?? 1);
   const startTime = advanceClock(snapshot.gameStatus.time.toISOString(), 0);
   const currentLocationId = typeof snapshot.variables.location === 'string'
     ? snapshot.variables.location : resolveMysteryLocation(snapshot.currentState.background);
   const continuity = snapshot.variables.actionContinuity?.cycleCount === cycleCount ? snapshot.variables.actionContinuity : undefined;
+  const savedSceneContext: ActionSceneContinuity | null | undefined = continuity?.sceneContext;
+  const validSavedScene = savedSceneContext
+    && continuity?.continuation
+    && savedSceneContext.actionId === continuity.continuation.actionId
+    && savedSceneContext.cycleCount === cycleCount
+    ? savedSceneContext : undefined;
+  const isResume = !!snapshot.resumeActionId
+    && snapshot.resumeActionId === continuity?.continuation?.actionId
+    && snapshot.resumeActionId === validSavedScene?.actionId;
+  let pendingActionSceneContext = isResume && validSavedScene
+    ? pendingSceneContextFromSaved(validSavedScene)
+    : buildPendingActionSceneContext(
+        snapshot.originalActionInput ?? snapshot.userInput,
+        snapshot.gameStatus.time,
+        {
+          currentLocationId,
+          cycleCount,
+          knowledgeEvents: snapshot.variables.knowledgeEvents,
+        },
+      );
+  if (!isResume && snapshot.pendingNarrativeContext) {
+    pendingActionSceneContext = {
+      ...pendingActionSceneContext,
+      contextsByLocation: {
+        ...pendingActionSceneContext.contextsByLocation,
+        [snapshot.pendingNarrativeContext.locationId]: structuredClone(snapshot.pendingNarrativeContext),
+      },
+    };
+  }
+  const proposed = isResume
+    ? selectContinuationSceneContext(validSavedScene, continuity?.continuation)
+    : snapshot.pendingNarrativeContext
+      ?? Object.values(pendingActionSceneContext.contextsByLocation)[0]
+      ?? null;
+  const sceneState: ProjectionSceneState = {
+    proposed: proposed ? structuredClone(proposed) : null,
+    pendingActionSceneContext: structuredClone(pendingActionSceneContext),
+    savedContinuation: continuity?.continuation ? structuredClone(continuity.continuation) : undefined,
+  };
+  const prepared = buildProjection(snapshot, structuredClone(sceneState));
   const actionAuthority: ActionAuthorityContext = {
     cycleCount, startTime, currentLocationId, stamina: snapshot.gameStatus.stamina, sanity: snapshot.gameStatus.sanity,
     originalInput: snapshot.originalActionInput ?? snapshot.userInput,
@@ -327,7 +395,10 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     budget: snapshot.activePreset?.settings,
   });
   prepared.request.projectExecution = resolution => {
-    const projected = buildProjection(snapshot, { resolution, proposed: prepared.actionNarrativeContext });
+    const projectedSceneState = isNonWorkResolution(resolution) && validSavedScene
+      ? { ...sceneState, pendingActionSceneContext: pendingSceneContextFromSaved(validSavedScene) }
+      : sceneState;
+    const projected = buildProjection(snapshot, projectedSceneState, { resolution });
     return {
       truthContext: projected.request.truthContext, turnContext: projected.request.turnContext,
       presentationContext: projected.request.presentationContext,
@@ -335,6 +406,8 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
       narrativeBackground: projected.narrativeBackground, mysteryLocation: projected.mysteryLocation,
       activeNpcIds: projected.activeNpcIds, npcPlayerKnowledge: projected.npcPlayerKnowledge,
       knownByNpcIds: projected.knownByNpcIds, contextBundle: projected.contextBundle,
+      segmentNpcIdsByLocation: projected.segmentNpcIdsByLocation,
+      pendingActionSceneContext: projected.request.pendingActionSceneContext,
     };
   };
   return prepared;

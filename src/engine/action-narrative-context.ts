@@ -20,6 +20,8 @@ export interface ActionNarrativeContext {
 export interface ResolveActionNarrativeContextOptions {
   currentLocationId?: string;
   cycleCount?: number;
+  /** Program-selected clause destination for compound actions. */
+  destinationLocationId?: string;
   /** 测试或复现用；未传时由输入、时间和地点生成稳定概率。 */
   enRouteEncounterRoll?: number;
   schoolEncounterRoll?: number;
@@ -69,7 +71,7 @@ function stableRoll(seed: string): number {
   return (hash >>> 0) / 0x1_0000_0000;
 }
 
-function findDestination(input: string): DestinationRule | null {
+function findDestination(input: string, destinationLocationId?: string): DestinationRule | null {
   // Only bind a verb to its adjacent destination phrase. A location in an
   // earlier clause (including the origin) is not evidence of travel there.
   for (const clause of input.split(/[，,。；;！!\n]/)) {
@@ -79,6 +81,7 @@ function findDestination(input: string): DestinationRule | null {
       if (verb[0] === '到' && /[谈提听看见想问收得知]$/.test(prefix)) continue;
       const target = clause.slice(verb.index + verb[0].length).replace(DESTINATION_MODIFIERS, '');
       const rule = DESTINATIONS.find(candidate => {
+        if (destinationLocationId && candidate.locationId !== destinationLocationId) return false;
         const match = candidate.aliases.exec(target);
         if (match?.index !== 0) return false;
         // Inspecting a receipt or seeking a phone number does not move the
@@ -119,7 +122,7 @@ export function resolveActionNarrativeContext(
   explicitTimeCostMinutes = 0,
   options: ResolveActionNarrativeContextOptions = {},
 ): ActionNarrativeContext | null {
-  const destinationRule = findDestination(input);
+  const destinationRule = findDestination(input, options.destinationLocationId);
   if (!destinationRule) return null;
   const location = getLocationById(destinationRule.locationId);
   if (!location) return null;
@@ -260,8 +263,10 @@ export function resolveExecutedActionNarrativeContext(
 
   const background = getLocationBackground(location, arrivalTime);
   const travelledToDestination = resolution.startLocationId !== proposed.locationId;
-  const enRouteNpcIds = travelledToDestination ? [...proposed.enRouteNpcIds] : [];
-  const routeAdjustedDirective = travelledToDestination
+  const resumedPartialJourney = resolution.segments.some(segment => segment.step.kind === 'travel'
+    && segment.completed && segment.cumulativeExecutedMinutes > segment.executedMinutes);
+  const enRouteNpcIds = travelledToDestination && !resumedPartialJourney ? [...proposed.enRouteNpcIds] : [];
+  const routeAdjustedDirective = enRouteNpcIds.length > 0
     ? proposed.directive
     : proposed.directive.replace(
         enRouteDirective(proposed.enRouteNpcIds),
