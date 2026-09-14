@@ -13,12 +13,23 @@ import { NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import { mergeRepairResiduals } from './repair-task';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 import type { ValidationError } from '../../sillytavern/output-protocol';
+import { maintextToScene } from '../../engine/scene-parser';
+import { characterIdFromSpeaker } from '../../data/npcPlayerKnowledge';
+import { normalizeWorldMemory, type WorldMemoryState } from '../../memory/world-memory';
+import {
+  buildCharacterContinuityCandidateEvidence,
+  validateCharacterContinuityAudit,
+  type CharacterContinuityAudit,
+} from '../../memory/character-continuity';
+import type { Scene } from '../../sillytavern/types';
 import {
   buildAssertionSources,
+  buildCanonicalPropositionBySourceId,
   extractNarrativeFields,
   validateAssertionAudit,
   type AssertionAudit,
 } from './fact-assertion-review';
+import type { FactAliasTable } from './fact-aliases';
 
 export interface NarrativeRepairFailure {
   draft: string;
@@ -163,6 +174,19 @@ export function reviewNarrativeDeterministically(
     .flatMap(sentence => reviewNarrativeSentence(packet, sentence, backgroundSourceTexts));
 }
 
+export function combineNarrativeReviews(reviews: FactReview[]): FactReview {
+  const violations = reviews.flatMap(review => review.violations);
+  const factReview = reviews.find(review => review.assertionAudit || review.continuityAudit || review.continuityEffects);
+  return {
+    approved: reviews.every(review => review.approved) && violations.length === 0,
+    violations,
+    corrections: violations.length === 0 ? [] : reviews.flatMap(review => review.corrections),
+    assertionAudit: factReview?.assertionAudit,
+    continuityAudit: factReview?.continuityAudit,
+    continuityEffects: factReview?.continuityEffects,
+  };
+}
+
 function reviewNarrativeSentence(
   packet: Parameters<typeof reviewNarrativeDeterministically>[0],
   narrative: string,
@@ -283,6 +307,16 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
   narrative: string;
   abortSignal?: AbortSignal;
   complete?: AgentCompletion;
+  /** Exact accepted scene and program-only authority used to validate continuity effects. */
+  scene?: Pick<Scene, 'lines'>;
+  continuityMode?: 'playable' | 'auxiliary';
+  continuityMemory?: WorldMemoryState;
+  cycleCount?: number;
+  possibleAudienceIds?: readonly string[];
+  resolvedEndTime?: string;
+  playerIdentityName?: string;
+  canonicalPropositionBySourceId?: Readonly<Record<string, string>>;
+  factAliases?: FactAliasTable;
 }): Promise<FactReview> {
   const deterministicViolations = reviewNarrativeDeterministically(options.packet, options.narrative);
   if (deterministicViolations.length > 0) {
@@ -297,9 +331,37 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
   }
   const complete = options.complete
     ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
+  const narrativeFields = extractNarrativeFields(options.narrative);
+  const assertionSources = buildAssertionSources(options.packet, narrativeFields);
+  const scene = options.scene ?? maintextToScene(narrativeFields.maintext ?? options.narrative);
+  const memory = options.continuityMemory ?? normalizeWorldMemory({});
+  const cycleCount = options.cycleCount ?? options.packet.resolvedAction?.cycleCount ?? 1;
+  const resolvedEndTime = options.resolvedEndTime ?? options.packet.resolvedAction?.endTime
+    ?? '2024-09-09T08:00:00';
+  const evidenceLines = scene.lines.map((line, lineIndex) => ({
+    lineIndex,
+    speakerId: characterIdFromSpeaker(line.speaker),
+    text: line.text,
+  }));
+  const possibleAudienceIds = [...new Set([
+    'player',
+    ...(options.possibleAudienceIds ?? []),
+    ...evidenceLines.map(line => line.speakerId).filter((id): id is string => id !== null),
+  ])];
+  const activeCommitments = (memory.commitments ?? []).filter(commitment => (
+    commitment.status === 'active' && commitment.cycleCount === cycleCount
+  )).map(({ id, actorId, recipientId, action, locationId, dueAt, evidenceQuote }) => ({
+    id, actorId, recipientId, action, locationId, dueAt, evidenceQuote,
+  }));
   const messages = [
     { role: 'system', content: `${FACT_CRITIC_SYSTEM_PROMPT}\n\n${NARRATIVE_CONTINUITY_REVIEW}` },
-    { role: 'user', content: buildNarrativeFactCriticUserPrompt(options.packet, options.narrative) },
+    { role: 'user', content: buildNarrativeFactCriticUserPrompt(options.packet, options.narrative, {
+      mode: options.continuityMode ?? 'playable',
+      lines: evidenceLines,
+      possibleAudienceIds,
+      activeCommitments,
+      resolvedEndTime,
+    }) },
   ] as const;
   const value = await completeParsedStructured(
     complete,
@@ -316,19 +378,53 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       return parsed as FactReview;
     },
   );
-  const narrativeFields = extractNarrativeFields(options.narrative);
   const auditReview = validateAssertionAudit(
     value.assertionAudit as AssertionAudit,
-    buildAssertionSources(options.packet, narrativeFields),
+    assertionSources,
     narrativeFields,
   );
+  const continuityEvidence = buildCharacterContinuityCandidateEvidence({
+    candidateText: options.narrative,
+    scene,
+    assertionAudit: value.assertionAudit ?? { reviewedFields: [], assertions: [] },
+    assertionSources,
+    possibleAudienceIds,
+    resolvedEndTime,
+    canonicalPropositionBySourceId: options.canonicalPropositionBySourceId
+      ?? (options.factAliases ? buildCanonicalPropositionBySourceId(assertionSources, options.factAliases) : undefined),
+  });
+  const continuity = validateCharacterContinuityAudit({
+    audit: value.continuityAudit as CharacterContinuityAudit | undefined,
+    evidence: continuityEvidence,
+    memory,
+    cycleCount,
+    playerIdentityName: options.playerIdentityName,
+  });
   const sanitized = sanitizeNarrativeFactReview(value, options.packet);
-  const violations = [...sanitized.violations, ...auditReview.violations];
+  const proposedContinuityAudit = value.continuityAudit as Partial<CharacterContinuityAudit> | undefined;
+  const auxiliaryHasEffects = options.continuityMode === 'auxiliary'
+    && !!proposedContinuityAudit
+    && ([proposedContinuityAudit.disclosures, proposedContinuityAudit.beliefs,
+      proposedContinuityAudit.commitments]
+      .some(proposals => Array.isArray(proposals) && proposals.length > 0));
+  const continuityViolations: FactReviewViolation[] = auxiliaryHasEffects
+    ? [{ code: 'auxiliary-continuity-effect', message: '辅助清单审查不得产生角色学习、披露或承诺。' }]
+    : continuity.violations.map(message => ({
+        code: message.includes('explicitly review')
+          ? 'incomplete-continuity-audit' as const
+          : 'invalid-continuity-audit' as const,
+        message,
+      }));
+  const violations = [...sanitized.violations, ...auditReview.violations, ...continuityViolations];
   return {
     approved: violations.length === 0,
     violations,
-    corrections: [...sanitized.corrections, ...auditReview.corrections],
+    corrections: [...sanitized.corrections, ...auditReview.corrections,
+      ...continuityViolations.map(violation => violation.message)],
     assertionAudit: value.assertionAudit,
+    continuityAudit: value.continuityAudit,
+    ...(!auxiliaryHasEffects && violations.length === 0 && continuity.effects
+      ? { continuityEffects: continuity.effects } : {}),
   };
 }
 

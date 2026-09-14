@@ -4,6 +4,7 @@ import type { DynamicRecord } from '../sillytavern/types';
 import type { ProgramChecklistAction } from '../agents/mystery/scene-list';
 import type { InvestigationOpportunity } from './investigation-opportunities';
 import { planQuietWait } from './scheduled-events';
+import type { ScheduledBoundary } from './scheduled-events';
 
 function knowledge(value: unknown): Record<string, RevealLevel> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -47,6 +48,7 @@ export interface BuildProgramChecklistActionsInput {
   stamina: number;
   publicLocations?: readonly { id: string; name: string; canTravel: boolean }[];
   opportunities: readonly InvestigationOpportunity[];
+  commitmentBoundaries?: ScheduledBoundary[];
 }
 
 /** Program-authored generic menu actions. Numeric prices are added by the checklist quote helper. */
@@ -67,6 +69,7 @@ export function buildProgramChecklistActions(input: BuildProgramChecklistActions
   const wait = planQuietWait({
     time: input.currentTime,
     variables: input.variables,
+    commitmentBoundaries: input.commitmentBoundaries,
     opportunities: input.opportunities,
   });
   if (wait.kind === 'wait') {

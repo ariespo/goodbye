@@ -27,12 +27,26 @@ describe('turn state snapshot', () => {
   it('isolates nested action and memory state through capture and rollback', () => {
     const source = { gameStatus: status, currentState, currentScene: scene, currentLineIndex: 0, sceneComplete: true,
       variables: { actionContinuity: { cycleCount: 1, appliedEventEffectIds: ['death-news:cycle:1'] },
-        worldMemory: { events: [{ id: 'retained' }] } } };
+        worldMemory: {
+          events: [{ id: 'retained' }],
+          disclosures: [{ id: 'disclosure:retained', listenerIds: ['chen-huihui'], evidenceSpans: [{ lineIndex: 0, quote: '听见了' }] }],
+          commitments: [{ id: 'commitment:retained', status: 'active', evidenceQuote: '十点见' }],
+          acknowledgedCommitmentBoundaryIds: ['commitment-boundary:retained'],
+        } } };
     const captured = captureTurnState(source);
     source.variables.actionContinuity.appliedEventEffectIds.push('mutated');
     source.variables.worldMemory.events[0].id = 'mutated';
+    source.variables.worldMemory.disclosures[0].listenerIds.push('old-man');
+    source.variables.worldMemory.disclosures[0].evidenceSpans[0].quote = 'mutated';
+    source.variables.worldMemory.commitments[0].status = 'fulfilled';
+    source.variables.worldMemory.acknowledgedCommitmentBoundaryIds.push('mutated');
     expect(captured.variables.actionContinuity?.appliedEventEffectIds).toEqual(['death-news:cycle:1']);
     expect(captured.variables.worldMemory.events[0].id).toBe('retained');
+    expect(captured.variables.worldMemory.disclosures[0]).toMatchObject({
+      listenerIds: ['chen-huihui'], evidenceSpans: [{ lineIndex: 0, quote: '听见了' }],
+    });
+    expect(captured.variables.worldMemory.commitments[0].status).toBe('active');
+    expect(captured.variables.worldMemory.acknowledgedCommitmentBoundaryIds).toEqual(['commitment-boundary:retained']);
     const restored = resolveTurnRollback({ id: 'm', role: 'user', content: '继续', timestamp: 0, variables: {}, turnState: captured }, source);
     restored.variables.actionContinuity!.appliedEventEffectIds!.push('another');
     expect(captured.variables.actionContinuity?.appliedEventEffectIds).toEqual(['death-news:cycle:1']);

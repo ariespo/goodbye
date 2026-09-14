@@ -16,6 +16,8 @@ import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
 import { maintextToScene } from '../engine/scene-parser';
 import { rebuildSceneFromChat } from '../utils/sceneFromChat';
 import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
+import { candidateFingerprint } from '../memory/character-continuity';
+import { normalizeWorldMemory } from '../memory/world-memory';
 
 vi.mock('../agents/mystery', async original => ({ ...await original<typeof import('../agents/mystery')>(),
   prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(), reviewNarrativeAgainstWriterPacket: vi.fn(), reviewNarrativeStyle: vi.fn() }));
@@ -25,7 +27,30 @@ vi.mock('../agents/state/state-agent', async original => ({ ...await original<ty
 vi.mock('../sillytavern/database', async original => ({ ...await original<typeof import('../sillytavern/database')>(), saveChat: vi.fn() }));
 const baseline = useGameStore.getState();
 const prose = '<maintext>场景|home-day\n对话|旁白|calm|你在房间里查看四周。</maintext><option>继续调查\n休息一会儿</option><sum>查看房间。</sum><vars>{}</vars>';
-const approved = { approved: true, violations: [], corrections: [] };
+const approved = {
+  approved: true, violations: [], corrections: [],
+  continuityAudit: { reviewed: true as const, disclosures: [], beliefs: [], commitments: [] },
+};
+
+function acceptedContinuityReview() {
+  const propositionId = 'claim:hook-validated-disclosure';
+  return {
+    ...approved,
+    continuityEffects: {
+      candidateId: candidateFingerprint(prose),
+      cognitionDeltas: [{
+        observerId: 'chen-huihui', propositionId, status: 'heard' as const, confidence: 1,
+        summary: '陈慧慧听到玩家说明情况', provenance: 'accepted-turn' as const,
+        scope: 'day' as const, acquiredCycle: 1,
+      }],
+      disclosures: [{
+        speakerId: 'player', listenerIds: ['chen-huihui'], propositionId,
+        evidenceQuote: '你在房间里查看四周。', evidenceSpans: [{ assertionIndex: 0, lineIndex: 0, quote: '你在房间里查看四周。' }],
+      }],
+      commitmentOperations: [],
+    },
+  };
+}
 
 describe('priced investigation menu acceptance', () => {
   it('awards a completed finding once and honors an exhausted same-day menu attempt', async () => {
@@ -214,6 +239,94 @@ beforeEach(() => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('resolved action at the real hook boundary', () => {
+  it('does not persist NPC name knowledge from player input when accepted prose contains no introduction', async () => {
+    useGameStore.setState(state => ({
+      tavern: {
+        ...state.tavern,
+        settings: {
+          ...state.tavern.settings,
+          userName: '小林', playerIdentityConfirmed: true, playerGender: 'male',
+        },
+        variables: { ...state.tavern.variables, location: 'school' },
+      },
+      game: {
+        ...state.game,
+        currentState: { ...state.game.currentState, background: 'school-day' },
+      },
+    }));
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({
+      ...options,
+      complete: async messages => messages[0].content.includes('事实复核')
+        || messages[0].content.includes('节奏与玩家能动性')
+        ? JSON.stringify(approved)
+        : JSON.stringify({
+            turnGoal: '在校门口停留', tone: '克制', timeCostMinutes: 1,
+            beats: [{ id: 'b', purpose: '回应', description: '门卫回应玩家。',
+              locationId: 'school', speakerIds: ['school-guard'] }],
+            revelations: [], assetRequests: [], optionIntents: [
+              { id: 'o1', intent: '继续调查', tone: '克制', expectedPressure: 'low' },
+              { id: 'o2', intent: '离开校门', tone: '克制', expectedPressure: 'low' },
+            ],
+          }),
+    }));
+    vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken('<maintext>场景|school-day\n对话|门卫|calm|请问有什么事？</maintext>'
+        + '<option>继续调查\n离开校门</option><sum>在校门口停留。</sum><vars>{}</vars>');
+      await callbacks.onComplete();
+    });
+
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('我叫小林。'); });
+
+    const variables = useGameStore.getState().tavern.variables;
+    const memory = normalizeWorldMemory(variables);
+    expect(variables.playerNameKnownByNpcIds ?? []).not.toContain('school-guard');
+    expect(memory.cognition.some(record => record.observerId === 'school-guard'
+      && (record.propositionId === 'identity:player-name'
+        || record.propositionId === 'expression:player-name'))).toBe(false);
+    unmount();
+  });
+
+  it('commits only the validator-produced continuity effects with the accepted candidate', async () => {
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue(acceptedContinuityReview());
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('查看房间'); });
+
+    const memory = useGameStore.getState().tavern.variables.worldMemory;
+    expect(memory?.cognition).toContainEqual(expect.objectContaining({
+      observerId: 'chen-huihui', propositionId: 'claim:hook-validated-disclosure', status: 'heard',
+    }));
+    expect(memory?.disclosures).toContainEqual(expect.objectContaining({
+      speakerId: 'player', listenerIds: ['chen-huihui'], propositionId: 'claim:hook-validated-disclosure',
+    }));
+    unmount();
+  });
+
+  it('keeps continuity effects atomic across a failed persistence and retry', async () => {
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue(acceptedContinuityReview());
+    let rejectAcceptedTurn = true;
+    vi.mocked(saveChat).mockImplementation(async chat => {
+      if (rejectAcceptedTurn && chat.messages.at(-1)?.role === 'assistant') {
+        rejectAcceptedTurn = false;
+        throw new Error('disk full');
+      }
+    });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('查看房间'); });
+
+    expect(useGameStore.getState().game.history).toHaveLength(0);
+    expect(useGameStore.getState().tavern.variables.worldMemory?.disclosures ?? []).toHaveLength(0);
+    await act(async () => { await result.current.retryTurn(); });
+
+    const state = useGameStore.getState();
+    const memory = normalizeWorldMemory(state.tavern.variables);
+    expect(state.game.history).toHaveLength(1);
+    expect(memory.disclosures.filter(
+      item => item.propositionId === 'claim:hook-validated-disclosure',
+    )).toHaveLength(1);
+    unmount();
+  });
+
   it.each([['休息一会儿', 112, '09:00:00'], ['等待一会儿', 100, '16:00:00']] as const)('settles %s through the actual prepared hook', async (input, stamina, endTime) => {
     const { result, unmount } = renderHook(() => useGameLoop());
     await act(async () => { await result.current.sendMessage(input); });

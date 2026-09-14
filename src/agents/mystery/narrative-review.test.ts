@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  combineNarrativeReviews,
   removeUngroundedNarrativeLines,
   reviewNarrativeAgainstWriterPacket,
   reviewNarrativeDeterministically,
@@ -22,6 +23,8 @@ const completeEmptyAuthority = {
   approvedBackgroundFactProposals: [],
 } as unknown as WriterPacket;
 
+const emptyContinuityAudit = { reviewed: true as const, disclosures: [], beliefs: [], commitments: [] };
+
 function ordinaryAudit(field: string, quote: string, status: 'question' | 'hypothesis' | 'ordinary-present') {
   return {
     reviewedFields: [field],
@@ -30,6 +33,143 @@ function ordinaryAudit(field: string, quote: string, status: 'question' | 'hypot
 }
 
 describe('deterministic final narrative review', () => {
+  it('keeps the exact fact-review continuity effects when style review is combined', () => {
+    const continuityEffects = {
+      candidateId: 'candidate:deadbeef:10', cognitionDeltas: [], disclosures: [], commitmentOperations: [],
+    };
+    const factReview = {
+      approved: true, violations: [], corrections: [],
+      assertionAudit: ordinaryAudit('maintext', '雨还在下。', 'ordinary-present'),
+      continuityAudit: emptyContinuityAudit,
+      continuityEffects,
+    };
+
+    expect(combineNarrativeReviews([
+      factReview,
+      { approved: true, violations: [], corrections: [] },
+    ])).toMatchObject({
+      approved: true,
+      assertionAudit: factReview.assertionAudit,
+      continuityAudit: emptyContinuityAudit,
+      continuityEffects,
+    });
+  });
+
+  it('rejects a new live audit that omits the explicit continuity envelope', async () => {
+    const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
+      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-continuity-audit' }));
+    expect(review.continuityEffects).toBeUndefined();
+  });
+
+  it('rejects a malformed live continuity envelope without treating missing arrays as empty', async () => {
+    const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [], assertionAudit,
+        continuityAudit: { reviewed: true, disclosures: [] },
+      }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-continuity-audit' }));
+    expect(review.continuityEffects).toBeUndefined();
+  });
+
+  it('sends numbered accepted-scene evidence without private canonical bindings', async () => {
+    let request = '';
+    const assertionAudit = ordinaryAudit('maintext', '我叫小林。', 'ordinary-present');
+    const continuityAudit = emptyContinuityAudit;
+    await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<maintext>对话|玩家|calm|我叫小林。</maintext>',
+      canonicalPropositionBySourceId: { 'fact:F001:clue': 'fact:a-secret-canonical-id' },
+      complete: async messages => {
+        request = messages[1]?.content ?? '';
+        return JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit, continuityAudit });
+      },
+    });
+
+    expect(request).toContain('[CharacterContinuityEvidence]');
+    expect(request).toContain('"lineIndex":0');
+    expect(request).toContain('"speakerId":"player"');
+    expect(request).toContain('"text":"我叫小林。"');
+    expect(request).not.toContain('a-secret-canonical-id');
+  });
+
+  it('rejects continuity learning from an auxiliary checklist review', async () => {
+    const assertionAudit = ordinaryAudit('observation', '陈慧慧听见了。', 'ordinary-present');
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<observe>陈慧慧听见了。</observe>',
+      continuityMode: 'auxiliary',
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [], assertionAudit,
+        continuityAudit: {
+          reviewed: true,
+          disclosures: [{ assertionIndex: 0, lineIndex: 0, quote: '听见了', listenerIds: ['chen-huihui'], audienceEvidence: [] }],
+          beliefs: [], commitments: [],
+        },
+      }),
+    });
+
+    expect(review.approved).toBe(false);
+    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'auxiliary-continuity-effect' }));
+    expect(review.continuityEffects).toBeUndefined();
+  });
+
+  it('validates an exact player disclosure for NPC A without granting permitted NPC B', async () => {
+    const packet = {
+      ...completeEmptyAuthority,
+      playerKnownFacts: [{ id: 'F001', route: 'shared', kind: 'event', level: 'hint', text: '文穗说她今天不去学校。' }],
+    } as WriterPacket;
+    const narrative = [
+      '<maintext>',
+      '对话|{{user}}|calm|文穗说她今天不去学校。',
+      '对话|陈慧慧|calm|我听见了。',
+      '</maintext>',
+    ].join('\n');
+    const assertionAudit = {
+      reviewedFields: ['maintext'],
+      assertions: [
+        { field: 'maintext', quote: '文穗说她今天不去学校。', proposition: '文穗自述今天不去学校', status: 'supported',
+          citations: [{ sourceId: 'known-fact:F001:hint', quote: '文穗说她今天不去学校。' }], reason: '玩家可复述已知事实。' },
+        { field: 'maintext', quote: '我听见了。', proposition: '陈慧慧回应', status: 'ordinary-present', citations: [], reason: '当下回应。' },
+      ],
+    };
+    const continuityAudit = {
+      reviewed: true,
+      disclosures: [{ assertionIndex: 0, lineIndex: 0, quote: '文穗说她今天不去学校。',
+        listenerIds: ['chen-huihui'], audienceEvidence: [{ lineIndex: 1, quote: '我听见了。' }] }],
+      beliefs: [], commitments: [],
+    };
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative,
+      possibleAudienceIds: ['chen-huihui', 'old-man'],
+      canonicalPropositionBySourceId: { 'known-fact:F001:hint': 'fact:shared-opening-message' },
+      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit, continuityAudit }),
+    });
+
+    expect(review.approved).toBe(true);
+    expect(review.continuityEffects?.cognitionDeltas).toEqual([
+      expect.objectContaining({ observerId: 'chen-huihui', propositionId: 'fact:shared-opening-message', status: 'heard' }),
+    ]);
+    expect(review.continuityEffects?.cognitionDeltas.some(delta => delta.observerId === 'old-man')).toBe(false);
+  });
+
   it.each([
     '她今早发消息说今天不去学校，电话打不通，衣柜里有一处不自然的空缺。',
     '她六点五十说今天不去学校。',
@@ -169,6 +309,7 @@ describe('deterministic final narrative review', () => {
           approved: true,
           violations: [],
           corrections: [],
+          continuityAudit: emptyContinuityAudit,
           assertionAudit: {
             reviewedFields: ['maintext'],
             assertions: [{
@@ -317,6 +458,7 @@ describe('deterministic final narrative review', () => {
           },
         ],
         corrections: ['lies-about 角色必须主动撒谎。', '删除确认。', '删除未授权时间线。'],
+        continuityAudit: emptyContinuityAudit,
         assertionAudit: {
           reviewedFields: ['maintext'],
           assertions: [{
@@ -363,6 +505,7 @@ describe('deterministic final narrative review', () => {
         approved: true,
         violations: [],
         corrections: [],
+        continuityAudit: emptyContinuityAudit,
         assertionAudit: {
           reviewedFields: ['maintext'],
           assertions: [{
@@ -385,7 +528,9 @@ describe('deterministic final narrative review', () => {
       preset: null,
       packet: completeEmptyAuthority,
       narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
-      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [] }),
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [], continuityAudit: emptyContinuityAudit,
+      }),
     });
 
     expect(review.approved).toBe(false);
@@ -404,6 +549,7 @@ describe('deterministic final narrative review', () => {
       packet: completeEmptyAuthority, narrative,
       complete: async () => JSON.stringify({
         approved: true, violations: [], corrections: [],
+        continuityAudit: emptyContinuityAudit,
         assertionAudit: ordinaryAudit('maintext', '雨还在下。', 'ordinary-present'),
       }),
     });
@@ -423,7 +569,9 @@ describe('deterministic final narrative review', () => {
     const review = await reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority, narrative,
-      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [], assertionAudit, continuityAudit: emptyContinuityAudit,
+      }),
     });
 
     expect(review.approved).toBe(true);
@@ -446,7 +594,9 @@ describe('deterministic final narrative review', () => {
     const review = await reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet, narrative,
-      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [], assertionAudit, continuityAudit: emptyContinuityAudit,
+      }),
     });
     expect(review.approved).toBe(true);
   });
@@ -468,7 +618,9 @@ describe('deterministic final narrative review', () => {
     const review = await reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: disclosedMorningMessage as unknown as WriterPacket, narrative,
-      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [], assertionAudit, continuityAudit: emptyContinuityAudit,
+      }),
     });
 
     expect(review.approved).toBe(false);
@@ -501,7 +653,9 @@ describe('deterministic final narrative review', () => {
     const review = await reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority, narrative,
-      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
+      complete: async () => JSON.stringify({
+        approved: true, violations: [], corrections: [], assertionAudit, continuityAudit: emptyContinuityAudit,
+      }),
     });
 
     expect(review.approved).toBe(false);
@@ -520,7 +674,9 @@ describe('deterministic final narrative review', () => {
         request = messages[1]?.content ?? '';
         const format = options?.responseFormat;
         responseName = format?.type === 'json_schema' ? format.json_schema.name : '';
-        return JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit });
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [], assertionAudit, continuityAudit: emptyContinuityAudit,
+        });
       },
     });
 

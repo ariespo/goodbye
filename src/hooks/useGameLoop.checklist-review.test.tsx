@@ -33,7 +33,10 @@ vi.mock('../sillytavern/database', async original => ({
 
 const baseline = useGameStore.getState();
 const prose = '<maintext>场景|home-day\n对话|旁白|calm|你在房间里坐下。</maintext><option>观察房间\n继续休息</option><sum>在家坐下。</sum><vars>{}</vars>';
-const approved: FactReview = { approved: true, violations: [], corrections: [] };
+const approved: FactReview = {
+  approved: true, violations: [], corrections: [],
+  continuityAudit: { reviewed: true, disclosures: [], beliefs: [], commitments: [] },
+};
 const injectedDetail = '记录证明六点半白色配送车到过便利店';
 
 beforeEach(async () => {
@@ -117,6 +120,7 @@ describe('asynchronous checklist authority', () => {
     const { result, unmount } = renderHook(() => useGameLoop());
     await act(async () => { await result.current.sendMessage('看看还有什么能做'); });
     await waitFor(() => expect(useGameStore.getState().game.currentScene?.observe).toBe(injectedDetail));
+    expect(vi.mocked(reviewNarrativeAgainstWriterPacket).mock.calls[0][0].continuityMode).toBe('auxiliary');
 
     const state = useGameStore.getState();
     expect(state.game.currentScene?.investigateItems).toEqual([]);

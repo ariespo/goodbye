@@ -196,10 +196,73 @@ const narrativeAssertionSchema: Record<string, unknown> = {
   },
 };
 
+const reviewedLineSpanSchema: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['lineIndex', 'quote'],
+  properties: {
+    lineIndex: { type: 'integer', minimum: 0 },
+    quote: { type: 'string', minLength: 1 },
+  },
+};
+
+const characterContinuityAuditSchema: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['reviewed', 'disclosures', 'beliefs', 'commitments'],
+  properties: {
+    reviewed: { type: 'boolean', const: true },
+    disclosures: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['assertionIndex', 'lineIndex', 'quote', 'listenerIds', 'audienceEvidence'],
+        properties: {
+          assertionIndex: { type: 'integer', minimum: 0 },
+          lineIndex: { type: 'integer', minimum: 0 },
+          quote: { type: 'string', minLength: 1 },
+          listenerIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+          audienceEvidence: { type: 'array', items: reviewedLineSpanSchema },
+        },
+      },
+    },
+    beliefs: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['assertionIndex', 'observerId', 'status', 'evidence'],
+        properties: {
+          assertionIndex: { type: 'integer', minimum: 0 },
+          observerId: { type: 'string', minLength: 1 },
+          status: { type: 'string', enum: ['believed', 'suspected', 'inferred'] },
+          evidence: { type: 'array', items: reviewedLineSpanSchema },
+        },
+      },
+    },
+    commitments: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['operation', 'actorId', 'recipientId', 'evidence'],
+        properties: {
+          operation: { type: 'string', enum: ['accept', 'fulfill', 'cancel'] },
+          existingCommitmentId: { type: 'string', minLength: 1 },
+          actorId: { type: 'string', minLength: 1 },
+          recipientId: { type: 'string', minLength: 1 },
+          evidence: { type: 'array', items: reviewedLineSpanSchema },
+          action: { type: 'string', minLength: 1 },
+          locationId: { type: 'string', minLength: 1 },
+          dueAt: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+  },
+};
+
 export const NARRATIVE_FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
-  required: ['approved', 'violations', 'corrections', 'assertionAudit'],
+  required: ['approved', 'violations', 'corrections', 'assertionAudit', 'continuityAudit'],
   properties: {
     ...(FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>),
     assertionAudit: {
@@ -211,6 +274,7 @@ export const NARRATIVE_FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
         assertions: { type: 'array', items: narrativeAssertionSchema },
       },
     },
+    continuityAudit: characterContinuityAuditSchema,
   },
 };
 

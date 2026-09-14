@@ -35,6 +35,7 @@ import {
 } from '../data/playerKnowledge';
 import {
   buildRetryPromptFromNarrativeFailure,
+  combineNarrativeReviews,
   consumePreplan,
   factResidualsForRetry,
   invalidatePreplans,
@@ -81,7 +82,8 @@ import {
   resolveActionNarrativeContext,
   type ActionNarrativeContext,
 } from '../engine/action-narrative-context';
-import { buildTurnCommit } from '../memory/world-memory';
+import { buildTurnCommit, normalizeWorldMemory } from '../memory/world-memory';
+import { commitmentIdFromBoundaryId } from '../memory/character-continuity';
 import type { Scene } from '../sillytavern/types';
 import {
   buildInvestigationOpportunities,
@@ -90,6 +92,7 @@ import {
 } from '../engine/investigation-opportunities';
 import { buildProgramChecklistActions, deriveNewOpportunitySourceIds } from '../engine/opportunity-integration';
 import { nextScheduledBoundary } from '../engine/scheduled-events';
+import { commitmentBoundariesFromVariables } from '../engine/commitment-boundaries';
 import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
 
 const outputProtocol = createOutputProtocol({
@@ -101,15 +104,6 @@ const outputProtocol = createOutputProtocol({
 
 
 
-function combineNarrativeReviews(reviews: FactReview[]): FactReview {
-  const violations = reviews.flatMap(review => review.violations);
-  return {
-    approved: reviews.every(review => review.approved) && violations.length === 0,
-    violations,
-    corrections: violations.length === 0 ? [] : reviews.flatMap(review => review.corrections),
-    assertionAudit: reviews.find(review => review.assertionAudit)?.assertionAudit,
-  };
-}
 function mergeAuthorizedKnowledge(
   variables: DynamicRecord,
   prepared: PreparedMysteryTurn | null,
@@ -321,8 +315,8 @@ export function useGameLoop() {
         actionSelection: actionRequest.selection, originalActionInput: actionRequest.originalInput,
         resumeActionId: actionRequest.resumeActionId,
       });
-      const { intentPolicy, hadPendingDeathNews, playerIdentity, introducesPlayerName } = preparation;
-      let { actionNarrativeContext, narrativeVariables, mysteryLocation, activeNpcIds, knownByNpcIds, npcPlayerKnowledge } = preparation;
+      const { intentPolicy, hadPendingDeathNews, playerIdentity } = preparation;
+      let { actionNarrativeContext, narrativeVariables, mysteryLocation, npcPlayerKnowledge } = preparation;
 
       let preparedTurn: PreparedMysteryTurn | null = null;
       let resumedNarrativeFailure: CachedNarrativeFailure | null = null;
@@ -350,7 +344,7 @@ export function useGameLoop() {
           preparedTurn ??= await prepareMysteryTurn({ ...preparation.request, abortSignal: abortController.signal });
           assertCurrent();
           if (preparedTurn.executedContext) {
-            ({ actionNarrativeContext, narrativeVariables, mysteryLocation, activeNpcIds, knownByNpcIds, npcPlayerKnowledge } = preparedTurn.executedContext);
+            ({ actionNarrativeContext, narrativeVariables, mysteryLocation, npcPlayerKnowledge } = preparedTurn.executedContext);
           }
           endPreparation();
           requestMessages = preparedTurn.writerMessages;
@@ -472,9 +466,6 @@ export function useGameLoop() {
         if (resolution && resolution.endLocationId !== resolution.startLocationId) {
           variablePatch.knowledgeEvents = addKnowledgeEvent(authorizedVariables.knowledgeEvents, `visit:${resolution.endLocationId}`);
         }
-        if (introducesPlayerName) {
-          variablePatch.playerNameKnownByNpcIds = [...knownByNpcIds];
-        }
         const transaction = settleGameTransaction({
           variables: authorizedVariables,
           gameStatus: game.gameStatus,
@@ -511,9 +502,12 @@ export function useGameLoop() {
           scene: acceptedScene,
           beforeVariables: tavern.variables,
           settledVariables: transaction.variables,
-          introducedPlayerNameToNpcIds: introducesPlayerName ? activeNpcIds : [],
           approvedBackgroundFactProposals: preparedTurn?.writerPacket.approvedBackgroundFactProposals ?? [],
           narrativeText: parsed.maintext || fullText,
+          continuityEffects: acceptedNarrativeReview?.continuityEffects,
+          encounteredCommitmentBoundaryId: resolution?.interruption
+            && commitmentIdFromBoundaryId(resolution.interruption.id)
+            ? resolution.interruption.id : undefined,
         });
         transaction.variables = {
           ...transaction.variables,
@@ -543,7 +537,10 @@ export function useGameLoop() {
           progress: normalizeOpportunityProgress(transaction.variables.opportunityProgress, finalCycleCount),
           currentTime: transaction.gameStatus.time.toISOString(),
           stamina: transaction.gameStatus.stamina,
-          nextBoundary: nextScheduledBoundary(transaction.gameStatus.time.toISOString(), transaction.variables),
+          nextBoundary: nextScheduledBoundary(
+            transaction.gameStatus.time.toISOString(), transaction.variables,
+            commitmentBoundariesFromVariables(transaction.variables),
+          ),
         };
         const finalOpportunities = buildInvestigationOpportunities(finalOpportunityInput);
         const finalPublicOpportunities = projectPublicInvestigationOpportunities(finalOpportunities);
@@ -554,6 +551,7 @@ export function useGameLoop() {
           stamina: transaction.gameStatus.stamina,
           publicLocations: finalTruthContext.playerPresentation.locations,
           opportunities: finalOpportunities,
+          commitmentBoundaries: commitmentBoundariesFromVariables(transaction.variables),
         });
         const deterministicChecklist = buildDeterministicSceneChecklist({
           currentLocationId: finalLocationId,
@@ -683,6 +681,7 @@ export function useGameLoop() {
               preset: activePreset,
               packet: preparedTurn.writerPacket,
               narrative: tags,
+              continuityMode: 'auxiliary',
               abortSignal: abortController.signal,
             });
             if (!checklistReview.approved) return;
@@ -924,7 +923,15 @@ export function useGameLoop() {
                     }
                   }
                   const approvedReview: FactReview = { approved: true, violations: [], corrections: [] };
-                  const reviewCandidate = async (candidateNarrative: string, candidateOutput: string) => {
+                  const reviewCandidate = async (
+                    candidateNarrative: string,
+                    candidateOutput: string,
+                    candidateScene: Scene,
+                  ) => {
+                    const possibleAudienceIds = [...new Set([
+                      ...(preparedTurn.executedContext?.activeNpcIds ?? []),
+                      ...Object.values(preparedTurn.executedContext?.segmentNpcIdsByLocation ?? {}).flat(),
+                    ])];
                     const [candidateFactReview, candidateStyleReview] = await Promise.all([
                       preparedTurn.reviewPolicy.narrative
                         ? metrics.stage('fact-review', () => reviewNarrativeAgainstWriterPacket({
@@ -932,6 +939,15 @@ export function useGameLoop() {
                             preset: activePreset,
                             packet: preparedTurn.writerPacket,
                             narrative: candidateOutput,
+                            scene: candidateScene,
+                            continuityMemory: normalizeWorldMemory(tavern.variables),
+                            cycleCount: preparedTurn.writerPacket.resolvedAction?.cycleCount
+                              ?? Number(tavern.variables.cycleCount ?? 1),
+                            possibleAudienceIds,
+                            resolvedEndTime: preparedTurn.writerPacket.resolvedAction?.endTime
+                              ?? game.gameStatus.time.toISOString(),
+                            playerIdentityName: playerIdentity?.name,
+                            factAliases: preparedTurn.factAliases,
                             abortSignal: abortController.signal,
                           }))
                         : Promise.resolve(approvedReview),
@@ -948,7 +964,7 @@ export function useGameLoop() {
                     return combineNarrativeReviews([candidateFactReview, candidateStyleReview]);
                   };
 
-                  narrativeReview = await reviewCandidate(narrative, fullText);
+                  narrativeReview = await reviewCandidate(narrative, fullText, completedScene);
                   assertCurrent();
                   for (let attempt = 0; attempt < 3 && narrativeReview && !narrativeReview.approved; attempt += 1) {
                     const rejectedReview = narrativeReview;
@@ -1044,6 +1060,7 @@ export function useGameLoop() {
                     narrativeReview = await reviewCandidate(
                       repairCandidate.parseState.parsed.maintext || repairCandidate.text,
                       repairCandidate.text,
+                      completedScene,
                     );
                   }
 

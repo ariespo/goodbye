@@ -14,6 +14,7 @@ export {
 export { buildWriterPacket, reviewDirectorPlan } from './review';
 export {
   buildAssertionSources,
+  buildCanonicalPropositionBySourceId,
   extractNarrativeFields,
   validateAssertionAudit,
 } from './fact-assertion-review';
@@ -32,6 +33,7 @@ export {
 } from './repair-task';
 export {
   buildRetryPromptFromNarrativeFailure,
+  combineNarrativeReviews,
   factResidualsForRetry,
   isStyleOnlyNarrativeReview,
   removeUngroundedNarrativeLines,

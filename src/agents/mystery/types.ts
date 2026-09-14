@@ -264,7 +264,10 @@ export type FactReviewViolationCode =
   | 'incomplete-assertion-audit'
   | 'invalid-assertion-citation'
   | 'unsupported-assertion'
-  | 'contradicted-assertion';
+  | 'contradicted-assertion'
+  | 'incomplete-continuity-audit'
+  | 'invalid-continuity-audit'
+  | 'auxiliary-continuity-effect';
 
 export interface FactReviewViolation {
   code: FactReviewViolationCode;
@@ -277,6 +280,10 @@ export interface FactReview {
   violations: FactReviewViolation[];
   corrections: string[];
   assertionAudit?: import('./fact-assertion-review').AssertionAudit;
+  /** Optional only for legacy persisted reviews; every new live fact review must supply it. */
+  continuityAudit?: import('../../memory/character-continuity').CharacterContinuityAudit;
+  /** Program-validated effects for this exact candidate; never accepted from model output. */
+  continuityEffects?: import('../../memory/character-continuity').ValidatedCharacterContinuityEffects;
 }
 
 export interface WriterFact {

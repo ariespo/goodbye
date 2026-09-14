@@ -45,6 +45,22 @@ describe('opportunity runtime integration', () => {
     ]);
   });
 
+  it('quotes quiet wait against an earlier active commitment boundary', () => {
+    const actions = buildProgramChecklistActions({
+      currentLocationId: 'home',
+      currentTime: '2024-09-09T08:00:00',
+      variables: { deathNews: 'untriggered' },
+      stamina: 120,
+      opportunities: [],
+      commitmentBoundaries: [{ id: 'commitment-boundary:commitment:turn-1:0', at: '2024-09-09T10:00:00' }],
+    });
+
+    expect(actions).toContainEqual(expect.objectContaining({
+      id: 'program:wait:2024-09-09T10:00:00',
+      requestedMinutes: 120,
+    }));
+  });
+
   it('round-trips authoritative menu metadata through persisted checklist tags', () => {
     const tags = serializeChecklistToTags({ observe: '', investigateItems: [{
       desc: '检查文穗留下的衣物和随身物品', suspect: '无', style: '现实', time: '25分钟', stamina: 3, sanity: 0,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAssertionSources,
+  buildCanonicalPropositionBySourceId,
   extractNarrativeFields,
   validateAssertionAudit,
   type AssertionAudit,
@@ -39,6 +40,20 @@ function supportedAudit(
 }
 
 describe('validateAssertionAudit', () => {
+  it('allows an identified player speaker to recount a player-known fact', () => {
+    const fields = { maintext: '对话|{{user}}|calm|文穗说她今天不去学校。' };
+    const source: AssertionSource = {
+      id: 'known-fact:F001:hint', kind: 'fact', factId: 'F001', level: 'hint',
+      text: '文穗说她今天不去学校。', speakerIds: [],
+    };
+
+    expect(validateAssertionAudit(
+      supportedAudit('maintext', '文穗说她今天不去学校。', source.id, source.text),
+      [source],
+      fields,
+    ).approved).toBe(true);
+  });
+
   it('does not authorize a delivery timeline from an unrelated time source', () => {
     const result = validateAssertionAudit({
       reviewedFields: ['maintext'],
@@ -348,6 +363,20 @@ describe('buildAssertionSources', () => {
       id: 'action-outcome:death-news:16:00', text: '电话明确告知文穗已经死亡。',
     }));
     expect(JSON.stringify(sources)).not.toContain('canonicalTruth');
+  });
+
+  it('builds a private exact alias-to-canonical proposition map for actual fact sources only', () => {
+    const sources = buildAssertionSources(packet, { maintext: '对话|旁白|calm|授权线索。' });
+    const map = buildCanonicalPropositionBySourceId(sources, {
+      aliasToFactId: { 'fact-a': 'a-secret-canonical-id', 'fact-b': 'b-secret-canonical-id' },
+      factIdToAlias: { 'a-secret-canonical-id': 'fact-a', 'b-secret-canonical-id': 'fact-b' },
+    });
+
+    expect(map).toEqual({
+      'fact:fact-a:clue': 'fact:a-secret-canonical-id',
+      'known-fact:fact-b:hint': 'fact:b-secret-canonical-id',
+    });
+    expect(map).not.toHaveProperty('background:bg:known');
   });
 
   it.each([

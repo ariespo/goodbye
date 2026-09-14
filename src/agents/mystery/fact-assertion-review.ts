@@ -1,5 +1,7 @@
 import { reviewBackgroundFactProposal } from '../../data/backgroundHistory';
 import { getItemByReference } from '../../data/itemAssets';
+import { characterIdFromSpeaker } from '../../data/npcPlayerKnowledge';
+import type { FactAliasTable } from './fact-aliases';
 import type { FactReview, RevealLevel, WriterPacket } from './types';
 
 export interface AssertionSource {
@@ -24,6 +26,18 @@ export interface NarrativeAssertion {
 export interface AssertionAudit {
   reviewedFields: string[];
   assertions: NarrativeAssertion[];
+}
+
+/** Program-private binding from public per-turn aliases to durable fact propositions. */
+export function buildCanonicalPropositionBySourceId(
+  sources: readonly AssertionSource[],
+  aliases: FactAliasTable,
+): Record<string, string> {
+  return Object.fromEntries(sources.flatMap(source => {
+    if (source.kind !== 'fact' || !source.factId) return [];
+    const canonicalFactId = aliases.aliasToFactId[source.factId];
+    return canonicalFactId ? [[source.id, `fact:${canonicalFactId}`] as const] : [];
+  }));
 }
 
 const NESTED_NONPLAYABLE_TAGS = ['option', 'sum', 'hint', 'observe', 'investigate', 'action'] as const;
@@ -188,7 +202,11 @@ function dialogueSpeakersForQuote(fieldText: string, quote: string): string[] {
     const end = start + lineMatch[0].length;
     if (!quoteRanges.some(range => range.start < end && range.end > start)) continue;
     const match = lineMatch[0].trim().match(/^(?:对话|dialog|dialogue)[|｜]([^|｜]+)[|｜]/i);
-    if (match?.[1]) speakers.push(match[1].trim());
+    if (match?.[1]) {
+      const rawSpeaker = match[1].trim();
+      if (isNarrator(rawSpeaker)) continue;
+      speakers.push(characterIdFromSpeaker(rawSpeaker) ?? `unknown:${rawSpeaker}`);
+    }
   }
   return speakers;
 }
@@ -341,8 +359,9 @@ export function validateAssertionAudit(
         continue;
       }
       const speakers = assertion.field === 'maintext' ? dialogueSpeakersForQuote(fieldText, quote) : [];
-      if (speakers.some(speaker => !isNarrator(speaker)
-        && Array.isArray(source.speakerIds) && !source.speakerIds.includes(speaker))) {
+      if (speakers.some(speaker => !(
+        source.id.startsWith('known-fact:') && speaker === 'player'
+      ) && (!Array.isArray(source.speakerIds) || !source.speakerIds.includes(speaker)))) {
         badCitation = true;
       }
     }

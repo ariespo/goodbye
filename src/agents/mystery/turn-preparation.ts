@@ -35,6 +35,7 @@ import { REVEAL_LEVELS, type RevealLevel, type MysteryRouteId, type MysteryOverl
 import type { AgentNarrativeMode, PrepareMysteryTurnOptions } from './orchestrator';
 import type { ApiConfig } from '../../sillytavern/api-router';
 import { buildProgramChecklistActions } from '../../engine/opportunity-integration';
+import { commitmentBoundariesFromVariables } from '../../engine/commitment-boundaries';
 import type { ProgramChecklistAction } from './scene-list';
 const mysteryFactIds = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => fact.id));
 const npcIdsByLocation: Record<string, string[]> = {
@@ -208,7 +209,9 @@ function validateSelectedOpportunityBeforeScene(
     progress: normalizeOpportunityProgress(input.variables.opportunityProgress, cycleCount),
     currentTime: input.gameStatus.time.toISOString(),
     stamina: input.gameStatus.stamina,
-    nextBoundary: nextScheduledBoundary(input.gameStatus.time.toISOString(), input.variables),
+    nextBoundary: nextScheduledBoundary(
+      input.gameStatus.time.toISOString(), input.variables, commitmentBoundariesFromVariables(input.variables),
+    ),
   }, selection.opportunityId);
   if (!exact) throw new Error('所选调查机会已经失效。');
   if (selection.kind !== 'investigation'
@@ -381,7 +384,9 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     progress: opportunityProgress,
     currentTime: opportunityTime,
     stamina: resolution?.resources.after.stamina ?? game.gameStatus.stamina,
-    nextBoundary: nextScheduledBoundary(opportunityTime, narrativeVariables),
+    nextBoundary: nextScheduledBoundary(
+      opportunityTime, narrativeVariables, commitmentBoundariesFromVariables(narrativeVariables),
+    ),
   };
   const opportunities = buildInvestigationOpportunities(opportunityInput);
   const requestedOpportunityId = input.actionSelection?.opportunityId;
@@ -399,6 +404,7 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     stamina: resolution?.resources.after.stamina ?? game.gameStatus.stamina,
     publicLocations: truthContext.playerPresentation?.locations ?? [],
     opportunities,
+    commitmentBoundaries: commitmentBoundariesFromVariables(narrativeVariables),
   });
   const legalProgramActionMap = immutableProgramActionMap(programActions);
   const opportunityPolicy = publicOpportunities[0]
@@ -554,6 +560,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
   const quietWaitDecision = planQuietWait({
     time: startTime,
     variables: snapshot.variables,
+    commitmentBoundaries: commitmentBoundariesFromVariables(snapshot.variables),
     opportunities: Object.values(prepared.request.legalOpportunityMap ?? {}),
   });
   const actionAuthority: ActionAuthorityContext = {
@@ -561,7 +568,9 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     originalInput: snapshot.originalActionInput ?? snapshot.userInput,
     deathNews: typeof snapshot.variables.deathNews === 'string' ? snapshot.variables.deathNews : undefined,
     proposedScene: prepared.actionNarrativeContext,
-    nextBoundary: nextScheduledBoundary(startTime, snapshot.variables),
+    nextBoundary: nextScheduledBoundary(
+      startTime, snapshot.variables, commitmentBoundariesFromVariables(snapshot.variables),
+    ),
     appliedEventEffectIds: continuity?.appliedEventEffectIds ?? [],
     continuation: continuity?.continuation ?? undefined,
     pendingAuthorization: continuity?.pendingAuthorization ?? undefined,
