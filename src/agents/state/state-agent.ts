@@ -73,12 +73,12 @@ const STATE_AGENT_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 - 只记录正文明确发生的变化。没有证据就不要改。
 - 纯氛围、眼神、停顿、玩家主观猜测或同一证据的重复叙述，不足以支持新的决定性嫌疑增长。
 - 固定行动成本由游戏引擎另行扣除，不要在 patch 中重复扣除。
-- 若请求含 resolvedAction，时间、地点、体力、理智均以该结果为准；不得用正文描写覆盖这些值，也不得写 actionContinuity。
+- 若请求含 resolvedAction，时间、地点、体力、理智均以该结果为准；不得用正文描写覆盖这些值，也不得写 actionContinuity 或 opportunityProgress。
 - 可写字段：stamina、sanity、location、suspicion.*、affinity.*、investigation.*、
   organizedClues。
 - 禁止写入：time、cycleCount、stayStreak、stayedEver、routesLockedEver、endingsSeen、
   knowledgeEvents、playerNameKnownByNpcIds、mysteryKnowledge、unlockedClues、deathNews、tripProgress、cultClues、
-  worldGlitchClues、fakeEvidence、letterFragments、lockedRoute、overlay、finalChoice。
+  worldGlitchClues、fakeEvidence、letterFragments、lockedRoute、overlay、finalChoice、opportunityProgress。
 - 数值写变化后的绝对值；数组只增不减；路线指认、解释层和最终选择只由玩家界面与游戏程序写入。
 - 如果请求中有 saturationPivot，且正文确实落地该转场：绝对禁止增加 blockedActorId 的嫌疑；必须把 redirectedActorId 的嫌疑在当前值基础上增加 requiredSuspicionGain。该增量来自程序已审查的线索归属，不得转给其他角色。
 - 路线碎片、假死证据、隐藏层线索和行程进度由事实门在正文生成后另行结算，不要写入。
@@ -127,6 +127,7 @@ const STATE_AGENT_FORBIDDEN_ROOTS = new Set([
   'loopSuspicionStart',
   'worldMemory',
   'actionContinuity',
+  'opportunityProgress',
 ]);
 
 export function validateStateAgentResponse(

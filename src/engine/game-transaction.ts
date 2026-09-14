@@ -31,6 +31,8 @@ export interface GameTransactionInput {
   resolvedAction?: ResolvedActionOutcome;
   pendingActionAuthorization?: import('../agents/mystery/pending-action-authorization').PendingActionAuthorization | null;
   pendingActionSceneContext?: import('./action-scene-continuity').ActionSceneContinuity | null;
+  opportunityProgress?: import('./investigation-opportunities').OpportunityProgress;
+  selectedOpportunity?: import('./investigation-opportunities').InvestigationOpportunity | null;
 }
 
 export interface GameTransactionResult {
@@ -171,7 +173,13 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
       sceneContext: resolved.continuation
         ? input.pendingActionSceneContext ?? null
         : retainedContinuation ? prior?.sceneContext ?? null : null,
+      selectedOpportunity: resolved.continuation
+        ? input.selectedOpportunity ? structuredClone(input.selectedOpportunity) : null
+        : retainedContinuation ? prior?.selectedOpportunity ? structuredClone(prior.selectedOpportunity) : null : null,
     };
+  }
+  if (input.opportunityProgress) {
+    variables.opportunityProgress = structuredClone(input.opportunityProgress);
   }
   if (
     input.deliverPendingDeathNews

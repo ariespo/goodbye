@@ -34,6 +34,18 @@ function plan(revelations: DirectorPlan['revelations']): DirectorPlan {
 }
 
 describe('mystery brief', () => {
+  it('offers one narrow first-day school disclosure without raising the global cap', () => {
+    const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({ currentLocation: 'school', activeNpcIds: ['school-guard'] }));
+    const school = brief.usableFacts.find(fact => fact.id === 'shared-school-absence');
+    expect(brief.revealBudget.maxRevealLevel).toBe('atmosphere');
+    expect(school?.revealOptions).toEqual([{ id: 'shared-school-absence', route: 'shared', kind: 'evidence', level: 'atmosphere', text: '门卫说，今天在校门口见过文穗。' }]);
+    expect(school?.deliveryNpcIds).toContain('school-guard');
+    expect(brief.usableFacts.map(fact => fact.id)).not.toContain('shared-male-leave-call');
+    expect(brief.usableFacts.map(fact => fact.id)).not.toContain('shared-nurse-school-inquiry');
+    const dayTwo = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({ cycleCount: 2, currentLocation: 'school', activeNpcIds: ['school-guard'], playerKnowledge: { 'shared-school-absence': 'atmosphere' } }));
+    expect(dayTwo.usableFacts.find(fact => fact.id === 'shared-school-absence')?.maxRevealLevel).toBe('hint');
+  });
+
   it('selects an authorized other-character clue for a saturated investigation', () => {
     const truthContext = context({
       cycleCount: 2,

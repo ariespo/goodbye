@@ -1,4 +1,4 @@
-import { buildTurnPreparation, preparationContextKey, resolveAnalysisApi, resolveMysteryLocation, readPlayerKnowledge } from '../agents/mystery/turn-preparation';
+import { buildTurnPreparation, normalizeOpportunityProgress, preparationContextKey, resolveAnalysisApi, resolveMysteryLocation, readPlayerKnowledge } from '../agents/mystery/turn-preparation';
 import { assertTurnActive, runStateWithFallback } from '../utils/turn-lifecycle';
 import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
 import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
@@ -61,6 +61,7 @@ import {
 } from '../agents/mystery';
 
 import {
+  buildDeterministicSceneChecklist,
   generateSceneChecklist,
   insertTagsIntoMaintext,
   mergeSceneChecklist,
@@ -82,6 +83,14 @@ import {
 } from '../engine/action-narrative-context';
 import { buildTurnCommit } from '../memory/world-memory';
 import type { Scene } from '../sillytavern/types';
+import {
+  buildInvestigationOpportunities,
+  projectPublicInvestigationOpportunities,
+  settleOpportunityProgress,
+} from '../engine/investigation-opportunities';
+import { buildProgramChecklistActions, deriveNewOpportunitySourceIds } from '../engine/opportunity-integration';
+import { nextScheduledBoundary } from '../engine/scheduled-events';
+import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
 
 const outputProtocol = createOutputProtocol({
   requiredTags: ['maintext', 'option', 'sum'],
@@ -452,6 +461,14 @@ export function useGameLoop() {
           );
         }
         const resolution = preparedTurn?.writerPacket.resolvedAction;
+        const opportunityProgress = resolution ? settleOpportunityProgress({
+          previous: normalizeOpportunityProgress(tavern.variables.opportunityProgress, resolution.cycleCount),
+          selected: preparedTurn?.selectedOpportunity,
+          resolution,
+          newSourceIds: preparedTurn
+            ? deriveNewOpportunitySourceIds(tavern.variables, authorizedVariables, preparedTurn.factAliases)
+            : [],
+        }) : undefined;
         if (resolution && resolution.endLocationId !== resolution.startLocationId) {
           variablePatch.knowledgeEvents = addKnowledgeEvent(authorizedVariables.knowledgeEvents, `visit:${resolution.endLocationId}`);
         }
@@ -465,6 +482,8 @@ export function useGameLoop() {
           resolvedAction: resolution,
           pendingActionAuthorization: preparedTurn?.pendingActionAuthorization,
           pendingActionSceneContext: preparedTurn?.pendingActionSceneContext,
+          selectedOpportunity: preparedTurn?.selectedOpportunity,
+          opportunityProgress,
           costs: {
             timeMinutes: finitePositive(explicitCosts?.timeMinutes) ? explicitCosts!.timeMinutes : llmCost ?? 10,
             stamina: explicitCosts?.stamina,
@@ -504,6 +523,59 @@ export function useGameLoop() {
           mysteryKnowledge: memoryCommit.mysteryKnowledge,
           playerNameKnownByNpcIds: memoryCommit.playerNameKnownByNpcIds,
         };
+        const finalLocationId = typeof transaction.variables.location === 'string'
+          ? transaction.variables.location : mysteryLocation;
+        const finalCycleCount = Number(transaction.variables.cycleCount ?? 1);
+        const finalTruthContext = {
+          ...(preparedTurn?.executedContext?.truthContext ?? preparation.request.truthContext),
+          cycleCount: finalCycleCount,
+          currentLocation: finalLocationId,
+          unlockedClueIds: Array.isArray(transaction.variables.unlockedClues)
+            ? transaction.variables.unlockedClues.filter((id): id is string => typeof id === 'string') : [],
+          playerKnowledge: readPlayerKnowledge(transaction.variables,
+            Array.isArray(transaction.variables.unlockedClues)
+              ? transaction.variables.unlockedClues.filter((id): id is string => typeof id === 'string') : []),
+          playerPresentation: buildPlayerKnowledgeBrief({ ...transaction.variables, location: finalLocationId }),
+        };
+        const finalOpportunityInput = {
+          graph: MYSTERY_TRUTH_GRAPH,
+          context: finalTruthContext,
+          progress: normalizeOpportunityProgress(transaction.variables.opportunityProgress, finalCycleCount),
+          currentTime: transaction.gameStatus.time.toISOString(),
+          stamina: transaction.gameStatus.stamina,
+          nextBoundary: nextScheduledBoundary(transaction.gameStatus.time.toISOString(), transaction.variables),
+        };
+        const finalOpportunities = buildInvestigationOpportunities(finalOpportunityInput);
+        const finalPublicOpportunities = projectPublicInvestigationOpportunities(finalOpportunities);
+        const finalProgramActions = buildProgramChecklistActions({
+          currentLocationId: finalLocationId,
+          currentTime: transaction.gameStatus.time.toISOString(),
+          variables: transaction.variables,
+          stamina: transaction.gameStatus.stamina,
+          publicLocations: finalTruthContext.playerPresentation.locations,
+          opportunities: finalOpportunities,
+        });
+        const deterministicChecklist = buildDeterministicSceneChecklist({
+          currentLocationId: finalLocationId,
+          currentTime: transaction.gameStatus.time.toISOString(),
+          publicOpportunities: finalPublicOpportunities,
+          programActions: finalProgramActions,
+        });
+        // A controlled turn always publishes program-owned rows immediately,
+        // including valid empty investigation lists. Writer/model prices never survive.
+        parsed.investigateItems = deterministicChecklist.investigateItems;
+        parsed.actionItems = deterministicChecklist.actionItems;
+        const authoritativeMenuTags = serializeChecklistToTags({
+          ...deterministicChecklist,
+          observe: parsed.observe ?? '',
+        });
+        fullText = insertTagsIntoMaintext(
+          fullText
+            .replace(/<observe>[\s\S]*?<\/observe>/g, '')
+            .replace(/<investigate>[\s\S]*?<\/investigate>/g, '')
+            .replace(/<action>[\s\S]*?<\/action>/g, ''),
+          authoritativeMenuTags,
+        );
         const mergedVariables = transaction.variables;
         const nextStatus = transaction.gameStatus;
         const allowPreplan = !transaction.ending && !transaction.failure;
@@ -575,15 +647,14 @@ export function useGameLoop() {
         cachedNarrativeFailure = null;
 
         // 写手未输出完整清单时，异步补全场景清单；不阻塞正文播放，失败静默（performAction 有 LLM fallback）
-        const needChecklist = preparedTurn && activeChat
-          && (!parsed.observe || !parsed.investigateItems?.length || !parsed.actionItems?.length);
+        const needChecklist = preparedTurn && activeChat && !parsed.observe;
         if (needChecklist) {
           const token = assistantMessage.id;
           checklistTokenRef.current = token;
           const existing = {
             hasObserve: !!parsed.observe,
-            hasInvestigate: !!parsed.investigateItems?.length,
-            hasAction: !!parsed.actionItems?.length,
+            hasInvestigate: true,
+            hasAction: true,
           };
           const writerScenePart = {
             observe: parsed.observe ?? '',
@@ -596,6 +667,10 @@ export function useGameLoop() {
             currentLocation: resolveMysteryLocation(game.currentState.background),
             previousScene: prevScene,
             variables: mergedVariables,
+            currentLocationId: finalLocationId,
+            currentTime: transaction.gameStatus.time.toISOString(),
+            publicOpportunities: finalPublicOpportunities,
+            programActions: finalProgramActions,
           }, {
             api: resolveAnalysisApi(settings),
             preset: activePreset,
@@ -1287,7 +1362,14 @@ export function useGameLoop() {
               chatId,
               input: prompt,
               originalInput: item.desc,
-              selection: { kind: 'investigation' },
+              selection: {
+                actionId: item.actionId,
+                opportunityId: item.opportunityId,
+                kind: item.kind ?? 'investigation',
+                scope: item.scope,
+                locationId: item.locationId,
+                requestedMinutes: item.requestedMinutes,
+              },
               costs: {
                 timeMinutes: parsedCost > 0 ? clampTimeCost(parsedCost) : undefined,
                 stamina: Math.max(0, Number(item.stamina) || 0),
@@ -1344,6 +1426,16 @@ ${narrativeContext ? `\n${narrativeContext.directive}\n` : ''}
                 sanity: Math.max(0, Number(item.sanity) || 0),
               },
               narrativeContext: narrativeContext ?? undefined,
+              selection: item.kind && item.scope && item.locationId
+                ? {
+                    actionId: item.actionId,
+                    opportunityId: item.opportunityId,
+                    kind: item.kind,
+                    scope: item.scope,
+                    locationId: item.locationId,
+                    requestedMinutes: item.requestedMinutes,
+                  }
+                : undefined,
             }
           : null;
         sendMessage(prompt);
@@ -1355,6 +1447,16 @@ ${narrativeContext ? `\n${narrativeContext.directive}\n` : ''}
         ).join('\n\n');
         actions.setActionPanel({ visible: true, type: 'act', content: listText, selectedIndex: null });
       }
+      return;
+    }
+
+    if (actionType === 'investigate' || actionType === 'actions') {
+      actions.setActionPanel({
+        visible: true,
+        type: actionType === 'investigate' ? 'investigate' : 'act',
+        content: actionType === 'investigate' ? '当前清单暂无新的明确调查目标。' : '当前清单暂无可用行动。',
+        selectedIndex: null,
+      });
       return;
     }
 

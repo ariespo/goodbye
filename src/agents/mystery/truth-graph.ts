@@ -5,7 +5,7 @@ import type { MysteryTruthGraph } from './types';
  * revelation 文本按“氛围 → 暗示 → 线索 → 确认”逐层增加信息量。
  */
 export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
-  version: '2026-07-19.1',
+  version: '2026-09-14.1',
   facts: [
     {
       id: 'shared-apron-missing',
@@ -29,6 +29,7 @@ export const MYSTERY_TRUTH_GRAPH: MysteryTruthGraph = {
       characters: ['fumi', 'school-guard'],
       locations: ['school'],
       revelations: {
+        atmosphere: '门卫说，今天在校门口见过文穗。',
         hint: '门卫记得文穗在校门口短暂停留。',
         clue: '文穗到过校门口，却没有进校；她对门卫说今天已经请假。',
       },

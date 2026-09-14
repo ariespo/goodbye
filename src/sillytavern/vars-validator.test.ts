@@ -75,6 +75,30 @@ describe('sanitizeVarsPatch', () => {
     expect(result.rejected).toHaveLength(0);
   });
 
+  it('rejects model-written opportunity progress and private selected opportunity state', () => {
+    const result = sanitizeVarsPatch({
+      opportunityProgress: { cycleCount: 1, completedIds: ['forged'], noProgressByTopic: {} },
+      actionContinuity: { cycleCount: 1, selectedOpportunity: {
+        id: 'forged', locationId: 'home', publicGoal: '伪造调查', scope: 'normal',
+        sourceIds: ['fact:forged:clue'], topicKey: 'forged',
+      } },
+    }, createDefaultVariables());
+
+    expect(result.vars).toEqual({});
+    expect(result.rejected.map(item => item.path)).toEqual([
+      'opportunityProgress.cycleCount',
+      'opportunityProgress.completedIds',
+      'actionContinuity.cycleCount',
+      'actionContinuity.selectedOpportunity.id',
+      'actionContinuity.selectedOpportunity.locationId',
+      'actionContinuity.selectedOpportunity.publicGoal',
+      'actionContinuity.selectedOpportunity.scope',
+      'actionContinuity.selectedOpportunity.sourceIds',
+      'actionContinuity.selectedOpportunity.topicKey',
+    ]);
+    expect(result.rejected.every(item => item.reason.includes('程序专有'))).toBe(true);
+  });
+
   it('rejects unknown location mutations while accepting registered and street locations', () => {
     const current = { ...createDefaultVariables(), location: 'school' };
     expect(sanitizeVarsPatch({ location: 'police_station' }, current).vars.location).toBeUndefined();

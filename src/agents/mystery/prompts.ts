@@ -39,6 +39,7 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 17. npcPlayerKnowledge 是每个在场 NPC 对玩家姓名的独立认知边界。knowsPlayerName=false 的角色绝不能说出、猜中或用姓名称呼玩家；为 true 时，只能在自然需要称呼时使用 allowedAddress，不得擅自换成全名、昵称或其他亲疏程度。该表不授予任何案件知识。
 18. TurnContext.clock给出权威本地日期、时刻与重复日；实际经过分钟数由程序结算。白天不能安排已过夜或次日晨起，不能无故把当前可做的寻人行动推到明天。publicContinuity是已经自动播放的开局公开事实，允许自然重述，不能改成昨夜失踪或把今早06:50的消息改写成其他日期。
 18a. actionSteps 只提议玩家行动的阶段、种类、强度和注册地点，存在时必须为 1–8 个非空阶段，id 唯一且非空。可用 kind 只有 inquiry/investigation/search/travel/rest/wait，可用 scope 只有 short/normal/deep；不得输出 requestedMinutes、eventId、completionSourceIds、体力/理智费用或任何确定价格。工作基准价为 short=25、normal=55、deep=105 分钟。旅行时间由程序按实际地点变化计算，每个实际路段只收取一次；同一地点连续工作共享已完成的旅行。复合行动按顺序执行并累加各阶段时间，明确短预算只允许部分执行，未完成阶段不得获得完整结果或完整奖励。
+18b. TurnContext 若提供 publicOpportunities/programActions，optionIntents 与 scenePlan 中的 opportunityId 只能逐字复制其公开 id，scope 必须复制对应公开 scope。不得根据隐藏事实推测或创造 id。这些字段只是候选关联，程序会重新验证；任何 costTier 都只作旧格式分类，不是时间或资源价格。
 19. 每轮必须完成玩家尝试中的一个具体步骤并交代可见结果；没有新线索时说明本次核实的范围与局限，并给出可执行下一步。未见到不等于没有到过，自述不去不等于已经证实缺席；不得为制造进展编造排除结论。不要重复查看同一批物品、重新准备出门、递同一个袋子、反复劝返或在同一地点从头表演。长时间搜索/等候可概括经过，遇16:00消息等关键事件先推进至事件，不能用长段环境描写替代行动结果。
 20. 固定地点的实际互动必须保留角色：supermarket=chen-huihui，community-hospital=detective-b，old-man-building=old-man，senpai-building=touko，school=school-guard（学校进入权限仍按sceneContract）。在对应地点至少一个beat明确把固定角色放入speakerIds，不能换成临时男性店员或无名陌生路人。npcPlayerKnowledge是可用称呼目录，不等于这些人全部在场。
 
@@ -48,17 +49,17 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
   "tone": "string",
   "beats": [{"id":"string","purpose":"string","description":"string","locationId":"string?","speakerIds":["string"]}],
   "revelations": [{"factId":"string","level":"atmosphere|hint|clue|confirmation","delivery":"narration|dialogue|object|environment","speakerId":"string?"}],
-  "optionIntents": [{"id":"string","intent":"string","tone":"string","expectedPressure":"low|medium|high"}],
+  "optionIntents": [{"id":"string","intent":"string","tone":"string","expectedPressure":"low|medium|high","opportunityId":"只能复制公开候选ID?","scope":"short|normal|deep?"}],
   "assetRequests": ["string"],
   "knowledgeEvents": [{"eventId":"只能选 MysteryBrief.playerPresentation.allowedDiscoveries 中的 ID","evidence":"玩家在正文中实际看到或听到、且满足该事件 evidenceStandard 的具体依据"}],
-  "scenePlan": {"observeFocus":"本回合观察面板应聚焦什么（短语）","observeConceal":"必须继续隐藏什么（短语，可省略）","investigateIntents":[{"intent":"调查方向短语","suspectId":"指向的嫌疑人ID?","factId":"对应 usableFacts 中的事实ID?","costTier":"light|medium|heavy"}],"actionIntents":[{"intent":"行动方向短语","costTier":"light|medium|heavy"}]},
+  "scenePlan": {"observeFocus":"本回合观察面板应聚焦什么（短语）","observeConceal":"必须继续隐藏什么（短语，可省略）","investigateIntents":[{"intent":"调查方向短语","suspectId":"指向的嫌疑人ID?","factId":"对应 usableFacts 中的事实ID?","costTier":"light|medium|heavy","opportunityId":"公开候选ID?","scope":"short|normal|deep?"}],"actionIntents":[{"intent":"行动方向短语","costTier":"light|medium|heavy","opportunityId":"公开候选ID?","scope":"short|normal|deep?"}]},
   "actionSteps": [{"id":"非空且唯一的阶段ID","kind":"inquiry|investigation|search|travel|rest|wait","scope":"short|normal|deep","locationId":"注册地点ID"}],
   "timeCostMinutes": 25
 }
 
 计划字段说明：
 - 输出紧凑单行 JSON，不加缩进或 Markdown。purpose、tone、intent 用短语；description 只写实际动作与必要因果，不写正文，不重复权限规则或整段复述简报。保持全部必需字段、事实来源、认知依据与场景契约，不得为精简而省略。
-- scenePlan 规则：只给意图级短语，不写具体文案；investigateIntents 的 factId 只能选 usableFacts；observeConceal 与 hiddenFacts 保持一致；每类意图 2-4 条。
+- scenePlan 规则：只给意图级短语，不写具体文案；investigateIntents 的 factId 只能选 usableFacts；observeConceal 与 hiddenFacts 保持一致；数量可为零或一，不得为凑数虚构意图。
 - actionSteps 是可省略的意图提案；需要表达复合行动时按实际执行顺序填写。程序会重新验证地点、种类与强度，并独立插入和结算旅行。
 - timeCostMinutes 仅作旧格式兼容的建议值，程序会忽略它；不得用它覆盖 actionSteps 的中央定价与实际旅行结算。
 

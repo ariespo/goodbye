@@ -18,6 +18,38 @@ function fixture() {
 }
 
 describe('resolved action transaction authority', () => {
+  it('stores opportunity progress and the selected private snapshot atomically with unfinished work', () => {
+    const input = fixture();
+    const selectedOpportunity = {
+      id: 'investigation:c1:F001:atmosphere:home', locationId: 'home', publicGoal: '检查随身物品',
+      scope: 'normal' as const, sourceIds: ['fact:F001:atmosphere'], topicKey: 'home:belongings',
+    };
+    input.resolvedAction = {
+      ...input.resolvedAction,
+      endTime: '2024-09-09T08:20:00',
+      executedMinutes: 20,
+      segments: [{
+        ...input.resolvedAction.segments[0],
+        step: { ...input.resolvedAction.segments[0].step, opportunityId: selectedOpportunity.id },
+        executedMinutes: 20,
+        cumulativeExecutedMinutes: 20,
+        completed: false,
+      }],
+      resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 97, sanity: 70 } },
+      continuation: {
+        actionId: 'resolved-q', cycleCount: 1,
+        steps: [{ ...input.resolvedAction.segments[0].step, opportunityId: selectedOpportunity.id }],
+        previousResolutionId: 'resolved-q', stepsDigest: 'stable', resumableFromTime: '2024-09-09T08:20:00',
+        expectedLocationId: 'home', activeStepId: 'q', completedMinutesByStep: { q: 20 }, chargedStaminaByStep: { q: 3 },
+      },
+    };
+    const opportunityProgress = { cycleCount: 1, completedIds: [], noProgressByTopic: {}, settledResolutionIds: ['resolved-q'] };
+
+    const result = settleGameTransaction({ ...input, opportunityProgress, selectedOpportunity });
+
+    expect(result.variables.opportunityProgress).toEqual(opportunityProgress);
+    expect(result.variables.actionContinuity?.selectedOpportunity).toEqual(selectedOpportunity);
+  });
   it('expires prior unfinished work when a quiet wait reaches midnight', () => {
     const input = fixture();
     const variables = { ...input.variables, actionContinuity: { cycleCount: 1, continuation: {

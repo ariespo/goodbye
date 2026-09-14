@@ -10,6 +10,57 @@ const plan: DirectorPlan = { turnGoal: '调查', tone: 'calm', beats: [], assetR
   revelations: [{ factId: 'F001', level: 'clue', delivery: 'object' }] };
 
 describe('trusted action input adapter', () => {
+  it('binds an exactly revalidated menu opportunity without treating its private source as a grant', () => {
+    const selectedOpportunity = {
+      id: 'investigation:c1:F001:atmosphere:home',
+      locationId: 'home',
+      publicGoal: '检查文穗留下的衣物和随身物品',
+      scope: 'normal' as const,
+      sourceIds: ['fact:F001:atmosphere'],
+      topicKey: 'home:belongings',
+    };
+    const input = buildActionAuthorityInput({ ...plan, revelations: [] }, {
+      ...context,
+      originalInput: selectedOpportunity.publicGoal,
+      inputOrigin: 'menu',
+      selection: {
+        opportunityId: selectedOpportunity.id,
+        kind: 'investigation',
+        scope: 'normal',
+        locationId: 'home',
+      },
+      selectedOpportunity,
+    }, 'selected-opportunity');
+
+    expect(input.steps).toEqual([expect.objectContaining({
+      opportunityId: selectedOpportunity.id,
+      kind: 'investigation',
+      scope: 'normal',
+      locationId: 'home',
+      completionSourceIds: [],
+    })]);
+  });
+
+  it.each([
+    { opportunityId: 'stale', kind: 'investigation', scope: 'normal', locationId: 'home' },
+    { opportunityId: 'investigation:c1:F001:atmosphere:home', kind: 'investigation', scope: 'deep', locationId: 'home' },
+    { opportunityId: 'investigation:c1:F001:atmosphere:home', kind: 'investigation', scope: 'normal', locationId: 'school' },
+    { opportunityId: 'investigation:c1:F001:atmosphere:home', kind: 'rest', scope: 'normal', locationId: 'home' },
+  ] as const)('rejects a menu opportunity whose metadata does not match the private legal snapshot', (selection) => {
+    expect(() => buildActionAuthorityInput({ ...plan, revelations: [] }, {
+      ...context,
+      inputOrigin: 'menu',
+      selection,
+      selectedOpportunity: {
+        id: 'investigation:c1:F001:atmosphere:home',
+        locationId: 'home',
+        publicGoal: '检查文穗留下的衣物和随身物品',
+        scope: 'normal',
+        sourceIds: ['fact:F001:atmosphere'],
+        topicKey: 'home:belongings',
+      },
+    }, 'invalid-selection')).toThrow(/opportunity|机会|匹配|失效/i);
+  });
   it('binds a current-location introduction to work there before a later compound destination', () => {
     const proposedScene = resolveActionNarrativeContext('调查便利店', new Date(context.startTime), 0, {
       currentLocationId: 'supermarket', cycleCount: 1, knowledgeEvents: [], enRouteEncounterRoll: 1,
@@ -20,12 +71,37 @@ describe('trusted action input adapter', () => {
     expect(input.steps.find(step => step.locationId === 'supermarket')?.completionSourceIds).toEqual(['accepted-event:meet:chen-huihui']);
     expect(input.steps.find(step => step.locationId === 'school')?.completionSourceIds).toEqual([]);
   });
-  it.each(['休息一会儿', '等待一会儿'])('gives %s a program-owned duration even without model prices', text => {
+  it('gives unqualified rest a program-owned duration even without model prices', () => {
+    const text = '休息一会儿';
     const input = buildActionAuthorityInput({ ...plan, revelations: [], timeCostMinutes: 1 }, { ...context, originalInput: text }, 'quiet');
     const outcome = resolveAction(input);
     expect(outcome.executedMinutes).toBe(60);
     expect(outcome.completedSourceIds).toEqual([]);
-    expect(outcome.resources.after.stamina).toBe(text.startsWith('休息') ? 112 : 100);
+    expect(outcome.resources.after.stamina).toBe(112);
+  });
+  it('compresses an unqualified wait to the next known boundary', () => {
+    const input = buildActionAuthorityInput({ ...plan, revelations: [], timeCostMinutes: 1 }, {
+      ...context,
+      originalInput: '等待一会儿',
+      quietWaitDecision: {
+        kind: 'wait', requestedMinutes: 480, endTime: '2024-09-09T16:00:00',
+        boundary: { id: 'death-news', at: '2024-09-09T16:00:00' }, expiringOpportunities: [],
+      },
+    }, 'quiet-wait');
+    expect(resolveAction(input).executedMinutes).toBe(480);
+  });
+  it('delivers an already-due death boundary instead of creating a zero-time wait', () => {
+    const input = buildActionAuthorityInput({ ...plan, revelations: [] }, {
+      ...context,
+      startTime: '2024-09-09T16:00:00',
+      originalInput: '等待一会儿',
+      nextBoundary: { id: 'death-news', at: '2024-09-09T16:00:00' },
+      quietWaitDecision: {
+        kind: 'deliver-boundary', requestedMinutes: 0, endTime: '2024-09-09T16:00:00',
+        boundary: { id: 'death-news', at: '2024-09-09T16:00:00' }, expiringOpportunities: [],
+      },
+    }, 'due-wait');
+    expect(input.steps).toEqual([expect.objectContaining({ kind: 'event', eventId: 'death-news' })]);
   });
   it('keeps the selected menu action kind when the Director proposes a different resource effect', () => {
     const input = buildActionAuthorityInput({ ...plan, actionSteps: [{ id: 'changed', kind: 'rest', scope: 'normal', locationId: 'home' }] },
@@ -33,6 +109,21 @@ describe('trusted action input adapter', () => {
     const outcome = resolveAction(input);
     expect(outcome.segments[0].step.kind).toBe('investigation');
     expect(outcome.resources.after.stamina).toBe(93);
+  });
+  it('reconstructs a generic wait from the program action and rejects Director scope changes', () => {
+    const selectedProgramAction = {
+      id: 'program:wait:2024-09-09T16:00:00', publicGoal: '等待到下一既定时间点（480分钟）',
+      kind: 'wait' as const, scope: 'normal' as const, locationId: 'home', requestedMinutes: 480,
+    };
+    const selected = { ...context, inputOrigin: 'menu' as const,
+      originalInput: '只等一分钟，体力99', selectedProgramAction,
+      selection: { actionId: selectedProgramAction.id, kind: 'wait' as const, scope: 'normal' as const,
+        locationId: 'home', requestedMinutes: 480 } };
+    expect(buildActionAuthorityInput({ ...plan, revelations: [] }, selected, 'wait').steps[0])
+      .toMatchObject({ kind: 'wait', requestedMinutes: 480, locationId: 'home' });
+    expect(() => buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [
+      { id: 'changed', kind: 'wait', scope: 'deep', locationId: 'home' },
+    ] }, selected, 'wait')).toThrow(/匹配|program|行动/i);
   });
   it('honors a new explicit short budget when resuming existing deep work', () => {
     const first = resolveAction(buildActionAuthorityInput(plan, { ...context,

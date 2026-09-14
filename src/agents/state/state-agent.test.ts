@@ -12,12 +12,21 @@ describe('validateStateAgentResponse', () => {
       segments: [], completedSourceIds: [], eventEffectIds: [],
       resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } } };
     const quote = '你精疲力竭，忘了之前的调查。';
-    const response = { patch: { stamina: 1, sanity: 1, location: 'school', actionContinuity: { cycleCount: 9 } },
-      evidence: ['stamina', 'sanity', 'location', 'actionContinuity.cycleCount'].map(path => ({ path, quote })) };
+    const response = { patch: { stamina: 1, sanity: 1, location: 'school', actionContinuity: { cycleCount: 9 },
+      opportunityProgress: { cycleCount: 9, completedIds: ['forged'], noProgressByTopic: {} } },
+      evidence: ['stamina', 'sanity', 'location', 'actionContinuity.cycleCount', 'opportunityProgress.cycleCount']
+        .map(path => ({ path, quote })) };
     const result = validateStateAgentResponse(response, createDefaultVariables(), quote, undefined, undefined, resolved);
     expect(result.vars).toEqual({});
     expect(result.rejected.map(item => item.path).sort())
-      .toEqual(['actionContinuity.cycleCount', 'location', 'sanity', 'stamina']);
+      .toEqual([
+        'actionContinuity.cycleCount',
+        'location',
+        'opportunityProgress.completedIds',
+        'opportunityProgress.cycleCount',
+        'sanity',
+        'stamina',
+      ]);
   });
 
   it('rejects unknown location mutations while preserving the registered anchor', () => {

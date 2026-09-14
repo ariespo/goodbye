@@ -63,12 +63,16 @@ export interface PrepareMysteryTurnOptions {
   pendingActionSceneContext?: import('../../engine/action-scene-continuity').PendingActionSceneContext;
   executionFingerprint?: string;
   projectExecution?: (resolution: ResolvedActionOutcome) => ExecutedTurnProjection;
+  /** Private source-bearing candidates; never included in Director/Writer messages. */
+  legalOpportunityMap?: Readonly<Record<string, import('../../engine/investigation-opportunities').InvestigationOpportunity>>;
+  legalProgramActionMap?: Readonly<Record<string, import('./scene-list').ProgramChecklistAction>>;
 }
 
 export interface PreparedMysteryTurn {
   /** Program-only authorization for unfinished work; never serialized to model messages. */
   pendingActionAuthorization?: import('./pending-action-authorization').PendingActionAuthorization | null;
   pendingActionSceneContext?: import('../../engine/action-scene-continuity').ActionSceneContinuity | null;
+  selectedOpportunity?: import('../../engine/investigation-opportunities').InvestigationOpportunity;
   executedContext?: ExecutedTurnProjection;
   brief: MysteryBrief;
   directorPlan: DirectorPlan;
@@ -770,6 +774,8 @@ async function runMysteryPipeline(
     executedContext,
     pendingActionAuthorization,
     pendingActionSceneContext,
+    selectedOpportunity: options.actionAuthority?.selectedOpportunity
+      ? structuredClone(options.actionAuthority.selectedOpportunity) : undefined,
     directorPlan,
     hardReview,
     semanticReview: reviewPolicy.semantic ? semanticReview : null,

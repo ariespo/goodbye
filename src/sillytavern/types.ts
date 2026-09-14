@@ -30,7 +30,9 @@ export interface DynamicRecord extends Record<string, unknown> {
     continuation?: import('../engine/action-resolution').ActionContinuation | null;
     pendingAuthorization?: import('../agents/mystery/pending-action-authorization').PendingActionAuthorization | null;
     sceneContext?: import('../engine/action-scene-continuity').ActionSceneContinuity | null;
+    selectedOpportunity?: import('../engine/investigation-opportunities').InvestigationOpportunity | null;
   };
+  opportunityProgress?: import('../engine/investigation-opportunities').OpportunityProgress;
   worldMemory?: import('../memory/world-memory').WorldMemoryState | {
     cognition?: unknown[];
     softCanonFacts?: unknown[];
@@ -381,8 +383,9 @@ export interface ChatMessage {
   actionRequest?: {
     resumeActionId?: string;
     originalInput?: string;
-    selection?: { kind: 'inquiry' | 'investigation' | 'search' | 'travel' | 'rest' | 'wait';
-      scope?: import('../engine/action-resolution').ActionScope; locationId?: string };
+    selection?: { actionId?: string; opportunityId?: string;
+      kind: 'inquiry' | 'investigation' | 'search' | 'travel' | 'rest' | 'wait';
+      scope?: import('../engine/action-resolution').ActionScope; locationId?: string; requestedMinutes?: number };
     narrativeContext?: import('../engine/action-narrative-context').ActionNarrativeContext;
     inputOrigin?: 'player' | 'menu';
   };
@@ -430,18 +433,28 @@ export interface ParsedContent {
     time: string;
     stamina: number;
     sanity: number;
-  }>;
+  } & ChecklistActionMetadata>;
   actionItems?: Array<{
     desc: string;
     style: string;
     time: string;
     stamina: number;
     sanity: number;
-  }>;
+  } & ChecklistActionMetadata>;
 
   // 二次请求返回的具体结果（<action type="investigate"> / <action type="act">）
   actionType?: 'investigate' | 'act';
   actionResult?: string;
+}
+
+export interface ChecklistActionMetadata {
+  actionId?: string;
+  opportunityId?: string;
+  kind?: 'inquiry' | 'investigation' | 'search' | 'travel' | 'rest' | 'wait';
+  scope?: import('../engine/action-resolution').ActionScope;
+  locationId?: string;
+  requestedMinutes?: number;
+  quote?: { workMinutes: number; travelMinutes: number; totalMinutes: number; staminaCost: number };
 }
 
 export interface OrganizedClue {
@@ -510,7 +523,7 @@ export interface Scene {
     time: string;
     stamina: number;
     sanity: number;
-  }>;
+  } & ChecklistActionMetadata>;
   /** 可执行行动列表 */
   actionItems?: Array<{
     desc: string;
@@ -518,7 +531,7 @@ export interface Scene {
     time: string;
     stamina: number;
     sanity: number;
-  }>;
+  } & ChecklistActionMetadata>;
 }
 
 /** GalGame 风格的单行场景指令:同一时刻的完整状态快照 */

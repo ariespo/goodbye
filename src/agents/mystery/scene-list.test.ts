@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildDeterministicSceneChecklist,
   buildSceneListMessages,
   generateSceneChecklist,
   insertTagsIntoMaintext,
+  materializeProgramSceneChecklist,
   mergeSceneChecklist,
+  quoteProgramChecklistAction,
   serializeChecklistToTags,
+  type ProgramSceneChecklistDraft,
   type SceneChecklist,
 } from './scene-list';
 import { resetResponseFormatSupportCache } from './structured';
@@ -69,6 +73,59 @@ describe('generateSceneChecklist', () => {
     expect(result.investigateItems[0].stamina).toBe(0);
     expect(result.investigateItems[0].suspect).toBe('无');
   });
+
+  it('uses program quotes and ignores model-authored prices on the authoritative path', async () => {
+    const complete = vi.fn().mockResolvedValue(JSON.stringify({
+      observe: '校门口的雨水顺着值班室玻璃滑落。',
+      investigateItems: [{
+        actionId: 'opportunity:F002:atmosphere',
+        desc: '去社区医院深入调查',
+        suspect: '无',
+        style: '现实',
+        time: '1分钟',
+        stamina: -999,
+        sanity: -999,
+      }],
+      actionItems: [],
+    }));
+    const result = await generateSceneChecklist({
+      maintext: '门卫站在值班室门口。',
+      currentLocationId: 'school',
+      currentTime: '2024-09-09T10:00:00',
+      publicOpportunities: [{
+        id: 'opportunity:F002:atmosphere',
+        locationId: 'school',
+        publicGoal: '向门卫打听文穗今天的行踪',
+        scope: 'normal',
+      }],
+    }, { ...options, complete });
+
+    expect(result.investigateItems).toEqual([expect.objectContaining({
+      actionId: 'opportunity:F002:atmosphere',
+      desc: '向门卫打听文穗今天的行踪',
+      opportunityId: 'opportunity:F002:atmosphere',
+      kind: 'investigation',
+      scope: 'normal',
+      locationId: 'school',
+      time: '55分钟',
+      stamina: 7,
+      sanity: 0,
+      quote: { workMinutes: 55, travelMinutes: 0, totalMinutes: 55, staminaCost: 7 },
+    })]);
+  });
+
+  it('fails closed when the model invents an unknown action id', async () => {
+    const complete = vi.fn().mockResolvedValue(JSON.stringify({
+      observe: '',
+      investigateItems: [{ actionId: 'invented', desc: '凭空发现新证据', suspect: '无', style: '现实' }],
+      actionItems: [],
+    }));
+    await expect(generateSceneChecklist({
+      maintext: '正文',
+      currentLocationId: 'school',
+      publicOpportunities: [],
+    }, { ...options, complete })).rejects.toThrow(/unknown checklist action id/i);
+  });
 });
 
 describe('buildSceneListMessages', () => {
@@ -92,6 +149,128 @@ describe('buildSceneListMessages', () => {
     expect(user).not.toContain('[导演场景意图]');
     expect(user).not.toContain('[上一份清单]');
     expect(user).not.toContain('[状态指令]');
+  });
+
+  it('projects only approved public material on the authoritative path', () => {
+    const messages = buildSceneListMessages({
+      maintext: '正文',
+      currentLocationId: 'school',
+      currentTime: '2024-09-09T10:00:00',
+      scenePlan: {
+        observeFocus: '校门',
+        observeConceal: 'solution secret',
+        investigateIntents: [{
+          intent: '询问门卫', factId: 'shared-school-absence', costTier: 'medium',
+          opportunityId: 'opportunity:F002:atmosphere', scope: 'normal',
+        }],
+        actionIntents: [],
+      },
+      variables: { canonicalTruth: '绝密', sourceIds: ['fact:F002:atmosphere'], topicKey: 'school:fumi' },
+      previousScene: {
+        observe: '已审核观察',
+        investigateItems: [{
+          desc: '已审核旧项', suspect: '无', style: '现实', time: '999分钟', stamina: 999, sanity: 999,
+        }],
+        actionItems: [],
+      },
+      publicOpportunities: [{
+        id: 'opportunity:F002:atmosphere',
+        locationId: 'school',
+        publicGoal: '向门卫打听文穗今天的行踪',
+        scope: 'normal',
+        availableUntil: '2024-09-09T16:00:00',
+      }],
+      programActions: [{
+        id: 'rest-here', publicGoal: '在学校休息', kind: 'rest', scope: 'short',
+        locationId: 'school', requestedMinutes: 60,
+      }],
+    });
+    const all = messages.map(message => message.content).join('\n');
+    expect(all).toContain('opportunity:F002:atmosphere');
+    expect(all).toContain('向门卫打听文穗今天的行踪');
+    expect(all).toContain('2024-09-09T16:00:00');
+    expect(all).not.toContain('绝密');
+    expect(all).not.toContain('sourceIds');
+    expect(all).not.toContain('topicKey');
+    expect(all).not.toContain('shared-school-absence');
+    expect(all).not.toContain('solution secret');
+    expect(all).not.toContain('costTier');
+    expect(all).not.toContain('requestedMinutes');
+    expect(all).not.toContain('999');
+  });
+});
+
+describe('program checklist authority', () => {
+  const draft: ProgramSceneChecklistDraft = {
+    observe: '',
+    investigateItems: [{ actionId: 'school-question', desc: '询问门卫', suspect: '无', style: '现实' }],
+    actionItems: [{ actionId: 'rest-here', desc: '原地休息', style: '平静' }],
+  };
+
+  it('quotes trusted generic action metadata without reading narrative prose', () => {
+    const quote = quoteProgramChecklistAction({
+      id: 'rest-here', publicGoal: '原地休息', kind: 'rest', scope: 'short',
+      locationId: 'school', requestedMinutes: 60,
+    }, 'school');
+    expect(quote).toEqual({ workMinutes: 60, travelMinutes: 0, totalMinutes: 60, staminaCost: 0 });
+  });
+
+  it('rejects duplicate and category-mismatched model ids', () => {
+    const publicOpportunities = [{
+      id: 'school-question', locationId: 'school', publicGoal: '询问门卫', scope: 'short' as const,
+    }];
+    expect(() => materializeProgramSceneChecklist({
+      draft: {
+        ...draft,
+        investigateItems: [draft.investigateItems[0], draft.investigateItems[0]],
+      },
+      currentLocationId: 'school',
+      publicOpportunities,
+      programActions: [{
+        id: 'rest-here', publicGoal: '原地休息', kind: 'rest', scope: 'short',
+        locationId: 'school', requestedMinutes: 60,
+      }],
+    })).toThrow(/duplicate checklist action id/i);
+
+    expect(() => materializeProgramSceneChecklist({
+      draft: { ...draft, investigateItems: [], actionItems: [{ ...draft.actionItems[0], actionId: 'school-question' }] },
+      currentLocationId: 'school',
+      publicOpportunities,
+      programActions: [],
+    })).toThrow(/category mismatch/i);
+  });
+
+  it('builds a zero-observation fallback directly from approved public goals', () => {
+    const fallback = buildDeterministicSceneChecklist({
+      currentLocationId: 'school',
+      publicOpportunities: [{
+        id: 'school-question', locationId: 'school', publicGoal: '询问门卫', scope: 'short',
+      }],
+      programActions: [{
+        id: 'wait-here', publicGoal: '等到下一个约定时点', kind: 'wait', scope: 'short',
+        locationId: 'school', requestedMinutes: 30,
+      }],
+    });
+    expect(fallback.observe).toBe('');
+    expect(fallback.investigateItems.map(item => item.desc)).toEqual(['询问门卫']);
+    expect(fallback.actionItems.map(item => item.desc)).toEqual(['等到下一个约定时点']);
+    expect(fallback.actionItems[0]).toEqual(expect.objectContaining({ time: '30分钟', stamina: 0 }));
+  });
+
+  it('allows an authoritative checklist with fewer than two items', async () => {
+    const complete = vi.fn().mockResolvedValue(JSON.stringify({
+      observe: '', investigateItems: [],
+      actionItems: [{ actionId: 'wait-here', desc: '稍作等待', style: '平静' }],
+    }));
+    const result = await generateSceneChecklist({
+      maintext: '正文', currentLocationId: 'school', publicOpportunities: [],
+      programActions: [{
+        id: 'wait-here', publicGoal: '稍作等待', kind: 'wait', scope: 'short',
+        locationId: 'school', requestedMinutes: 30,
+      }],
+    }, { ...options, complete });
+    expect(result.investigateItems).toEqual([]);
+    expect(result.actionItems).toHaveLength(1);
   });
 });
 

@@ -3,7 +3,7 @@ import type { AppSettings, ChatPreset, ChatMessage, DynamicRecord, GameStatus, C
 import { gameLocations, getLocationById, getLocationBackground } from '../../data/locations';
 import { appendResourcePrompt } from '../../utils/resourcePrompt';
 import { buildNpcPlayerKnowledgeBrief, doesPlayerIntroduceName, formatNpcPlayerKnowledgeDirective, type PlayerIdentity } from '../../data/npcPlayerKnowledge';
-import { buildScheduledDirectives, nextScheduledBoundary } from '../../engine/scheduled-events';
+import { buildScheduledDirectives, nextScheduledBoundary, planQuietWait } from '../../engine/scheduled-events';
 import { advanceClock } from '../../engine/game-clock';
 import { buildNarrativeClock } from '../../engine/narrative-contract';
 import { OPENING_MAINTEXT, OPENING_PUBLIC_CONTINUITY } from '../../engine/opening-storyline';
@@ -12,6 +12,14 @@ import { buildPlayerKnowledgeBrief } from '../../data/playerKnowledge';
 import { evaluatePlayerIntent } from '../../engine/player-intent-policy';
 import { resolveExecutedActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
 import type { ResolvedActionOutcome } from '../../engine/action-resolution';
+import {
+  buildInvestigationOpportunities,
+  findInvestigationOpportunity,
+  projectPublicInvestigationOpportunities,
+  type BuildInvestigationOpportunitiesInput,
+  type InvestigationOpportunity,
+  type OpportunityProgress,
+} from '../../engine/investigation-opportunities';
 import {
   buildPendingActionSceneContext,
   pendingSceneContextFromSaved,
@@ -26,6 +34,8 @@ import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
 import { REVEAL_LEVELS, type RevealLevel, type MysteryRouteId, type MysteryOverlayId, type TruthContext } from './types';
 import type { AgentNarrativeMode, PrepareMysteryTurnOptions } from './orchestrator';
 import type { ApiConfig } from '../../sillytavern/api-router';
+import { buildProgramChecklistActions } from '../../engine/opportunity-integration';
+import type { ProgramChecklistAction } from './scene-list';
 const mysteryFactIds = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => fact.id));
 const npcIdsByLocation: Record<string, string[]> = {
   supermarket: ['chen-huihui'],
@@ -118,6 +128,44 @@ export interface ExecutedTurnProjection {
   npcPlayerKnowledge: ReturnType<typeof buildNpcPlayerKnowledgeBrief>;
   knownByNpcIds: Set<string>;
   contextBundle: TurnContextBundle;
+  /** Private source-bearing candidates. Model contexts receive only their public projection. */
+  legalOpportunityMap: Readonly<Record<string, InvestigationOpportunity>>;
+  legalProgramActionMap: Readonly<Record<string, ProgramChecklistAction>>;
+}
+
+export function normalizeOpportunityProgress(value: unknown, cycleCount: number): OpportunityProgress {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { cycleCount, completedIds: [], noProgressByTopic: {}, settledResolutionIds: [] };
+  }
+  const candidate = value as Partial<OpportunityProgress>;
+  if (candidate.cycleCount !== cycleCount) {
+    return { cycleCount, completedIds: [], noProgressByTopic: {}, settledResolutionIds: [] };
+  }
+  const noProgressByTopic = candidate.noProgressByTopic && typeof candidate.noProgressByTopic === 'object'
+    && !Array.isArray(candidate.noProgressByTopic)
+    ? Object.fromEntries(Object.entries(candidate.noProgressByTopic)
+        .filter(([key, count]) => !!key && Number.isInteger(count) && Number(count) >= 0)
+        .map(([key, count]) => [key, Number(count)]))
+    : {};
+  return {
+    cycleCount,
+    completedIds: Array.isArray(candidate.completedIds)
+      ? [...new Set(candidate.completedIds.filter((id): id is string => typeof id === 'string' && !!id))] : [],
+    noProgressByTopic,
+    settledResolutionIds: Array.isArray(candidate.settledResolutionIds)
+      ? [...new Set(candidate.settledResolutionIds.filter((id): id is string => typeof id === 'string' && !!id))] : [],
+  };
+}
+
+function immutableOpportunityMap(opportunities: readonly InvestigationOpportunity[]): Readonly<Record<string, InvestigationOpportunity>> {
+  return Object.freeze(Object.fromEntries(opportunities.map(opportunity => [
+    opportunity.id,
+    Object.freeze({ ...opportunity, sourceIds: Object.freeze([...opportunity.sourceIds]) }) as InvestigationOpportunity,
+  ])));
+}
+
+function immutableProgramActionMap(actions: readonly ProgramChecklistAction[]): Readonly<Record<string, ProgramChecklistAction>> {
+  return Object.freeze(Object.fromEntries(actions.map(action => [action.id, Object.freeze({ ...action })])));
 }
 /** Old saves predate the public ledger. Trust only the exact mandatory assistant
  * opening, never a player quote or parsed-only claim. Legacy panels were nested
@@ -274,6 +322,37 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     playerIdentityVariables,
     sceneContract: actionNarrativeContext?.sceneContract,
   };
+  const opportunityTime = resolution?.endTime ?? game.gameStatus.time.toISOString();
+  const opportunityProgress = normalizeOpportunityProgress(narrativeVariables.opportunityProgress, truthContext.cycleCount);
+  const opportunityInput: BuildInvestigationOpportunitiesInput = {
+    graph: MYSTERY_TRUTH_GRAPH,
+    context: truthContext,
+    progress: opportunityProgress,
+    currentTime: opportunityTime,
+    stamina: resolution?.resources.after.stamina ?? game.gameStatus.stamina,
+    nextBoundary: nextScheduledBoundary(opportunityTime, narrativeVariables),
+  };
+  const opportunities = buildInvestigationOpportunities(opportunityInput);
+  const requestedOpportunityId = input.actionSelection?.opportunityId;
+  if (requestedOpportunityId) {
+    const exact = findInvestigationOpportunity(opportunityInput, requestedOpportunityId);
+    if (!exact) throw new Error('所选调查机会已经失效。');
+    if (!opportunities.some(opportunity => opportunity.id === exact.id)) opportunities.push(exact);
+  }
+  const legalOpportunityMap = immutableOpportunityMap(opportunities);
+  const publicOpportunities = projectPublicInvestigationOpportunities(opportunities);
+  const programActions = buildProgramChecklistActions({
+    currentLocationId: truthContext.currentLocation,
+    currentTime: opportunityTime,
+    variables: narrativeVariables,
+    stamina: resolution?.resources.after.stamina ?? game.gameStatus.stamina,
+    publicLocations: truthContext.playerPresentation?.locations ?? [],
+    opportunities,
+  });
+  const legalProgramActionMap = immutableProgramActionMap(programActions);
+  const opportunityPolicy = publicOpportunities[0]
+    ? `公开调查机会已按程序优先级排序。若玩家没有指定其他目标，下一组选项的首项必须关联 ${publicOpportunities[0].id}，逐字复制其 id 与 scope；不得让休息或长等待排在可负担的新调查之前。`
+    : '当前程序清单暂无新的明确调查目标；这不表示世界中没有可调查内容。保留玩家自由输入，并可提供公开通用行动。';
   const recentHistory = contextBundle.recentMessages.map(message => ({ role: message.role, content: message.content }));
   const analysisApi = resolveAnalysisApi(settings);
 
@@ -300,6 +379,9 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
         sanity: game.gameStatus.sanity,
       },
       investigation: game.endingCheckContext.investigation,
+      publicOpportunities,
+      programActions,
+      opportunityPolicy,
       thresholdDirectives: translateForDirector(tavern.variables)
         + (scheduledDirectives.length ? '\n' + scheduledDirectives.map(l => `- ${l}`).join('\n') : ''),
     },
@@ -317,14 +399,19 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
       playerIntentPolicy: intentPolicy,
       memoryContext: contextBundle.writerMemory,
       contextSelectionIds: contextBundle.selectedIds,
+      publicOpportunities,
+      programActions,
     },
     formatPrompt: settings.formatPromptTemplate,
     pendingActionSceneContext: structuredClone(sceneState.pendingActionSceneContext),
+    legalOpportunityMap,
+    legalProgramActionMap,
 
   };
   return { request, actionNarrativeContext, narrativeVariables, narrativeBackground, intentPolicy,
     hadPendingDeathNews, mysteryLocation, activeNpcIds, playerIdentity, introducesPlayerName,
-    knownByNpcIds, npcPlayerKnowledge, contextBundle, segmentNpcIdsByLocation };
+    knownByNpcIds, npcPlayerKnowledge, contextBundle, segmentNpcIdsByLocation,
+    legalOpportunityMap, legalProgramActionMap };
 }
 
 /** The callback and its immutable source snapshot stay in the in-memory preparation cache. */
@@ -375,6 +462,45 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     savedContinuation: continuity?.continuation ? structuredClone(continuity.continuation) : undefined,
   };
   const prepared = buildProjection(snapshot, structuredClone(sceneState));
+  const continuedOpportunityId = continuity?.continuation?.steps.find(step => step.opportunityId)?.opportunityId;
+  let selectedOpportunity: InvestigationOpportunity | undefined;
+  let selectedProgramAction: ProgramChecklistAction | undefined;
+  if (isResume && continuedOpportunityId) {
+    const saved = continuity?.selectedOpportunity;
+    if (!saved || saved.id !== continuedOpportunityId) throw new Error('未完成调查缺少原始机会快照。');
+    selectedOpportunity = structuredClone(saved);
+    prepared.request.legalOpportunityMap = immutableOpportunityMap([
+      ...Object.values(prepared.request.legalOpportunityMap ?? {}),
+      selectedOpportunity,
+    ]);
+  } else if (snapshot.actionSelection?.opportunityId) {
+    selectedOpportunity = prepared.request.legalOpportunityMap?.[snapshot.actionSelection.opportunityId];
+    if (!selectedOpportunity) throw new Error('所选调查机会已经失效。');
+    const selection = snapshot.actionSelection;
+    if (selection.kind !== 'investigation'
+      || selection.scope !== selectedOpportunity.scope
+      || selection.locationId !== selectedOpportunity.locationId) {
+      throw new Error('所选调查机会元数据与当前合法机会不匹配。');
+    }
+    selectedOpportunity = structuredClone(selectedOpportunity);
+  }
+  if (!snapshot.actionSelection?.opportunityId && snapshot.actionSelection?.actionId) {
+    selectedProgramAction = prepared.request.legalProgramActionMap?.[snapshot.actionSelection.actionId];
+    if (!selectedProgramAction) throw new Error('所选程序行动已经失效。');
+    const selection = snapshot.actionSelection;
+    if (selection.kind !== selectedProgramAction.kind
+      || selection.scope !== selectedProgramAction.scope
+      || selection.locationId !== selectedProgramAction.locationId
+      || selection.requestedMinutes !== selectedProgramAction.requestedMinutes) {
+      throw new Error('所选程序行动元数据与当前合法行动不匹配。');
+    }
+    selectedProgramAction = structuredClone(selectedProgramAction);
+  }
+  const quietWaitDecision = planQuietWait({
+    time: startTime,
+    variables: snapshot.variables,
+    opportunities: Object.values(prepared.request.legalOpportunityMap ?? {}),
+  });
   const actionAuthority: ActionAuthorityContext = {
     cycleCount, startTime, currentLocationId, stamina: snapshot.gameStatus.stamina, sanity: snapshot.gameStatus.sanity,
     originalInput: snapshot.originalActionInput ?? snapshot.userInput,
@@ -387,6 +513,9 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     resumeActionId: snapshot.resumeActionId,
     fantasy: prepared.intentPolicy.mode === 'fantasy',
     selection: snapshot.actionSelection,
+    selectedOpportunity,
+    selectedProgramAction,
+    quietWaitDecision,
     inputOrigin: snapshot.hasPendingAction ? 'menu' : 'player',
   };
   prepared.request.actionAuthority = actionAuthority;
@@ -411,6 +540,8 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
       narrativeBackground: projected.narrativeBackground, mysteryLocation: projected.mysteryLocation,
       activeNpcIds: projected.activeNpcIds, npcPlayerKnowledge: projected.npcPlayerKnowledge,
       knownByNpcIds: projected.knownByNpcIds, contextBundle: projected.contextBundle,
+      legalOpportunityMap: projected.legalOpportunityMap,
+      legalProgramActionMap: projected.legalProgramActionMap,
       segmentNpcIdsByLocation: projected.segmentNpcIdsByLocation,
       pendingActionSceneContext: projected.request.pendingActionSceneContext,
     };

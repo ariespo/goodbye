@@ -1,5 +1,10 @@
-import { crossesThreshold } from './game-clock';
+import { advanceClock, crossesThreshold } from './game-clock';
 import type { DynamicRecord } from '../sillytavern/types';
+import {
+  projectPublicInvestigationOpportunities,
+  type InvestigationOpportunity,
+  type PublicInvestigationOpportunity,
+} from './investigation-opportunities';
 
 export const DEATH_NEWS_TIME = '2024-09-09T16:00:00';
 
@@ -7,6 +12,30 @@ export interface ScheduledBoundary {
   id: string;
   at: string;
 }
+
+export interface PlanQuietWaitInput {
+  time: string;
+  variables: DynamicRecord;
+  requestedMinutes?: number;
+  commitmentBoundaries?: ScheduledBoundary[];
+  opportunities?: readonly InvestigationOpportunity[];
+}
+
+export type QuietWaitDecision =
+  | {
+      kind: 'deliver-boundary';
+      requestedMinutes: 0;
+      endTime: string;
+      boundary: ScheduledBoundary;
+      expiringOpportunities: PublicInvestigationOpportunity[];
+    }
+  | {
+      kind: 'wait';
+      requestedMinutes: number;
+      endTime: string;
+      boundary?: ScheduledBoundary;
+      expiringOpportunities: PublicInvestigationOpportunity[];
+    };
 
 function parseBoundaryClock(value: string): number {
   const time = new Date(value).getTime();
@@ -67,6 +96,48 @@ export function nextScheduledBoundary(
   return next ? { id: next.id, at: next.at } : undefined;
 }
 
+export function planQuietWait(input: PlanQuietWaitInput): QuietWaitDecision {
+  const now = parseBoundaryClock(input.time);
+  if (
+    input.requestedMinutes !== undefined
+    && (!Number.isSafeInteger(input.requestedMinutes) || input.requestedMinutes <= 0)
+  ) {
+    throw new RangeError('requested wait minutes must be a positive whole number');
+  }
+  const boundary = nextScheduledBoundary(
+    input.time,
+    input.variables,
+    input.commitmentBoundaries ?? [],
+  );
+  if (!boundary) throw new Error('quiet wait requires a scheduled boundary');
+  const boundaryMinutes = Math.floor((parseBoundaryClock(boundary.at) - now) / 60_000);
+  if (boundaryMinutes <= 0) {
+    return {
+      kind: 'deliver-boundary',
+      requestedMinutes: 0,
+      endTime: input.time,
+      boundary,
+      expiringOpportunities: [],
+    };
+  }
+
+  const requestedMinutes = Math.min(input.requestedMinutes ?? boundaryMinutes, boundaryMinutes);
+  const endTime = advanceClock(input.time, requestedMinutes);
+  const end = parseBoundaryClock(endTime);
+  const expiring = (input.opportunities ?? []).filter(opportunity => {
+    if (!opportunity.availableUntil) return false;
+    const availableUntil = parseBoundaryClock(opportunity.availableUntil);
+    return availableUntil > now && availableUntil <= end;
+  });
+  return {
+    kind: 'wait',
+    requestedMinutes,
+    endTime,
+    ...(requestedMinutes === boundaryMinutes ? { boundary } : {}),
+    expiringOpportunities: projectPublicInvestigationOpportunities(expiring),
+  };
+}
+
 /**
  * 定时事件表。引擎只管「何时必须发生」，怎么演全交给写手。
  * 目前仅一条 death-news；将来扩展文穗时刻表时在此增加记录。
@@ -83,13 +154,13 @@ export function checkScheduledEvents(
 }
 
 const DEATH_NEWS_DIRECTIVE =
-  '【定时事件·必须执行】时间已过16:00：文穗的死讯必须在本回合送达玩家（警方电话、警察上门、邻居传话等形式自选，地点不合适就让消息追到玩家所在处）。死讯到达后叙事基调转为崩溃，理智应明显下降。';
+  '【定时事件·必须执行】时间已过16:00：文穗的死讯必须在本回合送达玩家（警方电话、警察上门、邻居传话等形式自选，地点不合适就让消息追到玩家所在处）。以具体反应呈现消息的冲击；资源变化只服从程序结算。';
 
-const COLLAPSE_DIRECTIVE =
-  '【崩溃段】玩家已得知文穗的死讯。维持崩溃与失序氛围：理智持续下滑，调查/行动项收窄为与死讯相关或麻木的日常动作，NPC 反应事件余波。不要提供任何能拯救文穗的选项，时间将自然推进到午夜触发轮回。';
+const AFTERMATH_DIRECTIVE =
+  '【死讯余波】玩家已得知文穗的死讯。允许真实的哀痛、基于现有信息的有限跟进、休息或明确等待；不得承诺在本轮挽救已经发生的死亡，也不得用气氛要求资源下降或封死其他合理选择。';
 
 export function buildScheduledDirectives(variables: DynamicRecord): string[] {
   if (variables.deathNews === 'pending') return [DEATH_NEWS_DIRECTIVE];
-  if (variables.deathNews === 'delivered') return [COLLAPSE_DIRECTIVE];
+  if (variables.deathNews === 'delivered') return [AFTERMATH_DIRECTIVE];
   return [];
 }

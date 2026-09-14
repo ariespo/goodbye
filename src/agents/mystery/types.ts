@@ -193,6 +193,9 @@ export interface DirectorOptionIntent {
   intent: string;
   tone: string;
   expectedPressure: 'low' | 'medium' | 'high';
+  /** Untrusted echo of a program-offered action; the program must revalidate it. */
+  opportunityId?: string;
+  scope?: import('../../engine/action-resolution').ActionScope;
 }
 
 export interface DirectorScenePlan {
@@ -203,8 +206,15 @@ export interface DirectorScenePlan {
     suspectId?: string;
     factId?: string;
     costTier: 'light' | 'medium' | 'heavy';
+    opportunityId?: string;
+    scope?: import('../../engine/action-resolution').ActionScope;
   }>;
-  actionIntents: Array<{ intent: string; costTier: 'light' | 'medium' | 'heavy' }>;
+  actionIntents: Array<{
+    intent: string;
+    costTier: 'light' | 'medium' | 'heavy';
+    opportunityId?: string;
+    scope?: import('../../engine/action-resolution').ActionScope;
+  }>;
 }
 
 /** Director-owned intent proposal. Program authority adds costs, sources and event effects. */

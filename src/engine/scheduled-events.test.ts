@@ -4,7 +4,9 @@ import {
   buildScheduledDirectives,
   DEATH_NEWS_TIME,
   nextScheduledBoundary,
+  planQuietWait,
 } from './scheduled-events';
+import type { InvestigationOpportunity } from './investigation-opportunities';
 
 describe('checkScheduledEvents', () => {
   it('跨过16点触发死讯pending', () => {
@@ -33,11 +35,17 @@ describe('buildScheduledDirectives', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('死讯');
     expect(lines[0]).toContain('必须');
+    expect(lines[0]).not.toContain('理智应明显下降');
   });
-  it('delivered返回崩溃段指令', () => {
+  it('delivered允许有限跟进、休息和明确等待', () => {
     const lines = buildScheduledDirectives({ deathNews: 'delivered' });
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('崩溃');
+    expect(lines[0]).toContain('哀痛');
+    expect(lines[0]).toContain('有限跟进');
+    expect(lines[0]).toContain('休息');
+    expect(lines[0]).toContain('明确等待');
+    expect(lines[0]).not.toContain('理智持续下滑');
+    expect(lines[0]).not.toContain('行动项收窄');
   });
   it('未置位返回空数组', () => {
     expect(buildScheduledDirectives({})).toEqual([]);
@@ -91,5 +99,86 @@ describe('nextScheduledBoundary', () => {
     expect(() => nextScheduledBoundary('2024-09-09T10:00:00', {}, [
       { id: 'commitment:bad', at: 'not-a-time' },
     ])).toThrow(/clock/i);
+  });
+});
+
+describe('planQuietWait', () => {
+  const timedOpportunity: InvestigationOpportunity = {
+    id: 'investigation:c1:F002:atmosphere:school',
+    locationId: 'school',
+    publicGoal: '向门卫确认文穗今天是否到校',
+    scope: 'normal',
+    sourceIds: ['fact:F002:atmosphere'],
+    topicKey: 'school:attendance',
+    availableUntil: '2024-09-09T11:30:00',
+  };
+
+  it('compresses an unqualified wait to the next required event', () => {
+    expect(planQuietWait({ time: '2024-09-09T10:00:00', variables: {} })).toEqual({
+      kind: 'wait',
+      requestedMinutes: 360,
+      endTime: DEATH_NEWS_TIME,
+      boundary: { id: 'death-news', at: DEATH_NEWS_TIME },
+      expiringOpportunities: [],
+    });
+  });
+
+  it('honors a shorter explicit limit without claiming the later boundary', () => {
+    expect(planQuietWait({
+      time: '2024-09-09T10:00:00',
+      variables: {},
+      requestedMinutes: 90,
+    })).toEqual({
+      kind: 'wait',
+      requestedMinutes: 90,
+      endTime: '2024-09-09T11:30:00',
+      expiringOpportunities: [],
+    });
+  });
+
+  it('returns the due boundary instead of constructing a zero-minute wait action', () => {
+    expect(planQuietWait({
+      time: DEATH_NEWS_TIME,
+      variables: { deathNews: 'pending' },
+    })).toEqual({
+      kind: 'deliver-boundary',
+      requestedMinutes: 0,
+      endTime: DEATH_NEWS_TIME,
+      boundary: { id: 'death-news', at: DEATH_NEWS_TIME },
+      expiringOpportunities: [],
+    });
+  });
+
+  it('stops at an earlier appointment and discloses only public expiring opportunity data', () => {
+    const decision = planQuietWait({
+      time: '2024-09-09T10:00:00',
+      variables: {},
+      commitmentBoundaries: [{ id: 'commitment:school', at: '2024-09-09T12:00:00' }],
+      opportunities: [timedOpportunity],
+    });
+
+    expect(decision).toEqual({
+      kind: 'wait',
+      requestedMinutes: 120,
+      endTime: '2024-09-09T12:00:00',
+      boundary: { id: 'commitment:school', at: '2024-09-09T12:00:00' },
+      expiringOpportunities: [{
+        id: timedOpportunity.id,
+        locationId: 'school',
+        publicGoal: timedOpportunity.publicGoal,
+        scope: 'normal',
+        availableUntil: '2024-09-09T11:30:00',
+      }],
+    });
+    expect(JSON.stringify(decision)).not.toContain('sourceIds');
+    expect(JSON.stringify(decision)).not.toContain('topicKey');
+  });
+
+  it('rejects a non-positive explicit wait limit', () => {
+    expect(() => planQuietWait({
+      time: '2024-09-09T10:00:00',
+      variables: {},
+      requestedMinutes: 0,
+    })).toThrow(/positive/i);
   });
 });

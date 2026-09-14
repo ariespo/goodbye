@@ -1,4 +1,5 @@
 import type { ParsedContent } from './types';
+import { parseChecklistMetadata } from '../engine/checklist-metadata';
 
 export interface ParseOptions {
   /** 严格模式:非法 JSON / 未闭合标签会抛出错误 */
@@ -131,7 +132,7 @@ function flushTagBuffer(state: ParseState, tagName: string, options: ParseOption
         .map(line => line.trim())
         .filter(Boolean)
         .map(line => {
-          const [desc, suspect, style, time, stamina, sanity] = line.split(/[|｜]/).map(s => s.trim());
+          const [desc, suspect, style, time, stamina, sanity, metadata] = line.split(/[|｜]/).map(s => s.trim());
           return {
             desc: desc || '',
             suspect: suspect || '无',
@@ -139,6 +140,7 @@ function flushTagBuffer(state: ParseState, tagName: string, options: ParseOption
             time: time || '0分钟',
             stamina: parseInt(stamina, 10) || 0,
             sanity: parseInt(sanity, 10) || 0,
+            ...parseChecklistMetadata(metadata),
           };
         });
       break;
@@ -154,13 +156,14 @@ function flushTagBuffer(state: ParseState, tagName: string, options: ParseOption
           .map(line => line.trim())
           .filter(Boolean)
           .map(line => {
-            const [desc, style, time, stamina, sanity] = line.split(/[|｜]/).map(s => s.trim());
+            const [desc, style, time, stamina, sanity, metadata] = line.split(/[|｜]/).map(s => s.trim());
             return {
               desc: desc || '',
               style: style || '现实',
               time: time || '0分钟',
               stamina: parseInt(stamina, 10) || 0,
               sanity: parseInt(sanity, 10) || 0,
+              ...parseChecklistMetadata(metadata),
             };
           });
       }

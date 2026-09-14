@@ -2,6 +2,9 @@ import { getLocationById, resolveRegisteredLocation } from '../../data/locations
 import { resolveActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
 import type { ActionContinuation, ActionScope, ActionStep, ResolveActionInput, ResolvedActionOutcome } from '../../engine/action-resolution';
 import type { DirectorPlan, FactReview, WriterPacket } from './types';
+import type { InvestigationOpportunity } from '../../engine/investigation-opportunities';
+import type { QuietWaitDecision } from '../../engine/scheduled-events';
+import type { ProgramChecklistAction } from './scene-list';
 
 /** Constructed by the game, never by a model response. Kept out of model prompts. */
 export interface ActionAuthorityContext {
@@ -21,7 +24,13 @@ export interface ActionAuthorityContext {
   pendingAuthorization?: import('./pending-action-authorization').PendingActionAuthorization;
   resumeActionId?: string;
   fantasy?: boolean;
-  selection?: { kind: 'inquiry' | 'investigation' | 'search' | 'travel' | 'rest' | 'wait'; scope?: ActionScope; locationId?: string };
+  selection?: { actionId?: string; opportunityId?: string;
+    kind: 'inquiry' | 'investigation' | 'search' | 'travel' | 'rest' | 'wait';
+    scope?: ActionScope; locationId?: string; requestedMinutes?: number };
+  /** Private program snapshot selected from the legal map; never serialized to a model prompt. */
+  selectedOpportunity?: InvestigationOpportunity;
+  selectedProgramAction?: ProgramChecklistAction;
+  quietWaitDecision?: QuietWaitDecision;
   /** Menu prose/time fields are generated; only free player input imposes a budget. */
   inputOrigin?: 'player' | 'menu';
 }
@@ -93,6 +102,12 @@ export function buildActionAuthorityInput(
     appliedEventEffectIds: context.appliedEventEffectIds ? [...context.appliedEventEffectIds] : undefined };
   if (context.deathNews === 'pending') return { ...base, steps: [{ id: 'death-news', kind: 'event',
     eventId: 'death-news', scope: 'normal', locationId: context.currentLocationId, completionSourceIds: [] }] };
+  if (context.quietWaitDecision?.kind === 'deliver-boundary'
+    && context.quietWaitDecision.boundary.id === 'death-news'
+    && (context.selection?.kind === 'wait' || inferKind(context.originalInput) === 'wait')) {
+    return { ...base, steps: [{ id: 'death-news', kind: 'event', eventId: 'death-news',
+      scope: 'normal', locationId: context.currentLocationId, completionSourceIds: [] }] };
+  }
   if (context.resumeActionId) {
     if (!context.continuation || context.continuation.actionId !== context.resumeActionId) throw new Error('没有匹配的未完成行动。');
     const continuation: ActionContinuation = {
@@ -108,7 +123,34 @@ export function buildActionAuthorityInput(
   if (context.fantasy) return { ...base, steps: [{ id: 'fantasy', kind: 'fantasy', eventId: 'fantasy',
     scope: 'normal', locationId: context.currentLocationId, completionSourceIds: [] }] };
 
-  const clauses = actionClauses(context.originalInput);
+  const selectedOpportunity = context.selectedOpportunity;
+  if (context.selection?.opportunityId) {
+    if (!selectedOpportunity
+      || context.selection.opportunityId !== selectedOpportunity.id
+      || context.selection.kind !== 'investigation'
+      || context.selection.scope !== selectedOpportunity.scope
+      || context.selection.locationId !== selectedOpportunity.locationId) {
+      throw new Error('调查机会已经失效或选择元数据与当前合法机会不匹配。');
+    }
+  } else if (selectedOpportunity) {
+    throw new Error('调查机会选择缺少程序标识。');
+  }
+  const selectedProgramAction = context.selectedProgramAction;
+  if (!context.selection?.opportunityId && context.selection?.actionId) {
+    if (!selectedProgramAction
+      || context.selection.actionId !== selectedProgramAction.id
+      || context.selection.kind !== selectedProgramAction.kind
+      || context.selection.scope !== selectedProgramAction.scope
+      || context.selection.locationId !== selectedProgramAction.locationId
+      || context.selection.requestedMinutes !== selectedProgramAction.requestedMinutes) {
+      throw new Error('程序行动已经失效或选择元数据与当前合法行动不匹配。');
+    }
+  } else if (selectedProgramAction && !context.selection?.actionId) {
+    throw new Error('程序行动选择缺少程序标识。');
+  }
+
+  const operativeInput = selectedOpportunity?.publicGoal ?? selectedProgramAction?.publicGoal ?? context.originalInput;
+  const clauses = actionClauses(operativeInput);
   const approvedFactSources = plan.revelations.map(fact => `fact:${fact.factId}:${fact.level}`);
   const approvedKnowledgeSources = (plan.knowledgeEvents ?? []).map(event => `accepted-event:${event.eventId}`);
   const approvedSources = [...approvedFactSources, ...approvedKnowledgeSources];
@@ -118,6 +160,9 @@ export function buildActionAuthorityInput(
     throw new Error('导演行动阶段必须是非空且最多八项的数组。');
   }
   const supplied: unknown[] = Array.isArray(proposals) ? proposals : [];
+  if ((selectedOpportunity || selectedProgramAction) && supplied.length > 1) {
+    throw new Error('单个程序行动不能被模型扩展为复合行动。');
+  }
   const count = Math.max(clauses.length, supplied.length, 1);
   const steps: ActionStep[] = [];
   let location = context.currentLocationId;
@@ -150,8 +195,19 @@ export function buildActionAuthorityInput(
       throw new Error('行动结果引用了未授权的事实来源。');
     }
     const duration = context.inputOrigin === 'menu' ? undefined : explicitStageDuration(clause);
-    steps.push({ id: stepId, kind, scope, locationId: registered.locationId, completionSourceIds: [],
-      ...((kind === 'rest' || kind === 'wait') ? { requestedMinutes: duration ?? 60 } : {}) });
+    if ((selectedOpportunity || selectedProgramAction) && proposed
+      && ((proposed.kind !== undefined && proposed.kind !== context.selection?.kind)
+        || (proposed.scope !== undefined && proposed.scope !== context.selection?.scope)
+        || (proposed.locationId !== undefined && proposed.locationId !== context.selection?.locationId))) {
+      throw new Error('导演行动阶段与已选择调查机会不匹配。');
+    }
+    const quietMinutes = kind === 'wait' && duration === undefined
+      ? selectedProgramAction?.requestedMinutes
+        ?? (context.quietWaitDecision?.kind === 'wait' ? context.quietWaitDecision.requestedMinutes : undefined)
+      : undefined;
+    steps.push({ id: stepId, kind, scope, locationId: registered.locationId,
+      ...(selectedOpportunity ? { opportunityId: selectedOpportunity.id } : {}), completionSourceIds: [],
+      ...((kind === 'rest' || kind === 'wait') ? { requestedMinutes: duration ?? quietMinutes ?? 60 } : {}) });
     location = registered.locationId;
   }
   const requiredArrivalEvents = new Set(context.proposedScene?.sceneContract.requiredKnowledgeEvents

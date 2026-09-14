@@ -2,6 +2,7 @@ import { getItemByReference } from '../data/itemAssets';
 import { applyCharacterEmotionPolicies } from './character-emotion-policy';
 import { CHEN_HUIHUI_CHOCOLATE_EVENT, isZhouDemingConfirmedKiller } from './character-emotion-policy';
 import type { Scene, SceneLine, Mood } from '../sillytavern/types';
+import { parseChecklistMetadata } from './checklist-metadata';
 
 /**
  * GalGame 风格的 maintext 解析器。
@@ -66,7 +67,7 @@ function extractXmlTags(text: string): {
       .map(line => line.trim())
       .filter(Boolean)
       .map(line => {
-        const [desc, suspect, style, time, stamina, sanity] = splitFields(line);
+        const [desc, suspect, style, time, stamina, sanity, metadata] = splitFields(line);
         return {
           desc: desc || '',
           suspect: suspect || '无',
@@ -74,6 +75,7 @@ function extractXmlTags(text: string): {
           time: time || '0分钟',
           stamina: parseInt(stamina, 10) || 0,
           sanity: parseInt(sanity, 10) || 0,
+          ...parseChecklistMetadata(metadata),
         };
       });
   }
@@ -86,13 +88,14 @@ function extractXmlTags(text: string): {
       .map(line => line.trim())
       .filter(Boolean)
       .map(line => {
-        const [desc, style, time, stamina, sanity] = splitFields(line);
+        const [desc, style, time, stamina, sanity, metadata] = splitFields(line);
         return {
           desc: desc || '',
           style: style || '现实',
           time: time || '0分钟',
           stamina: parseInt(stamina, 10) || 0,
           sanity: parseInt(sanity, 10) || 0,
+          ...parseChecklistMetadata(metadata),
         };
       });
   }

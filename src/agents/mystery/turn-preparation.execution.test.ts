@@ -23,6 +23,36 @@ const interrupted: ResolvedActionOutcome = { id: 'r', cycleCount: 1, startTime: 
   interruption: { id: 'death-news', at: '2024-09-09T16:00:00' } };
 
 describe('execution context projection', () => {
+  it('keeps the legal source map private while projecting only public opportunity fields', () => {
+    const prepared = buildTurnPreparation(fixture());
+    const id = 'investigation:c1:F001:atmosphere:home';
+
+    expect(prepared.request.legalOpportunityMap?.[id]?.sourceIds).toEqual(['fact:F001:atmosphere']);
+    expect(prepared.request.turnContext.publicOpportunities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id, locationId: 'home', publicGoal: '检查文穗留下的衣物和随身物品' }),
+    ]));
+    expect(prepared.request.turnContext.opportunityPolicy).toContain(id);
+    expect(JSON.stringify(prepared.request.turnContext)).not.toContain('sourceIds');
+    expect(JSON.stringify(prepared.request.presentationContext)).not.toContain('topicKey');
+  });
+
+  it('revalidates an exhausted same-cycle opportunity by exact id but rejects an unknown id', () => {
+    const input = fixture();
+    const id = 'investigation:c1:F001:atmosphere:home';
+    input.variables.opportunityProgress = {
+      cycleCount: 1,
+      completedIds: [id],
+      noProgressByTopic: { 'home:belongings': 2 },
+      settledResolutionIds: ['old'],
+    };
+    input.actionSelection = { opportunityId: id, kind: 'investigation', scope: 'short', locationId: 'home' };
+
+    expect(buildTurnPreparation(input).request.actionAuthority?.selectedOpportunity?.id).toBe(id);
+    expect(() => buildTurnPreparation({
+      ...input,
+      actionSelection: { ...input.actionSelection, opportunityId: 'investigation:c0:stale' },
+    })).toThrow(/机会|opportunity|失效/i);
+  });
   it('rebuilds the actual anchor and NPC context after interrupted travel', () => {
     const prepared = buildTurnPreparation(fixture());
     expect(prepared.request.truthContext.currentLocation).toBe('school');
@@ -75,7 +105,8 @@ describe('execution context projection', () => {
         actionId: 'school-investigation', cycleCount: 1,
         steps: [
           { id: '__travel__:0:home:school:work%3A0', kind: 'travel', scope: 'normal', locationId: 'school', completionSourceIds: [] },
-          { id: 'work:0', kind: 'investigation', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+          { id: 'work:0', kind: 'investigation', scope: 'normal', locationId: 'school',
+            opportunityId: 'investigation:c1:F002:atmosphere:school', completionSourceIds: [] },
         ],
         previousResolutionId: 'first', stepsDigest: 'steps-original', resumableFromTime: '2024-09-09T16:00:00',
         expectedLocationId: 'home', activeStepId: '__travel__:0:home:school:work%3A0',
@@ -83,6 +114,11 @@ describe('execution context projection', () => {
         chargedStaminaByStep: { '__travel__:0:home:school:work%3A0': 2 },
       },
       sceneContext: { ...pending, actionId: 'school-investigation' },
+      selectedOpportunity: {
+        id: 'investigation:c1:F002:atmosphere:school', locationId: 'school',
+        publicGoal: '向门卫确认文穗今天是否到校', scope: 'normal',
+        sourceIds: ['fact:F002:atmosphere'], topicKey: 'school:attendance',
+      },
     };
 
     const prepared = buildTurnPreparation({ ...input, resumeActionId: 'school-investigation' });
@@ -92,6 +128,8 @@ describe('execution context projection', () => {
     });
     expect(prepared.request.pendingActionSceneContext?.contextsByLocation.school.forbiddenNpcIds)
       .toEqual(['liu-renguang']);
+    expect(prepared.request.actionAuthority?.selectedOpportunity?.id)
+      .toBe('investigation:c1:F002:atmosphere:school');
   });
 
   it('keeps the street presentation for an intervening zero-time event during partial travel', () => {

@@ -52,6 +52,8 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
           intent: { type: 'string' },
           tone: { type: 'string' },
           expectedPressure: { type: 'string', enum: ['low', 'medium', 'high'] },
+          opportunityId: { type: 'string', minLength: 1 },
+          scope: { type: 'string', enum: ['short', 'normal', 'deep'] },
         },
       },
     },
@@ -93,6 +95,8 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
               suspectId: { type: 'string' },
               factId: { type: 'string' },
               costTier: { type: 'string', enum: ['light', 'medium', 'heavy'] },
+              opportunityId: { type: 'string', minLength: 1 },
+              scope: { type: 'string', enum: ['short', 'normal', 'deep'] },
             },
           },
         },
@@ -105,6 +109,8 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
             properties: {
               intent: { type: 'string' },
               costTier: { type: 'string', enum: ['light', 'medium', 'heavy'] },
+              opportunityId: { type: 'string', minLength: 1 },
+              scope: { type: 'string', enum: ['short', 'normal', 'deep'] },
             },
           },
         },
@@ -248,9 +254,54 @@ export const SCENE_CHECKLIST_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
+export const PROGRAM_SCENE_CHECKLIST_JSON_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['observe', 'investigateItems', 'actionItems'],
+  properties: {
+    observe: { type: 'string' },
+    investigateItems: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['actionId', 'desc', 'suspect', 'style'],
+        properties: {
+          actionId: { type: 'string', minLength: 1 },
+          desc: { type: 'string' },
+          suspect: { type: 'string' },
+          style: { type: 'string' },
+        },
+      },
+    },
+    actionItems: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['actionId', 'desc', 'style'],
+        properties: {
+          actionId: { type: 'string', minLength: 1 },
+          desc: { type: 'string' },
+          style: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
 export const SCENE_CHECKLIST_RESPONSE_FORMAT: ResponseFormat = {
   type: 'json_schema',
   json_schema: { name: 'scene_checklist', strict: true, schema: SCENE_CHECKLIST_JSON_SCHEMA },
+};
+
+export const PROGRAM_SCENE_CHECKLIST_RESPONSE_FORMAT: ResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'program_scene_checklist',
+    strict: true,
+    schema: PROGRAM_SCENE_CHECKLIST_JSON_SCHEMA,
+  },
 };
 
 export const DIRECTOR_PLAN_RESPONSE_FORMAT: ResponseFormat = {

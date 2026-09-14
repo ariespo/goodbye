@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameLoop } from './useGameLoop';
 import { useGameStore } from '../stores/gameStore';
@@ -11,6 +11,9 @@ import { runStateAgent } from '../agents/state/state-agent';
 import { saveChat } from '../sillytavern/database';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatSession } from '../sillytavern/types';
+import { buildInvestigationOpportunities } from '../engine/investigation-opportunities';
+import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
+import { maintextToScene } from '../engine/scene-parser';
 
 vi.mock('../agents/mystery', async original => ({ ...await original<typeof import('../agents/mystery')>(),
   prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(), reviewNarrativeAgainstWriterPacket: vi.fn(), reviewNarrativeStyle: vi.fn() }));
@@ -21,6 +24,48 @@ vi.mock('../sillytavern/database', async original => ({ ...await original<typeof
 const baseline = useGameStore.getState();
 const prose = '<maintext>场景|home-day\n对话|旁白|calm|你在房间里查看四周。</maintext><option>继续调查\n休息一会儿</option><sum>查看房间。</sum><vars>{}</vars>';
 const approved = { approved: true, violations: [], corrections: [] };
+
+describe('priced investigation menu acceptance', () => {
+  it('awards a completed finding once and honors an exhausted same-day menu attempt', async () => {
+    const opportunity = buildInvestigationOpportunities({ graph: MYSTERY_TRUTH_GRAPH,
+      context: { cycleCount: 1, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [], playerKnowledge: {}, suspicion: {}, activeNpcIds: [] },
+      progress: { cycleCount: 1, completedIds: [], noProgressByTopic: {} } }).find(item => item.locationId === 'home');
+    expect(opportunity).toBeDefined();
+    const text = '衣柜里有一处不自然的空缺。';
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, complete: async messages =>
+      messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性') ? JSON.stringify(approved)
+        : JSON.stringify({ turnGoal: '查看衣柜', tone: '克制', beats: [{ id: 'b', purpose: '调查', description: text, locationId: 'home' }],
+          revelations: [{ factId: 'F001', level: 'atmosphere', delivery: 'object' }], assetRequests: [],
+          actionSteps: [{ id: 'q', kind: 'investigation', scope: opportunity!.scope, locationId: 'home' }],
+          optionIntents: [{ id: 'rest', intent: '休息', tone: '克制', expectedPressure: 'low' }] }) }));
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ ...approved, assertionAudit: {
+      reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: text, proposition: text, status: 'supported',
+        citations: [{ sourceId: 'fact:F001:atmosphere', quote: text }], reason: 'authorized scene finding' }],
+    } });
+    vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken(`<maintext>场景|home-day\n对话|旁白|calm|${text}</maintext><option>休息\n继续查看</option><sum>检查衣柜。</sum><vars>{}</vars>`);
+      await callbacks.onComplete();
+    });
+    const menu = { ...maintextToScene(`对话|旁白|calm|${text}`), investigateItems: [{
+      desc: opportunity!.publicGoal, suspect: '无', style: '现实', time: '1分钟', stamina: 99, sanity: 99,
+      opportunityId: opportunity!.id, scope: opportunity!.scope, locationId: 'home',
+    }] };
+    useGameStore.setState(state => ({ game: { ...state.game, currentScene: menu } }));
+    const { result, rerender, unmount } = renderHook(() => useGameLoop());
+    act(() => { result.current.performAction('investigate', 0); });
+    await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(1));
+    expect(useGameStore.getState().game.gameStatus.time.getHours()).toBe(8);
+    expect(useGameStore.getState().game.gameStatus.time.getMinutes()).toBe(25);
+    expect(useGameStore.getState().tavern.variables.opportunityProgress?.completedIds).toContain(opportunity!.id);
+    await act(async () => { useGameStore.setState(state => ({ game: { ...state.game, currentScene: menu } })); rerender(); });
+    act(() => { result.current.performAction('investigate', 0); });
+    await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(2));
+    const progress = useGameStore.getState().tavern.variables.opportunityProgress;
+    expect(progress?.completedIds.filter(id => id === opportunity!.id)).toHaveLength(1);
+    expect(progress?.noProgressByTopic[opportunity!.topicKey]).toBe(1);
+    unmount();
+  });
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,11 +101,11 @@ beforeEach(() => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('resolved action at the real hook boundary', () => {
-  it.each([['休息一会儿', 112], ['等待一会儿', 100]] as const)('settles %s through the actual prepared hook', async (input, stamina) => {
+  it.each([['休息一会儿', 112, '09:00:00'], ['等待一会儿', 100, '16:00:00']] as const)('settles %s through the actual prepared hook', async (input, stamina, endTime) => {
     const { result, unmount } = renderHook(() => useGameLoop());
     await act(async () => { await result.current.sendMessage(input); });
     expect(useGameStore.getState().game.history).toHaveLength(1);
-    expect(useGameStore.getState().tavern.variables).toMatchObject({ time: '2024-09-09T09:00:00', stamina, sanity: 70 });
+    expect(useGameStore.getState().tavern.variables).toMatchObject({ time: `2024-09-09T${endTime}`, stamina, sanity: 70 });
     unmount();
   });
   it('retains the original approved finding through interruption even when the resumed Director omits it', async () => {
