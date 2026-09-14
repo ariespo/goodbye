@@ -311,7 +311,7 @@ it('a resolved action overrides State time and resources', () => {
 
 **Interfaces:** Use opportunity types/functions above. `DirectorOptionIntent` and scene investigation/action intents gain optional `opportunityId` and `scope`; generated checklist output cannot invent priced opportunity IDs. Program adds quotes after validating IDs. `OpportunityProgress` is program-owned variables state, saved/snapshotted and day-reset.
 
-- [ ] Write red cases using the real `MYSTERY_TRUTH_GRAPH` and existing `TruthContext` fixtures: day1 school reachable `shared-school-absence` opportunity; day1 never shows day2 nurse/telephone result or solution; known fact can advance legal level but never duplicate equal-depth reward; two no-progress repeats prioritize alternative; no legal source produces an honest limitation/wait instead of fabricated evidence.
+- [x] Write red cases using the real `MYSTERY_TRUTH_GRAPH` and existing `TruthContext` fixtures: day1 school reachable `shared-school-absence` opportunity; day1 never shows day2 nurse/telephone result or solution; known fact can advance legal level but never duplicate equal-depth reward; two no-progress repeats prioritize alternative; no legal source produces an honest limitation/wait instead of fabricated evidence.
 
 ```ts
 it('two no-progress attempts do not masquerade as new investigation payoff', () => {
@@ -327,10 +327,10 @@ it('two no-progress attempts do not masquerade as new investigation payoff', () 
 });
 ```
 
-- [ ] Run `npm test -- --run src/engine/investigation-opportunities.test.ts src/agents/mystery/scene-list.test.ts` and observe red. Implement candidate generation by calling existing `buildMysteryBrief` under legal destination context, never reading canonicalTruth into UI/writer. Public goals name investigation affordance, not hidden answer.
-- [ ] Rank new affordable opportunities ahead of exhausted same-topic work; treat fact-level progress, actual outcomes and independent cognition as progress. Track repeated no-reply/refusal by stable topic. Preserve player insistence and +15 cap diversion, do not force new target without performing requested attempt.
-- [ ] Replace `COLLAPSE_DIRECTIVE` sustained collapse/sanity decay/all-options-narrowing with grief + limited grounded follow-up + rest/explicit wait. Quiet waits execute to next event/appointment/requested budget with disclosed opportunity tradeoff. Do not miss a known timed window because first option silently skips it.
-- [ ] Model scene-list may write descriptions only from approved material/opportunity projections. Add exact deterministic quote fields, permit fewer than2 clues when appropriate, and audit novel descriptive claims via Task2 before publishing. Run focused tests plus stage-1 fact negatives against generated list descriptions. Root reviews default-first-choice sample then commits.
+- [x] Run `npm test -- --run src/engine/investigation-opportunities.test.ts src/agents/mystery/scene-list.test.ts` and observe red. Implement candidate generation by calling existing `buildMysteryBrief` under legal destination context, never reading canonicalTruth into UI/writer. Public goals name investigation affordance, not hidden answer.
+- [x] Rank new affordable opportunities ahead of exhausted same-topic work; treat fact-level progress, actual outcomes and independent cognition as progress. Track repeated no-reply/refusal by stable topic. Preserve player insistence and +15 cap diversion, do not force new target without performing requested attempt.
+- [x] Replace `COLLAPSE_DIRECTIVE` sustained collapse/sanity decay/all-options-narrowing with grief + limited grounded follow-up + rest/explicit wait. Quiet waits execute to next event/appointment/requested budget with disclosed opportunity tradeoff. Do not miss a known timed window because first option silently skips it.
+- [x] Model scene-list may write descriptions only from approved material/opportunity projections. Add exact deterministic quote fields, permit fewer than2 clues when appropriate, and audit novel descriptive claims via Task2 before publishing. Run focused tests plus stage-1 fact negatives against generated list descriptions. Root reviews default-first-choice sample then commits.
 
 ### Task 6: character knowledge, belief, disclosure and commitments
 
