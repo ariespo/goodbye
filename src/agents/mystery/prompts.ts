@@ -41,6 +41,7 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 18. TurnContext.clock给出权威本地日期、时刻与重复日；实际经过分钟数由程序结算。白天不能安排已过夜或次日晨起，不能无故把当前可做的寻人行动推到明天。publicContinuity是已经自动播放的开局公开事实，允许自然重述，不能改成昨夜失踪或把今早06:50的消息改写成其他日期。
 18a. actionSteps 只提议玩家行动的阶段、种类、强度和注册地点，存在时必须为 1–8 个非空阶段，id 唯一且非空。可用 kind 只有 inquiry/investigation/search/travel/rest/wait，可用 scope 只有 short/normal/deep；不得输出 requestedMinutes、eventId、completionSourceIds、体力/理智费用或任何确定价格。工作基准价为 short=25、normal=55、deep=105 分钟。旅行时间由程序按实际地点变化计算，每个实际路段只收取一次；同一地点连续工作共享已完成的旅行。复合行动按顺序执行并累加各阶段时间，明确短预算只允许部分执行，未完成阶段不得获得完整结果或完整奖励。
 18b. TurnContext 若提供 publicOpportunities/programActions，optionIntents 与 scenePlan 中的 opportunityId 只能逐字复制其公开 id，scope 必须复制对应公开 scope。不得根据隐藏事实推测或创造 id。这些字段只是候选关联，程序会重新验证；任何 costTier 都只作旧格式分类，不是时间或资源价格。
+18c. 生成前在内部检查行动的时间结构：把旅行、工作、等待/休息分别安排，工作深度应对应真正持续的活动。normal/deep 调查不能只有一次提问；安排可压缩呈现的提问、梳理、复核或搜索过程，以及授权结果或仍未确认的局限。不得靠重复答案、天气描写或一句“过了很久”填满55/105分钟。只在获准地点、人物和事实范围内安排当下过程；不得为了拉长时长发明新线索、既往经历或记录。这里只提出可执行节拍，不自行确定实际耗时；后续程序的 resolvedAction 会约束本次真正执行部分。不要输出内部检查过程或增加 JSON 字段。
 19. 每轮必须完成玩家尝试中的一个具体步骤并交代可见结果；没有新线索时说明本次核实的范围与局限，并给出可执行下一步。未见到不等于没有到过，自述不去不等于已经证实缺席；不得为制造进展编造排除结论。不要重复查看同一批物品、重新准备出门、递同一个袋子、反复劝返或在同一地点从头表演。长时间搜索/等候可概括经过，遇16:00消息等关键事件先推进至事件，不能用长段环境描写替代行动结果。
 20. 固定地点的实际互动必须保留角色：supermarket=chen-huihui，community-hospital=detective-b，old-man-building=old-man，senpai-building=touko，school=school-guard（学校进入权限仍按sceneContract）。在对应地点至少一个beat明确把固定角色放入speakerIds，不能换成临时男性店员或无名陌生路人。npcPlayerKnowledge是可用称呼目录，不等于这些人全部在场。
 
@@ -86,6 +87,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 6. 地点、身份、职业、行为理解或人物关系更新，都必须在玩家实际看到/听到符合对应 evidenceStandard 的具体依据后，紧接证据句写“认知|eventId”。只能写 authorizedKnowledgeEvents 中的事件 ID；不得先写结论再把结论自身当作 evidence。
 7. 为兼容当前播放器，输出一句 <sum>；<vars> 必须固定为 {}。你不承担数值与存档写入。
 7a. WriterPacket.resolvedAction 存在时，它是本回合行动经过、位置、完成度和资源结果的唯一权威。正文必须覆盖 startTime 到 endTime、共 executedMinutes 分钟的完整时间区间，只挑选其中的高光和关键片段，不逐分钟铺写。不得自行改动或独立计算时间、体力、理智或其他资源；不得把计划值、DirectorPlan.timeCostMinutes 或气氛描写当作结算依据。任何未完成阶段不得写成已经发现结果或获得完整奖励，只能呈现本次实际执行的有限进展与中断；完成结果还必须同时出现在 completedSourceIds 对应的 authorizedFacts 或 authorizedActionOutcomes 中。续作不得重演此前已完成的旅行或工作，只写当前 resolvedAction.segments 本次执行的部分。
+7b. 落笔前在内部按 resolvedAction.segments 检查本次的旅行、工作、等待/休息和完成度，再选择片段。正文要让玩家看见这些时间内实际做了什么、过程如何推进、留下什么授权结果或局限；不输出内部计划、检查步骤或推理。55/105分钟不能写成一问一答后直接跳钟，也不能靠重复台词或机械旁白复述答案充数。用简洁的过程概述、阶段转换和关键问答压缩长行动，不逐分钟铺写、不要求固定字数或行数；不得为填时间新增事实。
 8. 必须逐条遵守 WriterPacket.characterPerformances，把导演节拍写成符合角色的动作、反应、措辞与情绪升级。
 9. 表演规则只决定“怎么演”，不决定“知道什么”。任何台词事实仍只能来自 authorizedFacts 和 playerKnownFacts。
 10. 同一情绪标签在不同角色身上必须按各自 emotionRules 表现；不得套用统一的哭、吼、冷笑或疯笑模板。
@@ -182,6 +184,10 @@ function jsonBlock(value: unknown): string {
   return JSON.stringify(value);
 }
 
+const EXECUTED_ACTION_COVERAGE_RULES = `行动时间与演出：以 WriterPacket.resolvedAction.segments 中本次 executedMinutes>0 的阶段为准；不把 plannedMinutes 或累计进度当作本次耗时。旅行、工作、等待/休息分别落实为 maintext 中的过程或转场，不能由摘要、选项或清单代替。完整旅行交代抵达，未完成旅行仍在途中；短暂的部分工作只写实际进展，不补成完整调查；续作不重演此前时间。零分钟事件仍按既有事件要求演出，不要求持续过程。
+normal/deep 工作或本次工作>=25分钟，要有简洁的时间推进、持续活动和授权结果或局限。例如问询可压缩呈现提问、梳理与再核对的不同阶段，不必逐句写完；不能只有一问一答后声称“55分钟过去了”。过程概述与阶段转换即可表现时间，不必报出每段精确时刻。不得虚构线索、记录、历史、身份或承诺来填时间；完成阶段也不自动证明额外发现。不得机械复述刚说过的答案，旁白应提供反应或后果。
+不按固定字数、行数或逐分钟检查，不要求复述全部事实。生成和修复前在内部校准时间、过程、结果，不输出内部检查或推理；若正文缺失上述过程，现有审查可用 scene-contract-violation 和 corrections 要求最小范围补足当下活动与转场，仍服从原事实权限。`;
+
 export function buildDirectorUserPrompt(
   brief: MysteryBrief,
   turnContext: Record<string, unknown>,
@@ -235,7 +241,7 @@ authorizedFacts 中的 text 就是本回合可直接呈现的授权内容；deli
 supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quote 中逐字引用该来源 text 的非空片段。真实 sourceId 或真实但无关的来源片段不等于语义支持；你必须实际比较 proposition 与来源，不能用关键词、相同时间或来源存在本身推断蕴含关系。unsupported/contradicted 必须如实标记，即使顶层可能获准也不能省略。
 问题标为 question，明确带“可能/也许”等不确定性的假设标为 hypothesis，普通当下动作标为 ordinary-present；这三类通常不需要事实引用。否定性考勤、登录、删除、未出现、未到场等仍是事实命题，不能自动视为安全。本次拨号无人接听只说明本次没有接听，不能推成登录、阅读、删除或此前去向。
   assertionAudit 的每条 assertion 都必须完整返回 field、quote、proposition、status、citations、reason。quote 必须是对应 NarrativeFields 字段中的非空逐字引文，proposition 与 reason 必须是非空字符串；status 只能是 supported、unsupported、contradicted、question、hypothesis、ordinary-present；citations 必须是数组，没有来源时返回 []，有来源时每项都完整返回非空 sourceId 与 quote。不得编造缺失字段或引用。
-  不要因为措辞风格或没有复述全部事实而拒绝。
+  不要因为措辞风格或没有复述全部事实而拒绝；这不免除下述已执行行动的过程覆盖检查。
   continuityAudit 必须始终返回 reviewed=true 以及 disclosures、beliefs、commitments 三个数组；没有变化时三个数组都显式返回空数组。只审查 CharacterContinuityEvidence 中按 lineIndex 编号的实际可播放台词，不得从玩家输入、Director 计划、option、sum、hint、observe、investigate 或 action 清单生成角色学习或承诺。
   disclosure 只记录已识别说话者实际说出的 assertion，并逐个 listenerId 用 audienceEvidence 的 lineIndex+exact quote 证明明确称呼、回应、目击对话、听见叙述或电话/消息频道。audienceEvidence 不得早于 disclosure 的 source line；默认只能引用 disclosure 当行或同背景紧接的下一行，更远的行必须逐字写出电话、消息等连接频道。普通移动或另一个问题不证明听见。人物出现在 possibleAudienceIds 只表示可能听见，不证明听见；含糊受众返回空，不得把事实真值授予听众。background 不同表示已切换渲染场景，后一场景的普通台词不能证明听见前一场景内容；只有紧接的同场回应，或正文明确写出的电话、消息等频道证据可以连接。belief 还必须引用该 observer 实际表达相信、怀疑或推断同一 assertion 的反应台词；否定或无关命题的反应不得登记为肯定认知，“不合理或没有道理”是反对而不是相信。玩家说出已知事实只证明听众听到了玩家的说法。
   commitment 的 operation=accept 时必须完整返回 operation、actorId、recipientId、evidence、action、locationId、dueAt；operation=fulfill 或 cancel 时必须完整返回 operation、existingCommitmentId、actorId、recipientId、evidence。accept 只记录 obligated actor 实际明确接受的具体同日未来行动，action/locationId/dueAt/recipientId 都必须由同一段肯定承担台词直接支持；dueAt 必须匹配台词中的完整时间表达，不能用“二十点”里包含的“十点”等子串。请求、否定、条件、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；否定、尚未履行或仅到达约定地点都不算履行，未来时的承诺或打算也不是已经完成的行为，旁白写角色拒绝或正要执行同样不等于已经履行。
@@ -244,6 +250,10 @@ supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quo
 [ContinuityAuditOutputSchema]
 ${jsonBlock(continuityAuditSchema)}
 只在实际台词提供上述字段所需证据时返回非空记录；没有相应变化时返回空数组。不得为了满足 schema 编造记录、索引、人物、引文、承诺或其他字段值。
+
+${characterContinuityEvidence?.mode === 'auxiliary'
+    ? '本次是辅助清单审查，不检查行动演出覆盖，不得因清单缺少旅行或工作过程而拒绝。'
+    : EXECUTED_ACTION_COVERAGE_RULES}
 
 [NarrativeFields]
 ${jsonBlock(narrativeFields)}
@@ -295,7 +305,8 @@ ${jsonBlock(review)}`;
   }
 
   return `上一版可播放场景未通过事实或角色审查。请在保留原剧情构思的前提下做最小范围修复，并只输出项目规定标签。
-必须逐条落实 corrections；精确时间、记录细节、物证细节和因果陈述只能保留 WriterPacket 的 authorizedFacts、playerKnownFacts、continuityContext.publicContinuity、authorizedBackgroundFacts 或 authorizedActionOutcomes 实际支持的有限内容。authorizedActionOutcomes 可作为事实来源，但不得补写其 text 未包含的死因、责任或过程。approvedBackgroundFactProposals 只有在其 evidenceText 已经逐字出现在被拒正文的实际 maintext 演出中时才可继续保留，不得由选项、摘要、提示或调查列表激活。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
+${EXECUTED_ACTION_COVERAGE_RULES}
+必须逐条落实 corrections；精确时间、记录细节、物证细节和因果陈述只能保留 WriterPacket 的 authorizedFacts、playerKnownFacts、continuityContext.publicContinuity、authorizedBackgroundFacts 或 authorizedActionOutcomes 实际支持的有限内容。authorizedActionOutcomes 可作为事实来源，但不得补写其 text 未包含的死因、责任或案件/历史经过；这不禁止符合 resolvedAction 且不产生新事实的当下工作概述。approvedBackgroundFactProposals 只有在其 evidenceText 已经逐字出现在被拒正文的实际 maintext 演出中时才可继续保留，不得由选项、摘要、提示或调查列表激活。除修复违规所必需的句子外，保留原有事件顺序、人物、场景、选项、状态和剧情功能。
 事实纠错优先于保留原构思：即使已批准 plan 中含同样的无依据推断，也必须同步纠正台词、旁白、hint、sum 与选项前提，改成授权证据实际支持的有限结论；不要在后文换个措辞恢复已删除的断言。
 如果 violations 同时包含文风重复，只改写被点名的句子、意象或动作模板，不得借此改动剧情节点。
 stance=lies-about 的角色只能明确否认、质疑证据或普通拒答；不得用台词、沉默、眼神、动作或旁白形成半自白。
@@ -354,6 +365,8 @@ export function buildWriterUserPrompt(
   presentationContext: Record<string, unknown>,
 ): string {
   return `请生成可播放场景。
+
+${EXECUTED_ACTION_COVERAGE_RULES}
 
 生活史规则：旧经历只能来自 authorizedBackgroundFacts、approvedBackgroundFactProposals 或计划中逐字引用的已选剧情记忆。不得把侦探的真实调查认知写成伪装身份可表达的信息。若采用 approvedBackgroundFactProposals，正文必须逐字出现对应 evidenceText，作为原子落库证据；未采用则不要暗示该提案已经发生。
 

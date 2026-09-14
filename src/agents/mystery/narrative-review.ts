@@ -418,7 +418,7 @@ export function removeUngroundedNarrativeLines(
 const NARRATIVE_CONTINUITY_REVIEW = `你正在审核实际正文与已知公开连续性，而不是要求每句正文都成为新的事实提案。
 continuityContext.publicContinuity 是已经展示的可信开局事件；authorizedBackgroundFacts 是已授权生活史，二者均可自然重述，无须再次 proposal。clock 是当前时钟；recentHistory/memory 用于检查承接，不把玩家愿望或猜测变成事实。
 若 publicContinuity 已展示今早06:50的消息，允许“她今早发消息说今天不去学校”或“她六点五十说今天不去学校”等有限转述；06:50与六点五十是同一时间，消息发送时间不必出现在引号内的消息正文中。转述只证明她这样说过，不能推成确认未到校、已请假或新的购买/去向记录。逐个局部断言比对来源，不要因句中有“她今早”就把整句判成未授权往事。
-只拒绝明确新增且无授权的事实、物证、具体旧事件、时间线矛盾或人物知识/身份越界。例如擅自确认考勤、请假条、过去具体购买记录，或与已展示今早06:50消息矛盾的说法。请指出具体原句及缺失来源或冲突来源。
+事实方面只拒绝明确新增且无授权的事实、物证、具体旧事件、时间线矛盾或人物知识/身份越界。例如擅自确认考勤、请假条、过去具体购买记录，或与已展示今早06:50消息矛盾的说法。请指出具体原句及缺失来源或冲突来源。对实际可播放正文还需按 resolvedAction.segments 检查已执行行动的过程覆盖；这不是要求复述全部事实或按字数评价。辅助清单不承担行动演出覆盖。
 普通当下服务动作、当前对话、递交商品和关怀性口吻本身不构成新案件事实；不要因涉及学校、牛奶或善意关怀就拒绝。不要以未逐字复述计划或语气偏好代替事实审核。
 发现违规时要求完整修复问答、旁白和依赖选项，不允许静默删除整条台词使对话断链。
 本调用复核正文，前述三字段示例不适用于本调用。必须返回 approved、violations、corrections、assertionAudit、continuityAudit 五个顶层字段。assertionAudit 必须含 reviewedFields 与 assertions；每条 assertion 必须完整返回 field、quote、proposition、status、citations、reason。continuityAudit 必须含 reviewed=true 以及 disclosures、beliefs、commitments 三个数组。不得省略嵌套字段、编造字段值或用顶层 approved 代替逐项审查。`;
