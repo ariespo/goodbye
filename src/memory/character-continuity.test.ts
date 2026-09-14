@@ -694,6 +694,46 @@ describe('character continuity audit validation', () => {
     }).approved).toBe(false);
   });
 
+  it.each([
+    ['旁白', '赵刚已经拒绝交出值班表。', '交出值班表', false],
+    ['旁白', '赵刚拒绝交出值班表了。', '交出值班表', false],
+    ['旁白', '赵刚刚刚拒绝交出值班表。', '交出值班表', false],
+    ['赵刚', '我已经拒绝交出值班表。', '交出值班表', false],
+    ['赵刚', '我拒绝交出值班表了。', '交出值班表', false],
+    ['赵刚', '我已经拒绝把值班表交给你了。', '把值班表交给玩家', false],
+    ['赵刚', '我把拒绝交出值班表的原因说清楚。', '交出值班表', false],
+    ['旁白', '赵刚交出值班表。', '交出值班表', true],
+    ['旁白', '赵刚已经交出值班表。', '交出值班表', true],
+    ['赵刚', '我已经交出值班表。', '交出值班表', true],
+    ['赵刚', '我交出值班表了。', '交出值班表', true],
+    ['赵刚', '我已经把值班表交给你了。', '把值班表交给玩家', true],
+    ['赵刚', '我把值班表交给你。', '把值班表交给玩家', true],
+  ])('binds fulfillment to the promised predicate: %s %s', (speaker, text, action, approved) => {
+    const commitment: CommitmentRecord = {
+      id: 'commitment:existing:0', cycleCount: 1, actorId: 'detective-a', recipientId: 'player',
+      action, locationId: 'school', dueAt: '2024-09-09T10:00:00',
+      status: 'active', sourceEventId: 'turn:promise', evidenceQuote: '我会交给你',
+    };
+    const result = validateCharacterContinuityAudit({
+      audit: reviewed({ commitments: [{
+        operation: 'fulfill', existingCommitmentId: commitment.id, actorId: 'detective-a', recipientId: 'player',
+        evidence: [{ lineIndex: 0, quote: text }],
+      }] }),
+      evidence: evidence({
+        candidateText: `对话|${speaker}|calm|${text}`, scene: scene([speaker, text]),
+        assertions: [], audience: ['detective-a'],
+      }),
+      memory: normalizeWorldMemory({ cycleCount: 1, worldMemory: {
+        ...normalizeWorldMemory({ cycleCount: 1 }), commitments: [commitment],
+      } }),
+      cycleCount: 1,
+    });
+    expect(result.approved).toBe(approved);
+    expect(result.effects?.commitmentOperations ?? []).toEqual(approved
+      ? [expect.objectContaining({ operation: 'fulfill', existingCommitmentId: commitment.id })]
+      : []);
+  });
+
   it('uses only a cited program binding and keeps public aliases opaque when bindings drift', () => {
     const candidate = evidence({
       candidateText: '对话|玩家|calm|赵刚，我看到收据了。\n对话|赵刚|calm|听见了。',

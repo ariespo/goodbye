@@ -414,8 +414,9 @@ function actionGrounded(action: string, text: string): boolean {
   return expected.length >= 2 && (rendered.includes(expected) || expected.includes(rendered));
 }
 
-function narratedActionIsPerformed(action: string, actorId: string, text: string): boolean {
-  const actorAlias = (CHARACTER_MENTIONS[actorId] ?? [actorId])
+function actorActionIsPerformed(action: string, actorId: string, text: string, actorSpoken: boolean): boolean {
+  const aliases = CHARACTER_MENTIONS[actorId] ?? [actorId];
+  const actorAlias = (actorSpoken ? ['我', '本人', ...aliases] : aliases)
     .find(alias => text.trim().startsWith(alias));
   if (!actorAlias) return false;
   const predicate = text.trim().slice(actorAlias.length).trim()
@@ -459,14 +460,13 @@ function actionEvidence(
       || (line.speakerId === null && lineMentionsCharacter(text, actorId));
     const nonPerformance = /(?:还没有|尚未|并未|未曾|没有|还没|没能|不能|无法|不曾|尚没有)/u.test(text);
     const prospective = /(?:如果|假如|要是|可能|也许|或许|会|将要|准备|打算|计划|稍后|等会|待会|到时|想要|想|愿意|承诺|答应|同意|决定|试图|尝试|声称|表示)|[？?]/u.test(text);
-    const narratedPerformance = line.speakerId === null
-      && narratedActionIsPerformed(action, actorId, text);
+    const narratedPerformance = line.speakerId === null;
     const directPerformance = line.speakerId === actorId && /(?:^|[，,。！？!?；;])\s*我(?:已经|刚刚|刚才|终于)?把/u.test(text);
     const completedPerformance = /(?:已经|刚刚|刚才|终于|完成|完毕|办完|做完)|了[。！？!?；;]?$/u.test(text.trim());
     return actorRendered && !nonPerformance && !prospective
       && !/^(?:到达|来到|抵达|赴约|等待|等到)/u.test(text.trim())
       && (narratedPerformance || directPerformance || completedPerformance)
-      && actionGrounded(action, text);
+      && actorActionIsPerformed(action, actorId, text, line.speakerId === actorId);
   });
 }
 
