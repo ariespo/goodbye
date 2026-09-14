@@ -25,6 +25,7 @@ describe('completeParsedStructured', () => {
     for (const [key, expected] of [
       ['https://api.deepseek.com/v1|deepseek-v4-flash', 'json_object'],
       ['https://oneapi.hakoyu.com/v1|deepseek-flash【果汁】', 'json_object'],
+      ['https://oneapi.hakoyu.com/v1|deepseek-flash-none【果汁】', 'json_object'],
       ['https://oneapi.hakoyu.com.evil.example/v1|deepseek-flash【果汁】', 'json_schema'],
       ['https://proxy.example/v1|deepseek-flash【果汁】', 'json_schema'],
       ['https://proxy.example/v1|deepseek-v4-flash', 'json_schema'],
