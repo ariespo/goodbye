@@ -381,6 +381,7 @@ export interface ChatMessage {
   variables: DynamicRecord;
   /** 玩家选择的程序元数据，用于重试/重演；不承载模型报价或剩余成本。 */
   actionRequest?: {
+    playerActionIntent?: import('../engine/player-action-intent').ActionIntentSnapshot;
     resumeActionId?: string;
     originalInput?: string;
     selection?: { actionId?: string; opportunityId?: string;

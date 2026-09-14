@@ -3,6 +3,7 @@ import { assertTurnActive, runStateWithFallback } from '../utils/turn-lifecycle'
 import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
 import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
 import { validateNarrativeContract } from '../engine/narrative-contract';
+import { resolvePlayerActionIntent, type ActionIntentSnapshot } from '../engine/player-action-intent';
 import { selectPresentedActionFacts, type ActionAuthorityContext } from '../agents/mystery/action-authority';
 
 import { useCallback, useRef } from 'react';
@@ -96,6 +97,7 @@ import { commitmentBoundariesFromVariables } from '../engine/commitment-boundari
 import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
 import {
   buildContinuationChoice,
+  buildActionOptionBindings,
   projectPublicActionOutcome,
   resolveChecklistAction,
   validatedOptionBinding,
@@ -193,6 +195,7 @@ let pendingActionCost: {
 } | null = null;
 
 export interface SendMessageOptions {
+  playerActionIntent?: ActionIntentSnapshot;
   /** 仅恢复当前轮回中匹配的未完成行动；不接受调用方提供的剩余成本。 */
   resumeActionId?: string;
   isReroll?: boolean;
@@ -267,6 +270,7 @@ export function useGameLoop() {
         ? pendingActionCost : null;
       const savedRequest = (isRetry || isReroll) ? [...baseMessages].reverse().find(message => message.role === 'user')?.actionRequest : undefined;
       const actionRequest: ChatMessage['actionRequest'] = savedRequest ?? {
+        playerActionIntent: opts?.playerActionIntent,
         originalInput: selectedAction?.originalInput,
         selection: selectedAction?.selection,
         narrativeContext: selectedAction?.narrativeContext,
@@ -326,6 +330,7 @@ export function useGameLoop() {
         history: excludeCurrentInputFromHistory(messages, userInput), pendingNarrativeContext,
         hasPendingAction: actionRequest.inputOrigin === 'menu',
         actionSelection: actionRequest.selection, originalActionInput: actionRequest.originalInput,
+        playerActionIntent: actionRequest.playerActionIntent,
         resumeActionId: actionRequest.resumeActionId,
       });
       const { intentPolicy, hadPendingDeathNews, playerIdentity } = preparation;
@@ -621,6 +626,12 @@ export function useGameLoop() {
         } else {
           parsed.optionBindings = undefined;
         }
+        if (!transaction.failure && !transaction.ending) {
+          const priorityBindings = parsed.optionBindings ?? [];
+          parsed.optionBindings = [...priorityBindings, ...buildActionOptionBindings(
+            parsed.options, finalLocationId, transaction.gameStatus.time, turnId,
+          ).filter(binding => !priorityBindings.some(priority => priority.optionIndex === binding.optionIndex))];
+        }
         parsed.actionOutcome = actionOutcome;
 
         const assistantMessage: ChatMessage = {
@@ -793,6 +804,8 @@ export function useGameLoop() {
             );
             const speculative = buildTurnPreparation({
               userInput: firstOption, settings, activePreset, variables: mergedVariables,
+              playerActionIntent: parsed.optionBindings?.find(binding => binding.optionIndex === 0)?.playerActionIntent,
+              resumeActionId: parsed.optionBindings?.find(binding => binding.optionIndex === 0)?.continuationId,
               gameStatus: nextStatus, currentState: { ...committed.game.currentState, background: terminalBackground },
               endingCheckContext: committed.game.endingCheckContext, history: finalMessages,
             });
@@ -834,6 +847,14 @@ export function useGameLoop() {
                 pendingDeathNews: hadPendingDeathNews,
                 resolvedAction: preparedTurn?.writerPacket.resolvedAction,
               }));
+              const optionResolution = preparedTurn?.writerPacket.resolvedAction;
+              for (const [index, option] of candidateParseState.parsed.options.entries()) {
+                if (!resolvePlayerActionIntent(option, optionResolution?.endLocationId ?? mysteryLocation,
+                  optionResolution ? new Date(optionResolution.endTime) : game.gameStatus.time)) {
+                  candidateValidationErrors.push({ code: 'UNRESOLVED_OPTION_ACTION',
+                    message: `选项${index + 1}“${option}”的目的地无法确认。仅修正该选项的表述，使其明确对应获准计划中的注册地点与目标；不得把它换成原地行动或新增目标。` });
+                }
+              }
               if (candidateScene && actionNarrativeContext) {
                 const contextError = actionNarrativeContextError(actionNarrativeContext, candidateScene);
                 if (contextError) {
@@ -1303,7 +1324,9 @@ export function useGameLoop() {
       if (!provided || !stored || optionAtIndex !== optionText
         || provided.optionText !== stored.optionText
         || provided.actionId !== stored.actionId
-        || provided.continuationId !== stored.continuationId) {
+        || provided.continuationId !== stored.continuationId
+        || provided.unavailable || stored.unavailable
+        || JSON.stringify(provided.playerActionIntent) !== JSON.stringify(stored.playerActionIntent)) {
         liveStore.actions.addNotification({ type: 'warning', message: '这个选项已更新，请重新选择。', duration: 3000 });
         return false;
       }
@@ -1366,7 +1389,7 @@ export function useGameLoop() {
         liveStore.actions.setShowApiGuide(true);
         return false;
       }
-      void sendMessage(optionText, { resumeActionId: stored.continuationId });
+      void sendMessage(optionText, { resumeActionId: stored.continuationId, playerActionIntent: stored.playerActionIntent });
       return true;
     }
     const settings = liveStore.tavern.settings;

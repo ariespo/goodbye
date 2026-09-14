@@ -21,6 +21,7 @@ import { normalizeWorldMemory } from '../memory/world-memory';
 import { buildMapTravelTransaction, prepareMapTravel } from '../utils/mapTravel';
 import { commitGameTransaction } from '../utils/gameTransactionStore';
 import { resolveSavedParsedContent } from '../utils/gameSession';
+import { buildActionOptionBindings, acceptedActionUiFromMessage } from '../utils/actionPresentation';
 
 vi.mock('../agents/mystery', async original => ({ ...await original<typeof import('../agents/mystery')>(),
   prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(), reviewNarrativeAgainstWriterPacket: vi.fn(), reviewNarrativeStyle: vi.fn() }));
@@ -114,7 +115,7 @@ describe('priced investigation menu acceptance', () => {
         citations: [{ sourceId: 'fact:F002:atmosphere', quote: finding }], reason: 'authorized school inquiry' }],
     } });
     vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
-      callbacks.onToken(`<maintext>场景|school-day\n对话|门卫|calm|${finding}</maintext><option>继续调查\n返回</option><sum>询问门卫。</sum><vars>{}</vars>`);
+      callbacks.onToken(`<maintext>场景|school-day\n对话|门卫|calm|${finding}</maintext><option>继续调查\n返回公寓</option><sum>询问门卫。</sum><vars>{}</vars>`);
       await callbacks.onComplete();
     });
     const menu = { ...maintextToScene('对话|旁白|calm|你准备出门。'), investigateItems: [{
@@ -206,7 +207,8 @@ describe('priced investigation menu acceptance', () => {
       remaining: { workMinutes: 35, travelMinutes: 0, totalMinutes: 35 },
     });
     expect(interrupted.api.parsedContent.options[0]).toBe('处理眼前的事情');
-    expect(interrupted.api.parsedContent.optionBindings).toBeUndefined();
+    expect(interrupted.api.parsedContent.optionBindings?.[0]).toMatchObject({ optionText: '处理眼前的事情' });
+    expect(interrupted.api.parsedContent.optionBindings?.[0]?.continuationId).toBeUndefined();
 
     const reloadedScene = rebuildSceneFromChat(interrupted.tavern.chats[0]);
     firstHook.unmount();
@@ -265,6 +267,56 @@ beforeEach(() => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('resolved action at the real hook boundary', () => {
+  it('persists a normal option intent across Writer failure and retry without changing its destination', async () => {
+    const optionText = '前往中学询问门卫';
+    const bindings = buildActionOptionBindings([optionText], 'home', new Date('2024-09-09T08:00:00'), 'selected-scene');
+    useGameStore.setState(state => ({ api: { ...state.api,
+      parsedContent: { ...state.api.parsedContent, options: [optionText], optionBindings: bindings } } }));
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, complete: async messages =>
+      messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性') ? JSON.stringify(approved)
+        : JSON.stringify({ turnGoal: '询问门卫', tone: '克制', beats: [{ id: 'b', purpose: '询问', description: '在校门口询问门卫。',
+          locationId: 'school', speakerIds: ['school-guard'] }], revelations: [], assetRequests: [],
+          optionIntents: [{ id: 'o1', intent: '继续调查', tone: '克制', expectedPressure: 'low' },
+            { id: 'o2', intent: '休息一会儿', tone: '克制', expectedPressure: 'low' }] }) }));
+    vi.mocked(streamChatCompletion).mockRejectedValueOnce(new Error('temporary writer failure'));
+    const { result, unmount } = renderHook(() => useGameLoop());
+    act(() => { expect(result.current.selectOption(optionText, bindings[0])).toBe(true); });
+    await waitFor(() => expect(useGameStore.getState().api.turnRecovery.phase).not.toBe('idle'));
+    const request = useGameStore.getState().tavern.chats[0].messages.at(-1)?.actionRequest;
+    expect(request?.playerActionIntent).toEqual(bindings[0].playerActionIntent);
+    expect(useGameStore.getState().tavern.variables.time).toBe('2024-09-09T08:00:00');
+    vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken(prose.replace('场景|home-day\n对话|旁白|calm|你在房间里查看四周。',
+        '场景|school-day\n对话|门卫|calm|你来问文穗的事？我先听你说。'));
+      await callbacks.onComplete();
+    });
+    await act(async () => { await result.current.retryTurn(); });
+    const state = useGameStore.getState();
+    expect(state.game.history).toHaveLength(1);
+    expect(state.tavern.variables.location).toBe('school');
+    expect(state.tavern.variables.time).toBe('2024-09-09T09:05:00');
+    expect(state.tavern.chats[0].messages.filter(message => message.role === 'user')).toHaveLength(1);
+    expect(vi.mocked(runStateAgent).mock.calls[0][0].resolvedAction?.endLocationId).toBe('school');
+    const assistant = state.tavern.chats[0].messages.at(-1)!;
+    expect(acceptedActionUiFromMessage(assistant, state.api.parsedContent.options).optionBindings).toEqual(state.api.parsedContent.optionBindings);
+    expect(streamChatCompletion).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('rejects a changed normal option binding before dispatch', () => {
+    const optionText = '前往中学询问门卫';
+    const bindings = buildActionOptionBindings([optionText], 'home', new Date('2024-09-09T08:00:00'), 's');
+    useGameStore.setState(state => ({ api: { ...state.api,
+      parsedContent: { ...state.api.parsedContent, options: [optionText], optionBindings: bindings } } }));
+    const changed = structuredClone(bindings[0]);
+    changed.playerActionIntent!.steps[0].locationId = 'senpai-building';
+    const { result, unmount } = renderHook(() => useGameLoop());
+    expect(result.current.selectOption(optionText, changed)).toBe(false);
+    expect(streamChatCompletion).not.toHaveBeenCalled();
+    expect(useGameStore.getState().game.history).toHaveLength(0);
+    unmount();
+  });
+
   it.each([true, false])('sends a midnight mismatch to Writer before commit (repair succeeds: %s)', async repaired => {
     const time = '2024-09-09T23:30:00';
     useGameStore.setState(state => ({

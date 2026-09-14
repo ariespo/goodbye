@@ -493,6 +493,23 @@ async function runMysteryPipeline(
     DIRECTOR_PLAN_RESPONSE_FORMAT,
     parsePlan,
   ));
+  // Only an exceptional action mismatch gets one local repair. The repaired
+  // plan still traverses all ordinary fact/pacing gates below.
+  if (options.actionAuthority) {
+    try {
+      buildActionAuthorityInput(directorPlan, options.actionAuthority, 'intent-check');
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      if (!/导演行动阶段与玩家原始意图|行动地点未注册或与玩家请求/.test(reason)) throw error;
+      directorAttempts += 1;
+      observe.setDirectorAttempts(directorAttempts);
+      directorPlan = await timeStage('director-repair', () => completeParsed(complete, supportKey, [
+        ...directorMessages,
+        { role: 'user', content: `只修复下列已生成计划中的行动不一致，保留原获准事实范围；不得改写玩家原始意图或发明目的地。原始输入：${options.actionAuthority!.originalInput}\n原计划：${JSON.stringify(directorPlan)}\n错误：${reason}\n仅输出完整修复计划 JSON。` },
+      ], { temperature: 0.1, maxTokens: getMaxOutputTokens(options.preset) }, DIRECTOR_PLAN_RESPONSE_FORMAT, parsePlan));
+      buildActionAuthorityInput(directorPlan, options.actionAuthority, 'intent-recheck');
+    }
+  }
   directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
   observe.setDirectorPlan(directorPlan);
   let hardReview = await timeStage('hard-review', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
@@ -705,6 +722,10 @@ async function runMysteryPipeline(
     }
   }
 
+  const approvedPlanSummary = { planGoal: directorPlan.turnGoal,
+    plannedLocations: [...new Set(directorPlan.beats.flatMap(beat => beat.locationId ? [beat.locationId] : []))],
+    plannedNpcIds: [...new Set(directorPlan.beats.flatMap(beat => beat.speakerIds ?? []))] };
+  const approvedActionSteps = directorPlan.actionSteps ? structuredClone(directorPlan.actionSteps) : undefined;
   let executedContext: ExecutedTurnProjection | undefined;
   let resolvedAction: ResolvedActionOutcome | undefined;
   let pendingActionAuthorization: PendingActionAuthorization | null | undefined;
@@ -761,6 +782,17 @@ async function runMysteryPipeline(
   const writerPacket = buildWriterPacket(directorPlan, writerBrief, writerTurnContext);
   if (resolvedAction) {
     writerPacket.resolvedAction = resolvedAction;
+    writerPacket.actionIntentAudit = {
+      ...approvedPlanSummary,
+      originalInput: options.actionAuthority!.originalInput,
+      startLocationId: options.actionAuthority!.currentLocationId,
+      boundIntent: options.actionAuthority!.playerActionIntent,
+      approvedSteps: approvedActionSteps,
+      executedSteps: resolvedAction.segments.map(segment => ({ kind: segment.step.kind,
+        scope: segment.step.scope, locationId: segment.step.locationId,
+        executedMinutes: segment.executedMinutes, completed: segment.completed })),
+      interruption: resolvedAction.interruption,
+    };
     writerPacket.authorizedActionOutcomes = buildActionOutcomeSources(resolvedAction, executedContext?.narrativeBackground === 'street');
   }
   writerPacket.continuityContext = { ...writerPresentation };

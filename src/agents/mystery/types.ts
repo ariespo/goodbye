@@ -295,6 +295,19 @@ export interface WriterFact {
 }
 
 export interface WriterPacket {
+  actionIntentAudit?: {
+    planGoal: string;
+    plannedLocations: string[];
+    plannedNpcIds: string[];
+    originalInput: string;
+    startLocationId: string;
+    boundIntent?: import('../../engine/player-action-intent').ActionIntentSnapshot;
+    approvedSteps?: DirectorActionStepProposal[];
+    executedSteps: Array<{ kind: import('../../engine/action-resolution').ActionStep['kind'];
+      scope: import('../../engine/action-resolution').ActionScope; locationId: string;
+      executedMinutes: number; completed: boolean }>;
+    interruption?: import('../../engine/action-resolution').ResolvedActionOutcome['interruption'];
+  };
   /** Public clock, accepted history and memory survive both semantic and format repairs. */
   continuityContext?: Record<string, unknown>;
   plan: Omit<DirectorPlan, 'revelations' | 'knowledgeEvents' | 'backgroundFactProposals'>;

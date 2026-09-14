@@ -3,6 +3,9 @@ import { resolveAction } from '../engine/action-resolution';
 import {
   projectPublicActionOutcome,
   resolveChecklistAction,
+  buildActionOptionBindings,
+  validatedOptionBinding,
+  acceptedActionUiFromMessage,
   type ChecklistActionRow,
 } from './actionPresentation';
 
@@ -17,6 +20,35 @@ const normalSchoolInvestigation: ChecklistActionRow = {
   scope: 'normal',
   locationId: 'school',
 };
+
+describe('ordinary narrative option identity', () => {
+  it('binds the displayed destination before selection and preserves it on reload', () => {
+    const options = ['前往旧街区向周大爷打听清晨动静', '在这里休息一会儿'];
+    const bindings = buildActionOptionBindings(options, 'senpai-building', new Date('2024-09-09T14:10:00'), 'scene-1');
+    expect(bindings[0]).toMatchObject({ optionIndex: 0, optionText: options[0], actionId: 'scene-1:option:0',
+      playerActionIntent: { originalInput: options[0], startLocationId: 'senpai-building',
+        steps: [expect.objectContaining({ locationId: 'old-man-building' })] } });
+    expect(bindings[1].playerActionIntent?.steps).toEqual([expect.objectContaining({ kind: 'rest', locationId: 'senpai-building' })]);
+    expect(acceptedActionUiFromMessage({ parsed: { options, optionBindings: bindings }, variables: {} } as never, options).optionBindings)
+      .toEqual(bindings);
+    expect(validatedOptionBinding(bindings[0], 0, '留在商住楼')).toBeUndefined();
+    const tampered = structuredClone(bindings[0]);
+    tampered.playerActionIntent!.steps[0].locationId = 'home';
+    expect(validatedOptionBinding(tampered, 0, options[0])).toBeUndefined();
+  });
+
+  it('does not silently downgrade an invalid persisted intent into a free-text option', () => {
+    const options = ['前往中学询问门卫'];
+    const broken = { optionIndex: 0, optionText: options[0], actionId: 'scene:option:0', playerActionIntent: { version: 999 } };
+    const restored = acceptedActionUiFromMessage({ parsed: { options, optionBindings: [broken] }, variables: {} } as never, options);
+    expect(restored.optionBindings).toEqual([{ optionIndex: 0, optionText: options[0], unavailable: true }]);
+  });
+
+  it('rejects an unresolved travel option rather than binding the current location', () => {
+    expect(() => buildActionOptionBindings(['前往完全未知的地方调查'], 'home', new Date('2024-09-09T08:00:00'), 's'))
+      .toThrow(/目的地|行动|选项/);
+  });
+});
 
 describe('resolveChecklistAction', () => {
   it('quotes a normal investigation plus the actual home-to-school leg from program metadata', () => {

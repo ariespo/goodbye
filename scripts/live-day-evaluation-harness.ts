@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { extractNarrativeFields } from '../src/agents/mystery/fact-assertion-review';
+import { readActionIntentSnapshot } from '../src/engine/player-action-intent';
 
 export type DayEvaluationMode = 'standard' | 'strict' | 'legacy';
 
@@ -124,7 +125,8 @@ export function assertResumeCompatible(input: {
     && checkpointCycle !== input.expected.baselineCycle
     && checkpointCycle === storedCycle && checkpointCycle === resultFinalCycle;
   if (artifactsAgreeOnAdvancedCycle
-    || result.stopReason === 'completed-calendar-day' || asRecord(result.acceptance).passed === true) {
+    || result.stopReason === 'completed-calendar-day' || result.stopReason === 'completed-resource-loop'
+    || asRecord(result.acceptance).passed === true) {
     throw new Error('completed segment cannot use DAY_RESUME; use DAY_ADVANCE with immutable parent artifacts');
   }
   if (finiteNumber(checkpoint.baselineCycle) !== input.expected.baselineCycle
@@ -316,8 +318,19 @@ export function assertCampaignAdvance(input: {
     || checkpointCycle !== input.expected.baselineCycle || storedCycle !== checkpointCycle) {
     throw new Error('parent checkpoint does not advance exactly one completed segment into the requested cycle');
   }
-  if (result.stopReason !== 'completed-calendar-day' || asRecord(result.acceptance).passed !== true) {
-    throw new Error('campaign advance requires a passed natural calendar day');
+  if ((result.stopReason !== 'completed-calendar-day' && result.stopReason !== 'completed-resource-loop')
+    || asRecord(result.acceptance).passed !== true) {
+    throw new Error('campaign advance requires a passed legal completed loop');
+  }
+  if (result.stopReason === 'completed-resource-loop') {
+    const verified = assessFullDayAcceptance({ baselineCycle: parentBaseline,
+      finalCycle: input.expected.baselineCycle, successfulRows: finiteNumber(result.successful) ?? 0,
+      stopReason: result.stopReason, resetEvidence: result.resetEvidence as CycleResetEvidence | undefined,
+      programMenuRequired: input.expected.profile === 'program-menu',
+      programMenuSelections: finiteNumber(result.programMenuSelections) ?? 0,
+      optionChoiceRequired: input.expected.profile === 'options',
+      optionChoiceSelections: finiteNumber(result.optionChoiceSelections) ?? 0 });
+    if (!verified.passed) throw new Error(`resource parent completion evidence is invalid: ${verified.reasons.join('; ')}`);
   }
   if (!sameLineage(checkpoint.lineage, result.lineage)) {
     throw new Error('parent checkpoint and result campaign lineage disagree');
@@ -468,10 +481,13 @@ export function compareQuoteToResolution(selectedProgramAction: unknown, resolve
 function actionRequestIdentity(value: unknown): unknown {
   const request = asRecord(value);
   const selection = asRecord(request.selection);
+  const playerActionIntent = readActionIntentSnapshot(request.playerActionIntent);
+  if (request.playerActionIntent != null && !playerActionIntent) return null;
   return {
     inputOrigin: request.inputOrigin ?? null,
     originalInput: request.originalInput ?? null,
     resumeActionId: request.resumeActionId ?? null,
+    playerActionIntent,
     selection: Object.keys(selection).length === 0 ? null : {
       actionId: selection.actionId ?? null,
       opportunityId: selection.opportunityId ?? null,
@@ -484,22 +500,33 @@ function actionRequestIdentity(value: unknown): unknown {
 }
 
 export function sameActionRequestIdentity(before: unknown, after: unknown): boolean {
-  return JSON.stringify(actionRequestIdentity(before)) === JSON.stringify(actionRequestIdentity(after));
+  const beforeIdentity = actionRequestIdentity(before);
+  const afterIdentity = actionRequestIdentity(after);
+  return beforeIdentity !== null && afterIdentity !== null
+    && JSON.stringify(beforeIdentity) === JSON.stringify(afterIdentity);
 }
 
-export function classifyCycleReset(input: {
+export interface CycleResetEvidence {
   reason: string;
   beforeResetTime: string;
   afterResetTime: string;
   baselineCycle: number;
   afterCycle: number;
-}): string {
+  afterLocation?: string;
+  beforeStamina?: number;
+  beforeSanity?: number;
+}
+
+export function classifyCycleReset(input: CycleResetEvidence): string {
   const clockMinutes = (value: string): number | null => {
-    const match = value.match(/T(\d{2}):(\d{2})(?::\d{2})?/u);
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
+    const match = value.match(/T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:Z|[+-]\d{2}:\d{2})?$/u);
     if (!match) return null;
     const hours = Number(match[1]);
     const minutes = Number(match[2]);
-    return hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60 ? hours * 60 + minutes : null;
+    const seconds = Number(match[3] ?? 0) + Number(`0.${match[4] ?? 0}`);
+    return hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60
+      && seconds < 60 ? hours * 60 + minutes + seconds / 60 : null;
   };
   const reachedMidnight = clockMinutes(input.beforeResetTime) === 0;
   const returnedToMorning = clockMinutes(input.afterResetTime) === 8 * 60;
@@ -508,7 +535,14 @@ export function classifyCycleReset(input: {
     return reachedMidnight && returnedToMorning && advancedOneCycle
       ? 'completed-calendar-day' : 'invalid-calendar-reset';
   }
-  if (/stamina|sanity|resource|exhaust/iu.test(input.reason)) return `early-resource-reset:${input.reason}`;
+  if (/stamina|sanity|resource|exhaust/iu.test(input.reason)) {
+    const depletedValue = input.reason === 'stamina' ? input.beforeStamina
+      : input.reason === 'sanity' ? input.beforeSanity : undefined;
+    return typeof depletedValue === 'number' && Number.isFinite(depletedValue) && depletedValue <= 0
+      && clockMinutes(input.beforeResetTime) !== null && returnedToMorning && advancedOneCycle
+      && input.afterLocation === 'home'
+      ? 'completed-resource-loop' : `invalid-resource-reset:${input.reason}`;
+  }
   return `early-reset:${input.reason}`;
 }
 
@@ -648,22 +682,30 @@ export function assessFullDayAcceptance(input: {
   finalCycle: number;
   successfulRows: number;
   stopReason: string;
+  resetEvidence?: CycleResetEvidence;
   programMenuRequired?: boolean;
   programMenuSelections?: number;
   optionChoiceRequired?: boolean;
   optionChoiceSelections?: number;
-}): { passed: boolean; reasons: string[] } {
+}): { passed: boolean; reasons: string[]; completionKind: 'calendar' | 'resource' | 'none'; calendarDayCompleted: boolean } {
   const reasons: string[] = [];
-  if (input.stopReason !== 'completed-calendar-day') reasons.push(`stop reason was ${input.stopReason}`);
+  const resourceCompleted = input.stopReason === 'completed-resource-loop' && input.resetEvidence !== undefined
+    && input.resetEvidence !== null && input.resetEvidence.baselineCycle === input.baselineCycle
+    && input.resetEvidence.afterCycle === input.finalCycle
+    && classifyCycleReset(input.resetEvidence) === 'completed-resource-loop';
+  const calendarCompleted = input.stopReason === 'completed-calendar-day';
+  if (!calendarCompleted && !resourceCompleted) reasons.push(`stop reason was ${input.stopReason}; legal reset evidence required`);
   if (input.finalCycle !== input.baselineCycle + 1) {
-    reasons.push(`cycle advanced from ${input.baselineCycle} to ${input.finalCycle}, expected exactly one completed day`);
+    reasons.push(`cycle advanced from ${input.baselineCycle} to ${input.finalCycle}, expected exactly one completed loop`);
   }
-  if (input.successfulRows < 2) reasons.push('a single accepted row is not full-day evidence');
+  if (!Number.isSafeInteger(input.successfulRows) || input.successfulRows < 2) reasons.push('at least two accepted rows are required for loop evidence');
   if (input.programMenuRequired && (input.programMenuSelections ?? 0) < 1) {
     reasons.push('program-menu profile did not execute performAction');
   }
   if (input.optionChoiceRequired && (input.optionChoiceSelections ?? 0) < 1) {
     reasons.push('options profile did not execute an accepted selectOption choice');
   }
-  return { passed: reasons.length === 0, reasons };
+  return { passed: reasons.length === 0, reasons,
+    completionKind: calendarCompleted ? 'calendar' : resourceCompleted ? 'resource' : 'none',
+    calendarDayCompleted: calendarCompleted };
 }

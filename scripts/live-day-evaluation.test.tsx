@@ -167,8 +167,8 @@ const interactions = [
   '谢谢你替我考虑，但这次我想自己决定。你能把能说的部分直接告诉我吗？',
 ];
 
-describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
-  it(`${label}: requires a naturally completed real-model calendar day`, async () => {
+describe.skipIf(!enabled)('live completed-loop evaluation', () => {
+  it(`${label}: requires a legal real-model loop reset and reports calendar coverage separately`, async () => {
     const key = process.env.DAY_API_KEY ?? process.env.DEEPSEEK_API_KEY;
     if (!key) throw new Error('DAY_API_KEY or DEEPSEEK_API_KEY is required');
     const baseUrl = process.env.DAY_API_BASE_URL ?? 'https://api.deepseek.com/v1';
@@ -279,6 +279,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
     mkdirSync(root, { recursive: true });
     const { result, unmount } = renderHook(() => useGameLoop());
     let stopReason = 'turn-cap';
+    let resetEvidence: Parameters<typeof classifyCycleReset>[0] | undefined;
     let consecutiveFailures = 0;
     let successful = rows.filter(row => row.success).length;
     let programMenuSelections = rows.filter(row => row.actionOrigin === 'program-menu').length;
@@ -288,7 +289,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
       const finalState = snapshot();
       const audit = summarizeAuditRows(rows);
       const acceptance = assessFullDayAcceptance({ baselineCycle: expectedBaselineCycle,
-        finalCycle: Number(finalState.cycleCount), successfulRows: successful, stopReason,
+        finalCycle: Number(finalState.cycleCount), successfulRows: successful, stopReason, resetEvidence,
         programMenuRequired: profile === 'program-menu', programMenuSelections,
         optionChoiceRequired: profile === 'options', optionChoiceSelections });
       const storageBoundary = {
@@ -297,7 +298,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
       };
       writeFileSync(file, serializeScrubbed({ profile, mode, baseUrl, model, diagnosticsEnabled: false,
         provenance, lineage, startState, finalState, stopReason, successful, programMenuSelections, optionChoiceSelections,
-        audit, acceptance, storageBoundary,
+        audit, acceptance, resetEvidence, storageBoundary,
         characterConversationCoverage: 'unrun: no fabricated alive in-person Fumi fixture; legal production route must be determined later',
         rows }, [key]));
       writeFileSync(checkpoint, serializeScrubbed({ provenance, lineage, baselineCycle: expectedBaselineCycle,
@@ -470,10 +471,19 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
           });
           row.resetScene = useGameStore.getState().game.currentScene?.lines;
           row.afterReset = snapshot();
+          resetEvidence = { reason, beforeResetTime, afterResetTime: String(row.afterReset.storyTime ?? ''),
+            baselineCycle: expectedBaselineCycle, afterCycle: Number(row.afterReset.cycleCount),
+            afterLocation: String(row.afterReset.location ?? ''),
+            beforeStamina: beforeReset.stamina, beforeSanity: beforeReset.sanity };
+          stopReason = classifyCycleReset(resetEvidence);
           const afterEvidence = (row.afterReset.persistedEvidence as any) ?? {};
           const afterMemory = afterEvidence.characterContinuity ?? {};
           const commitments = Array.isArray(afterMemory.commitments?.items) ? afterMemory.commitments.items : [];
           row.resetAudit = {
+            classification: stopReason,
+            calendarDayCompleted: stopReason === 'completed-calendar-day',
+            legalLoopCompleted: stopReason === 'completed-calendar-day' || stopReason === 'completed-resource-loop',
+            evidence: resetEvidence,
             returnedTo08Home: String(row.afterReset.storyTime).includes('T08:00') && row.afterReset.location === 'home',
             resourcesReset: row.afterReset.stamina === 100 && row.afterReset.sanity === 70,
             retainedFacts: JSON.stringify(row.afterReset.facts) === JSON.stringify(beforeReset.facts),
@@ -482,8 +492,6 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
             opportunityProgressCleared: afterEvidence.opportunityProgress === null,
             activeCommitmentsAfterReset: commitments.filter((item: any) => item?.status === 'active').map((item: any) => item.id),
           };
-          stopReason = classifyCycleReset({ reason, beforeResetTime, afterResetTime: String(row.afterReset.storyTime ?? ''),
-            baselineCycle: expectedBaselineCycle, afterCycle: Number(row.afterReset.cycleCount) });
         }
         console.log(JSON.stringify({profile,mode:mode.requestedMode,attempt:row.attempt,turn:row.turn,success,
           from:before.time,to:row.after.time,stamina:row.after.stamina,sanity:row.after.sanity,

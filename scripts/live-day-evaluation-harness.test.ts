@@ -108,7 +108,7 @@ describe('live day evaluation harness policy', () => {
     });
     expect(() => assertCampaignAdvance({ expected, checkpoint, result: {
       ...result, stopReason: 'provider-proxy-error', acceptance: { passed: false },
-    }, checkpointText, resultText, parentArtifacts })).toThrow(/passed natural calendar day/);
+    }, checkpointText, resultText, parentArtifacts })).toThrow(/passed legal completed loop/);
     expect(() => assertCampaignAdvance({ expected: { ...expected, testedCommit: 'abcdef1234567890abcdef1234567890abcdef12' },
       checkpoint, result, checkpointText, resultText, parentArtifacts })).toThrow(/tested commit/);
   });
@@ -319,13 +319,99 @@ describe('live day evidence snapshots', () => {
 });
 
 describe('full-day classification and audit statistics', () => {
+  const resourceReset = { reason: 'stamina', beforeResetTime: '2024-09-09T14:00:00',
+    afterResetTime: '2024-09-09T08:00:00', baselineCycle: 3, afterCycle: 4,
+    afterLocation: 'home', beforeStamina: 0, beforeSanity: 35 };
+
+  it.each(['stamina', 'sanity'])('accepts actual %s exhaustion without claiming calendar coverage', reason => {
+    const resetEvidence = { ...resourceReset, reason,
+      beforeStamina: reason === 'stamina' ? 0 : 35, beforeSanity: reason === 'sanity' ? 0 : 35 };
+    expect(classifyCycleReset(resetEvidence)).toBe('completed-resource-loop');
+    expect(assessFullDayAcceptance({ baselineCycle: 3, finalCycle: 4, successfulRows: 12,
+      stopReason: 'completed-resource-loop', resetEvidence })).toMatchObject({
+      passed: true, completionKind: 'resource', calendarDayCompleted: false,
+    });
+  });
+
+  it('preserves the complete bound intent across retry without including unrelated request credentials', () => {
+    const playerActionIntent = { version: 1, originalInput: '询问门卫', startLocationId: 'school',
+      steps: [{ kind: 'inquiry', scope: 'normal', locationId: 'school', targetNpcIds: ['school-guard'] }] };
+    const request = { inputOrigin: 'option', originalInput: '询问门卫', playerActionIntent,
+      apiKey: 'private-before', credentials: { token: 'private-before' } };
+    expect(sameActionRequestIdentity(request, { ...structuredClone(request),
+      apiKey: 'private-after', credentials: { token: 'private-after' } })).toBe(true);
+    for (const intent of [undefined,
+      { ...playerActionIntent, version: 2 },
+      { ...playerActionIntent, originalInput: '询问周大爷' },
+      { ...playerActionIntent, startLocationId: 'home' },
+      { ...playerActionIntent, steps: [{ ...playerActionIntent.steps[0], targetNpcIds: ['old-man'] }] },
+      { ...playerActionIntent, steps: [{ ...playerActionIntent.steps[0], kind: 'search' }] },
+      { ...playerActionIntent, steps: [{ ...playerActionIntent.steps[0], scope: 'deep' }] },
+      { ...playerActionIntent, steps: [{ ...playerActionIntent.steps[0], locationId: 'home' }] },
+    ]) expect(sameActionRequestIdentity(request, { ...request, playerActionIntent: intent })).toBe(false);
+  });
+
+  it('never treats two invalid persisted intent bindings as an unchanged valid retry', () => {
+    const request = { originalInput: '询问门卫', playerActionIntent: { version: 999 } };
+    expect(sameActionRequestIdentity(request, structuredClone(request))).toBe(false);
+    expect(sameActionRequestIdentity(request, { originalInput: '询问门卫' })).toBe(false);
+  });
+
+  it('advances a verified resource parent but rejects missing evidence and historical failed records', () => {
+    const parent = buildEvaluationProvenance({ testedCommit: commit, profile: 'options', mode: parseDayMode('standard'),
+      model: 'route-a', baseUrl: 'https://gateway.example/v1', maxTurns: 90, runTag: 'resource', baselineCycle: 3 });
+    const expected = { ...parent, baselineCycle: 4 };
+    const resetEvidence = { reason: 'sanity', beforeResetTime: '2024-09-09T16:00:00',
+      afterResetTime: '2024-09-09T08:00:00', afterLocation: 'home', beforeSanity: 0, beforeStamina: 40,
+      baselineCycle: 3, afterCycle: 4 };
+    const checkpoint = { provenance: parent, baselineCycle: 3, currentCycle: 4,
+      tavern: { variables: { cycleCount: 4 } }, lineage: { source: 'fresh' } };
+    const result = { provenance: parent, startState: { cycleCount: 3 }, finalState: { cycleCount: 4 },
+      stopReason: 'completed-resource-loop', successful: 12, optionChoiceSelections: 11,
+      acceptance: { passed: true }, resetEvidence, lineage: { source: 'fresh' } };
+    const advance = (candidate: unknown) => assertCampaignAdvance({ expected, checkpoint, result: candidate,
+      checkpointText: JSON.stringify(checkpoint), resultText: JSON.stringify(candidate) });
+    expect(advance(result)).toMatchObject({ source: 'advance', parentBaselineCycle: 3 });
+    expect(() => assertResumeCompatible({ expected: parent, checkpoint, result })).toThrow(/DAY_ADVANCE/);
+    for (const change of [
+      { resetEvidence: undefined }, { resetEvidence: { ...resetEvidence, beforeSanity: 40 } },
+      { successful: 1 }, { optionChoiceSelections: 0 }, { acceptance: { passed: false } },
+      { stopReason: 'early-resource-reset:sanity' },
+    ]) expect(() => advance({ ...result, ...change })).toThrow();
+    expect(() => assertCampaignAdvance({ expected: { ...expected, testedCommit: 'abcdef1234567890abcdef1234567890abcdef12' },
+      checkpoint, result, checkpointText: JSON.stringify(checkpoint), resultText: JSON.stringify(result) })).toThrow(/tested commit/);
+  });
+
+  it.each([
+    { beforeStamina: 1 }, { beforeStamina: undefined }, { beforeStamina: NaN },
+    { reason: 'sanity' }, { reason: 'resource' }, { afterCycle: 5 },
+    { afterLocation: 'school' }, { afterResetTime: '2024-09-09T07:30:00' },
+    { afterResetTime: '2024-09-09T08:00:45' }, { beforeResetTime: 'invalid' },
+  ])('rejects unsupported exhaustion or malformed morning evidence: %j', change => {
+    const resetEvidence = { ...resourceReset, ...change };
+    expect(classifyCycleReset(resetEvidence)).not.toBe('completed-resource-loop');
+    expect(assessFullDayAcceptance({ baselineCycle: 3, finalCycle: 4, successfulRows: 12,
+      stopReason: 'completed-resource-loop', resetEvidence }).passed).toBe(false);
+  });
+
+  it('does not accept an unverified resource label or evidence from another cycle', () => {
+    for (const resetEvidence of [undefined, { ...resourceReset, baselineCycle: 2, afterCycle: 3 }]) {
+      expect(assessFullDayAcceptance({ baselineCycle: 3, finalCycle: 4, successfulRows: 12,
+        stopReason: 'completed-resource-loop', resetEvidence }).passed).toBe(false);
+    }
+  });
+
+  it('accepts exhaustion between minute boundaries while requiring an exact reset clock', () => {
+    expect(classifyCycleReset({ ...resourceReset, beforeResetTime: '2024-09-09T14:00:45.500' }))
+      .toBe('completed-resource-loop');
+  });
   it('recognizes only a natural baseline-relative cycle 3 to 4 calendar completion', () => {
     expect(classifyCycleReset({ reason: 'day-end', beforeResetTime: '2024-09-10T00:00:00',
       afterResetTime: '2024-09-09T08:00:00', baselineCycle: 3, afterCycle: 4 }))
       .toBe('completed-calendar-day');
     expect(classifyCycleReset({ reason: 'stamina-depleted', beforeResetTime: '2024-09-09T14:00:00.000Z',
       afterResetTime: '2024-09-09T08:00:00', baselineCycle: 3, afterCycle: 4 }))
-      .toBe('early-resource-reset:stamina-depleted');
+      .toBe('invalid-resource-reset:stamina-depleted');
     expect(classifyCycleReset({ reason: 'day-end', beforeResetTime: '2024-09-09T14:00:00.000Z',
       afterResetTime: '2024-09-09T08:00:00', baselineCycle: 3, afterCycle: 4 }))
       .toBe('invalid-calendar-reset');
@@ -340,7 +426,8 @@ describe('full-day classification and audit statistics', () => {
         .toBe(false);
     }
     expect(assessFullDayAcceptance({ baselineCycle: 3, finalCycle: 4, successfulRows: 12,
-      stopReason: 'completed-calendar-day' })).toEqual({ passed: true, reasons: [] });
+      stopReason: 'completed-calendar-day' })).toEqual({ passed: true, reasons: [],
+        completionKind: 'calendar', calendarDayCompleted: true });
   });
 
   it('treats 5-8 investigations and 10-16 major actions as reported targets rather than caps', () => {

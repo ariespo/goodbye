@@ -1,5 +1,6 @@
 import { getLocationById } from '../data/locations';
 import { resolveActionNarrativeContext } from '../engine/action-narrative-context';
+import { readActionIntentSnapshot, resolvePlayerActionIntent, type ActionIntentSnapshot } from '../engine/player-action-intent';
 import {
   quoteActionSteps,
   type ActionScope,
@@ -52,6 +53,19 @@ export interface ActionOptionBinding {
   optionText: string;
   actionId?: string;
   continuationId?: string;
+  playerActionIntent?: ActionIntentSnapshot;
+  /** Invalid persisted metadata must remain unavailable rather than become free text. */
+  unavailable?: true;
+}
+
+export function buildActionOptionBindings(
+  options: readonly string[], locationId: string, time: Date, sceneId: string,
+): ActionOptionBinding[] {
+  return options.map((optionText, optionIndex) => {
+    const playerActionIntent = resolvePlayerActionIntent(optionText, locationId, time);
+    if (!playerActionIntent) throw new Error(`选项${optionIndex + 1}的行动目的地尚未确定：${optionText}`);
+    return { optionIndex, optionText, actionId: `${sceneId}:option:${optionIndex}`, playerActionIntent };
+  });
 }
 
 export function buildContinuationChoice(
@@ -286,6 +300,10 @@ export function validatedOptionBinding(
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const item = value as Record<string, unknown>;
   if (item.optionIndex !== optionIndex || item.optionText !== optionText) return undefined;
+  if (item.unavailable === true) return { optionIndex, optionText, unavailable: true };
+  const playerActionIntent = item.playerActionIntent === undefined ? undefined : readActionIntentSnapshot(item.playerActionIntent);
+  if (item.playerActionIntent !== undefined && (!playerActionIntent || playerActionIntent.originalInput !== optionText
+    || !stableId(item.actionId) || item.continuationId !== undefined)) return undefined;
   if (item.actionId !== undefined && !stableId(item.actionId)) return undefined;
   if (item.continuationId !== undefined) {
     if (!stableId(item.continuationId) || item.continuationId !== activeContinuationId) return undefined;
@@ -296,6 +314,7 @@ export function validatedOptionBinding(
     optionText,
     ...(stableId(item.actionId) ? { actionId: item.actionId } : {}),
     ...(stableId(item.continuationId) ? { continuationId: item.continuationId } : {}),
+    ...(playerActionIntent ? { playerActionIntent } : {}),
   };
 }
 
@@ -314,7 +333,8 @@ export function acceptedActionUiFromMessage(
         const index = value.optionIndex;
         if (!Number.isSafeInteger(index) || Number(index) < 0 || Number(index) >= options.length) return [];
         const binding = validatedOptionBinding(value, Number(index), options[Number(index)], activeContinuationId);
-        return binding ? [binding] : [];
+        return binding ? [binding] : value.playerActionIntent !== undefined
+          ? [{ optionIndex: Number(index), optionText: options[Number(index)], unavailable: true as const }] : [];
       })
     : [];
   return {

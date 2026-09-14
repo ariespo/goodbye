@@ -681,3 +681,41 @@ describe('mystery orchestrator', () => {
     expect(result.writerPacket.plan.timeCostMinutes).toBe(25);
   });
 });
+
+describe('action intent consistency before execution', () => {
+  const authority = { cycleCount: 2, startTime: '2024-09-09T08:00:00', currentLocationId: 'home', stamina: 100, sanity: 70, originalInput: '调查房间' };
+  const projection = () => ({ truthContext, turnContext: {}, presentationContext: {}, activeNpcIds: [], narrativeBackground: 'home' } as unknown as import('./turn-preparation').ExecutedTurnProjection);
+  const right: DirectorPlan = { ...validPlan, revelations: [], assetRequests: [], actionSteps: [{ id: 'work', kind: 'investigation', scope: 'normal', locationId: 'home' }] };
+  it('preserves original intent, approved proposal and actual execution in the writer audit', async () => {
+    const result = await prepareMysteryTurn({ mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext, turnContext: {}, presentationContext: {}, actionAuthority: authority, projectExecution: projection, complete: completeApproved(right) });
+    expect(result.writerPacket.actionIntentAudit).toMatchObject({ originalInput: '调查房间', approvedSteps: right.actionSteps,
+      executedSteps: [expect.objectContaining({ kind: 'investigation', locationId: 'home', completed: true })] });
+  });
+  it('repairs an action mismatch once before the same review and execution path', async () => {
+    let directorCalls = 0;
+    const complete = vi.fn(async (messages: Array<{ content: string }>) => {
+      if (messages[0]?.content.includes('事实复核') || messages[0]?.content.includes('节奏与玩家能动性')) return approvedFactReview;
+      directorCalls++;
+      return JSON.stringify(directorCalls === 1 ? { ...right, actionSteps: [{ id: 'bad', kind: 'wait', scope: 'normal', locationId: 'home' }] } : right);
+    });
+    const result = await prepareMysteryTurn({ mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext, turnContext: {}, presentationContext: {}, actionAuthority: authority, projectExecution: projection, complete });
+    expect(result.writerPacket.resolvedAction?.segments[0].step.kind).toBe('investigation');
+    expect(directorCalls).toBe(2);
+  });
+});
+
+it('keeps an original old-street plan audit even without explicit action steps', async () => {
+  const originalInput = '前往旧街区向周大爷打听清晨动静';
+  const plan: DirectorPlan = { ...validPlan, revelations: [], assetRequests: [], actionSteps: undefined,
+    turnGoal: '向周大爷打听清晨动静', beats: [{ id: 'zhou', purpose: '询问', description: '进行当下询问', locationId: 'old-man-building', speakerIds: ['old-man'] }] };
+  const projectedTruth = { ...truthContext, currentLocation: 'old-man-building' };
+  const result = await prepareMysteryTurn({ mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+    truthContext: { ...truthContext, currentLocation: 'senpai-building' }, turnContext: {}, presentationContext: {},
+    actionAuthority: { cycleCount: 2, startTime: '2024-09-09T08:00:00', currentLocationId: 'senpai-building', stamina: 100, sanity: 70, originalInput },
+    projectExecution: () => ({ truthContext: projectedTruth, turnContext: {}, presentationContext: {}, activeNpcIds: ['old-man'], narrativeBackground: 'old-man-building' } as unknown as import('./turn-preparation').ExecutedTurnProjection),
+    complete: completeApproved(plan) });
+  expect(result.writerPacket.actionIntentAudit).toMatchObject({ originalInput, planGoal: plan.turnGoal,
+    plannedLocations: ['old-man-building'], plannedNpcIds: ['old-man'] });
+});

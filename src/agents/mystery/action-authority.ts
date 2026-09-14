@@ -1,3 +1,4 @@
+import { readActionIntentSnapshot, resolvePlayerActionIntent, type ActionIntentSnapshot } from '../../engine/player-action-intent';
 import { getLocationById, resolveRegisteredLocation } from '../../data/locations';
 import { checkCycleFailure } from '../../engine/cycle-failure';
 import { resolveActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
@@ -15,6 +16,7 @@ export interface ActionAuthorityContext {
   stamina: number;
   sanity: number;
   originalInput: string;
+  playerActionIntent?: ActionIntentSnapshot;
   /** Trusted location whose approved case-fact budget produced this plan. */
   sourceLocationId?: string;
   deathNews?: string;
@@ -151,6 +153,13 @@ export function buildActionAuthorityInput(
   }
 
   const operativeInput = selectedOpportunity?.publicGoal ?? selectedProgramAction?.publicGoal ?? context.originalInput;
+  const boundIntent = context.playerActionIntent === undefined ? undefined : readActionIntentSnapshot(context.playerActionIntent);
+  if (context.playerActionIntent !== undefined && (!boundIntent
+    || boundIntent.originalInput !== context.originalInput || boundIntent.startLocationId !== context.currentLocationId)) {
+    throw new Error('玩家行动意图绑定已经失效或被修改。');
+  }
+  const recognizedIntent = boundIntent ?? resolvePlayerActionIntent(operativeInput, context.currentLocationId, new Date(context.startTime));
+  if (!recognizedIntent) throw new Error('玩家行动意图的目的地无法解析，请明确注册地点。');
   const clauses = actionClauses(operativeInput);
   const approvedFactSources = plan.revelations.map(fact => `fact:${fact.factId}:${fact.level}`);
   const approvedKnowledgeSources = (plan.knowledgeEvents ?? []).map(event => `accepted-event:${event.eventId}`);
@@ -161,6 +170,19 @@ export function buildActionAuthorityInput(
     throw new Error('导演行动阶段必须是非空且最多八项的数组。');
   }
   const supplied: unknown[] = Array.isArray(proposals) ? proposals : [];
+  if (supplied.length && !selectedOpportunity && !selectedProgramAction && !context.selection) {
+    // A separate travel proposal may precede work; it cannot replace or add work.
+    const semantic = supplied.filter(raw => !(raw && typeof raw === 'object'
+      && (raw as Partial<ActionStep>).kind === 'travel'
+      && recognizedIntent.steps.some(step => step.kind !== 'travel' && step.locationId === (raw as Partial<ActionStep>).locationId)));
+    if (semantic.length !== recognizedIntent.steps.length || semantic.some((raw, index) => {
+      const step = raw as Partial<ActionStep> | null;
+      const expected = recognizedIntent.steps[index];
+      const explicitKind = /调查|查看|检查|观察|搜查|翻找|搜寻|休息|睡|等待|询问|打听|问|交谈|对话|聊|拜访|探访|找|同步|商讨|交流|讨论|谈|梳理/u.test(clauses[index] ?? operativeInput) || expected.kind === 'travel';
+      return !step || ((boundIntent || explicitKind) && step.kind !== expected.kind) || step.locationId !== expected.locationId
+        || (boundIntent && step.scope !== expected.scope);
+    })) throw new Error('导演行动阶段与玩家原始意图的种类或目的地不匹配。');
+  }
   if ((selectedOpportunity || selectedProgramAction) && supplied.length > 1) {
     throw new Error('单个程序行动不能被模型扩展为复合行动。');
   }
@@ -180,7 +202,7 @@ export function buildActionAuthorityInput(
     if (!registered.accepted || registered.sceneId || (proposed?.locationId && proposed.locationId !== destination)) {
       throw new Error('行动地点未注册或与玩家请求的目的地不符。');
     }
-    const kind = context.selection?.kind ?? proposed?.kind ?? inferKind(clause);
+    const kind = context.selection?.kind ?? proposed?.kind ?? recognizedIntent.steps[index]?.kind ?? inferKind(clause);
     if (!['inquiry', 'investigation', 'search', 'travel', 'rest', 'wait'].includes(kind)
       || proposed?.eventId !== undefined || proposed?.requestedMinutes !== undefined) {
       throw new Error('模型不能创建事件效果或指定确定性行动价格。');

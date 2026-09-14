@@ -31,13 +31,14 @@ export interface ResolveActionNarrativeContextOptions {
 interface DestinationRule {
   locationId: string;
   aliases: RegExp;
+  travelOnly?: boolean;
 }
 
 const DESTINATIONS: DestinationRule[] = [
   { locationId: 'supermarket', aliases: /社区便利店|便利店|便民超市|社区超市/ },
   { locationId: 'community-hospital', aliases: /社区医院|医院/ },
   { locationId: 'school', aliases: /文穗的中学|中学|学校|校门|校园|校内|教学楼|操场|体育办公室/ },
-  { locationId: 'old-man-building', aliases: /周大爷(?:家|住处|房子)?|周德明(?:家|住处|房子)?|独居老头楼|老头楼|旧居民楼|麻将馆楼上/ },
+  { locationId: 'old-man-building', aliases: /周大爷(?:家|住处|房子)?|周德明(?:家|住处|房子)?|独居老头楼|老头楼|旧居民楼|旧街区(?=向周大爷|向周德明|的?周大爷|的?周德明)|麻将馆楼上/ },
   { locationId: 'senpai-building', aliases: /学姐(?:家|住处|房子|楼)?|灯织(?:家|住处|房子)?|商住楼/ },
   { locationId: 'mountain-trail', aliases: /黔灵山脚|山脚步道|山路/ },
   { locationId: 'detective-inn', aliases: /侦探小旅馆|小旅馆|旅馆/ },
@@ -48,7 +49,7 @@ const DESTINATIONS: DestinationRule[] = [
 
 const TRAVEL_VERBS = /前往|赶往|赶到|走向|走到|走进|进入|进去|到达|抵达|返回|回到|回|拜访|探访|动身|出发|过去|调查|查看|寻找|去找|去|找|到/g;
 const DESTINATION_MODIFIERS = /^(?:往|向|去|到|附近的?|对面的?|那家|这家|那座|这座|沈|的|\s)*/;
-const NON_ACTION_CONTEXT = /不|别|没有|没打算|取消|放弃|怎么|如何|是否|哪里|哪儿|告诉|询问|问问|想起|回忆|昨天|曾经/;
+const NON_ACTION_CONTEXT = /不|别|没有|没打算|取消|放弃|怎么|如何|是否|哪里|哪儿|告诉|询问|问问|想起|回忆|昨天|曾经|电话|手机|短信|远程/;
 const SCHOOL_INTERIOR = /进(?:入|去)?(?:中学|学校|校内|校园|教学楼|操场|体育办公室)|进校|校内|校园|教学楼|操场|体育办公室|找体育老师|找刘仁光/;
 const SCHOOL_EXTERIOR = /校门|门口|学校外|中学外|校外/;
 
@@ -86,17 +87,47 @@ function findDestination(input: string, destinationLocationId?: string): Destina
       const rule = DESTINATIONS.find(candidate => {
         if (destinationLocationId && candidate.locationId !== destinationLocationId) return false;
         const match = candidate.aliases.exec(target);
-        if (match?.index !== 0) return false;
+        if (!match) return false;
+        if (match.index > 0) {
+          const modifier = target.slice(0, match.index);
+          // Permit a bounded descriptive phrase, never a second location,
+          // source/object ownership, question or non-adjacent sentence.
+          if (modifier.length > 24 || !/的$/u.test(modifier)
+            || /[，,。；;！？!?]|电话|短信|怎么|如何|不去|别去/u.test(modifier)
+            || DESTINATIONS.some(other => other.aliases.test(modifier))) return false;
+        }
         // Inspecting a receipt or seeking a phone number does not move the
         // player into the building mentioned as that object's owner.
-        return !/^(?:的|里?的)/.test(target.slice(match[0].length));
+        return !/^(?:的|里?的|(?:附近|旁边|对面|后面)的)/.test(target.slice(match.index + match[0].length));
       });
-      if (rule) return rule;
+      if (rule) {
+        const match = rule.aliases.exec(target)!;
+        const remainder = target.slice(match.index + match[0].length).trim();
+        return { ...rule, travelOnly: /^(?:前往|赶往|赶到|走向|走到|走进|进入|进去|到达|抵达|返回|回到|回|动身|出发|过去|去|到)$/u.test(verb[0])
+          && /^(?:一趟)?$/u.test(remainder) };
+      }
     }
   }
   return null;
 }
 
+/** Use the same matched destination span to distinguish a journey from work after arrival. */
+export function isTravelOnlyIntent(input: string): boolean {
+  return findDestination(input)?.travelOnly === true;
+}
+
+/** Unknown affirmative travel is unresolved, never an implicit stay. */
+export function hasExplicitTravelIntent(input: string): boolean {
+  return input.split(/[，,。；;！!\n]/).some(clause => {
+    for (const verb of clause.matchAll(/前往|赶往|赶到|走向|走到|走进|进入|到达|抵达|返回|回到|去找|去/g)) {
+      const prefix = clause.slice(0, verb.index);
+      if (NON_ACTION_CONTEXT.test(prefix) || /[？?]|(?:吗|么)\s*$/.test(clause)) continue;
+      if (verb[0] === '去' && (/^去向/u.test(clause.slice(verb.index)) || /过$/u.test(prefix))) continue;
+      return true;
+    }
+    return false;
+  });
+}
 function npcPublicLabel(npcId: string): string {
   return ({
     'chen-huihui': '陈慧慧（chen-huihui）',

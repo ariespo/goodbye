@@ -493,3 +493,31 @@ describe('executed plan projection', () => {
     expect(text).not.toMatch(/正文|不得|获准来源|investigation|search/iu);
   });
 });
+
+it('rejects unresolved explicit travel instead of settling work at the origin', () => {
+  expect(() => buildActionAuthorityInput(plan, { ...context, originalInput: '前往未知仓库调查' }, 'unknown')).toThrow(/目的地|意图/);
+});
+it('rejects a director changing a recognized investigation into waiting', () => {
+  expect(() => buildActionAuthorityInput({ ...plan, actionSteps: [{ id: 'wrong', kind: 'wait', scope: 'normal', locationId: 'home' }] }, context, 'wrong-kind')).toThrow(/意图|种类/);
+});
+
+it('rejects stale bound text and origin while keeping event precedence', () => {
+  const playerActionIntent = { version: 1 as const, originalInput: '调查房间', startLocationId: 'home', steps: [{ kind: 'investigation' as const, scope: 'normal' as const, locationId: 'home' }] };
+  expect(() => buildActionAuthorityInput(plan, { ...context, originalInput: '休息', playerActionIntent }, 'stale')).toThrow(/失效|修改/);
+  expect(() => buildActionAuthorityInput(plan, { ...context, currentLocationId: 'school', playerActionIntent }, 'stale')).toThrow(/失效|修改/);
+  expect(buildActionAuthorityInput(plan, { ...context, originalInput: '休息', playerActionIntent, deathNews: 'pending' }, 'event').steps[0].kind).toBe('event');
+});
+it('prices the bound old-street work and rejects destination changes before projection', () => {
+  const originalInput = '前往旧街区向周大爷打听清晨动静';
+  const playerActionIntent = { version: 1 as const, originalInput, startLocationId: 'senpai-building', steps: [{ kind: 'inquiry' as const, scope: 'normal' as const, locationId: 'old-man-building', targetNpcIds: ['old-man'] }] };
+  const boundContext = { ...context, originalInput, currentLocationId: 'senpai-building', playerActionIntent };
+  const outcome = resolveAction(buildActionAuthorityInput({ ...plan, revelations: [], timeCostMinutes: 1 }, boundContext, 'bound'));
+  expect(outcome.endLocationId).toBe('old-man-building');
+  expect(outcome.segments.at(-1)?.executedMinutes).toBe(55);
+  expect(() => buildActionAuthorityInput({ ...plan, actionSteps: [{ id: 'wrong', kind: 'inquiry', scope: 'normal', locationId: 'senpai-building' }] }, boundContext, 'bad')).toThrow(/意图|目的地/);
+});
+
+it('lets the existing director interpret an unrecognized local action kind', () => {
+  const input = buildActionAuthorityInput({ ...plan, actionSteps: [{ id: 'local', kind: 'search', scope: 'normal', locationId: 'home' }] }, { ...context, originalInput: '处理眼前的事情' }, 'ambiguous');
+  expect(input.steps[0].kind).toBe('search');
+});

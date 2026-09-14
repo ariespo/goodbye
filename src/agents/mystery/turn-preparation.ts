@@ -110,6 +110,7 @@ export interface TurnPreparationInput {
   endingCheckContext: EndingCheckContext; history: ChatMessage[];
   pendingNarrativeContext?: ActionNarrativeContext | null; hasPendingAction?: boolean;
   actionSelection?: ActionAuthorityContext['selection']; originalActionInput?: string;
+  playerActionIntent?: import('../../engine/player-action-intent').ActionIntentSnapshot;
   resumeActionId?: string;
 }
 
@@ -572,6 +573,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     opportunities: Object.values(prepared.request.legalOpportunityMap ?? {}),
   });
   const actionAuthority: ActionAuthorityContext = {
+    playerActionIntent: snapshot.playerActionIntent,
     cycleCount, startTime, currentLocationId, stamina: snapshot.gameStatus.stamina, sanity: snapshot.gameStatus.sanity,
     originalInput: snapshot.originalActionInput ?? snapshot.userInput,
     deathNews: typeof snapshot.variables.deathNews === 'string' ? snapshot.variables.deathNews : undefined,
