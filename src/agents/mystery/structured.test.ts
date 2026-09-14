@@ -20,10 +20,13 @@ describe('completeParsedStructured', () => {
     expect(stillInvalid).toHaveBeenCalledTimes(2);
   });
 
-  it('uses JSON Object directly for the measured DeepSeek V4 endpoint, leaving other hosts unchanged', async () => {
+  it('uses JSON Object for measured DeepSeek endpoints, leaving other hosts unchanged', async () => {
     resetResponseFormatSupportCache();
     for (const [key, expected] of [
       ['https://api.deepseek.com/v1|deepseek-v4-flash', 'json_object'],
+      ['https://oneapi.hakoyu.com/v1|deepseek-flash【果汁】', 'json_object'],
+      ['https://oneapi.hakoyu.com.evil.example/v1|deepseek-flash【果汁】', 'json_schema'],
+      ['https://proxy.example/v1|deepseek-flash【果汁】', 'json_schema'],
       ['https://proxy.example/v1|deepseek-v4-flash', 'json_schema'],
       ['https://api.deepseek.com.evil.example/v1|deepseek-v4-flash', 'json_schema'],
     ]) {

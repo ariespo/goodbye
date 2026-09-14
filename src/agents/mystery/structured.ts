@@ -62,9 +62,12 @@ function prefersJsonObject(supportKey: string): boolean {
   const separator = supportKey.lastIndexOf('|');
   try {
     const endpoint = new URL(supportKey.slice(0, separator));
-    return endpoint.origin === 'https://api.deepseek.com'
-      && /^\/(?:v1\/?)?$/.test(endpoint.pathname)
-      && supportKey.slice(separator + 1) === 'deepseek-v4-flash';
+    const model = supportKey.slice(separator + 1);
+    if (!/^\/(?:v1\/?)?$/.test(endpoint.pathname)) return false;
+    return (endpoint.origin === 'https://api.deepseek.com' && model === 'deepseek-v4-flash')
+      // Measured 2026-09-14: this exact gateway alias returns a generic proxy
+      // HTTP 400 for json_schema, while an otherwise identical json_object works.
+      || (endpoint.origin === 'https://oneapi.hakoyu.com' && model === 'deepseek-flash【果汁】');
   } catch {
     return false;
   }
