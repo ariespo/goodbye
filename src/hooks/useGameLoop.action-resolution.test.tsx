@@ -560,6 +560,99 @@ describe('resolved action at the real hook boundary', () => {
     },
   );
 
+  it.each(['resolve', 'reject'] as const)(
+    'releases a stale local-map operation after its save %s so the original chat can resume again',
+    async settlement => {
+      const startVariables = {
+        ...createDefaultVariables(), cycleCount: 1, location: 'home', time: '2024-09-09T15:55:00',
+        stamina: 100, sanity: 70, knowledgeEvents: [],
+      };
+      const partial = prepareMapTravel({
+        variables: startVariables,
+        gameStatus: { time: new Date(startVariables.time), stamina: 100, sanity: 70, items: [] },
+        destinationLocationId: 'school',
+      });
+      if (partial.kind !== 'travel') throw new Error('expected partial map travel');
+      const partialTransaction = buildMapTravelTransaction({
+        variables: startVariables,
+        gameStatus: { time: new Date(startVariables.time), stamina: 100, sanity: 70, items: [] },
+        prepared: partial,
+        knowledgeEvents: [], endings: [], endingsSeen: [], hasEndingInProgress: false,
+      });
+      const originalChat = useGameStore.getState().tavern.chats[0];
+      const continuationVariables = { ...partialTransaction.variables, deathNews: 'delivered' as const };
+      const optionText = '继续未完成的行动（剩余5分钟）';
+      const binding = {
+        optionIndex: 0, optionText, actionId: partial.actionId, continuationId: partial.actionId,
+      };
+      const parsedContent = {
+        ...useGameStore.getState().api.parsedContent,
+        options: [optionText], optionBindings: [binding],
+      };
+      useGameStore.setState(state => ({
+        tavern: {
+          ...state.tavern,
+          variables: continuationVariables,
+          chats: [{ ...originalChat, variables: continuationVariables }],
+        },
+        api: { ...state.api, parsedContent },
+        game: { ...state.game, gameStatus: partialTransaction.gameStatus, sceneComplete: true },
+      }));
+
+      let settleOldSave!: () => void;
+      let rejectOldSave!: (error: Error) => void;
+      const oldSave = new Promise<void>((resolve, reject) => {
+        settleOldSave = resolve;
+        rejectOldSave = reject;
+      });
+      vi.mocked(saveChat).mockImplementationOnce(() => oldSave).mockResolvedValue(undefined);
+      const { result, unmount } = renderHook(() => useGameLoop());
+
+      act(() => { expect(result.current.selectOption(optionText, binding)).toBe(true); });
+      expect(saveChat).toHaveBeenCalledTimes(1);
+
+      const awayVariables = { ...createDefaultVariables(), cycleCount: 2, time: '2024-09-10T08:00:00' };
+      const awayChat: ChatSession = {
+        ...originalChat, id: 'away-chat', name: 'away chat', messages: [], variables: awayVariables,
+      };
+      useGameStore.setState(state => ({
+        tavern: {
+          ...state.tavern,
+          activeChatId: awayChat.id,
+          chats: [...state.tavern.chats, awayChat],
+          variables: awayVariables,
+        },
+        game: { ...state.game, isWaitingForAI: false },
+      }));
+      if (settlement === 'resolve') settleOldSave();
+      else rejectOldSave(new Error('旧地图保存失败'));
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+      useGameStore.setState(state => ({
+        tavern: {
+          ...state.tavern,
+          activeChatId: originalChat.id,
+          variables: continuationVariables,
+          chats: state.tavern.chats.map(chat => chat.id === originalChat.id
+            ? { ...chat, variables: continuationVariables }
+            : chat),
+        },
+        api: { ...state.api, abortController: null, parsedContent },
+        game: {
+          ...state.game,
+          isWaitingForAI: false,
+          gameStatus: partialTransaction.gameStatus,
+          sceneComplete: true,
+        },
+      }));
+
+      act(() => { expect(result.current.selectOption(optionText, binding)).toBe(true); });
+      await waitFor(() => expect(useGameStore.getState().tavern.variables.location).toBe('school'));
+      expect(saveChat).toHaveBeenCalledTimes(2);
+      unmount();
+    },
+  );
+
   it('reports a missing API as a non-dispatch so the choice can be used after configuration', () => {
     const optionText = '继续调查';
     useGameStore.setState(state => ({

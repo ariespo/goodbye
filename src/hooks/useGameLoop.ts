@@ -1348,8 +1348,9 @@ export function useGameLoop() {
             current.actions.setParsedContent({ options: [...current.api.parsedContent.options] });
           })
           .finally(() => {
-            if (!ownsOperation()) return;
-            localActionOperationRef.current = null;
+            const canUpdateUi = ownsOperation();
+            if (localActionOperationRef.current === operation) localActionOperationRef.current = null;
+            if (!canUpdateUi) return;
             useGameStore.getState().actions.setIsWaitingForAI(false);
           });
         return true;

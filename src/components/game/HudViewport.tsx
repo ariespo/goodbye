@@ -2,10 +2,18 @@ import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { calculateHudLayout } from './hudLayout';
 
 export function HudViewport({ children }: { children: ReactNode }) {
-  const [layout, setLayout] = useState(() => calculateHudLayout(window.innerWidth, window.innerHeight));
+  const [layout, setLayout] = useState(() => calculateHudLayout(
+    window.innerWidth,
+    window.innerHeight,
+    { nativePhone: true },
+  ));
 
   useLayoutEffect(() => {
-    const update = () => setLayout(calculateHudLayout(window.innerWidth, window.innerHeight));
+    const update = () => setLayout(calculateHudLayout(
+      window.innerWidth,
+      window.innerHeight,
+      { nativePhone: true },
+    ));
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);

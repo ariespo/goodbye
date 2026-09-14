@@ -9,9 +9,26 @@ export type HudLayout = {
   offsetY: number;
 };
 
-export function calculateHudLayout(viewportWidth: number, viewportHeight: number): HudLayout {
+export type HudLayoutOptions = {
+  nativePhone?: boolean;
+};
+
+export function calculateHudLayout(
+  viewportWidth: number,
+  viewportHeight: number,
+  options: HudLayoutOptions = {},
+): HudLayout {
   const safeWidth = Math.max(1, viewportWidth);
   const safeHeight = Math.max(1, viewportHeight);
+  if (options.nativePhone && safeWidth <= 800) {
+    return {
+      scale: 1,
+      virtualWidth: safeWidth,
+      virtualHeight: safeHeight,
+      offsetX: 0,
+      offsetY: 0,
+    };
+  }
   const scale = Math.min(safeWidth / HUD_DESIGN_WIDTH, safeHeight / HUD_DESIGN_HEIGHT);
 
   return {

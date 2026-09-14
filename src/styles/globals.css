@@ -5734,3 +5734,135 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     font-size: 14px;
   }
 }
+
+/* Native phone HUD: use viewport coordinates without scaling the desktop board. */
+@media (max-width: 800px) {
+  .hud-design-canvas .mobile-status-panel__buttons button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .hud-design-canvas .mobile-action-strip {
+    right: var(--mobile-safe-right, 10px);
+    bottom: var(--mobile-safe-bottom, 10px);
+    left: var(--mobile-safe-left, 10px);
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    overflow: visible;
+  }
+
+  .hud-design-canvas .mobile-action-strip button {
+    min-width: 0;
+    min-height: 48px;
+    height: 48px;
+    grid-template-columns: 1fr;
+    grid-template-rows: 21px auto;
+    justify-items: center;
+    gap: 1px;
+    padding: 3px 2px;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .hud-design-canvas .mobile-action-strip img {
+    width: 20px;
+    height: 20px;
+  }
+
+  .game-canvas .hud-design-canvas .dialogue-panel {
+    top: auto !important;
+    right: var(--mobile-safe-right, 10px) !important;
+    bottom: calc(var(--mobile-safe-bottom, 10px) + 60px) !important;
+    left: var(--mobile-safe-left, 10px) !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+
+  .game-canvas .hud-design-canvas .dialogue-panel-main,
+  .game-canvas .hud-design-canvas .world-pixel-frame-dialogue,
+  .game-canvas .hud-design-canvas .dialogue-frame-content,
+  .game-canvas .hud-design-canvas .world-pixel-frame-dialogue .pixel-frame-content {
+    min-height: 151px !important;
+    height: 151px !important;
+    max-height: 151px !important;
+  }
+
+  .game-canvas .hud-design-canvas .dialogue-frame-content {
+    padding: 16px 18px 14px !important;
+  }
+
+  .game-canvas .hud-design-canvas .dialogue-text {
+    font-size: 18px !important;
+    line-height: 1.45 !important;
+  }
+
+  .game-canvas .hud-design-canvas .dialogue-controls-row {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 7px;
+    padding-left: 0;
+  }
+
+  .game-canvas .hud-design-canvas .dialogue-control-button {
+    width: auto;
+    min-width: 88px;
+    max-width: 116px;
+    height: 44px;
+    min-height: 44px !important;
+    flex: 1 1 0;
+    padding: 0 8px !important;
+    font-size: 14px !important;
+  }
+
+  .hud-design-canvas .choice-menu {
+    top: calc(var(--mobile-safe-top, 10px) + 54px) !important;
+    right: var(--mobile-safe-right, 10px) !important;
+    bottom: calc(var(--mobile-safe-bottom, 10px) + 278px) !important;
+    left: var(--mobile-safe-left, 10px) !important;
+    width: auto !important;
+    max-height: calc(100dvh - 352px) !important;
+    overflow-y: auto;
+    transform: none !important;
+  }
+
+  .hud-design-canvas .choice-menu .choice-button {
+    min-height: 56px !important;
+    padding: 10px 14px !important;
+    font-size: 18px !important;
+  }
+
+  .hud-design-canvas .choice-menu .choice-reroll-button {
+    min-height: 48px !important;
+    padding: 8px 14px !important;
+    font-size: 16px !important;
+  }
+
+  .hud-design-canvas .free-action-dialog {
+    place-items: center;
+    padding: var(--mobile-safe-top, 10px) var(--mobile-safe-right, 10px)
+      calc(var(--mobile-safe-bottom, 10px) + 58px) var(--mobile-safe-left, 10px);
+  }
+
+  .game-canvas .hud-design-canvas .free-action-dialog__panel {
+    width: 100%;
+    min-height: 0;
+    padding: 18px !important;
+  }
+
+  .hud-design-canvas .free-action-dialog__title > span { font-size: 22px; }
+  .hud-design-canvas .free-action-dialog__title > small { font-size: 13px; }
+  .hud-design-canvas .free-action-dialog textarea {
+    min-height: 112px;
+    font-size: 18px;
+  }
+  .hud-design-canvas .free-action-dialog__controls { gap: 10px; }
+  .hud-design-canvas .free-action-dialog__controls > button {
+    width: min(46%, 154px);
+    height: 48px;
+    min-height: 48px;
+    font-size: 17px;
+  }
+}

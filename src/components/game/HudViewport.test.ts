@@ -31,4 +31,33 @@ describe('calculateHudLayout', () => {
     expect(layout.offsetX).toBeCloseTo((1920 - 1672 * (800 / 941)) / 2, 8);
     expect(layout.offsetY).toBeCloseTo(0, 8);
   });
+
+  it('uses native viewport coordinates on a portrait phone so controls are not miniaturized', () => {
+    expect(calculateHudLayout(390, 844, { nativePhone: true })).toEqual({
+      scale: 1,
+      virtualWidth: 390,
+      virtualHeight: 844,
+      offsetX: 0,
+      offsetY: 0,
+    });
+  });
+
+  it('keeps the fixed reference canvas for callers that do not opt into the game HUD phone layout', () => {
+    const layout = calculateHudLayout(390, 844);
+
+    expect(layout.scale).toBeCloseTo(390 / 1672, 8);
+    expect(layout.virtualWidth).toBe(1672);
+    expect(layout.virtualHeight).toBe(941);
+  });
+
+  it('keeps the measured desktop transform unchanged at 1280×720', () => {
+    const layout = calculateHudLayout(1280, 720);
+    const expectedScale = 720 / 941;
+
+    expect(layout.scale).toBeCloseTo(expectedScale, 8);
+    expect(layout.virtualWidth).toBe(1672);
+    expect(layout.virtualHeight).toBe(941);
+    expect(layout.offsetX).toBeCloseTo((1280 - 1672 * expectedScale) / 2, 8);
+    expect(layout.offsetY).toBeCloseTo(0, 8);
+  });
 });
