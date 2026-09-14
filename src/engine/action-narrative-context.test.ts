@@ -328,3 +328,8 @@ describe('executed action narrative context', () => {
     });
   });
 });
+
+it('recognizes the destination after a completed inquiry without reinterpreting its object', () => {
+  expect(resolveActionNarrativeContext('打听完情况后前往学校', morning)?.locationId).toBe('school');
+  expect(resolveActionNarrativeContext('追问文穗打听完情况后前往学校的原因', morning)).toBeNull();
+});

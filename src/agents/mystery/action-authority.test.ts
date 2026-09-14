@@ -521,3 +521,10 @@ it('lets the existing director interpret an unrecognized local action kind', () 
   const input = buildActionAuthorityInput({ ...plan, actionSteps: [{ id: 'local', kind: 'search', scope: 'normal', locationId: 'home' }] }, { ...context, originalInput: '处理眼前的事情' }, 'ambiguous');
   expect(input.steps[0].kind).toBe('search');
 });
+
+it('settles inquiry followed by explicit travel as two separately located stages', () => {
+  const input = buildActionAuthorityInput({ ...plan, revelations: [] }, { ...context, originalInput: '打听完情况后前往学校' }, 'inquiry-then-travel');
+  expect(input.steps.map(step => ({ kind: step.kind, locationId: step.locationId }))).toEqual([
+    { kind: 'inquiry', locationId: 'home' }, { kind: 'travel', locationId: 'school' },
+  ]);
+});

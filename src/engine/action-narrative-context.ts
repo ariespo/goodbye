@@ -48,8 +48,9 @@ const DESTINATIONS: DestinationRule[] = [
 ];
 
 const TRAVEL_VERBS = /前往|赶往|赶到|走向|走到|走进|进入|进去|到达|抵达|返回|回到|回|拜访|探访|动身|出发|过去|调查|查看|寻找|去找|去|找|到/g;
+const EXPLICIT_TRAVEL_VERBS = /前往|赶往|赶到|走向|走到|走进|进入|到达|抵达|返回|回到|去找|去/g;
 const DESTINATION_MODIFIERS = /^(?:往|向|去|到|附近的?|对面的?|那家|这家|那座|这座|沈|的|\s)*/;
-const NON_ACTION_CONTEXT = /不|别|没有|没打算|取消|放弃|怎么|如何|是否|哪里|哪儿|告诉|询问|问问|想起|回忆|昨天|曾经|电话|手机|短信|远程/;
+const NON_ACTION_CONTEXT = /不|别|没有|没打算|取消|放弃|怎么|如何|是否|哪里|哪儿|告诉|询问|追问|打听|问问|想起|回忆|昨天|曾经|电话|手机|短信|远程/;
 const SCHOOL_INTERIOR = /进(?:入|去)?(?:中学|学校|校内|校园|教学楼|操场|体育办公室)|进校|校内|校园|教学楼|操场|体育办公室|找体育老师|找刘仁光/;
 const SCHOOL_EXTERIOR = /校门|门口|学校外|中学外|校外/;
 
@@ -72,13 +73,31 @@ function stableRoll(seed: string): number {
   return (hash >>> 0) / 0x1_0000_0000;
 }
 
+/** Keep completed player inquiry and the following action in separate scopes.
+ * The completion must be the player's own leading predicate, never a quoted
+ * statement or the subject of another inquiry.
+ */
+export function splitPlayerActionClauses(input: string): string[] {
+  const completedInquiry = new RegExp(
+    `(^|[，,；;。])((?:我)?(?:先)?(?:打听|询问|追问|问问|交谈)(?:完|结束)[^，,。；;！？!?“”「」"\\n]{0,24}?)(?:之后|以后|后)(?=(?:再)?(?:${EXPLICIT_TRAVEL_VERBS.source}))`, 'gu',
+  );
+  const marked = input.replace(completedInquiry, (match, boundary: string, inquiry: string, offset: number) => {
+    const prefix = input.slice(0, offset);
+    const openQuotes = prefix.match(/[“「]/gu)?.length ?? 0;
+    const closedQuotes = prefix.match(/[”」]/gu)?.length ?? 0;
+    const quoted = openQuotes > closedQuotes || (prefix.match(/"/gu)?.length ?? 0) % 2 === 1;
+    return quoted ? match : `${boundary}${inquiry}；然后`;
+  }).replace(/^先(.+?)再/u, '$1；再');
+  return marked.split(/[，,；;]\s*(?:然后|接着|再)|(?:然后|接着)/u).map(value => value.trim()).filter(Boolean);
+}
+
 function findDestination(input: string, destinationLocationId?: string): DestinationRule | null {
   if (destinationLocationId) {
     return DESTINATIONS.find(candidate => candidate.locationId === destinationLocationId) ?? null;
   }
   // Only bind a verb to its adjacent destination phrase. A location in an
   // earlier clause (including the origin) is not evidence of travel there.
-  for (const clause of input.split(/[，,。；;！!\n]/)) {
+  for (const clause of splitPlayerActionClauses(input).flatMap(part => part.split(/[，,。；;！!\n]/))) {
     for (const verb of clause.matchAll(TRAVEL_VERBS)) {
       const prefix = clause.slice(0, verb.index);
       if (NON_ACTION_CONTEXT.test(prefix) || /[？?]|(?:吗|么)\s*$/.test(clause)) continue;
@@ -118,8 +137,8 @@ export function isTravelOnlyIntent(input: string): boolean {
 
 /** Unknown affirmative travel is unresolved, never an implicit stay. */
 export function hasExplicitTravelIntent(input: string): boolean {
-  return input.split(/[，,。；;！!\n]/).some(clause => {
-    for (const verb of clause.matchAll(/前往|赶往|赶到|走向|走到|走进|进入|到达|抵达|返回|回到|去找|去/g)) {
+  return splitPlayerActionClauses(input).flatMap(part => part.split(/[，,。；;！!\n]/)).some(clause => {
+    for (const verb of clause.matchAll(EXPLICIT_TRAVEL_VERBS)) {
       const prefix = clause.slice(0, verb.index);
       if (NON_ACTION_CONTEXT.test(prefix) || /[？?]|(?:吗|么)\s*$/.test(clause)) continue;
       const destination = clause.slice(verb.index + verb[0].length).trimStart();

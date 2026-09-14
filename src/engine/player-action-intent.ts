@@ -1,5 +1,5 @@
 import { getLocationById } from '../data/locations';
-import { resolveActionNarrativeContext, hasExplicitTravelIntent, isTravelOnlyIntent } from './action-narrative-context';
+import { resolveActionNarrativeContext, hasExplicitTravelIntent, isTravelOnlyIntent, splitPlayerActionClauses } from './action-narrative-context';
 
 export interface ActionIntentSnapshot {
   version: 1;
@@ -11,7 +11,7 @@ export interface ActionIntentSnapshot {
 
 export function resolvePlayerActionIntent(input: string, locationId: string, time: Date): ActionIntentSnapshot | null {
   if (!input.trim() || !getLocationById(locationId) || Number.isNaN(time.getTime())) return null;
-  const clauses = input.replace(/^先(.+?)再/u, '$1；再').split(/[，,；;]\s*(?:然后|接着|再)|(?:然后|接着)/u).map(s => s.trim()).filter(Boolean);
+  const clauses = splitPlayerActionClauses(input);
   if (!clauses.length || clauses.length > 8) return null;
   const steps: ActionIntentSnapshot['steps'] = [];
   let current = locationId;

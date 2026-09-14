@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePlayerActionIntent, readActionIntentSnapshot } from './player-action-intent';
 const time = new Date('2024-09-09T08:00:00');
+it.each(['在文穗的中学向门卫追问文穗早晨的具体走向与时间', '向门卫打听文穗走到哪里', '向门卫追问文穗是否前往未知仓库'])('keeps the subject of an inquiry separate from player travel: %s', text => {
+  expect(resolvePlayerActionIntent(text, 'school', time)?.steps).toEqual([{ kind: 'inquiry', scope: 'normal', locationId: 'school', targetNpcIds: ['school-guard'] }]);
+});
 it.each(['我检查眼前能看到的事情，决定接下来去哪里找文穗。', '检查房间，考虑去哪个地方寻找线索', '检查房间，决定去何处调查'])('keeps a contemplated destination from becoming an unresolved journey: %s', text => {
   expect(resolvePlayerActionIntent(text, 'home', time)?.steps.every(step => step.locationId === 'home')).toBe(true);
 });
@@ -59,4 +62,26 @@ it.each(['前往医院查看休息室', '查看休息时间'])('does not grant r
 
 it.each(['回家', '前往周大爷住处'])('prices a plain recognized journey without invented inquiry: %s', text => {
   expect(resolvePlayerActionIntent(text, 'senpai-building', time)?.steps[0].kind).toBe('travel');
+});
+
+it('keeps inquiry work before a declared journey after finishing the inquiry', () => {
+  expect(resolvePlayerActionIntent('打听完情况后前往学校', 'home', time)?.steps).toEqual([
+    { kind: 'inquiry', scope: 'normal', locationId: 'home' },
+    { kind: 'travel', scope: 'normal', locationId: 'school' },
+  ]);
+});
+it('rejects an unresolved journey after finishing an inquiry', () => {
+  expect(resolvePlayerActionIntent('打听完情况后前往未知仓库', 'home', time)).toBeNull();
+});
+it.each([
+  '在文穗的中学向门卫追问文穗早晨的具体走向与时间',
+  '追问文穗打听完情况后前往学校的原因',
+  '询问“打听完情况后前往学校”是什么意思',
+])('keeps inquiry object movement separate from player movement: %s', text => {
+  expect(resolvePlayerActionIntent(text, 'home', time)?.steps.every(step => step.locationId === 'home')).toBe(true);
+});
+
+it('does not split an inquiry quotation at its internal punctuation', () => {
+  const input = '询问“你说，打听完情况后前往学校”是什么意思';
+  expect(resolvePlayerActionIntent(input, 'home', time)?.steps.every(step => step.locationId === 'home')).toBe(true);
 });

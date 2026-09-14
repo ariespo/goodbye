@@ -1,7 +1,7 @@
 import { readActionIntentSnapshot, resolvePlayerActionIntent, type ActionIntentSnapshot } from '../../engine/player-action-intent';
 import { getLocationById, resolveRegisteredLocation } from '../../data/locations';
 import { checkCycleFailure } from '../../engine/cycle-failure';
-import { resolveActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
+import { resolveActionNarrativeContext, splitPlayerActionClauses, type ActionNarrativeContext } from '../../engine/action-narrative-context';
 import type { ActionContinuation, ActionScope, ActionStep, ResolveActionInput, ResolvedActionOutcome } from '../../engine/action-resolution';
 import type { DirectorPlan, FactReview, WriterPacket } from './types';
 import type { InvestigationOpportunity } from '../../engine/investigation-opportunities';
@@ -74,8 +74,7 @@ function explicitStageDuration(text: string): number | undefined {
 }
 
 function actionClauses(text: string): string[] {
-  const marked = text.replace(/^先(.+?)再/u, '$1；再');
-  const clauses = marked.split(/[，,；;]\s*(?:然后|接着|再)|(?:然后|接着)/u).map(value => value.trim()).filter(Boolean);
+  const clauses = splitPlayerActionClauses(text);
   if (clauses.length > 8) throw new Error('单次复合行动超过八个阶段，请拆分行动。');
   return clauses.length ? clauses : [text];
 }
