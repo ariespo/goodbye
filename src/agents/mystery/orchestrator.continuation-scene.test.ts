@@ -13,6 +13,10 @@ const plan: DirectorPlan = { turnGoal: '在校门询问', tone: '克制',
   revelations: [], assetRequests: [], optionIntents: [{ id: 'rest', intent: '休息', tone: '克制', expectedPressure: 'low' }] };
 const complete: AgentCompletion = async messages => messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
   ? JSON.stringify({ approved: true, violations: [], corrections: [] }) : JSON.stringify(plan);
+function completeWith(planForTurn: DirectorPlan): AgentCompletion {
+  return async messages => messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
+    ? JSON.stringify({ approved: true, violations: [], corrections: [] }) : JSON.stringify(planForTurn);
+}
 function prepare(variables: DynamicRecord, input: string, resumeActionId?: string) {
   const game = useGameStore.getState().game;
   return buildTurnPreparation({ variables, userInput: input, resumeActionId,
@@ -59,5 +63,29 @@ describe('saved execution scene context', () => {
     expect(JSON.stringify(resumed.writerMessages)).not.toContain('contextsByLocation');
     expect(JSON.stringify(resumed.writerMessages)).not.toContain('pendingActionSceneContext');
     expect(commit(variables, resumed).actionContinuity?.sceneContext).toBeNull();
+  });
+  it('presents a new completed trip at its actual destination and clears the old route', async () => {
+    const { variables } = await interrupted();
+    const marketPlan: DirectorPlan = {
+      turnGoal: '前往便利店', tone: '克制',
+      beats: [{ id: 'move', purpose: '移动', description: '抵达便利店。', locationId: 'supermarket', speakerIds: [] }],
+      revelations: [], assetRequests: [],
+      optionIntents: [{ id: 'next', intent: '查看便利店', tone: '克制', expectedPressure: 'low' }],
+      actionSteps: [{ id: 'move', kind: 'travel', scope: 'normal', locationId: 'supermarket' }],
+    };
+    const moved = await prepareMysteryTurn({
+      ...prepare(variables, '前往便利店').request,
+      complete: completeWith(marketPlan),
+    });
+
+    expect(moved.writerPacket.resolvedAction).toMatchObject({
+      startLocationId: 'home', endLocationId: 'supermarket', executedMinutes: 15,
+    });
+    expect(moved.executedContext?.narrativeBackground).toBe('supermarket-day');
+    expect(moved.writerPacket.authorizedActionOutcomes?.map(source => source.text).join(''))
+      .toContain('玩家位于便利店（supermarket）');
+    expect(moved.writerPacket.authorizedActionOutcomes?.map(source => source.text).join(''))
+      .not.toContain('仍在途中');
+    expect(commit(variables, moved).actionContinuity?.continuation).toBeNull();
   });
 });

@@ -48,13 +48,15 @@ function summedDurations(matches: RegExpMatchArray[]): number | undefined {
 }
 
 function explicitDuration(text: string): number | undefined {
-  const aggregateCap = [...text.matchAll(/(?:只用|只花|最多|总共|总计|限定|预算|给自己)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)];
-  if (aggregateCap.length) return summedDurations(aggregateCap.slice(0, 1));
+  const aggregateCap = text.match(/^\s*(?:只用|只花|最多|总共|总计|限定|预算|给自己)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/u);
+  if (aggregateCap) return summedDurations([aggregateCap]);
   return summedDurations([...text.matchAll(/(?:用|花|休息|等待|等)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)]);
 }
 
 function explicitStageDuration(text: string): number | undefined {
-  return summedDurations([...text.matchAll(/(?:休息|等待|等)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)]);
+  const suffixDurations = [...text.matchAll(/(?:休息|等待|等)([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)/gu)];
+  if (suffixDurations.length) return summedDurations(suffixDurations);
+  return summedDurations([...text.matchAll(/(?:只用|只花|用|花)?([半一二两三四五六七八九十\d]+)(分钟|小时)(?!前(?!往)|后|之)(?:来)?(?:休息|等待|等)/gu)]);
 }
 
 function actionClauses(text: string): string[] {

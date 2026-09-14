@@ -94,8 +94,18 @@ describe('trusted action input adapter', () => {
     expect(input.steps.map(step => step.requestedMinutes)).toEqual([60, 30]);
     expect(resolveAction(input).executedMinutes).toBe(90);
   });
+  it('treats a later only-duration as a local stage limit in a compound action', () => {
+    const input = buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [
+      { id: 'rest', kind: 'rest', scope: 'normal', locationId: 'home' },
+      { id: 'wait', kind: 'wait', scope: 'normal', locationId: 'home' },
+    ] }, { ...context, originalInput: '先休息十分钟，再只用五分钟等待' }, 'locally-capped-compound');
+    expect(input.explicitBudgetMinutes).toBe(15);
+    expect(input.steps.map(step => step.requestedMinutes)).toEqual([10, 5]);
+    expect(resolveAction(input).executedMinutes).toBe(15);
+  });
   it('does not turn a historical time mentioned in a question into a budget', () => {
     expect(buildActionAuthorityInput(plan, { ...context, originalInput: '询问两小时前发生了什么' }, 'r').explicitBudgetMinutes).toBeUndefined();
+    expect(buildActionAuthorityInput(plan, { ...context, originalInput: '只用五分钟前的记录核实情况' }, 'r2').explicitBudgetMinutes).toBeUndefined();
   });
   it('keeps separately priced compound actions and binds ambiguous findings to the final stage', () => {
     const result = buildActionAuthorityInput(plan, { ...context, originalInput: '先调查房间，再询问邻居' }, 'r');

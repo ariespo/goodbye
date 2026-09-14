@@ -131,6 +131,126 @@ describe('execution context projection', () => {
     expect(projected.activeNpcIds).toEqual([]);
   });
 
+  it('does not apply an abandoned partial route to a new completed destination travel', () => {
+    const input = fixture();
+    const pending = buildPendingActionSceneContext(input.userInput, input.gameStatus.time, {
+      currentLocationId: 'home', cycleCount: 1, enRouteEncounterRoll: 1,
+    });
+    input.userInput = '前往便利店';
+    input.variables.time = '2024-09-09T16:00:00';
+    input.variables.deathNews = 'delivered';
+    input.gameStatus.time = new Date('2024-09-09T16:00:00');
+    input.variables.actionContinuity = {
+      cycleCount: 1,
+      continuation: {
+        actionId: 'school-investigation', cycleCount: 1,
+        steps: [
+          { id: '__travel__:0:home:school:work%3A0', kind: 'travel', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+          { id: 'work:0', kind: 'investigation', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+        ], previousResolutionId: 'first', stepsDigest: 'steps-original', resumableFromTime: '2024-09-09T16:00:00',
+        expectedLocationId: 'home', activeStepId: '__travel__:0:home:school:work%3A0',
+        completedMinutesByStep: { '__travel__:0:home:school:work%3A0': 5 },
+        chargedStaminaByStep: { '__travel__:0:home:school:work%3A0': 2 },
+      },
+      sceneContext: { ...pending, actionId: 'school-investigation' },
+    };
+    const completedTravel: ResolvedActionOutcome = {
+      id: 'new-market-travel', cycleCount: 1,
+      startTime: '2024-09-09T16:00:00', endTime: '2024-09-09T16:15:00',
+      startLocationId: 'home', endLocationId: 'supermarket', plannedMinutes: 15, executedMinutes: 15,
+      segments: [{
+        step: { id: '__travel__:0:home:supermarket:move', kind: 'travel', scope: 'normal', locationId: 'supermarket', completionSourceIds: [] },
+        plannedMinutes: 15, executedMinutes: 15, cumulativeExecutedMinutes: 15, staminaDelta: -5, completed: true,
+      }],
+      resources: { before: { stamina: 99, sanity: 58 }, after: { stamina: 94, sanity: 58 } },
+      completedSourceIds: [], eventEffectIds: [],
+    };
+
+    const projected = buildTurnPreparation(input).request.projectExecution!(completedTravel);
+    expect(projected.mysteryLocation).toBe('supermarket');
+    expect(projected.presentationContext.currentBackground).toBe('supermarket-day');
+    expect(projected.narrativeBackground).toBe('supermarket-day');
+  });
+
+  it('projects a resumed pure-travel continuation at its completed destination', () => {
+    const input = fixture();
+    const pending = buildPendingActionSceneContext(input.userInput, input.gameStatus.time, {
+      currentLocationId: 'home', cycleCount: 1, enRouteEncounterRoll: 1,
+    });
+    input.userInput = '继续未完成的行程';
+    input.variables.time = '2024-09-09T16:00:00';
+    input.gameStatus.time = new Date('2024-09-09T16:00:00');
+    input.variables.actionContinuity = {
+      cycleCount: 1,
+      continuation: {
+        actionId: 'school-travel', cycleCount: 1,
+        steps: [{ id: '__travel__:0:home:school:move', kind: 'travel', scope: 'normal', locationId: 'school', completionSourceIds: [] }],
+        previousResolutionId: 'first', stepsDigest: 'steps-original', resumableFromTime: '2024-09-09T16:00:00',
+        expectedLocationId: 'home', activeStepId: '__travel__:0:home:school:move',
+        completedMinutesByStep: { '__travel__:0:home:school:move': 5 },
+        chargedStaminaByStep: { '__travel__:0:home:school:move': 2 },
+      },
+      sceneContext: { ...pending, actionId: 'school-travel' },
+    };
+    const completedTravel: ResolvedActionOutcome = {
+      id: 'school-travel', cycleCount: 1,
+      startTime: '2024-09-09T16:00:00', endTime: '2024-09-09T16:10:00',
+      startLocationId: 'home', endLocationId: 'school', plannedMinutes: 10, executedMinutes: 10,
+      segments: [{
+        step: { id: '__travel__:0:home:school:move', kind: 'travel', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+        plannedMinutes: 15, executedMinutes: 10, cumulativeExecutedMinutes: 15, staminaDelta: -3, completed: true,
+      }],
+      resources: { before: { stamina: 99, sanity: 58 }, after: { stamina: 96, sanity: 58 } },
+      completedSourceIds: [], eventEffectIds: [],
+    };
+
+    const projected = buildTurnPreparation({ ...input, resumeActionId: 'school-travel' })
+      .request.projectExecution!(completedTravel);
+    expect(projected.mysteryLocation).toBe('school');
+    expect(projected.presentationContext.currentBackground).toBe('school-day');
+    expect(projected.narrativeBackground).toBe('school-day');
+  });
+
+  it('keeps a same-anchor wait on the street while partial travel is retained', () => {
+    const input = fixture();
+    const pending = buildPendingActionSceneContext(input.userInput, input.gameStatus.time, {
+      currentLocationId: 'home', cycleCount: 1, enRouteEncounterRoll: 1,
+    });
+    input.userInput = '原地等待半小时';
+    input.variables.time = '2024-09-09T16:00:00';
+    input.gameStatus.time = new Date('2024-09-09T16:00:00');
+    input.variables.actionContinuity = {
+      cycleCount: 1,
+      continuation: {
+        actionId: 'school-investigation', cycleCount: 1,
+        steps: [
+          { id: '__travel__:0:home:school:work%3A0', kind: 'travel', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+          { id: 'work:0', kind: 'investigation', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+        ], previousResolutionId: 'first', stepsDigest: 'steps-original', resumableFromTime: '2024-09-09T16:00:00',
+        expectedLocationId: 'home', activeStepId: '__travel__:0:home:school:work%3A0',
+        completedMinutesByStep: { '__travel__:0:home:school:work%3A0': 5 },
+        chargedStaminaByStep: { '__travel__:0:home:school:work%3A0': 2 },
+      },
+      sceneContext: { ...pending, actionId: 'school-investigation' },
+    };
+    const wait: ResolvedActionOutcome = {
+      id: 'wait', cycleCount: 1,
+      startTime: '2024-09-09T16:00:00', endTime: '2024-09-09T16:30:00',
+      startLocationId: 'home', endLocationId: 'home', plannedMinutes: 30, executedMinutes: 30,
+      segments: [{
+        step: { id: 'wait', kind: 'wait', scope: 'normal', locationId: 'home', completionSourceIds: [], requestedMinutes: 30 },
+        plannedMinutes: 30, executedMinutes: 30, cumulativeExecutedMinutes: 30, staminaDelta: 0, completed: true,
+      }],
+      resources: { before: { stamina: 99, sanity: 58 }, after: { stamina: 99, sanity: 58 } },
+      completedSourceIds: [], eventEffectIds: [],
+    };
+
+    const projected = buildTurnPreparation(input).request.projectExecution!(wait);
+    expect(projected.mysteryLocation).toBe('home');
+    expect(projected.presentationContext.currentBackground).toBe('street');
+    expect(projected.actionNarrativeContext).toBeNull();
+  });
+
   it('maps completed compound work participants while withholding every scene contract in transit', () => {
     const input = fixture();
     input.userInput = '先调查便利店，再去学校调查';

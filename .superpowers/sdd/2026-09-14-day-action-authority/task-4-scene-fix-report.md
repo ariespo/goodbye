@@ -53,3 +53,29 @@ The 99-test run includes narrative-context, new scene-continuity, preparation sn
 ## Freeze
 
 This scene/preparation slice is frozen for root integration and independent re-review. Further changes should be made only for a concrete review finding.
+
+## Fix round 2: unrelated completed travel
+
+Astra identified a new edge after round 1: an old partial home-to-school route remained stored while the player chose a new, completed home-to-supermarket travel action. `isNonWorkResolution` includes pure travel, so the old `savedTransit` predicate incorrectly projected the completed new trip as `street` and authorized the false statement “仍在途中，尚未抵达目的地.” The read-only reproduction is recorded in `.codex-test-tmp/task4-new-travel-probe.log`.
+
+The projection now uses saved partial-travel presentation only when the current resolution matches transaction retention: it starts and ends at the saved expected anchor on the same day, and every current segment is an event or wait. A completed new trip or completed pure-travel resume therefore uses its actual destination background and clears the abandoned continuation at settlement. A zero-time official event and a same-anchor wait still preserve the street presentation.
+
+Round-2 RED command:
+
+`npx vitest run src/agents/mystery/turn-preparation.execution.test.ts src/agents/mystery/orchestrator.continuation-scene.test.ts`
+
+Result before the fix: **2 failed, 10 passed**. Both the direct projector and actual orchestrator expected `supermarket-day` but received `street`.
+
+Round-2 final covering command:
+
+`npx vitest run src/agents/mystery/turn-preparation.execution.test.ts src/agents/mystery/orchestrator.continuation-scene.test.ts src/agents/mystery/turn-preparation.test.ts src/agents/mystery/orchestrator.action-resolution.test.ts src/engine/game-transaction.resolved.test.ts src/agents/mystery/action-authority.test.ts src/engine/action-narrative-context.test.ts src/engine/action-scene-continuity.test.ts`
+
+Result: **8 files, 104 tests passed**. This includes new completed travel, completed pure-travel resume, same-anchor wait, zero-time event, original partial travel, exterior-school resume, and compound cast coverage.
+
+Additional verification:
+
+- `npx eslint src/agents/mystery/turn-preparation.ts src/agents/mystery/turn-preparation.execution.test.ts src/agents/mystery/orchestrator.continuation-scene.test.ts`: exit 0.
+- `npx tsc -b --pretty false`: exit 0.
+- scoped `git diff --check`: exit 0, with LF/CRLF conversion notices only.
+
+The round-2 slice is frozen. No git stage or commit operation was performed.

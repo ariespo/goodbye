@@ -156,7 +156,12 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     && segment.executedMinutes > 0 && !segment.completed);
   const savedActiveStep = sceneState.savedContinuation?.steps
     .find(step => step.id === sceneState.savedContinuation?.activeStepId);
-  const savedTransit = !!resolution && nonWork && savedActiveStep?.kind === 'travel'
+  const preservesSavedWork = !!resolution
+    && resolution.startLocationId === resolution.endLocationId
+    && sceneState.savedContinuation?.expectedLocationId === resolution.endLocationId
+    && new Date(resolution.startTime).toDateString() === new Date(resolution.endTime).toDateString()
+    && resolution.segments.every(segment => segment.step.kind === 'event' || segment.step.kind === 'wait');
+  const savedTransit = preservesSavedWork && savedActiveStep?.kind === 'travel'
     && (sceneState.savedContinuation?.completedMinutesByStep[savedActiveStep.id] ?? 0) > 0;
   const transit = resolutionTransit || savedTransit;
   const executionContext = resolution && !transit
