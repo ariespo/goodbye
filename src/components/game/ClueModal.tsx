@@ -15,7 +15,7 @@ import {
   PixelModalShell,
 } from '../ui/PixelModal';
 
-const MOBILE_CLUE_MEDIA_QUERY = '(max-width: 700px)';
+const MOBILE_CLUE_MEDIA_QUERY = '(max-width: 800px)';
 
 function useNarrowClueViewport() {
   const [isNarrow, setIsNarrow] = useState(

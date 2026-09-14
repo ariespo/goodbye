@@ -5114,10 +5114,10 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   transform: none;
 }
 
-/* The clue board stays a single component instance. At the portrait
+/* The clue board stays a single component instance. At the native HUD
  * breakpoint it is portaled out of the scaled HUD, then this bridge restores
  * the ordinary game-canvas coordinate system without touching legacy cards. */
-@media (max-width: 700px) {
+@media (max-width: 800px) {
   .clue-modal-shell.pixel-modal-shell {
     z-index: 245;
     align-items: stretch !important;
@@ -5454,9 +5454,8 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   font: 16px/1.55 "RenOuFangSong 16", "LXGW WenKai", monospace;
 }
 
-/* This bridge preserves the existing narrow-screen floating panel behavior;
- * only the PC HUD branch above is newly measured. */
-@media (max-width: 700px) {
+/* Match the native HUD and action portal boundary for floating panels. */
+@media (max-width: 800px) {
   .action-panel.pixel-modal-shell {
     inset: auto !important;
     left: var(--mobile-safe-left) !important;
@@ -5635,9 +5634,8 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   opacity: 1;
 }
 
-/* Keep the pre-existing portrait map behavior after the PC board moved to
- * shared modal primitives; these rules intentionally reset fixed HUD values. */
-@media (max-width: 700px) {
+/* Match the native HUD and map portal boundary, resetting fixed HUD values. */
+@media (max-width: 800px) {
   .map-modal-shell.pixel-modal-shell {
     align-items: stretch !important;
     justify-content: stretch !important;
@@ -5737,6 +5735,14 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 
 /* Native phone HUD: use viewport coordinates without scaling the desktop board. */
 @media (max-width: 800px) {
+  :root,
+  .game-canvas {
+    --mobile-safe-top: max(10px, env(safe-area-inset-top));
+    --mobile-safe-right: max(10px, env(safe-area-inset-right));
+    --mobile-safe-bottom: max(10px, env(safe-area-inset-bottom));
+    --mobile-safe-left: max(10px, env(safe-area-inset-left));
+  }
+
   .hud-design-canvas .mobile-status-panel__buttons button {
     min-width: 44px;
     min-height: 44px;

@@ -36,7 +36,7 @@ type ActionPanelPayload = {
   selectedIndex: number | null;
 };
 
-const MOBILE_ACTION_MEDIA_QUERY = '(max-width: 700px)';
+const MOBILE_ACTION_MEDIA_QUERY = '(max-width: 800px)';
 
 function useNarrowActionViewport() {
   const [isNarrow, setIsNarrow] = useState(

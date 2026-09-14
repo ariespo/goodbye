@@ -47,7 +47,7 @@ const MAP_LOCATION_POSITIONS: Record<string, { x: number; y: number }> = {
   'observation-deck': { x: 86, y: 42 },
 };
 
-const MOBILE_MAP_MEDIA_QUERY = '(max-width: 700px)';
+const MOBILE_MAP_MEDIA_QUERY = '(max-width: 800px)';
 
 function getMapPosition(location: { id: string; x: number; y: number }) {
   return MAP_LOCATION_POSITIONS[location.id] ?? { x: location.x, y: location.y };
