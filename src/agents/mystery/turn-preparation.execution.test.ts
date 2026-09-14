@@ -53,6 +53,33 @@ describe('execution context projection', () => {
       actionSelection: { ...input.actionSelection, opportunityId: 'investigation:c0:stale' },
     })).toThrow(/机会|opportunity|失效/i);
   });
+
+  it('binds a trusted menu opportunity destination before preparing its scene and fact context', () => {
+    const input = fixture();
+    input.userInput = '[系统] 玩家选择了一项调查';
+    input.originalActionInput = '向门卫确认文穗今天是否到校';
+    input.hasPendingAction = true;
+    input.actionSelection = {
+      opportunityId: 'investigation:c1:F002:atmosphere:school',
+      kind: 'investigation',
+      scope: 'normal',
+      locationId: 'school',
+    };
+
+    const prepared = buildTurnPreparation(input);
+
+    expect(prepared.request.actionAuthority?.selectedOpportunity?.sourceIds)
+      .toEqual(['fact:F002:atmosphere']);
+    expect(prepared.request.truthContext).toMatchObject({
+      currentLocation: 'school',
+      sceneContract: {
+        destinationLocationId: 'school',
+        requiredDestinationNpcIds: ['school-guard'],
+      },
+    });
+    expect(prepared.request.pendingActionSceneContext?.contextsByLocation.school)
+      .toMatchObject({ locationId: 'school' });
+  });
   it('rebuilds the actual anchor and NPC context after interrupted travel', () => {
     const prepared = buildTurnPreparation(fixture());
     expect(prepared.request.truthContext.currentLocation).toBe('school');

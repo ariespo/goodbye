@@ -72,6 +72,9 @@ function stableRoll(seed: string): number {
 }
 
 function findDestination(input: string, destinationLocationId?: string): DestinationRule | null {
+  if (destinationLocationId) {
+    return DESTINATIONS.find(candidate => candidate.locationId === destinationLocationId) ?? null;
+  }
   // Only bind a verb to its adjacent destination phrase. A location in an
   // earlier clause (including the origin) is not evidence of travel there.
   for (const clause of input.split(/[，,。；;！!\n]/)) {

@@ -568,7 +568,7 @@ export function useGameLoop() {
         const authoritativeMenuTags = serializeChecklistToTags({
           ...deterministicChecklist,
           observe: parsed.observe ?? '',
-        });
+        }, undefined, { authoritativeMenus: true });
         fullText = insertTagsIntoMaintext(
           fullText
             .replace(/<observe>[\s\S]*?<\/observe>/g, '')

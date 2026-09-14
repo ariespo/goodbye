@@ -384,12 +384,15 @@ export function serializeChecklistToTags(checklist: SceneChecklist, existing?: {
   hasObserve?: boolean;
   hasInvestigate?: boolean;
   hasAction?: boolean;
+}, options?: {
+  /** Persist explicit empty program menus so reload can distinguish them from absent legacy data. */
+  authoritativeMenus?: boolean;
 }): string {
   const blocks: string[] = [];
   if (!existing?.hasObserve && checklist.observe) {
     blocks.push(`<observe>\n${checklist.observe}\n</observe>`);
   }
-  if (!existing?.hasInvestigate && checklist.investigateItems.length > 0) {
+  if (!existing?.hasInvestigate && (checklist.investigateItems.length > 0 || options?.authoritativeMenus)) {
     const lines = checklist.investigateItems.map(item => {
       const fields: Array<string | number> = [sanitizeField(item.desc), sanitizeField(item.suspect), sanitizeField(item.style), sanitizeField(item.time), item.stamina, item.sanity];
       const metadata = encodeChecklistMetadata(item);
@@ -398,7 +401,7 @@ export function serializeChecklistToTags(checklist: SceneChecklist, existing?: {
     });
     blocks.push(`<investigate>\n${lines.join('\n')}\n</investigate>`);
   }
-  if (!existing?.hasAction && checklist.actionItems.length > 0) {
+  if (!existing?.hasAction && (checklist.actionItems.length > 0 || options?.authoritativeMenus)) {
     const lines = checklist.actionItems.map(item => {
       const fields: Array<string | number> = [sanitizeField(item.desc), sanitizeField(item.style), sanitizeField(item.time), item.stamina, item.sanity];
       const metadata = encodeChecklistMetadata(item);

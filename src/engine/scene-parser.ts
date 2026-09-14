@@ -251,10 +251,10 @@ export function mergeParsedIntoScene(
   return {
     ...scene,
     observe: parsed.observe || scene.observe || prev?.observe,
-    investigateItems: parsed.investigateItems?.length
+    investigateItems: parsed.investigateItems !== undefined
       ? parsed.investigateItems
       : scene.investigateItems?.length ? scene.investigateItems : prev?.investigateItems,
-    actionItems: parsed.actionItems?.length
+    actionItems: parsed.actionItems !== undefined
       ? parsed.actionItems
       : scene.actionItems?.length ? scene.actionItems : prev?.actionItems,
   };

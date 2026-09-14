@@ -13,7 +13,11 @@ export function rebuildSceneFromChat(chat: ChatSession | null | undefined): Scen
   const maintext = lastAssistant.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim() || '';
   if (!maintext) return null;
   const scene = maintext === OPENING_STORYLINE ? parseOpeningStoryline() : maintextToScene(maintext);
-  if (scene.lines.length > 0 && (scene.observe || scene.investigateItems?.length || scene.actionItems?.length)) {
+  if (scene.lines.length > 0 && (
+    scene.observe
+    || scene.investigateItems !== undefined
+    || scene.actionItems !== undefined
+  )) {
     return scene;
   }
   return null;

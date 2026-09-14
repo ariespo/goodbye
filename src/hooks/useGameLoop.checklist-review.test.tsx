@@ -11,6 +11,8 @@ import { runStateAgent } from '../agents/state/state-agent';
 import { saveChat } from '../sillytavern/database';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatSession } from '../sillytavern/types';
+import { maintextToScene } from '../engine/scene-parser';
+import { rebuildSceneFromChat } from '../utils/sceneFromChat';
 
 vi.mock('../agents/mystery', async original => ({
   ...await original<typeof import('../agents/mystery')>(),
@@ -83,6 +85,60 @@ afterEach(() => {
 });
 
 describe('asynchronous checklist authority', () => {
+  it('keeps an authoritative empty investigation menu through Writer rows, enrichment, reload, and panel opening', async () => {
+    const known = {
+      'shared-apron-missing': 'atmosphere' as const,
+      'shared-school-absence': 'atmosphere' as const,
+      'red-herring-part-time-job': 'hint' as const,
+    };
+    useGameStore.setState(state => {
+      const variables = { ...state.tavern.variables, mysteryKnowledge: known };
+      const previous = maintextToScene('对话|旁白|calm|上一轮');
+      previous.investigateItems = [{
+        desc: '上一轮调查', suspect: '无', style: '现实', time: '10分钟', stamina: 1, sanity: 0,
+      }];
+      return {
+        tavern: { ...state.tavern, variables },
+        game: {
+          ...state.game,
+          currentScene: previous,
+          endingCheckContext: variablesToEndingContext(variables) as typeof state.game.endingCheckContext,
+        },
+      };
+    });
+    vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken('<maintext>场景|home-day\n对话|旁白|calm|这一轮没有新的明确调查目标。\n'
+        + '<investigate>写手伪造调查|无|现实|1分钟|99|99</investigate>\n'
+        + '<action>写手伪造行动|现实|1分钟|99|99</action></maintext>'
+        + '<option>继续\n休息</option><sum>暂无目标。</sum><vars>{}</vars>');
+      await callbacks.onComplete();
+    });
+
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('看看还有什么能做'); });
+    await waitFor(() => expect(useGameStore.getState().game.currentScene?.observe).toBe(injectedDetail));
+
+    const state = useGameStore.getState();
+    expect(state.game.currentScene?.investigateItems).toEqual([]);
+    expect(JSON.stringify(state.game.currentScene)).not.toContain('写手伪造');
+    const activeChat = state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId)!;
+    const restored = rebuildSceneFromChat(activeChat);
+    expect(restored?.investigateItems).toEqual([]);
+    expect(JSON.stringify(restored)).not.toContain('写手伪造');
+
+    const generatedTurns = vi.mocked(streamChatCompletion).mock.calls.length;
+    const timeBeforePanel = state.tavern.variables.time;
+    act(() => { result.current.performAction('investigate'); });
+    expect(useGameStore.getState().game.actionPanel).toMatchObject({
+      visible: true,
+      type: 'investigate',
+      content: '当前清单暂无新的明确调查目标。',
+    });
+    expect(streamChatCompletion).toHaveBeenCalledTimes(generatedTurns);
+    expect(useGameStore.getState().tavern.variables.time).toBe(timeBeforePanel);
+    unmount();
+  });
+
   it('rejects unsupported checklist text without undoing the accepted foreground scene', async () => {
     vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ approved: false,
       violations: [{ code: 'ungrounded-evidence-detail', message: '无配送记录授权' }], corrections: ['移除未授权断言'] });

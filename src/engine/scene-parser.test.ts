@@ -136,7 +136,7 @@ describe('mergeParsedIntoScene', () => {
     expect(merged.lines[0].text).toBe('新');
   });
 
-  it('overrides with parsed values when present', () => {
+  it('treats an explicitly empty parsed menu as authoritative', () => {
     const scene = maintextToScene('对话|旁白|calm|新');
     const merged = mergeParsedIntoScene(prev, scene, {
       observe: '新观察',
@@ -145,7 +145,7 @@ describe('mergeParsedIntoScene', () => {
     });
     expect(merged.observe).toBe('新观察');
     expect(merged.investigateItems?.[0].desc).toBe('新调查');
-    expect(merged.actionItems).toEqual(prev.actionItems);
+    expect(merged.actionItems).toEqual([]);
   });
 
   it('works without a previous scene', () => {

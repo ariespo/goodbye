@@ -14,6 +14,8 @@ import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatSessio
 import { buildInvestigationOpportunities } from '../engine/investigation-opportunities';
 import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
 import { maintextToScene } from '../engine/scene-parser';
+import { rebuildSceneFromChat } from '../utils/sceneFromChat';
+import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
 
 vi.mock('../agents/mystery', async original => ({ ...await original<typeof import('../agents/mystery')>(),
   prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(), reviewNarrativeAgainstWriterPacket: vi.fn(), reviewNarrativeStyle: vi.fn() }));
@@ -28,7 +30,7 @@ const approved = { approved: true, violations: [], corrections: [] };
 describe('priced investigation menu acceptance', () => {
   it('awards a completed finding once and honors an exhausted same-day menu attempt', async () => {
     const opportunity = buildInvestigationOpportunities({ graph: MYSTERY_TRUTH_GRAPH,
-      context: { cycleCount: 1, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [], playerKnowledge: {}, suspicion: {}, activeNpcIds: [] },
+      context: { cycleCount: 1, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [], playerKnowledge: {}, suspicion: {}, activeNpcIds: [], playerPresentation: buildPlayerKnowledgeBrief({ location: 'home' }) },
       progress: { cycleCount: 1, completedIds: [], noProgressByTopic: {} } }).find(item => item.locationId === 'home');
     expect(opportunity).toBeDefined();
     const text = '衣柜里有一处不自然的空缺。';
@@ -64,6 +66,117 @@ describe('priced investigation menu acceptance', () => {
     expect(progress?.completedIds.filter(id => id === opportunity!.id)).toHaveLength(1);
     expect(progress?.noProgressByTopic[opportunity!.topicKey]).toBe(1);
     unmount();
+  });
+
+  it('uses the trusted school opportunity for one travel charge, 55 minutes of work, and its reward', async () => {
+    const opportunity = buildInvestigationOpportunities({ graph: MYSTERY_TRUTH_GRAPH,
+      context: { cycleCount: 1, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [], playerKnowledge: {}, suspicion: {}, activeNpcIds: [], playerPresentation: buildPlayerKnowledgeBrief({ location: 'home' }) },
+      progress: { cycleCount: 1, completedIds: [], noProgressByTopic: {} } }).find(item => item.locationId === 'school');
+    expect(opportunity).toBeDefined();
+    const finding = '门卫说，今天在校门口见过文穗。';
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, complete: async messages =>
+      messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性') ? JSON.stringify(approved)
+        : JSON.stringify({ turnGoal: '向门卫核对到校情况', tone: '克制',
+          beats: [{ id: 'b', purpose: '调查', description: finding, locationId: 'school', speakerIds: ['school-guard'] }],
+          revelations: [{ factId: 'F002', level: 'atmosphere', delivery: 'dialogue', speakerId: 'school-guard' }], assetRequests: [],
+          actionSteps: [{ id: 'school-check', kind: 'investigation', scope: opportunity!.scope, locationId: 'school' }],
+          optionIntents: [{ id: 'rest', intent: '稍作休息', tone: '克制', expectedPressure: 'low' }] }) }));
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ ...approved, assertionAudit: {
+      reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: finding, proposition: finding, status: 'supported',
+        citations: [{ sourceId: 'fact:F002:atmosphere', quote: finding }], reason: 'authorized school inquiry' }],
+    } });
+    vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken(`<maintext>场景|school-day\n对话|门卫|calm|${finding}</maintext><option>继续调查\n返回</option><sum>询问门卫。</sum><vars>{}</vars>`);
+      await callbacks.onComplete();
+    });
+    const menu = { ...maintextToScene('对话|旁白|calm|你准备出门。'), investigateItems: [{
+      desc: opportunity!.publicGoal, suspect: '无', style: '现实', time: '1分钟', stamina: 99, sanity: 99,
+      opportunityId: opportunity!.id, scope: opportunity!.scope, locationId: opportunity!.locationId,
+    }] };
+    useGameStore.setState(state => ({ game: { ...state.game, currentScene: menu } }));
+
+    const { result, unmount } = renderHook(() => useGameLoop());
+    act(() => { result.current.performAction('investigate', 0); });
+    await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(1));
+
+    const state = useGameStore.getState();
+    expect(state.tavern.variables).toMatchObject({
+      time: '2024-09-09T09:05:00',
+      location: 'school',
+      mysteryKnowledge: { 'shared-school-absence': 'atmosphere' },
+    });
+    const resolved = vi.mocked(runStateAgent).mock.calls[0][0].resolvedAction!;
+    expect(resolved.segments.map(segment => ({ kind: segment.step.kind, planned: segment.plannedMinutes })))
+      .toEqual([{ kind: 'travel', planned: 10 }, { kind: 'investigation', planned: 55 }]);
+    expect(resolved.completedSourceIds).toEqual(['fact:F002:atmosphere']);
+    expect(state.tavern.variables.opportunityProgress?.completedIds).toContain(opportunity!.id);
+    unmount();
+  });
+
+  it('restores the selected school opportunity identity after interruption and reload', async () => {
+    useGameStore.setState(state => ({
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, time: '2024-09-09T15:30:00' } },
+      game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T15:30:00') } },
+    }));
+    const opportunity = buildInvestigationOpportunities({ graph: MYSTERY_TRUTH_GRAPH,
+      context: { cycleCount: 1, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [], playerKnowledge: {}, suspicion: {}, activeNpcIds: [], playerPresentation: buildPlayerKnowledgeBrief({ location: 'home' }) },
+      progress: { cycleCount: 1, completedIds: [], noProgressByTopic: {} } }).find(item => item.locationId === 'school')!;
+    let plans = 0;
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, complete: async messages => {
+      if (messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')) return JSON.stringify(approved);
+      plans += 1;
+      return JSON.stringify({ turnGoal: '向门卫核对到校情况', tone: '克制',
+        beats: [{ id: 'b', purpose: '调查', description: '门卫说，今天在校门口见过文穗。', locationId: 'school', speakerIds: ['school-guard'] }],
+        revelations: plans === 1 ? [{ factId: 'F002', level: 'atmosphere', delivery: 'dialogue', speakerId: 'school-guard' }] : [], assetRequests: [],
+        ...(plans === 1 ? { actionSteps: [{ id: 'school-check', kind: 'investigation', scope: opportunity.scope, locationId: 'school' }] } : {}),
+        optionIntents: [{ id: 'rest', intent: '稍作休息', tone: '克制', expectedPressure: 'low' }] });
+    } }));
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ ...approved, assertionAudit: {
+      reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: '门卫', proposition: '门卫核对到校记录', status: 'supported',
+        citations: [{ sourceId: 'fact:F002:atmosphere', quote: '门卫' }], reason: 'authorized resumed inquiry' }],
+    } });
+    const scenes = [
+      '对话|旁白|calm|你赶到学校，并开始向门卫核对记录。\n对话|门卫|calm|我得翻一下今天的记录，你等会儿。',
+      '对话|旁白|calm|警方通过电话明确告知你：文穗已经死亡。',
+      '对话|门卫|calm|门卫说，今天在校门口见过文穗。',
+    ];
+    let sceneIndex = 0;
+    vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken(`<maintext>场景|school-day\n${scenes[sceneIndex++]}</maintext><option>继续调查\n休息</option><sum>核对记录。</sum><vars>{}</vars>`);
+      await callbacks.onComplete();
+    });
+    const menu = { ...maintextToScene('对话|旁白|calm|你准备出门。'), investigateItems: [{
+      desc: opportunity.publicGoal, suspect: '无', style: '现实', time: '1分钟', stamina: 99, sanity: 99,
+      opportunityId: opportunity.id, scope: opportunity.scope, locationId: opportunity.locationId,
+    }] };
+    useGameStore.setState(state => ({ game: { ...state.game, currentScene: menu } }));
+
+    const firstHook = renderHook(() => useGameLoop());
+    act(() => { firstHook.result.current.performAction('investigate', 0); });
+    await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(1));
+    const interrupted = useGameStore.getState();
+    const resumeActionId = interrupted.tavern.variables.actionContinuity?.continuation?.actionId;
+    expect(interrupted.tavern.variables).toMatchObject({ time: '2024-09-09T16:00:00', location: 'school' });
+    expect(interrupted.tavern.variables.actionContinuity?.selectedOpportunity?.id).toBe(opportunity.id);
+    expect(interrupted.tavern.variables.mysteryKnowledge?.['shared-school-absence']).toBeUndefined();
+    expect(interrupted.tavern.chats[0].messages.find(message => message.role === 'user')?.actionRequest?.selection?.opportunityId)
+      .toBe(opportunity.id);
+
+    const reloadedScene = rebuildSceneFromChat(interrupted.tavern.chats[0]);
+    firstHook.unmount();
+    useGameStore.setState(state => ({ game: { ...state.game, currentScene: reloadedScene } }));
+    const resumedHook = renderHook(() => useGameLoop());
+    await act(async () => { await resumedHook.result.current.sendMessage('接听警方电话'); });
+    await act(async () => { await resumedHook.result.current.sendMessage('继续未完成的调查', { resumeActionId }); });
+
+    const final = useGameStore.getState().tavern.variables;
+    expect(final).toMatchObject({
+      time: '2024-09-09T16:35:00',
+      location: 'school',
+      mysteryKnowledge: { 'shared-school-absence': 'atmosphere' },
+    });
+    expect(final.opportunityProgress?.completedIds).toContain(opportunity.id);
+    resumedHook.unmount();
   });
 });
 

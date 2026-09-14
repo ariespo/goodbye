@@ -16,7 +16,7 @@ export interface ActionSceneContinuity {
 export type PendingActionSceneContext = Omit<ActionSceneContinuity, 'actionId'>;
 
 type BuildSceneContextOptions = Pick<ResolveActionNarrativeContextOptions,
-  'currentLocationId' | 'cycleCount' | 'knowledgeEvents' | 'enRouteEncounterRoll' | 'schoolEncounterRoll'>;
+  'currentLocationId' | 'cycleCount' | 'destinationLocationId' | 'knowledgeEvents' | 'enRouteEncounterRoll' | 'schoolEncounterRoll'>;
 
 function actionClauses(input: string): string[] {
   const marked = input.replace(/^先(.+?)再/u, '$1；再');

@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { createParseState, parseChunk, isComplete } from './stream-parser';
 
 describe('stream-parser', () => {
+  it('keeps absent legacy checklist tags distinct from explicit empty menus', () => {
+    const state = parseChunk(createParseState(), '<maintext>对话|旁白|calm|只有正文</maintext>');
+    expect(state.parsed.investigateItems).toBeUndefined();
+    expect(state.parsed.actionItems).toBeUndefined();
+  });
+
   it('should parse complete tags', () => {
     let state = createParseState();
     state = parseChunk(state, '<maintext>这是一段剧情</maintext>');

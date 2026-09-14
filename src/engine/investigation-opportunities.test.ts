@@ -38,6 +38,24 @@ function context(overrides: Partial<TruthContext> = {}): TruthContext {
   };
 }
 
+function withTravel(...ids: string[]): TruthContext['playerPresentation'] {
+  return {
+    locations: ids.map(id => ({ id, stage: 'located', name: id, canTravel: true })),
+    entities: [],
+    namingRules: [],
+    allowedDiscoveries: [],
+  };
+}
+
+function hasFactOpportunity(overrides: Partial<TruthContext>, factId: string): boolean {
+  const alias = aliases.factIdToAlias[factId];
+  return buildInvestigationOpportunities({
+    graph: MYSTERY_TRUTH_GRAPH,
+    context: context(overrides),
+    progress: progress(overrides.cycleCount ?? 1),
+  }).some(opportunity => opportunity.sourceIds.some(source => source.startsWith(`fact:${alias}:`)));
+}
+
 describe('buildInvestigationOpportunities', () => {
   it('offers a public home search from the legal day-one brief', () => {
     const opportunities = buildInvestigationOpportunities({
@@ -230,6 +248,51 @@ describe('buildInvestigationOpportunities', () => {
         sourceIds: ['fact:F007:hint'],
       }),
     ]));
+  });
+
+  it('offers the legal day-two bedroom search after the shared opening leads are known', () => {
+    const opportunities = buildInvestigationOpportunities({
+      graph: MYSTERY_TRUTH_GRAPH,
+      context: context({
+        cycleCount: 2,
+        playerKnowledge: {
+          'shared-apron-missing': 'atmosphere',
+          'red-herring-part-time-job': 'hint',
+        },
+      }),
+      progress: progress(2),
+    });
+
+    expect(opportunities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        locationId: 'home',
+        publicGoal: '仔细检查卧室抽屉和夹层',
+        sourceIds: [expect.stringMatching(/^fact:F\d+:hint$/)],
+      }),
+    ]));
+  });
+
+  it.each([
+    ['A first', 'a-sacrifice-list', { cycleCount: 3, suspicion: { 'old-man': 26 }, playerPresentation: withTravel('old-man-building') }],
+    ['A middle', 'a-lured-inside', { cycleCount: 4, suspicion: { 'old-man': 26 }, unlockedClueIds: ['a-sacrifice-list'], playerKnowledge: { 'a-sacrifice-list': 'clue' }, playerPresentation: withTravel('old-man-building') }],
+    ['A final', 'a-murder-staged-fall', { cycleCount: 5, lockedRoute: 'A', suspicion: { 'old-man': 50 }, unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside'], playerKnowledge: { 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' }, playerPresentation: withTravel('old-man-building') }],
+    ['B first', 'b-water-tower-blood', { cycleCount: 3, suspicion: { 'detective-a': 26 }, playerPresentation: withTravel('water-tower') }],
+    ['B middle', 'b-detective-coverup', { cycleCount: 4, suspicion: { 'detective-a': 50 }, unlockedClueIds: ['b-water-tower-blood'], playerKnowledge: { 'b-water-tower-blood': 'clue' }, playerPresentation: withTravel('water-tower') }],
+    ['B final', 'b-accidental-killing', { cycleCount: 5, lockedRoute: 'B', suspicion: { 'detective-a': 50 }, unlockedClueIds: ['b-water-tower-blood', 'b-detective-coverup'], playerKnowledge: { 'b-water-tower-blood': 'clue', 'b-detective-coverup': 'clue' }, playerPresentation: withTravel('water-tower') }],
+    ['C first', 'c-player-made-leave-call', { cycleCount: 4, suspicion: { self: 30 }, unlockedClueIds: ['shared-male-leave-call'], playerKnowledge: { 'shared-male-leave-call': 'clue' } }],
+    ['C middle', 'c-loop-is-reenactment', { cycleCount: 4, suspicion: { self: 40 } }],
+    ['C final', 'c-player-killed-fumi', { cycleCount: 5, lockedRoute: 'C', suspicion: { self: 50 }, unlockedClueIds: ['c-player-made-leave-call', 'c-loop-is-reenactment'], playerKnowledge: { 'c-player-made-leave-call': 'clue', 'c-loop-is-reenactment': 'clue' } }],
+    ['NONE second', 'none-letter-water-tower', { cycleCount: 3, unlockedClueIds: ['none-letter-bedroom'], playerKnowledge: { 'none-letter-bedroom': 'clue' }, playerPresentation: withTravel('water-tower') }],
+    ['NONE third', 'none-letter-door-gap', { cycleCount: 4, unlockedClueIds: ['none-letter-bedroom', 'none-letter-water-tower'], playerKnowledge: { 'none-letter-bedroom': 'clue', 'none-letter-water-tower': 'clue' } }],
+    ['NONE final', 'none-accidental-goodbye', { cycleCount: 5, lockedRoute: 'NONE', tripProgress: 100, unlockedClueIds: ['none-letter-bedroom', 'none-letter-water-tower', 'none-letter-door-gap'], playerKnowledge: { 'none-letter-bedroom': 'clue', 'none-letter-water-tower': 'clue', 'none-letter-door-gap': 'clue' }, playerPresentation: withTravel('observation-deck') }],
+    ['FAKE body', 'fake-body-mismatch', { cycleCount: 3, playerPresentation: withTravel('community-hospital') }],
+    ['FAKE ticket', 'fake-alias-ticket', { cycleCount: 3 }],
+    ['FAKE savings', 'fake-empty-savings', { cycleCount: 3, playerPresentation: withTravel('supermarket') }],
+    ['FAKE sighting', 'fake-postdeath-sighting', { cycleCount: 4, playerPresentation: withTravel('mountain-trail') }],
+    ['FAKE request', 'fake-touko-request', { cycleCount: 4, affinity: { touko: 80 }, playerPresentation: withTravel('senpai-building') }],
+    ['FAKE final', 'fake-staged-death-escape', { cycleCount: 5, lockedRoute: 'FAKE', unlockedClueIds: ['fake-body-mismatch', 'fake-alias-ticket', 'fake-empty-savings'], playerKnowledge: { 'fake-body-mismatch': 'clue', 'fake-alias-ticket': 'clue', 'fake-empty-savings': 'clue' }, playerPresentation: withTravel('observation-deck') }],
+  ] as Array<[string, string, Partial<TruthContext>]>)('catalogs the legal %s milestone through the real brief gate', (_name, factId, overrides) => {
+    expect(hasFactOpportunity(overrides, factId)).toBe(true);
   });
 
   it('recovers an exact same-cycle authored opportunity even after its level is known', () => {

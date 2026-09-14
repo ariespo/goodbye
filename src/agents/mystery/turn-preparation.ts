@@ -167,6 +167,57 @@ function immutableOpportunityMap(opportunities: readonly InvestigationOpportunit
 function immutableProgramActionMap(actions: readonly ProgramChecklistAction[]): Readonly<Record<string, ProgramChecklistAction>> {
   return Object.freeze(Object.fromEntries(actions.map(action => [action.id, Object.freeze({ ...action })])));
 }
+
+function validateSelectedOpportunityBeforeScene(
+  input: TurnPreparationInput,
+  currentLocationId: string,
+  cycleCount: number,
+): InvestigationOpportunity | undefined {
+  const selection = input.actionSelection;
+  if (!selection?.opportunityId) return undefined;
+  const knownClueIds = (Array.isArray(input.endingCheckContext.unlockedClues)
+    ? input.endingCheckContext.unlockedClues : []).filter(id => mysteryFactIds.has(id));
+  const playerIdentity = readConfirmedPlayerIdentity(input.settings);
+  const truthContext: TruthContext = {
+    cycleCount,
+    currentLocation: currentLocationId,
+    lockedRoute: readLockedRoute(input.variables),
+    unlockedClueIds: knownClueIds,
+    playerKnowledge: readPlayerKnowledge(input.variables, knownClueIds),
+    suspicion: {
+      ...input.endingCheckContext.suspicion,
+      ...(input.variables.suspicion && typeof input.variables.suspicion === 'object'
+        ? input.variables.suspicion : {}),
+    },
+    affinity: {
+      ...input.endingCheckContext.affinity,
+      ...(input.variables.affinity && typeof input.variables.affinity === 'object'
+        ? input.variables.affinity : {}),
+    },
+    tripProgress: Number(input.variables.tripProgress ?? 0),
+    sanity: input.gameStatus.sanity,
+    activeOverlay: readActiveOverlay(input.variables),
+    activeNpcIds: [],
+    playerPresentation: buildPlayerKnowledgeBrief({ ...input.variables, location: currentLocationId }),
+    playerIdentity,
+    playerIdentityVariables: input.variables,
+  };
+  const exact = findInvestigationOpportunity({
+    graph: MYSTERY_TRUTH_GRAPH,
+    context: truthContext,
+    progress: normalizeOpportunityProgress(input.variables.opportunityProgress, cycleCount),
+    currentTime: input.gameStatus.time.toISOString(),
+    stamina: input.gameStatus.stamina,
+    nextBoundary: nextScheduledBoundary(input.gameStatus.time.toISOString(), input.variables),
+  }, selection.opportunityId);
+  if (!exact) throw new Error('所选调查机会已经失效。');
+  if (selection.kind !== 'investigation'
+    || selection.scope !== exact.scope
+    || selection.locationId !== exact.locationId) {
+    throw new Error('所选调查机会元数据与当前合法机会不匹配。');
+  }
+  return exact;
+}
 /** Old saves predate the public ledger. Trust only the exact mandatory assistant
  * opening, never a player quote or parsed-only claim. Legacy panels were nested
  * inside maintext, but their optional contents do not confer any knowledge.
@@ -431,15 +482,19 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
   const isResume = !!snapshot.resumeActionId
     && snapshot.resumeActionId === continuity?.continuation?.actionId
     && snapshot.resumeActionId === validSavedScene?.actionId;
+  const preselectedOpportunity = isResume
+    ? undefined
+    : validateSelectedOpportunityBeforeScene(snapshot, currentLocationId, cycleCount);
   let pendingActionSceneContext = isResume && validSavedScene
     ? pendingSceneContextFromSaved(validSavedScene)
     : buildPendingActionSceneContext(
-        snapshot.originalActionInput ?? snapshot.userInput,
+        preselectedOpportunity?.publicGoal ?? snapshot.originalActionInput ?? snapshot.userInput,
         snapshot.gameStatus.time,
         {
           currentLocationId,
           cycleCount,
           knowledgeEvents: snapshot.variables.knowledgeEvents,
+          destinationLocationId: preselectedOpportunity?.locationId,
         },
       );
   if (!isResume && snapshot.pendingNarrativeContext) {
@@ -474,7 +529,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
       selectedOpportunity,
     ]);
   } else if (snapshot.actionSelection?.opportunityId) {
-    selectedOpportunity = prepared.request.legalOpportunityMap?.[snapshot.actionSelection.opportunityId];
+    selectedOpportunity = preselectedOpportunity;
     if (!selectedOpportunity) throw new Error('所选调查机会已经失效。');
     const selection = snapshot.actionSelection;
     if (selection.kind !== 'investigation'

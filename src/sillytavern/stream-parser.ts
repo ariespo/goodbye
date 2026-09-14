@@ -27,8 +27,6 @@ export function createParseState(): ParseState {
       summary: '',
       vars: {},
       observe: '',
-      investigateItems: [],
-      actionItems: [],
     },
     currentTag: null,
     tagBuffer: '',

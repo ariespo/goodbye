@@ -70,4 +70,27 @@ describe('opportunity runtime integration', () => {
       quote: { workMinutes: 25, travelMinutes: 0, totalMinutes: 25, staminaCost: 3 },
     });
   });
+
+  it('persists authoritative empty menus so reload cannot resurrect older rows', () => {
+    const tags = serializeChecklistToTags(
+      { observe: '', investigateItems: [], actionItems: [] },
+      undefined,
+      { authoritativeMenus: true },
+    );
+    expect(tags).toContain('<investigate>');
+    expect(tags).toContain('<action>');
+
+    const content = insertTagsIntoMaintext(
+      '<maintext>对话|旁白|calm|这一轮没有新的明确调查目标。</maintext><option>继续\n休息</option><sum>暂无目标。</sum>',
+      tags,
+    );
+    const restored = rebuildSceneFromChat({
+      id: 'chat', name: 'test', characterName: '文穗', userName: '玩家', presetId: null,
+      lorebookIds: [], variables: {}, createdAt: 0, updatedAt: 0,
+      messages: [{ id: 'assistant', role: 'assistant', content, timestamp: 0, variables: {} }],
+    });
+    expect(restored).not.toBeNull();
+    expect(restored?.investigateItems).toEqual([]);
+    expect(restored?.actionItems).toEqual([]);
+  });
 });
