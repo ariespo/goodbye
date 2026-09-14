@@ -42,7 +42,13 @@ function assertNoProxyErrorEnvelope(content: string): void {
   const match = content.trim().match(/^### \*\*Proxy error \(HTTP ([45]\d{2})(?: [^\r\n()]*)?\)\*\*\r?\n[\s\S]*\n<!-- oai-proxy-error -->$/);
   if (!match) return;
   const status = Number(match[1]);
-  throw new ApiCallError(`网关返回代理错误（HTTP ${status}）`, classifyHttpStatus(status), status);
+  // Preserve only the capability classification, not the gateway's arbitrary
+  // response body, so the structured adapter can perform its normal fallback.
+  const unsupportedFormat = [400, 404, 422].includes(status)
+    && /response[_ ]?(?:schema|format)|json_schema|json_object/i.test(content)
+    && /not supported|unsupported|unknown (?:name|field)|unavailable/i.test(content);
+  throw new ApiCallError(`网关返回代理错误（HTTP ${status}）${unsupportedFormat ? '：response_schema unsupported' : ''}`,
+    classifyHttpStatus(status), status);
 }
 
 export function toApiCallError(cause: unknown): ApiCallError {

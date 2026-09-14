@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { completeStructured, resetResponseFormatSupportCache } from '../agents/mystery/structured';
 import {
   ApiCallError,
   callSecondaryApi,
@@ -156,6 +157,20 @@ describe('reasoning_content compatibility', () => {
 });
 
 describe('HTTP 200 gateway error envelopes', () => {
+  it('retains explicit schema incompatibility so structured calls can fall back to JSON Object', async () => {
+    resetResponseFormatSupportCache();
+    const schemaError = '### **Proxy error (HTTP 400 Bad Request)**\nRequest validation failed. At generationConfig > responseSchema: additionalProperties is not supported by Gemini structured output.\n<!-- oai-proxy-error -->';
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(schemaError))
+      .mockResolvedValueOnce(jsonResponse('{"approved":true}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await completeStructured((messages, options) => callSecondaryApi(config, messages, null, options),
+      'gateway-schema-regression', [{ role: 'user', content: 'Return JSON review' }], {},
+      { type: 'json_schema', json_schema: { name: 'review', schema: { type: 'object' } } });
+    expect(response).toBe('{"approved":true}');
+    expect(fetchMock.mock.calls.map(call => JSON.parse(call[1].body).response_format.type))
+      .toEqual(['json_schema', 'json_object']);
+  });
+
   const gatewayError = '### **Proxy error (HTTP 503 Service Unavailable)**\nUpstream unavailable.\n```json\n{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}\n```\n<!-- oai-proxy-error -->';
 
   it('retries a non-stream gateway envelope instead of returning it as model JSON', async () => {
