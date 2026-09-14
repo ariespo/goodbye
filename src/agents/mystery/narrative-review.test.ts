@@ -139,6 +139,64 @@ describe('deterministic final narrative review', () => {
     expect(requests[1][3]?.content).toContain(expectedPath);
   });
 
+  it('repairs an unproved disclosure with the same critic and unchanged candidate', async () => {
+    const narrative = [
+      '<maintext>',
+      '对话|旁白|calm|你站在传达室窗外。',
+      '对话|门卫|calm|“今天雨很大。”',
+      '</maintext>',
+    ].join('\n');
+    const assertionAudit = {
+      reviewedFields: ['maintext'],
+      assertions: [
+        { field: 'maintext', quote: '你站在传达室窗外。', proposition: '玩家站在窗外', status: 'ordinary-present', citations: [], reason: '当前动作。' },
+        { field: 'maintext', quote: '“今天雨很大。”', proposition: '门卫说雨很大', status: 'ordinary-present', citations: [], reason: '当前台词。' },
+      ],
+    };
+    const invalidAudit = { reviewed: true, disclosures: [{
+      assertionIndex: 1, lineIndex: 1, quote: '“今天雨很大。”', listenerIds: ['player'],
+      audienceEvidence: [{ lineIndex: 0, quote: '你站在传达室窗外。' }],
+    }], beliefs: [], commitments: [] };
+    const requests: Array<Array<{ role: string; content: string }>> = [];
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority, narrative,
+      complete: async messages => {
+        requests.push(messages);
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [], assertionAudit,
+          continuityAudit: requests.length === 1 ? invalidAudit : emptyContinuityAudit,
+        });
+      },
+    });
+
+    expect(review.approved).toBe(true);
+    expect(requests).toHaveLength(2);
+    expect(requests[1][1]).toEqual(requests[0][1]);
+    expect(requests[1][3]?.content).toContain('disclosure 0 has an unproved listener or audience');
+  });
+
+  it('fails safely when the one critic correction still returns an unproved disclosure', async () => {
+    const narrative = '<maintext>对话|门卫|calm|“今天雨很大。”</maintext>';
+    const assertionAudit = ordinaryAudit('maintext', '“今天雨很大。”', 'ordinary-present');
+    const invalidAudit = { reviewed: true, disclosures: [{
+      assertionIndex: 0, lineIndex: 0, quote: '“今天雨很大。”', listenerIds: ['player'], audienceEvidence: [],
+    }], beliefs: [], commitments: [] };
+    let calls = 0;
+
+    await expect(reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority, narrative,
+      complete: async () => {
+        calls += 1;
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [], assertionAudit, continuityAudit: invalidAudit,
+        });
+      },
+    })).rejects.toThrow('disclosure 0 has an unproved listener or audience');
+    expect(calls).toBe(2);
+  });
+
   it('sends numbered accepted-scene evidence without private canonical bindings', async () => {
     let request = '';
     const assertionAudit = ordinaryAudit('maintext', '我叫小林。', 'ordinary-present');
@@ -161,6 +219,9 @@ describe('deterministic final narrative review', () => {
     expect(request).toContain('"text":"我叫小林。"');
     expect(request).toContain('"background":"school-day"');
     expect(request).toContain('background 不同表示已切换渲染场景');
+    expect(request).toContain('audienceEvidence 不得早于 disclosure');
+    expect(request).toContain('默认只能引用 disclosure 当行或同背景紧接的下一行');
+    expect(request).toContain('普通移动或另一个问题不证明听见');
     expect(request).toContain('否定、尚未履行或仅到达约定地点');
     expect(request).toContain('未来时的承诺或打算');
     expect(request).toContain('完整时间表达');

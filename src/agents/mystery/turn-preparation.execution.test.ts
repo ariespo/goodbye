@@ -3,9 +3,11 @@ import { buildTurnPreparation, preparationContextKey, type TurnPreparationInput 
 import { useGameStore } from '../../stores/gameStore';
 import { createDefaultVariables } from '../../sillytavern/vars-merger';
 import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatMessage } from '../../sillytavern/types';
-import type { ResolvedActionOutcome } from '../../engine/action-resolution';
+import { resolveAction, type ResolvedActionOutcome } from '../../engine/action-resolution';
 import { buildPendingActionSceneContext } from '../../engine/action-scene-continuity';
+import { resolveActionNarrativeContext } from '../../engine/action-narrative-context';
 import { prepareMysteryTurn } from './orchestrator';
+import { buildActionAuthorityInput } from './action-authority';
 import {
   buildCharacterContinuityCandidateEvidence,
   validateCharacterContinuityAudit,
@@ -165,6 +167,46 @@ describe('execution context projection', () => {
     });
     expect(prepared.request.pendingActionSceneContext?.contextsByLocation.school)
       .toMatchObject({ locationId: 'school' });
+  });
+  it('revalidates a generated travel menu against the pre-action location', () => {
+    const input = fixture();
+    input.userInput = '[系统] 玩家执行了行动："前往玩家公寓"';
+    input.originalActionInput = '前往玩家公寓';
+    input.hasPendingAction = true;
+    input.variables.location = 'school';
+    input.variables.opportunityProgress = {
+      cycleCount: 1,
+      completedIds: [
+        'investigation:c1:F001:atmosphere:home',
+        'investigation:c1:F002:atmosphere:school',
+      ],
+      noProgressByTopic: {},
+      settledResolutionIds: ['prior-school-inquiry'],
+    };
+    input.gameStatus.time = new Date('2024-09-09T10:00:00');
+    input.variables.time = '2024-09-09T10:00:00';
+    input.currentState.background = 'school-day';
+    input.actionSelection = {
+      actionId: 'program:travel:home', kind: 'travel', scope: 'normal', locationId: 'home',
+    };
+    input.pendingNarrativeContext = resolveActionNarrativeContext('前往玩家公寓', input.gameStatus.time, 0, {
+      currentLocationId: 'school', cycleCount: 1, destinationLocationId: 'home', enRouteEncounterRoll: 1,
+    });
+
+    const prepared = buildTurnPreparation(input);
+    const authority = prepared.request.actionAuthority!;
+    const resolved = resolveAction(buildActionAuthorityInput({
+      turnGoal: '回家', tone: '克制', beats: [], revelations: [], assetRequests: [], optionIntents: [],
+    }, authority, 'travel-home'));
+
+    expect(authority.currentLocationId).toBe('school');
+    expect(authority.selectedProgramAction).toMatchObject({
+      id: 'program:travel:home', kind: 'travel', locationId: 'home',
+    });
+    expect(resolved.segments).toHaveLength(1);
+    expect(resolved.segments[0]).toMatchObject({
+      step: { kind: 'travel', locationId: 'home' }, executedMinutes: 10, staminaDelta: -4,
+    });
   });
   it('rebuilds the actual anchor and NPC context after interrupted travel', () => {
     const prepared = buildTurnPreparation(fixture());

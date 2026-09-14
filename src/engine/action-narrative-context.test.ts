@@ -14,6 +14,7 @@ describe('action narrative context semantic planning', () => {
   it.each([
     ['离开便利店，前往对面商住楼找灯织', 'senpai-building'],
     ['从学校走到社区医院问问护士', 'community-hospital'],
+    ['前往文穗的中学向门卫打听情况', 'school'],
     ['不去便利店，改去学校找门卫', 'school'],
     ['去医院问问学校的情况', 'community-hospital'],
     ['回家休息一段时间', 'home'],

@@ -243,6 +243,8 @@ interface ProjectionSceneState {
   proposed: ActionNarrativeContext | null;
   pendingActionSceneContext: PendingActionSceneContext;
   savedContinuation?: import('../../engine/action-resolution').ActionContinuation;
+  /** Optional trusted anchor used only when inspecting the state before a proposed move. */
+  baseLocationId?: string;
 }
 
 function buildProjection(input: TurnPreparationInput, sceneState: ProjectionSceneState, execution?: {
@@ -281,7 +283,7 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     actionNarrativeContext = { ...actionNarrativeContext, directive,
       sceneContract: { ...actionNarrativeContext.sceneContract, requiredKnowledgeEvents, directive } };
   }
-  const actualLocation = resolution?.endLocationId ?? actionNarrativeContext?.locationId;
+  const actualLocation = resolution?.endLocationId ?? actionNarrativeContext?.locationId ?? sceneState.baseLocationId;
   const narrativeVariables = actualLocation
     ? { ...tavern.variables, location: actualLocation,
       ...(resolution ? { stamina: resolution.resources.after.stamina, sanity: resolution.resources.after.sanity } : {}) }
@@ -523,6 +525,11 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     pendingActionSceneContext: structuredClone(pendingActionSceneContext),
     savedContinuation: continuity?.continuation ? structuredClone(continuity.continuation) : undefined,
   };
+  const preActionProgramActionMap = snapshot.actionSelection?.actionId
+    ? buildProjection(snapshot, {
+        ...structuredClone(sceneState), proposed: null, baseLocationId: currentLocationId,
+      }).request.legalProgramActionMap
+    : undefined;
   const prepared = buildProjection(snapshot, structuredClone(sceneState));
   const continuedOpportunityId = continuity?.continuation?.steps.find(step => step.opportunityId)?.opportunityId;
   let selectedOpportunity: InvestigationOpportunity | undefined;
@@ -547,7 +554,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     selectedOpportunity = structuredClone(selectedOpportunity);
   }
   if (!snapshot.actionSelection?.opportunityId && snapshot.actionSelection?.actionId) {
-    selectedProgramAction = prepared.request.legalProgramActionMap?.[snapshot.actionSelection.actionId];
+    selectedProgramAction = preActionProgramActionMap?.[snapshot.actionSelection.actionId];
     if (!selectedProgramAction) throw new Error('所选程序行动已经失效。');
     const selection = snapshot.actionSelection;
     if (selection.kind !== selectedProgramAction.kind

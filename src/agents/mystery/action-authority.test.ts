@@ -41,6 +41,23 @@ describe('trusted action input adapter', () => {
     })]);
   });
 
+  it('accepts sequential school travel and inquiry from the authored possessive destination name', () => {
+    const originalInput = '前往文穗的中学向门卫打听情况';
+    const proposedScene = resolveActionNarrativeContext(originalInput, new Date(context.startTime), 0, {
+      currentLocationId: 'home', cycleCount: 1, enRouteEncounterRoll: 1,
+    });
+    const input = buildActionAuthorityInput({ ...plan, revelations: [], actionSteps: [
+      { id: 'travel-school', kind: 'travel', scope: 'short', locationId: 'school' },
+      { id: 'ask-guard', kind: 'inquiry', scope: 'normal', locationId: 'school' },
+    ] }, { ...context, originalInput, proposedScene }, 'possessive-school');
+
+    expect(proposedScene?.locationId).toBe('school');
+    expect(input.steps).toEqual([
+      expect.objectContaining({ id: 'travel-school', kind: 'travel', locationId: 'school' }),
+      expect.objectContaining({ id: 'ask-guard', kind: 'inquiry', locationId: 'school' }),
+    ]);
+  });
+
   it.each([
     { opportunityId: 'stale', kind: 'investigation', scope: 'normal', locationId: 'home' },
     { opportunityId: 'investigation:c1:F001:atmosphere:home', kind: 'investigation', scope: 'deep', locationId: 'home' },

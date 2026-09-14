@@ -515,36 +515,44 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       resolvedEndTime,
     }) },
   ] as const;
-  const value = await completeParsedStructured(
+  const canonicalPropositionBySourceId = options.canonicalPropositionBySourceId
+    ?? (options.factAliases ? buildCanonicalPropositionBySourceId(assertionSources, options.factAliases) : undefined);
+  const reviewed = await completeParsedStructured(
     complete,
     `${options.api.baseUrl}|${options.api.model}`,
     [...messages],
     { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
     NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT,
-    raw => parseNarrativeFactReview(raw, assertionSources, narrativeFields),
+    raw => {
+      const value = parseNarrativeFactReview(raw, assertionSources, narrativeFields);
+      const continuityEvidence = buildCharacterContinuityCandidateEvidence({
+        candidateText: options.narrative,
+        scene,
+        assertionAudit: value.assertionAudit ?? { reviewedFields: [], assertions: [] },
+        assertionSources,
+        possibleAudienceIds,
+        resolvedEndTime,
+        canonicalPropositionBySourceId,
+      });
+      const continuity = validateCharacterContinuityAudit({
+        audit: value.continuityAudit as CharacterContinuityAudit | undefined,
+        evidence: continuityEvidence,
+        memory,
+        cycleCount,
+        playerIdentityName: options.playerIdentityName,
+      });
+      if (options.continuityMode !== 'auxiliary' && !continuity.approved) {
+        throw new Error(continuity.violations.join('\n'));
+      }
+      return { value, continuity };
+    },
   );
+  const { value, continuity } = reviewed;
   const auditReview = validateAssertionAudit(
     value.assertionAudit as AssertionAudit,
     assertionSources,
     narrativeFields,
   );
-  const continuityEvidence = buildCharacterContinuityCandidateEvidence({
-    candidateText: options.narrative,
-    scene,
-    assertionAudit: value.assertionAudit ?? { reviewedFields: [], assertions: [] },
-    assertionSources,
-    possibleAudienceIds,
-    resolvedEndTime,
-    canonicalPropositionBySourceId: options.canonicalPropositionBySourceId
-      ?? (options.factAliases ? buildCanonicalPropositionBySourceId(assertionSources, options.factAliases) : undefined),
-  });
-  const continuity = validateCharacterContinuityAudit({
-    audit: value.continuityAudit as CharacterContinuityAudit | undefined,
-    evidence: continuityEvidence,
-    memory,
-    cycleCount,
-    playerIdentityName: options.playerIdentityName,
-  });
   const sanitized = sanitizeNarrativeFactReview(value, options.packet);
   const proposedContinuityAudit = value.continuityAudit as Partial<CharacterContinuityAudit> | undefined;
   const auxiliaryHasEffects = options.continuityMode === 'auxiliary'
