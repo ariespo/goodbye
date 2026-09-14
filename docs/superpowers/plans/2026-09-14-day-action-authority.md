@@ -355,7 +355,7 @@ export function resetCharacterContinuity(
 ): import('./world-memory').WorldMemoryState;
 ```
 
-- [ ] Add red tests to existing world-memory fixtures: player learns clue and says it only to NPC A; A heard it and B did not; NPC lie is `said` but proposition not confirmed; player asks for a promise but no accepted promise creates no commitment; accepted promise does. Reset keeps player facts/events but removes NPC day learning and expires commitment/continuation.
+- [x] Add red tests to existing world-memory fixtures: player learns clue and says it only to NPC A; A heard it and B did not; NPC lie is `said` but proposition not confirmed; player asks for a promise but no accepted promise creates no commitment; accepted promise does. Reset keeps player facts/events but removes NPC day learning and expires commitment/continuation.
 
 ```ts
 it('does not grant a stranger yesterday’s introduction after reset', () => {
@@ -369,10 +369,10 @@ it('does not grant a stranger yesterday’s introduction after reset', () => {
 });
 ```
 
-- [ ] Run memory/cycle/name-knowledge suites and verify red. Source all deltas from reviewed dialogue/evidence spans with identified present listeners. Add status/scope validation: player claims heard by NPCs cannot become confirmed world facts; actor cognition projections do not reveal hidden fact truth. Keep fixed public identity/baseline cognition separate from day observations.
-- [ ] Modify existing `buildTurnCommit` integration to write approved deltas/disclosures/commitments atomically with accepted event; do not add a second model State authority. Preserve historical records as player recollection while compiling only current-cycle/baseline active NPC context. Explicit commitment acceptance must be spoken/rendered, with registered location and valid due time.
-- [ ] At `settleCycleVariables`, reset NPC active cognition to authored baseline, expire active old-day commitments, remove active action continuation/progress/effects, preserve player learning and suspicion. Regenerate `playerNameKnownByNpcIds` from baseline/current active knowledge. Normalize v2 missing fields safely; never turn every imported NPC fact into eternal baseline.
-- [ ] Run `npm test -- --run src/memory/world-memory.test.ts src/memory/character-continuity.test.ts src/utils/cycleLoop.test.ts src/data/npcPlayerKnowledge.test.ts src/hooks/useGameLoop.day-contract.test.tsx`. Add cycle3→4 hypothesis-only to eligible-route test alongside memory reset; root reviews and commits.
+- [x] Run memory/cycle/name-knowledge suites and verify red. Source all deltas from reviewed dialogue/evidence spans with identified present listeners. Add status/scope validation: player claims heard by NPCs cannot become confirmed world facts; actor cognition projections do not reveal hidden fact truth. Keep fixed public identity/baseline cognition separate from day observations.
+- [x] Modify existing `buildTurnCommit` integration to write approved deltas/disclosures/commitments atomically with accepted event; do not add a second model State authority. Preserve historical records as player recollection while compiling only current-cycle/baseline active NPC context. Explicit commitment acceptance must be spoken/rendered, with registered location and valid due time.
+- [x] At `settleCycleVariables`, reset NPC active cognition to authored baseline, expire active old-day commitments, remove active action continuation/progress/effects, preserve player learning and suspicion. Regenerate `playerNameKnownByNpcIds` from baseline/current active knowledge. Normalize v2 missing fields safely; never turn every imported NPC fact into eternal baseline.
+- [x] Run `npm test -- --run src/memory/world-memory.test.ts src/memory/character-continuity.test.ts src/utils/cycleLoop.test.ts src/data/npcPlayerKnowledge.test.ts src/hooks/useGameLoop.day-contract.test.tsx`. Add cycle3→4 hypothesis-only to eligible-route test alongside memory reset; root reviews and commits.
 
 ### Task 7: consistent cost disclosure and continuation UI
 
