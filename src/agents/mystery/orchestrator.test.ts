@@ -175,7 +175,7 @@ describe('mystery orchestrator', () => {
     expect(criticOptions?.responseFormat?.json_schema?.name).toBe('fact_review');
   });
 
-  it('falls back from json_schema to json_object and caches the working mode', async () => {
+  it('falls back from json_schema to json_object and caches each exact schema', async () => {
     const complete = vi.fn(async (_messages, callOptions) => {
       if (callOptions?.responseFormat?.type === 'json_schema') {
         throw new Error('API error 400: response_format is not supported');
@@ -194,10 +194,12 @@ describe('mystery orchestrator', () => {
       complete,
     });
     expect(result.hardReview.approved).toBe(true);
-    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete).toHaveBeenCalledTimes(4);
     expect(complete.mock.calls[1]?.[1]?.responseFormat).toEqual({ type: 'json_object' });
+    expect(complete.mock.calls[2]?.[1]?.responseFormat?.json_schema?.name).toBe('fact_review');
+    expect(complete.mock.calls[3]?.[1]?.responseFormat).toEqual({ type: 'json_object' });
 
-    // 同一服务端的后续调用直接使用 json_object，不再重复撞 json_schema。
+    // 两种 schema 各自完成探测后，后续调用不再重复碰撞。
     complete.mockClear();
     await prepareMysteryTurn({
       mode: 'standard',
@@ -225,7 +227,14 @@ describe('mystery orchestrator', () => {
     });
     expect(result.hardReview.approved).toBe(true);
     expect(complete.mock.calls.map(call => call[1]?.responseFormat?.type ?? 'text'))
-      .toEqual(['json_schema', 'json_object', 'text', 'text']);
+      .toEqual(['json_schema', 'json_object', 'text', 'json_schema', 'text']);
+    complete.mockClear();
+    await prepareMysteryTurn({
+      mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'no-structured' }, preset: null,
+      truthContext, turnContext: {}, presentationContext: {}, complete,
+    });
+    expect(complete.mock.calls.map(call => call[1]?.responseFormat?.type ?? 'text'))
+      .toEqual(['text', 'text']);
   });
 
   it('does not swallow unrelated errors as fallback', async () => {
