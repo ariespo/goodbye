@@ -206,16 +206,24 @@ function listenerHasEvidence(
       || (nextRepeatedSource !== undefined && line.lineIndex >= nextRepeatedSource))) return [];
     return [{ span, line }];
   });
-  const channelBridge = source && bounded.some(({ line }) => (
+  const channelBridge = source && bounded.find(({ line }) => (
     line.lineIndex >= source.lineIndex
+    && line.lineIndex <= source.lineIndex + 1
     && lineMentionsCharacter(line.text, listenerId)
     && /(?:听见|听到|听着|电话|通话|耳机|扬声器|消息|短信|频道|接通|电话那头)/u.test(line.text)
   ));
   return bounded.some(({ line }) => {
+    if (source) {
+      const sameRenderedContext = !source.background || !line.background || source.background === line.background;
+      const immediateExchange = line.lineIndex === source.lineIndex
+        || (line.lineIndex === source.lineIndex + 1 && sameRenderedContext);
+      const connectedChannel = !!channelBridge
+        && line.lineIndex >= channelBridge.line.lineIndex
+        && line.lineIndex <= channelBridge.line.lineIndex + 1;
+      if (!immediateExchange && !connectedChannel) return false;
+    }
     if (line.speakerId === listenerId) {
-      const sameRenderedContext = !source?.background || !line.background || source.background === line.background;
-      if (!source || (line.lineIndex === source.lineIndex + 1 && sameRenderedContext)) return true;
-      return !!channelBridge;
+      return true;
     }
     if (!lineMentionsCharacter(line.text, listenerId)) return false;
     return /(?:听见|听到|听着|回应|回答|点头|对.+说|告诉|电话|通话|耳机|扬声器|消息|短信|频道)/u.test(line.text)
@@ -268,7 +276,7 @@ function beliefReactionEvidence(
   assertion: NarrativeAssertion,
 ): boolean {
   const pattern = status === 'believed'
-    ? /(?:相信|信了|认同|确信|是真的|有道理)/u
+    ? /(?:相信|信了|认同|确信|是真的|有道理|合理)/u
     : status === 'suspected'
       ? /(?:怀疑|可疑|不确定|未必|也许|可能)/u
       : /(?:推断|推测|看来|说明|意味着|所以)/u;
@@ -277,22 +285,28 @@ function beliefReactionEvidence(
     : status === 'suspected'
       ? /(?:不再|并不|没(?:有)?|未曾?)怀疑|(?:一点也不|并不)可疑/u
       : /(?:不|并不|没(?:有)?|未曾?|无法|不能)(?:据此)?(?:推断|推测|说明|意味着)/u;
-  const normalizedAssertion = `${assertion.quote}${assertion.proposition}`.replace(/[\s，。！？、,!.?]/g, '');
   return spans.some(span => {
     const line = validSpan(span, evidence);
     if (!line || !pattern.test(span.quote) || negative.test(line.text)) return false;
     const belongsToObserver = line.speakerId === observerId
       || (line.speakerId === null && lineMentionsCharacter(line.text, observerId));
     if (!belongsToObserver) return false;
-    const normalizedReaction = line.text.replace(/[\s，。！？、,!.?]/g, '');
-    const directlyBound = normalizedReaction.includes(assertion.quote.replace(/[\s，。！？、,!.?]/g, ''))
-      || normalizedReaction.includes(assertion.proposition.replace(/[\s，。！？、,!.?]/g, ''));
+    const assertionReferences = [assertion.quote, assertion.proposition]
+      .map(text => text.replace(/[\s，。！？、,!.?]/g, ''))
+      .filter(Boolean);
+    const reactionClauses = line.text.split(/[，。！？,!.?；;]/u).map(text => text.trim()).filter(Boolean);
+    const directlyBound = reactionClauses.some(clause => {
+      const normalizedClause = clause.replace(/[\s，。！？、,!.?]/g, '');
+      return pattern.test(clause) && assertionReferences.some(reference => normalizedClause.includes(reference));
+    });
     if (directlyBound) return true;
     const assertionLine = evidence.lines.find(candidate => candidate.text.includes(assertion.quote));
-    return !!assertionLine
-      && line.lineIndex === assertionLine.lineIndex + 1
-      && /(?:这|此事|这件事|你说的|刚才|那个说法|有道理)/u.test(line.text)
-      && normalizedAssertion.length > 0;
+    if (!assertionLine || line.lineIndex !== assertionLine.lineIndex + 1
+      || !/(?:这|此事|这件事|你说的|刚才|那个说法|有道理|合理)/u.test(line.text)) return false;
+    const referentialResidue = line.text
+      .replace(/(?:嗯|对|是的|没错|好|哦|啊|我|也|现在|开始|已经|确实|的确|真的|很|挺|更|就|便|才|仍然|依然|这件事|此事|这|你说的|刚才(?:的)?|那个说法|说法|有道理|合理|是真的|相信|信了|认同|确信|怀疑|可疑|不确定|未必|也许|可能|推断|推测|看来|说明|意味着|所以|了)/gu, '')
+      .replace(/[\s，。！？、,!.?；;]/gu, '');
+    return referentialResidue.length === 0;
   });
 }
 
@@ -334,25 +348,44 @@ function locationGrounded(locationId: string, text: string): boolean {
     .some(name => text.includes(name));
 }
 
-const CHINESE_NUMBERS = [
-  '零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
-  '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
-  '二十一', '二十二', '二十三',
-] as const;
+function parseChineseNumber(value: string): number | null {
+  const digitByCharacter: Readonly<Record<string, number>> = {
+    零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+  };
+  if (value.includes('十')) {
+    const [tensText, unitsText] = value.split('十');
+    const tens = tensText ? digitByCharacter[tensText] : 1;
+    const units = unitsText ? digitByCharacter[unitsText] : 0;
+    return tens === undefined || units === undefined ? null : tens * 10 + units;
+  }
+  const digits = [...value].map(character => digitByCharacter[character]);
+  return digits.some(digit => digit === undefined) ? null : Number(digits.join(''));
+}
+
+function clockMentions(text: string): Array<{ hour: number; minute: number }> {
+  const mentions: Array<{ hour: number; minute: number }> = [];
+  for (const match of text.matchAll(/(?<!\d)([01]?\d|2[0-3])[:：]([0-5]\d)(?!\d)/gu)) {
+    mentions.push({ hour: Number(match[1]), minute: Number(match[2]) });
+  }
+  for (const match of text.matchAll(/(?<!\d)([01]?\d|2[0-3])点(半|([0-5]?\d)分?)?(?![\d零〇一二两三四五六七八九十])/gu)) {
+    mentions.push({ hour: Number(match[1]), minute: match[2] === '半' ? 30 : Number(match[3] ?? 0) });
+  }
+  const chineseDigit = '零〇一二两三四五六七八九十';
+  const chineseClock = new RegExp(`(?<![${chineseDigit}])([${chineseDigit}]{1,3})点(半|([${chineseDigit}]{1,3})分?)?(?![${chineseDigit}\\d])`, 'gu');
+  for (const match of text.matchAll(chineseClock)) {
+    const hour = parseChineseNumber(match[1]);
+    const minute = match[2] === '半' ? 30 : parseChineseNumber(match[3] ?? '零');
+    if (hour !== null && minute !== null && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      mentions.push({ hour, minute });
+    }
+  }
+  return mentions;
+}
 
 function timeGrounded(dueAt: string, text: string): boolean {
   const due = new Date(dueAt);
   if (!Number.isFinite(due.getTime())) return false;
-  const hour = due.getHours();
-  const minute = due.getMinutes();
-  const numeric = `${hour}:${String(minute).padStart(2, '0')}`;
-  const fullNumeric = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  const chineseHour = CHINESE_NUMBERS[hour];
-  const chinese = chineseHour && minute === 0 ? `${chineseHour}点`
-    : chineseHour && minute === 30 ? `${chineseHour}点半`
-      : chineseHour ? `${chineseHour}点${CHINESE_NUMBERS[minute] ?? String(minute)}分` : '';
-  return [numeric, fullNumeric, numeric.replace(':', '：'), fullNumeric.replace(':', '：'),
-    minute === 0 ? `${hour}点` : '', chinese].some(value => value && text.includes(value));
+  return clockMentions(text).some(({ hour, minute }) => hour === due.getHours() && minute === due.getMinutes());
 }
 
 function recipientGrounded(recipientId: string, text: string, actorSpoken: boolean): boolean {
@@ -407,9 +440,14 @@ function actionEvidence(
     const actorRendered = line.speakerId === actorId
       || (line.speakerId === null && lineMentionsCharacter(text, actorId));
     const nonPerformance = /(?:还没有|尚未|并未|未曾|没有|还没|没能|不能|无法|不曾|尚没有)/u.test(text);
-    const hypothetical = /(?:如果|假如|要是|可能|也许|或许)|[？?]/u.test(text);
-    return actorRendered && !nonPerformance && !hypothetical
+    const prospective = /(?:如果|假如|要是|可能|也许|或许|会|将要|准备|打算|计划|稍后|等会|待会|到时|想要|想|愿意|承诺|答应|同意|决定|试图|尝试|声称|表示)|[？?]/u.test(text);
+    const narratedPerformance = line.speakerId === null
+      && (CHARACTER_MENTIONS[actorId] ?? [actorId]).some(alias => text.trim().startsWith(alias));
+    const directPerformance = line.speakerId === actorId && /(?:^|[，,。！？!?；;])\s*我(?:已经|刚刚|刚才|终于)?把/u.test(text);
+    const completedPerformance = /(?:已经|刚刚|刚才|终于|完成|完毕|办完|做完)|了[。！？!?；;]?$/u.test(text.trim());
+    return actorRendered && !nonPerformance && !prospective
       && !/^(?:到达|来到|抵达|赴约|等待|等到)/u.test(text.trim())
+      && (narratedPerformance || directPerformance || completedPerformance)
       && actionGrounded(action, text);
   });
 }

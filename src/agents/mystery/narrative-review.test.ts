@@ -109,6 +109,8 @@ describe('deterministic final narrative review', () => {
     expect(request).toContain('"background":"school-day"');
     expect(request).toContain('background 不同表示已切换渲染场景');
     expect(request).toContain('否定、尚未履行或仅到达约定地点');
+    expect(request).toContain('未来时的承诺或打算');
+    expect(request).toContain('完整时间表达');
     expect(request).toContain('否定或无关命题的反应');
     expect(request).not.toContain('a-secret-canonical-id');
   });
