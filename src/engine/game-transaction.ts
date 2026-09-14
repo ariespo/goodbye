@@ -7,6 +7,7 @@ import { checkScheduledEvents } from './scheduled-events';
 import { hasDeliveredDeathNews } from './narrative-contract';
 import { getLocationById, resolveRegisteredLocation } from '../data/locations';
 import type { ResolvedActionOutcome } from './action-resolution';
+import { commitmentBoundariesFromVariables } from './commitment-boundaries';
 
 export interface GameResourceCosts {
   timeMinutes?: number;
@@ -91,6 +92,23 @@ function assertResolutionCurrent(input: GameTransactionInput, resolved: Resolved
   }
 }
 
+function acknowledgesCurrentCommitmentBoundary(
+  input: GameTransactionInput,
+  resolved: ResolvedActionOutcome,
+): boolean {
+  const interruption = resolved.interruption;
+  if (!interruption?.id.startsWith('commitment-boundary:')
+    || resolved.executedMinutes !== 0
+    || new Date(resolved.startTime).getTime() !== new Date(resolved.endTime).getTime()
+    || new Date(interruption.at).getTime() !== new Date(resolved.startTime).getTime()) {
+    return false;
+  }
+  return commitmentBoundariesFromVariables(input.variables).some(boundary => (
+    boundary.id === interruption.id
+    && new Date(boundary.at).getTime() === new Date(interruption.at).getTime()
+  ));
+}
+
 /**
  * 所有会改变游戏数值的路径都应经过这里：
  * 合并受信状态补丁 → 扣除确定性成本 → 推进时钟 → 定时事件 → 结局/轮回失败判定。
@@ -161,21 +179,26 @@ export function settleGameTransaction(input: GameTransactionInput): GameTransact
       && resolved.segments.every(segment => segment.step.kind === 'event' || segment.step.kind === 'wait');
     const retainedContinuation = preservesWork && prior?.continuation?.cycleCount === resolved.cycleCount
       && prior.continuation.expectedLocationId === resolved.endLocationId ? prior.continuation : null;
+    const handlesDueCommitment = !!retainedContinuation && acknowledgesCurrentCommitmentBoundary(input, resolved);
+    const continuation = handlesDueCommitment
+      ? retainedContinuation
+      : resolved.continuation ?? retainedContinuation;
+    const usesResolvedContinuation = !!continuation && continuation === resolved.continuation;
     variables.actionContinuity = {
       cycleCount: resolved.cycleCount,
       lastResolutionId: resolved.id,
       settledResolutionIds: [...new Set([...priorIds, resolved.id])],
       appliedEventEffectIds: [...new Set([...priorEffects, ...resolved.eventEffectIds])],
-      continuation: resolved.continuation ?? retainedContinuation,
-      pendingAuthorization: resolved.continuation
+      continuation,
+      pendingAuthorization: usesResolvedContinuation
         ? input.pendingActionAuthorization ?? null
-        : retainedContinuation ? prior?.pendingAuthorization ?? null : null,
-      sceneContext: resolved.continuation
+        : continuation ? prior?.pendingAuthorization ?? null : null,
+      sceneContext: usesResolvedContinuation
         ? input.pendingActionSceneContext ?? null
-        : retainedContinuation ? prior?.sceneContext ?? null : null,
-      selectedOpportunity: resolved.continuation
+        : continuation ? prior?.sceneContext ?? null : null,
+      selectedOpportunity: usesResolvedContinuation
         ? input.selectedOpportunity ? structuredClone(input.selectedOpportunity) : null
-        : retainedContinuation ? prior?.selectedOpportunity ? structuredClone(prior.selectedOpportunity) : null : null,
+        : continuation ? prior?.selectedOpportunity ? structuredClone(prior.selectedOpportunity) : null : null,
     };
   }
   if (input.opportunityProgress) {

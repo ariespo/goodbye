@@ -273,7 +273,48 @@ describe('resolveAction', () => {
     });
     expect(fantasy.executedMinutes).toBe(25);
     expect(fantasy.resources.after.sanity).toBe(62);
-    expect(fantasy.eventEffectIds).toEqual(['fantasy:cycle:3']);
+    expect(fantasy.eventEffectIds).toHaveLength(1);
+  });
+
+  it('charges each logical fantasy attempt once, including partial execution and resume', () => {
+    const fantasyStep: ActionStep = {
+      id: 'fantasy', kind: 'fantasy', eventId: 'fantasy', scope: 'short',
+      locationId: 'school', completionSourceIds: [],
+    };
+    const first = resolveAction({
+      ...deepInput, id: 'fantasy-attempt:first', sanity: 70, steps: [fantasyStep],
+    });
+    const second = resolveAction({
+      ...deepInput, id: 'fantasy-attempt:second', sanity: first.resources.after.sanity,
+      steps: [fantasyStep], appliedEventEffectIds: first.eventEffectIds,
+    });
+    const replayedSecond = resolveAction({
+      ...deepInput, id: 'fantasy-attempt:second', sanity: second.resources.after.sanity,
+      steps: [fantasyStep], appliedEventEffectIds: [...first.eventEffectIds, ...second.eventEffectIds],
+    });
+
+    expect(first.resources.after.sanity).toBe(62);
+    expect(second.resources.after.sanity).toBe(54);
+    expect(second.eventEffectIds[0]).not.toBe(first.eventEffectIds[0]);
+    expect(replayedSecond.resources.after.sanity).toBe(54);
+    expect(replayedSecond.eventEffectIds).toEqual([]);
+
+    const partial = resolveAction({
+      ...deepInput, id: 'fantasy-attempt:partial', sanity: 70, steps: [fantasyStep],
+      explicitBudgetMinutes: 5,
+    });
+    expect(partial.executedMinutes).toBe(5);
+    expect(partial.resources.after.sanity).toBe(62);
+    expect(partial.eventEffectIds).toHaveLength(1);
+
+    const resumed = resolveAction({
+      ...deepInput, id: partial.continuation!.actionId, startTime: partial.endTime,
+      sanity: partial.resources.after.sanity, steps: partial.continuation!.steps,
+      continuation: partial.continuation, appliedEventEffectIds: partial.eventEffectIds,
+    });
+    expect(resumed.executedMinutes).toBe(20);
+    expect(resumed.resources.after.sanity).toBe(62);
+    expect(resumed.eventEffectIds).toEqual([]);
   });
 
   it('executes a reached zero-minute event after the time budget is exhausted', () => {

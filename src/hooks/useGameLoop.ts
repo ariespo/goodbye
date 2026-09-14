@@ -595,11 +595,20 @@ export function useGameLoop() {
         const mergedVariables = transaction.variables;
         const nextStatus = transaction.gameStatus;
         const allowPreplan = !transaction.ending && !transaction.failure;
-        const actionOutcome = resolution ? projectPublicActionOutcome(resolution) : undefined;
         const activeContinuation = transaction.variables.actionContinuity?.continuation;
+        const publicResolution = resolution?.interruption?.id.startsWith('commitment-boundary:')
+          && resolution.executedMinutes === 0
+          && activeContinuation
+          && activeContinuation.actionId !== resolution.continuation?.actionId
+          ? { ...resolution, continuation: activeContinuation }
+          : resolution;
+        const actionOutcome = publicResolution ? projectPublicActionOutcome(publicResolution) : undefined;
+        const pendingCommitmentBoundaryIds = new Set(
+          commitmentBoundariesFromVariables(transaction.variables).map(boundary => boundary.id),
+        );
         const mustHandleBoundary = actionOutcome?.interruption
           && (actionOutcome.interruption.id === 'death-news'
-            || actionOutcome.interruption.id.startsWith('commitment-boundary:'));
+            || pendingCommitmentBoundaryIds.has(actionOutcome.interruption.id));
         if (activeContinuation && mustHandleBoundary) {
           const handleBoundaryOption = '处理眼前的事情';
           parsed.options = [

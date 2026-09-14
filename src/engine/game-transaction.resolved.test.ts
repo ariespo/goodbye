@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultVariables } from '../sillytavern/vars-merger';
-import type { ResolvedActionOutcome } from './action-resolution';
+import { resolveAction, type ResolvedActionOutcome } from './action-resolution';
+import { commitmentBoundariesFromVariables } from './commitment-boundaries';
 import { settleGameTransaction } from './game-transaction';
 
 function fixture() {
@@ -125,5 +126,91 @@ describe('resolved action transaction authority', () => {
     expect(settleGameTransaction({ ...input, variables, resolvedAction: event }).variables.actionContinuity?.continuation)
       .toEqual(continuation);
     expect(settleGameTransaction({ ...input, variables }).variables.actionContinuity?.continuation).toBeNull();
+  });
+
+  it('keeps the original continuation and private authority while acknowledging its due commitment boundary', () => {
+    const commitment = {
+      id: 'commitment:school-meeting', cycleCount: 1, actorId: 'school-guard', recipientId: 'player',
+      action: '在校门口见面', locationId: 'school', dueAt: '2024-09-09T08:05:00', status: 'active' as const,
+      sourceEventId: 'turn:promise', evidenceQuote: '八点零五分在校门口见。',
+    };
+    const variables = {
+      ...createDefaultVariables(), cycleCount: 1, location: 'home', time: '2024-09-09T08:00:00', stamina: 100, sanity: 70,
+      worldMemory: {
+        version: 2 as const, canonicalTruthVersion: 'test', events: [], cognition: [], episodes: [], softCanonFacts: [],
+        disclosures: [], commitments: [commitment], acknowledgedCommitmentBoundaryIds: [],
+      },
+    };
+    const gameStatus = { time: new Date(variables.time), stamina: 100, sanity: 70, items: [] };
+    const boundary = commitmentBoundariesFromVariables(variables)[0];
+    const travel = resolveAction({
+      id: 'map-travel:school', cycleCount: 1, startTime: variables.time, currentLocationId: 'home',
+      stamina: 100, sanity: 70, nextBoundary: boundary,
+      steps: [{ id: 'school-leg', kind: 'travel', scope: 'short', locationId: 'school', completionSourceIds: [] }],
+    });
+    const interrupted = settleGameTransaction({ variables, gameStatus, resolvedAction: travel });
+    const original = interrupted.variables.actionContinuity!.continuation!;
+    const authorization = {
+      actionId: original.actionId, cycleCount: 1, graphFingerprint: 'graph', revelations: [], knowledgeMilestones: [],
+    };
+    const sceneContext = {
+      actionId: original.actionId, cycleCount: 1, contextsByLocation: {},
+    };
+    interrupted.variables.actionContinuity = {
+      ...interrupted.variables.actionContinuity!, pendingAuthorization: authorization, sceneContext,
+    };
+    const handling = resolveAction({
+      id: 'neutral-handling', cycleCount: 1, startTime: travel.endTime, currentLocationId: 'home',
+      stamina: travel.resources.after.stamina, sanity: travel.resources.after.sanity, nextBoundary: boundary,
+      steps: [{ id: 'inquiry', kind: 'inquiry', scope: 'normal', locationId: 'home', completionSourceIds: [] }],
+    });
+    expect(handling.executedMinutes).toBe(0);
+    expect(handling.continuation?.actionId).toBe('neutral-handling');
+
+    const settled = settleGameTransaction({
+      variables: interrupted.variables, gameStatus: interrupted.gameStatus, resolvedAction: handling,
+    });
+
+    expect(settled.variables.actionContinuity?.continuation).toEqual(original);
+    expect(settled.variables.actionContinuity?.pendingAuthorization).toEqual(authorization);
+    expect(settled.variables.actionContinuity?.sceneContext).toEqual(sceneContext);
+  });
+
+  it.each(['forged', 'stale'] as const)('does not retain old work for a %s commitment-boundary resolution', kind => {
+    const input = fixture();
+    const oldContinuation = {
+      actionId: 'old-work', cycleCount: 1, steps: [input.resolvedAction.segments[0].step],
+      previousResolutionId: 'old-resolution', stepsDigest: 'old-digest', resumableFromTime: input.variables.time,
+      expectedLocationId: 'home', activeStepId: 'q', completedMinutesByStep: { q: 20 }, chargedStaminaByStep: { q: 3 },
+    };
+    const commitment = {
+      id: 'commitment:due', cycleCount: 1, actorId: 'school-guard', recipientId: 'player', action: '见面',
+      locationId: 'home', dueAt: input.variables.time, status: 'active' as const,
+      sourceEventId: 'turn:promise', evidenceQuote: '八点见。',
+    };
+    input.variables.actionContinuity = { cycleCount: 1, continuation: oldContinuation };
+    input.variables.actionContinuity.pendingAuthorization = {
+      actionId: oldContinuation.actionId, cycleCount: 1, graphFingerprint: 'old-graph',
+      revelations: [], knowledgeMilestones: [],
+    };
+    input.variables.worldMemory = {
+      version: 2, canonicalTruthVersion: 'test', events: [], cognition: [], episodes: [], softCanonFacts: [],
+      disclosures: [], commitments: [commitment],
+      acknowledgedCommitmentBoundaryIds: kind === 'stale' ? ['commitment-boundary:commitment:due'] : [],
+    };
+    const boundaryId = kind === 'forged'
+      ? 'commitment-boundary:commitment:forged'
+      : 'commitment-boundary:commitment:due';
+    const handling = resolveAction({
+      id: `handling:${kind}`, cycleCount: 1, startTime: input.variables.time as string, currentLocationId: 'home',
+      stamina: 100, sanity: 70, nextBoundary: { id: boundaryId, at: input.variables.time as string },
+      steps: [{ id: 'new-work', kind: 'inquiry', scope: 'normal', locationId: 'home', completionSourceIds: [] }],
+    });
+
+    const settled = settleGameTransaction({ ...input, resolvedAction: handling });
+
+    expect(settled.variables.actionContinuity?.continuation?.actionId).toBe(`handling:${kind}`);
+    expect(settled.variables.actionContinuity?.continuation?.actionId).not.toBe(oldContinuation.actionId);
+    expect(settled.variables.actionContinuity?.pendingAuthorization).toBeNull();
   });
 });

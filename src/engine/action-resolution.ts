@@ -266,8 +266,10 @@ function digestSteps(steps: ActionStep[]): string {
   return `steps-${stableHash(serializedSteps(steps))}`;
 }
 
-function effectId(eventId: ActionEventId, cycleCount: number): string {
-  return `${eventId}:cycle:${cycleCount}`;
+function effectId(eventId: ActionEventId, cycleCount: number, actionId: string): string {
+  return eventId === 'fantasy'
+    ? `${eventId}:cycle:${cycleCount}:attempt:${encodeURIComponent(actionId)}`
+    : `${eventId}:cycle:${cycleCount}`;
 }
 
 function completedMinutes(continuation: ActionContinuation | undefined, stepId: string): number {
@@ -502,17 +504,19 @@ export function resolveAction(input: ResolveActionInput): ResolvedActionOutcome 
     budgetRemaining -= execute;
     boundaryRemaining -= execute;
 
+    const reachedEffect = item.step.eventId
+      && (completed || (item.step.eventId === 'fantasy' && execute > 0));
+    if (reachedEffect) {
+      const id = effectId(item.step.eventId!, input.cycleCount, input.id);
+      if (!appliedEffects.has(id)) {
+        appliedEffects.add(id);
+        eventEffectIds.push(id);
+        sanity = Math.max(0, sanity - (item.step.eventId === 'death-news' ? 12 : 8));
+      }
+    }
     if (completed) {
       if (item.step.kind === 'travel') endLocationId = item.step.locationId;
       completedSourceIds.push(...item.step.completionSourceIds);
-      if (item.step.eventId) {
-        const id = effectId(item.step.eventId, input.cycleCount);
-        if (!appliedEffects.has(id)) {
-          appliedEffects.add(id);
-          eventEffectIds.push(id);
-          sanity = Math.max(0, sanity - (item.step.eventId === 'death-news' ? 12 : 8));
-        }
-      }
       if (matchesDueEvent) boundaryConsumed = true;
     }
     if (!completed) break;

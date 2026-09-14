@@ -449,6 +449,125 @@ describe('resolved action at the real hook boundary', () => {
     unmount();
   });
 
+  it('keeps a map journey through commitment handling, reload, and bound local resume', async () => {
+    const commitment = {
+      id: 'commitment:school-meeting', cycleCount: 1, actorId: 'school-guard', recipientId: 'player',
+      action: '在校门口见面', locationId: 'school', dueAt: '2024-09-09T08:05:00', status: 'active' as const,
+      sourceEventId: 'turn:promise', evidenceQuote: '八点零五分在校门口见。',
+    };
+    const startVariables = {
+      ...createDefaultVariables(), cycleCount: 1, location: 'home', time: '2024-09-09T08:00:00',
+      stamina: 100, sanity: 70, knowledgeEvents: [],
+      worldMemory: {
+        version: 2 as const, canonicalTruthVersion: 'test', events: [], cognition: [], episodes: [], softCanonFacts: [],
+        disclosures: [], commitments: [commitment], acknowledgedCommitmentBoundaryIds: [],
+      },
+    };
+    const startStatus = { time: new Date(startVariables.time), stamina: 100, sanity: 70, items: [] };
+    const partial = prepareMapTravel({ variables: startVariables, gameStatus: startStatus, destinationLocationId: 'school' });
+    if (partial.kind !== 'travel') throw new Error('expected partial map travel');
+    const partialTransaction = buildMapTravelTransaction({
+      variables: startVariables, gameStatus: startStatus, prepared: partial,
+      knowledgeEvents: [], endings: [], endingsSeen: [], hasEndingInProgress: false,
+    });
+    expect(partial.publicOutcome.remaining).toMatchObject({ travelMinutes: 5, staminaCost: 2 });
+    const handleOption = '处理眼前的事情';
+    const partialParsed = {
+      thinking: '', maintext: '场景|street\n对话|旁白|calm|约定时间到了，路程暂停。', options: [handleOption],
+      summary: '移动暂停。', vars: {}, investigateItems: [], actionItems: [],
+      actionOutcome: partial.publicOutcome, optionBindings: undefined,
+    };
+    const localMessages: ChatMessage[] = [{
+      id: 'map-user', role: 'user', content: '前往文穗的中学', timestamp: 1,
+      variables: startVariables, localAction: 'map-travel',
+    }, {
+      id: 'map-assistant', role: 'assistant', timestamp: 2, variables: partialTransaction.variables,
+      content: `<maintext>${partialParsed.maintext}</maintext><option>${handleOption}</option><sum>移动暂停。</sum><vars>{}</vars>`,
+      localAction: 'map-travel', acceptedActionOutcome: partial.publicOutcome, parsed: partialParsed,
+    }];
+    commitGameTransaction(partialTransaction, {
+      id: 'partial-map-commitment', lines: [{ background: 'street', speaker: '旁白', emotion: 'calm', text: '约定时间到了。' }],
+      actionOutcome: partial.publicOutcome,
+    });
+    useGameStore.setState(state => ({
+      tavern: { ...state.tavern, variables: partialTransaction.variables,
+        chats: [{ ...state.tavern.chats[0], variables: partialTransaction.variables, messages: localMessages }] },
+      api: { ...state.api, parsedContent: resolveSavedParsedContent({ gameState: {} } as never, localMessages) },
+      game: { ...state.game, gameStatus: partialTransaction.gameStatus,
+        currentScene: rebuildSceneFromChat({ ...state.tavern.chats[0], variables: partialTransaction.variables, messages: localMessages }),
+        sceneComplete: true },
+    }));
+    vi.mocked(streamChatCompletion).mockImplementationOnce(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken('<maintext>场景|street\n对话|旁白|calm|你确认约定时间已经到了。</maintext><option>继续行动\n稍作整理</option><sum>确认约定。</sum><vars>{}</vars>');
+      await callbacks.onComplete();
+    });
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    await act(async () => { await result.current.sendMessage(handleOption); });
+    const handled = useGameStore.getState();
+    expect(handled.tavern.variables).toMatchObject({ time: '2024-09-09T08:05:00', location: 'home', stamina: 98 });
+    expect(handled.tavern.variables.actionContinuity?.continuation?.actionId).toBe(partial.actionId);
+    expect(handled.api.parsedContent.actionOutcome?.remaining).toMatchObject({ travelMinutes: 5, staminaCost: 2 });
+    expect(normalizeWorldMemory(handled.tavern.variables).commitments[0]).toMatchObject({ status: 'active' });
+    expect(normalizeWorldMemory(handled.tavern.variables).acknowledgedCommitmentBoundaryIds)
+      .toContain('commitment-boundary:commitment:school-meeting');
+    const resumeOption = handled.api.parsedContent.options[0];
+    const resumeBinding = handled.api.parsedContent.optionBindings?.[0];
+    expect(resumeOption).toMatch(/继续未完成的行动.*剩余5分钟/);
+    expect(resumeBinding).toMatchObject({ actionId: partial.actionId, continuationId: partial.actionId });
+
+    const reloadedParsed = resolveSavedParsedContent({ gameState: {} } as never, handled.tavern.chats[0].messages);
+    useGameStore.setState(state => ({ api: { ...state.api, parsedContent: reloadedParsed } }));
+    const callsBeforeResume = vi.mocked(streamChatCompletion).mock.calls.length;
+    act(() => { expect(result.current.selectOption(resumeOption, resumeBinding)).toBe(true); });
+    await waitFor(() => expect(useGameStore.getState().tavern.variables.location).toBe('school'));
+    expect(useGameStore.getState().tavern.variables).toMatchObject({
+      time: '2024-09-09T08:10:00', location: 'school', stamina: 96,
+    });
+    expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledTimes(callsBeforeResume);
+    unmount();
+  });
+
+  it('offers a bound resume immediately after a generated investigation reaches a commitment boundary', async () => {
+    const commitment = {
+      id: 'commitment:home-check', cycleCount: 1, actorId: 'chen-huihui', recipientId: 'player',
+      action: '在家中回电', locationId: 'home', dueAt: '2024-09-09T08:05:00', status: 'active' as const,
+      sourceEventId: 'turn:promise', evidenceQuote: '八点零五分我给你回电。',
+    };
+    useGameStore.setState(state => ({
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, worldMemory: {
+        version: 2, canonicalTruthVersion: 'test', events: [], cognition: [], episodes: [], softCanonFacts: [],
+        disclosures: [], commitments: [commitment], acknowledgedCommitmentBoundaryIds: [],
+      } } },
+    }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+
+    await act(async () => { await result.current.sendMessage('深入调查房间'); });
+
+    const state = useGameStore.getState();
+    const continuation = state.tavern.variables.actionContinuity?.continuation;
+    expect(state.tavern.variables).toMatchObject({ time: '2024-09-09T08:05:00', stamina: 99, sanity: 70 });
+    expect(continuation?.completedMinutesByStep).toMatchObject({ 'work:0': 5 });
+    expect(state.tavern.variables.actionContinuity?.pendingAuthorization).toBeTruthy();
+    expect(state.api.parsedContent.options[0]).toMatch(/继续未完成的行动.*剩余100分钟/);
+    expect(state.api.parsedContent.optionBindings?.[0]).toMatchObject({
+      actionId: continuation?.actionId, continuationId: continuation?.actionId,
+    });
+    const callsBeforeResume = vi.mocked(streamChatCompletion).mock.calls.length;
+    act(() => {
+      expect(result.current.selectOption(
+        state.api.parsedContent.options[0],
+        state.api.parsedContent.optionBindings?.[0],
+      )).toBe(true);
+    });
+    await waitFor(() => expect(useGameStore.getState().tavern.variables.actionContinuity?.continuation).toBeNull());
+    expect(useGameStore.getState().tavern.variables).toMatchObject({
+      time: '2024-09-09T09:45:00', stamina: 86, sanity: 70,
+    });
+    expect(vi.mocked(streamChatCompletion).mock.calls.length).toBeGreaterThan(callsBeforeResume);
+    unmount();
+  });
+
   it.each(['resolve', 'reject'] as const)(
     'does not let a stale local-map save %s overwrite a new chat request',
     async settlement => {
