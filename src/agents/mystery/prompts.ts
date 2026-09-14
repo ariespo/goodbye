@@ -210,7 +210,7 @@ export function buildNarrativeFactCriticUserPrompt(
   narrative: string,
   characterContinuityEvidence?: {
     mode: 'playable' | 'auxiliary';
-    lines: Array<{ lineIndex: number; speakerId: string | null; text: string }>;
+    lines: Array<{ lineIndex: number; speakerId: string | null; text: string; background?: string }>;
     possibleAudienceIds: string[];
     activeCommitments: Array<{
       id: string; actorId: string; recipientId: string; action: string;
@@ -232,8 +232,8 @@ supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quo
 问题标为 question，明确带“可能/也许”等不确定性的假设标为 hypothesis，普通当下动作标为 ordinary-present；这三类通常不需要事实引用。否定性考勤、登录、删除、未出现、未到场等仍是事实命题，不能自动视为安全。本次拨号无人接听只说明本次没有接听，不能推成登录、阅读、删除或此前去向。
   不要因为措辞风格或没有复述全部事实而拒绝。
   continuityAudit 必须始终返回 reviewed=true 以及 disclosures、beliefs、commitments 三个数组；没有变化时三个数组都显式返回空数组。只审查 CharacterContinuityEvidence 中按 lineIndex 编号的实际可播放台词，不得从玩家输入、Director 计划、option、sum、hint、observe、investigate 或 action 清单生成角色学习或承诺。
-  disclosure 只记录已识别说话者实际说出的 assertion，并逐个 listenerId 用 audienceEvidence 的 lineIndex+exact quote 证明明确称呼、回应、目击对话、听见叙述或电话/消息频道。人物出现在 possibleAudienceIds 只表示可能听见，不证明听见；含糊受众返回空，不得把事实真值授予听众。belief 还必须引用该 observer 实际表达相信、怀疑或推断的反应台词。玩家说出已知事实只证明听众听到了玩家的说法。
-  commitment accept 只记录 obligated actor 实际明确接受的具体同日未来行动，写出 action/locationId/dueAt；请求、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；到达时间或地点本身不算履行。
+  disclosure 只记录已识别说话者实际说出的 assertion，并逐个 listenerId 用 audienceEvidence 的 lineIndex+exact quote 证明明确称呼、回应、目击对话、听见叙述或电话/消息频道。人物出现在 possibleAudienceIds 只表示可能听见，不证明听见；含糊受众返回空，不得把事实真值授予听众。background 不同表示已切换渲染场景，后一场景的普通台词不能证明听见前一场景内容；只有紧接的同场回应，或正文明确写出的电话、消息等频道证据可以连接。belief 还必须引用该 observer 实际表达相信、怀疑或推断同一 assertion 的反应台词；否定或无关命题的反应不得登记为肯定认知。玩家说出已知事实只证明听众听到了玩家的说法。
+  commitment accept 只记录 obligated actor 实际明确接受的具体同日未来行动，action/locationId/dueAt/recipientId 都必须由同一段肯定承担台词直接支持；请求、否定、条件、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；否定、尚未履行或仅到达约定地点都不算履行。
   mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。返回带 assertionAudit 与 continuityAudit 的 narrative FactReview JSON。
 
 [NarrativeFields]

@@ -94,6 +94,7 @@ describe('deterministic final narrative review', () => {
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority,
       narrative: '<maintext>对话|玩家|calm|我叫小林。</maintext>',
+      scene: { lines: [{ speaker: '玩家', emotion: 'calm', text: '我叫小林。', background: 'school-day' }] },
       canonicalPropositionBySourceId: { 'fact:F001:clue': 'fact:a-secret-canonical-id' },
       complete: async messages => {
         request = messages[1]?.content ?? '';
@@ -105,6 +106,10 @@ describe('deterministic final narrative review', () => {
     expect(request).toContain('"lineIndex":0');
     expect(request).toContain('"speakerId":"player"');
     expect(request).toContain('"text":"我叫小林。"');
+    expect(request).toContain('"background":"school-day"');
+    expect(request).toContain('background 不同表示已切换渲染场景');
+    expect(request).toContain('否定、尚未履行或仅到达约定地点');
+    expect(request).toContain('否定或无关命题的反应');
     expect(request).not.toContain('a-secret-canonical-id');
   });
 

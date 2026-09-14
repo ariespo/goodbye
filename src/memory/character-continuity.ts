@@ -72,6 +72,7 @@ export interface CharacterContinuityEvidenceLine {
   lineIndex: number;
   speakerId: string | null;
   text: string;
+  background?: string;
 }
 
 export interface CharacterContinuityCandidateEvidence {
@@ -134,6 +135,7 @@ export function buildCharacterContinuityCandidateEvidence(input: {
     lineIndex,
     speakerId: characterIdFromSpeaker(line.speaker),
     text: line.text,
+    ...(line.background ? { background: line.background } : {}),
   }));
   return {
     candidateId: candidateFingerprint(input.candidateText),
@@ -188,7 +190,7 @@ function listenerHasEvidence(
   listenerId: string,
   spans: readonly ReviewedLineSpan[],
   evidence: CharacterContinuityCandidateEvidence,
-  source?: { lineIndex: number; speakerId: string; quote: string },
+  source?: { lineIndex: number; speakerId: string; quote: string; background?: string },
 ): boolean {
   const nextRepeatedSource = source
     ? evidence.lines.find(line => (
@@ -197,12 +199,24 @@ function listenerHasEvidence(
       && line.text.includes(source.quote)
     ))?.lineIndex
     : undefined;
-  return spans.some(span => {
+  const bounded = spans.flatMap(span => {
     const line = validSpan(span, evidence);
-    if (!line) return false;
+    if (!line) return [];
     if (source && (line.lineIndex < source.lineIndex
-      || (nextRepeatedSource !== undefined && line.lineIndex >= nextRepeatedSource))) return false;
-    if (line.speakerId === listenerId) return true;
+      || (nextRepeatedSource !== undefined && line.lineIndex >= nextRepeatedSource))) return [];
+    return [{ span, line }];
+  });
+  const channelBridge = source && bounded.some(({ line }) => (
+    line.lineIndex >= source.lineIndex
+    && lineMentionsCharacter(line.text, listenerId)
+    && /(?:听见|听到|听着|电话|通话|耳机|扬声器|消息|短信|频道|接通|电话那头)/u.test(line.text)
+  ));
+  return bounded.some(({ line }) => {
+    if (line.speakerId === listenerId) {
+      const sameRenderedContext = !source?.background || !line.background || source.background === line.background;
+      if (!source || (line.lineIndex === source.lineIndex + 1 && sameRenderedContext)) return true;
+      return !!channelBridge;
+    }
     if (!lineMentionsCharacter(line.text, listenerId)) return false;
     return /(?:听见|听到|听着|回应|回答|点头|对.+说|告诉|电话|通话|耳机|扬声器|消息|短信|频道)/u.test(line.text)
       || lineDirectlyAddressesCharacter(line.text, listenerId);
@@ -246,36 +260,39 @@ function isSameLocalDay(left: number, right: number): boolean {
     && a.getDate() === b.getDate();
 }
 
-function actorEvidence(
-  actorId: string,
-  spans: readonly ReviewedLineSpan[],
-  evidence: CharacterContinuityCandidateEvidence,
-  narrationPattern: RegExp,
-): boolean {
-  return spans.some(span => {
-    const line = validSpan(span, evidence);
-    if (!line) return false;
-    return (line.speakerId === actorId && narrationPattern.test(line.text))
-      || (line.speakerId === null && lineMentionsCharacter(line.text, actorId) && narrationPattern.test(line.text));
-  });
-}
-
 function beliefReactionEvidence(
   observerId: string,
   status: 'believed' | 'suspected' | 'inferred',
   spans: readonly ReviewedLineSpan[],
   evidence: CharacterContinuityCandidateEvidence,
+  assertion: NarrativeAssertion,
 ): boolean {
   const pattern = status === 'believed'
     ? /(?:相信|信了|认同|确信|是真的|有道理)/u
     : status === 'suspected'
       ? /(?:怀疑|可疑|不确定|未必|也许|可能)/u
       : /(?:推断|推测|看来|说明|意味着|所以)/u;
+  const negative = status === 'believed'
+    ? /(?:不|并不|没(?:有)?|未曾?|无法|不能|难以)(?:再|真|完全)?(?:相信|信服|认同|确信)|(?:不|并不|未必)是真的/u
+    : status === 'suspected'
+      ? /(?:不再|并不|没(?:有)?|未曾?)怀疑|(?:一点也不|并不)可疑/u
+      : /(?:不|并不|没(?:有)?|未曾?|无法|不能)(?:据此)?(?:推断|推测|说明|意味着)/u;
+  const normalizedAssertion = `${assertion.quote}${assertion.proposition}`.replace(/[\s，。！？、,!.?]/g, '');
   return spans.some(span => {
     const line = validSpan(span, evidence);
-    if (!line || !pattern.test(span.quote)) return false;
-    return line.speakerId === observerId
+    if (!line || !pattern.test(span.quote) || negative.test(line.text)) return false;
+    const belongsToObserver = line.speakerId === observerId
       || (line.speakerId === null && lineMentionsCharacter(line.text, observerId));
+    if (!belongsToObserver) return false;
+    const normalizedReaction = line.text.replace(/[\s，。！？、,!.?]/g, '');
+    const directlyBound = normalizedReaction.includes(assertion.quote.replace(/[\s，。！？、,!.?]/g, ''))
+      || normalizedReaction.includes(assertion.proposition.replace(/[\s，。！？、,!.?]/g, ''));
+    if (directlyBound) return true;
+    const assertionLine = evidence.lines.find(candidate => candidate.text.includes(assertion.quote));
+    return !!assertionLine
+      && line.lineIndex === assertionLine.lineIndex + 1
+      && /(?:这|此事|这件事|你说的|刚才|那个说法|有道理)/u.test(line.text)
+      && normalizedAssertion.length > 0;
   });
 }
 
@@ -284,13 +301,132 @@ function explicitlyIntroducesPlayerName(text: string, playerName: string): boole
   return new RegExp(`(?:我叫(?:做)?|我的名字(?:是|叫)|我是)\\s*${escaped}(?:$|[，。！？、,!.?\\s])`, 'u').test(text);
 }
 
-function actionEvidence(action: string, spans: readonly ReviewedLineSpan[]): boolean {
-  const compactAction = action.replace(/[\s，。！？、,!.?]/g, '');
-  const compactEvidence = evidenceQuote(spans).replace(/[\s，。！？、,!.?]/g, '');
-  if (!compactAction || !compactEvidence || /^(?:到达|来到|抵达|赴约|等待|等到)/u.test(compactEvidence)) return false;
-  if (compactEvidence.includes(compactAction) || compactAction.includes(compactEvidence)) return true;
-  const chunks = compactAction.match(/[\u3400-\u9fff]{2,}|[a-z0-9-]{3,}/giu) ?? [];
-  return chunks.some(chunk => compactEvidence.includes(chunk));
+function clausesForSpans(
+  spans: readonly ReviewedLineSpan[],
+  evidence: CharacterContinuityCandidateEvidence,
+): Array<{ line: CharacterContinuityEvidenceLine; text: string }> {
+  return spans.flatMap(span => {
+    const line = validSpan(span, evidence);
+    if (!line) return [];
+    const clauses = line.text.split(/(?<=[。！？!?；;])/u).map(text => text.trim()).filter(Boolean);
+    const containing = clauses.filter(text => text.includes(span.quote));
+    return (containing.length > 0 ? containing : [line.text]).map(text => ({ line, text }));
+  });
+}
+
+const LOCATION_MENTIONS: Readonly<Record<string, readonly string[]>> = {
+  home: ['玩家公寓', '公寓', '家里', '住处'],
+  'senpai-building': ['学姐商住楼', '学姐楼', '商住楼'],
+  school: ['中学', '学校', '校门'],
+  supermarket: ['便利店', '超市'],
+  'old-man-building': ['独居老头楼', '老头楼', '麻将馆楼上'],
+  'mountain-trail': ['黔灵山脚步道', '山脚步道', '步道'],
+  'detective-inn': ['侦探小旅馆', '小旅馆', '旅馆'],
+  'water-tower': ['废弃水塔', '水塔'],
+  'community-hospital': ['社区医院', '医院'],
+  'observation-deck': ['废弃观景台', '观景台'],
+};
+
+function locationGrounded(locationId: string, text: string): boolean {
+  const location = getLocationById(locationId);
+  if (!location) return false;
+  return uniqueStrings([location.id, location.name, location.shortName, ...(LOCATION_MENTIONS[location.id] ?? [])])
+    .some(name => text.includes(name));
+}
+
+const CHINESE_NUMBERS = [
+  '零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+  '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
+  '二十一', '二十二', '二十三',
+] as const;
+
+function timeGrounded(dueAt: string, text: string): boolean {
+  const due = new Date(dueAt);
+  if (!Number.isFinite(due.getTime())) return false;
+  const hour = due.getHours();
+  const minute = due.getMinutes();
+  const numeric = `${hour}:${String(minute).padStart(2, '0')}`;
+  const fullNumeric = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  const chineseHour = CHINESE_NUMBERS[hour];
+  const chinese = chineseHour && minute === 0 ? `${chineseHour}点`
+    : chineseHour && minute === 30 ? `${chineseHour}点半`
+      : chineseHour ? `${chineseHour}点${CHINESE_NUMBERS[minute] ?? String(minute)}分` : '';
+  return [numeric, fullNumeric, numeric.replace(':', '：'), fullNumeric.replace(':', '：'),
+    minute === 0 ? `${hour}点` : '', chinese].some(value => value && text.includes(value));
+}
+
+function recipientGrounded(recipientId: string, text: string, actorSpoken: boolean): boolean {
+  if (recipientId === 'player') return actorSpoken ? /(?:你|玩家|\{\{user\}\})/u.test(text) : lineMentionsCharacter(text, 'player');
+  return lineMentionsCharacter(text, recipientId);
+}
+
+function canonicalActionText(text: string): string {
+  return text
+    .replace(/(?:交给|交出|递给|送给|转交给|给)/gu, '交付')
+    .replace(/(?:玩家|\{\{user\}\}|我|你|他|她|把|将|好|可以|没问题|答应|接受|承诺|同意|一定|准时|会)/gu, '')
+    .replace(/(?:零|一|二|三|四|五|六|七|八|九|十|两|[0-9]{1,2})(?:点(?:半|[零一二三四五六七八九十0-9]+分?)?|[:：][0-9]{2})/gu, '')
+    .replace(/[\s，。！？、,!.?；;：:]/g, '');
+}
+
+function actionGrounded(action: string, text: string): boolean {
+  const expected = canonicalActionText(action);
+  const rendered = canonicalActionText(text);
+  return expected.length >= 2 && (rendered.includes(expected) || expected.includes(rendered));
+}
+
+function affirmativeUndertaking(
+  proposal: CharacterContinuityAudit['commitments'][number],
+  spans: readonly ReviewedLineSpan[],
+  evidence: CharacterContinuityCandidateEvidence,
+): boolean {
+  const action = proposal.action?.trim() ?? '';
+  const locationId = proposal.locationId?.trim() ?? '';
+  const dueAt = proposal.dueAt?.trim() ?? '';
+  return clausesForSpans(spans, evidence).some(({ line, text }) => {
+    const actorSpoken = line.speakerId === proposal.actorId;
+    const actorRendered = actorSpoken || (line.speakerId === null && lineMentionsCharacter(text, proposal.actorId));
+    const positive = /(?:^|[，,。！？!?；;\s])好(?:[，,。！？!?；;\s]|$)|可以|没问题|答应|接受|承诺|同意|(?:我|本人|他|她).{0,8}(?:会|将|一定|准时)/u.test(text);
+    const refusal = /(?:不|并不|不会|没(?:有)?|未曾?|无法|不能|不愿|拒绝)(?:再|真|完全)?(?:会|愿|能|答应|接受|承诺|同意|保证|打算)?/u.test(text.replace(/没问题/gu, ''));
+    const conditional = /(?:如果|假如|要是|除非|可能|也许|或许|看情况)/u.test(text);
+    const question = /[？?]|(?:吗|是否|要不要)(?:[。！？?!；;]|$)/u.test(text);
+    return actorRendered && positive && !refusal && !conditional && !question
+      && actionGrounded(action, text)
+      && locationGrounded(locationId, text)
+      && timeGrounded(dueAt, text)
+      && recipientGrounded(proposal.recipientId, text, actorSpoken);
+  });
+}
+
+function actionEvidence(
+  action: string,
+  actorId: string,
+  spans: readonly ReviewedLineSpan[],
+  evidence: CharacterContinuityCandidateEvidence,
+): boolean {
+  return clausesForSpans(spans, evidence).some(({ line, text }) => {
+    const actorRendered = line.speakerId === actorId
+      || (line.speakerId === null && lineMentionsCharacter(text, actorId));
+    const nonPerformance = /(?:还没有|尚未|并未|未曾|没有|还没|没能|不能|无法|不曾|尚没有)/u.test(text);
+    const hypothetical = /(?:如果|假如|要是|可能|也许|或许)|[？?]/u.test(text);
+    return actorRendered && !nonPerformance && !hypothetical
+      && !/^(?:到达|来到|抵达|赴约|等待|等到)/u.test(text.trim())
+      && actionGrounded(action, text);
+  });
+}
+
+function cancellationEvidence(
+  actorId: string,
+  spans: readonly ReviewedLineSpan[],
+  evidence: CharacterContinuityCandidateEvidence,
+): boolean {
+  return clausesForSpans(spans, evidence).some(({ line, text }) => {
+    const actorRendered = line.speakerId === actorId
+      || (line.speakerId === null && lineMentionsCharacter(text, actorId));
+    const cancellation = /(?:取消|不去|不能|无法|作废|算了)/u.test(text);
+    const deniedCancellation = /(?:没有|并未|未曾?|不(?:会)?)(?:真的)?取消|并非(?:不能|无法)/u.test(text);
+    return actorRendered && cancellation && !deniedCancellation
+      && !/(?:如果|假如|要是|可能|也许|或许)|[？?]/u.test(text);
+  });
 }
 
 export function validateCharacterContinuityAudit(input: {
@@ -330,6 +466,7 @@ export function validateCharacterContinuityAudit(input: {
       || !input.evidence.possibleAudienceIds.includes(listener)
       || !listenerHasEvidence(listener, proposal.audienceEvidence ?? [], input.evidence, {
         lineIndex: proposal.lineIndex, speakerId: sourceLine.speakerId, quote: proposal.quote,
+        background: sourceLine.background,
       })
     ))) {
       violations.push(`disclosure ${proposalIndex} has an unproved listener or audience`);
@@ -385,7 +522,7 @@ export function validateCharacterContinuityAudit(input: {
     const assertion = acceptedAssertion(proposal.assertionIndex, input.evidence);
     const spans = proposal.evidence ?? [];
     if (!assertion || spans.length === 0 || spans.some(span => !validSpan(span, input.evidence))
-      || !beliefReactionEvidence(proposal.observerId, proposal.status, spans, input.evidence)) {
+      || !beliefReactionEvidence(proposal.observerId, proposal.status, spans, input.evidence, assertion)) {
       violations.push(`belief ${proposalIndex} lacks an accepted rendered observer reaction`);
       return;
     }
@@ -414,7 +551,7 @@ export function validateCharacterContinuityAudit(input: {
       const dueAt = proposal.dueAt?.trim() ?? '';
       const end = new Date(input.evidence.resolvedEndTime).getTime();
       const due = new Date(dueAt).getTime();
-      if (!actorEvidence(proposal.actorId, spans, input.evidence, /(?:^好[，,]|可以|没问题|答应|接受|承诺|同意|会|将)/u)
+      if (!affirmativeUndertaking(proposal, spans, input.evidence)
         || !action || !getLocationById(locationId) || !Number.isFinite(end) || !Number.isFinite(due)
         || due <= end || !isSameLocalDay(end, due)) {
         violations.push(`commitment ${proposalIndex} is not a concrete same-day future undertaking by its actor`);
@@ -435,9 +572,8 @@ export function validateCharacterContinuityAudit(input: {
       return;
     }
     const validOperationEvidence = proposal.operation === 'cancel'
-      ? actorEvidence(proposal.actorId, spans, input.evidence, /(?:取消|不去|不能|无法|作废|算了)/u)
-        && /(?:取消|不去|不能|无法|作废|算了)/u.test(evidenceQuote(spans))
-      : actorEvidence(proposal.actorId, spans, input.evidence, /./u) && actionEvidence(existing.action, spans);
+      ? cancellationEvidence(proposal.actorId, spans, input.evidence)
+      : actionEvidence(existing.action, proposal.actorId, spans, input.evidence);
     if (!validOperationEvidence) {
       violations.push(`commitment ${proposalIndex} lacks ${proposal.operation} evidence`);
       return;

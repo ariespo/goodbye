@@ -132,6 +132,92 @@ describe('character continuity audit validation', () => {
     expect(result.approved).toBe(false);
   });
 
+  it('does not treat unrelated dialogue after cross-location travel as hearing evidence', () => {
+    const candidate = evidence({
+      candidateText: [
+        '对话|赵刚|calm|收据显示文穗买过牛奶。',
+        '对话|旁白|calm|你离开学校，随后来到社区医院。',
+        '对话|林静|calm|你怎么现在才来？',
+      ].join('\n'),
+      scene: scene(
+        ['赵刚', '收据显示文穗买过牛奶。'],
+        ['旁白', '你离开学校，随后来到社区医院。'],
+        ['林静', '你怎么现在才来？'],
+      ),
+      assertions: [{
+        field: 'maintext', quote: '收据显示文穗买过牛奶', proposition: '文穗买过牛奶', status: 'supported',
+        citations: [{ sourceId: receiptSource.id, quote: '收据显示文穗买过牛奶' }], reason: '收据支持',
+      }],
+      sources: [receiptSource], audience: ['detective-b'],
+    });
+
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ disclosures: [{
+        assertionIndex: 0, lineIndex: 0, quote: '收据显示文穗买过牛奶', listenerIds: ['detective-b'],
+        audienceEvidence: [{ lineIndex: 2, quote: '你怎么现在才来' }],
+      }] }),
+      evidence: candidate, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(false);
+  });
+
+  it('does not treat an adjacent speaker after a rendered scene change as an immediate listener', () => {
+    const acceptedScene: Scene = {
+      id: 'cross-location',
+      lines: [
+        { id: 'school-line', background: 'school-day', speaker: '赵刚', emotion: 'calm', text: '收据显示文穗买过牛奶。' },
+        { id: 'hospital-line', background: 'community-hospital', speaker: '林静', emotion: 'calm', text: '你怎么现在才来？' },
+      ],
+    };
+    const candidate = evidence({
+      candidateText: '场景|school-day\n对话|赵刚|calm|收据显示文穗买过牛奶。\n场景|community-hospital\n对话|林静|calm|你怎么现在才来？',
+      scene: acceptedScene,
+      assertions: [{
+        field: 'maintext', quote: '收据显示文穗买过牛奶', proposition: '文穗买过牛奶', status: 'supported',
+        citations: [{ sourceId: receiptSource.id, quote: '收据显示文穗买过牛奶' }], reason: '收据支持',
+      }],
+      sources: [receiptSource], audience: ['detective-b'],
+    });
+
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ disclosures: [{
+        assertionIndex: 0, lineIndex: 0, quote: '收据显示文穗买过牛奶', listenerIds: ['detective-b'],
+        audienceEvidence: [{ lineIndex: 1, quote: '你怎么现在才来' }],
+      }] }),
+      evidence: candidate, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(false);
+  });
+
+  it('keeps a later response valid when rendered narration proves the telephone channel stayed open', () => {
+    const candidate = evidence({
+      candidateText: [
+        '对话|赵刚|calm|收据显示文穗买过牛奶。',
+        '对话|旁白|calm|电话仍然接通，林静在电话那头听着。',
+        '对话|林静|calm|我听见了。',
+      ].join('\n'),
+      scene: scene(
+        ['赵刚', '收据显示文穗买过牛奶。'],
+        ['旁白', '电话仍然接通，林静在电话那头听着。'],
+        ['林静', '我听见了。'],
+      ),
+      assertions: [{
+        field: 'maintext', quote: '收据显示文穗买过牛奶', proposition: '文穗买过牛奶', status: 'supported',
+        citations: [{ sourceId: receiptSource.id, quote: '收据显示文穗买过牛奶' }], reason: '收据支持',
+      }],
+      sources: [receiptSource], audience: ['detective-b'],
+    });
+
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ disclosures: [{
+        assertionIndex: 0, lineIndex: 0, quote: '收据显示文穗买过牛奶', listenerIds: ['detective-b'],
+        audienceEvidence: [
+          { lineIndex: 1, quote: '电话仍然接通，林静在电话那头听着' },
+          { lineIndex: 2, quote: '我听见了' },
+        ],
+      }] }),
+      evidence: candidate, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(true);
+  });
+
   it('does not treat a visual mention of someone as evidence they heard the disclosure', () => {
     const candidate = evidence({
       candidateText: '对话|玩家|calm|我看见赵刚站在雨里。我看到收据了。',
@@ -198,6 +284,51 @@ describe('character continuity audit validation', () => {
     }).approved).toBe(false);
   });
 
+  it('rejects negated or unrelated affirmative belief reactions while retaining a bound affirmative reaction', () => {
+    const factAssertion = {
+      field: 'maintext', quote: '文穗买过牛奶', proposition: '文穗买过牛奶', status: 'supported' as const,
+      citations: [{ sourceId: receiptSource.id, quote: '文穗买过牛奶' }], reason: '收据支持',
+    };
+    const negative = evidence({
+      candidateText: '对话|赵刚|calm|我不相信文穗买过牛奶。',
+      scene: scene(['赵刚', '我不相信文穗买过牛奶。']), assertions: [factAssertion],
+      sources: [receiptSource], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ beliefs: [{
+        assertionIndex: 0, observerId: 'detective-a', status: 'believed',
+        evidence: [{ lineIndex: 0, quote: '我不相信文穗买过牛奶' }],
+      }] }),
+      evidence: negative, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(false);
+
+    const unrelated = evidence({
+      candidateText: '对话|玩家|calm|文穗买过牛奶。\n对话|赵刚|calm|我相信今天会下雨。',
+      scene: scene(['玩家', '文穗买过牛奶。'], ['赵刚', '我相信今天会下雨。']),
+      assertions: [factAssertion], sources: [receiptSource], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ beliefs: [{
+        assertionIndex: 0, observerId: 'detective-a', status: 'believed',
+        evidence: [{ lineIndex: 1, quote: '我相信今天会下雨' }],
+      }] }),
+      evidence: unrelated, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(false);
+
+    const affirmative = evidence({
+      candidateText: '对话|玩家|calm|文穗买过牛奶。\n对话|赵刚|calm|你说的收据有道理，我相信文穗买过牛奶。',
+      scene: scene(['玩家', '文穗买过牛奶。'], ['赵刚', '你说的收据有道理，我相信文穗买过牛奶。']),
+      assertions: [factAssertion], sources: [receiptSource], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ beliefs: [{
+        assertionIndex: 0, observerId: 'detective-a', status: 'believed',
+        evidence: [{ lineIndex: 1, quote: '我相信文穗买过牛奶' }],
+      }] }),
+      evidence: affirmative, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(true);
+  });
+
   it('creates a commitment only from the obligated actor\'s accepted future undertaking', () => {
     const candidate = evidence({
       candidateText: '对话|玩家|calm|十点在学校把值班表给我。\n对话|赵刚|calm|好，我十点在学校把值班表给你。',
@@ -231,6 +362,38 @@ describe('character continuity audit validation', () => {
       }] }),
       evidence: actorQuestion, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
     }).approved).toBe(false);
+  });
+
+  it('grounds every accepted promise field in an affirmative undertaking', () => {
+    const validate = (text: string, overrides: Partial<CharacterContinuityAudit['commitments'][number]> = {}) => (
+      validateCharacterContinuityAudit({
+        audit: reviewed({ commitments: [{
+          operation: 'accept', actorId: 'detective-a', recipientId: 'player', action: '把值班表交给玩家',
+          locationId: 'school', dueAt: '2024-09-09T10:00:00',
+          evidence: [{ lineIndex: 0, quote: text.replace(/。$/u, '') }], ...overrides,
+        }] }),
+        evidence: evidence({
+          candidateText: `对话|赵刚|calm|${text}`, scene: scene(['赵刚', text]), assertions: [],
+          audience: ['detective-a'], end: '2024-09-09T09:00:00',
+        }),
+        memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+      })
+    );
+
+    expect(validate('我不会十点在学校把值班表给你。')).toMatchObject({ approved: false });
+    expect(validate('如果你再求我，我会十点在学校把值班表给你。')).toMatchObject({ approved: false });
+    expect(validate('好，我十点在学校把值班表给你。', { action: '把钥匙交给玩家' }))
+      .toMatchObject({ approved: false });
+    expect(validate('好，我十点在学校把值班表给你。', { locationId: 'supermarket' }))
+      .toMatchObject({ approved: false });
+    expect(validate('好，我十点在学校把值班表给你。', { dueAt: '2024-09-09T11:00:00' }))
+      .toMatchObject({ approved: false });
+    expect(validate('好，我十点在学校把值班表给你。', { recipientId: 'fumi' }))
+      .toMatchObject({ approved: false });
+
+    expect(validate('我得先确认名单。好，我十点在学校把值班表给你。', {
+      evidence: [{ lineIndex: 0, quote: '好，我十点在学校把值班表给你' }],
+    })).toMatchObject({ approved: true });
   });
 
   it('does not grant player-name expression from merely mentioning that name', () => {
@@ -320,6 +483,30 @@ describe('character continuity audit validation', () => {
     expect(validateCharacterContinuityAudit({
       audit: reviewed({ commitments: [{ operation: 'cancel', existingCommitmentId: commitment.id, actorId: 'detective-b', recipientId: 'player', evidence: [{ lineIndex: 0, quote: '我取消约定' }] }] }),
       evidence: cancelled, memory, cycleCount: 1,
+    }).approved).toBe(false);
+
+    const deniedCancellation = evidence({
+      candidateText: '对话|赵刚|calm|我没有取消约定。',
+      scene: scene(['赵刚', '我没有取消约定。']), assertions: [], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ commitments: [{
+        operation: 'cancel', existingCommitmentId: commitment.id, actorId: 'detective-a', recipientId: 'player',
+        evidence: [{ lineIndex: 0, quote: '我没有取消约定' }],
+      }] }),
+      evidence: deniedCancellation, memory, cycleCount: 1,
+    }).approved).toBe(false);
+
+    const negativePerformance = evidence({
+      candidateText: '对话|赵刚|calm|我还没有交出值班表。',
+      scene: scene(['赵刚', '我还没有交出值班表。']), assertions: [], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ commitments: [{
+        operation: 'fulfill', existingCommitmentId: commitment.id, actorId: 'detective-a', recipientId: 'player',
+        evidence: [{ lineIndex: 0, quote: '我还没有交出值班表' }],
+      }] }),
+      evidence: negativePerformance, memory, cycleCount: 1,
     }).approved).toBe(false);
   });
 

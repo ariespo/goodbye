@@ -612,6 +612,14 @@ export function buildWriterPacket(
     ...safePlan
   } = plan;
   void _revelations;
+  const writerPlan = {
+    ...safePlan,
+    beats: safePlan.beats.map(beat => {
+      const writerBeat = { ...beat };
+      delete writerBeat.sourceMemoryIds;
+      return writerBeat;
+    }),
+  };
   const backgroundById = new Map([
     ...FIXED_BACKGROUND_FACTS.map(fact => [fact.factId, fact] as const),
     ...selectedBackgroundFacts(turnContext).map(fact => [fact.factId, fact] as const),
@@ -635,7 +643,7 @@ export function buildWriterPacket(
     speakerIds: [...speakerIds],
   }));
   return {
-    plan: safePlan,
+    plan: writerPlan,
     playerKnownFacts: brief.playerKnownFacts,
     authorizedFacts: plan.revelations.map((revelation) => {
       const fact = brief.usableFacts.find((candidate) => candidate.id === revelation.factId);

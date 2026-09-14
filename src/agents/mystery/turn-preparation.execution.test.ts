@@ -5,6 +5,12 @@ import { createDefaultVariables } from '../../sillytavern/vars-merger';
 import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatMessage } from '../../sillytavern/types';
 import type { ResolvedActionOutcome } from '../../engine/action-resolution';
 import { buildPendingActionSceneContext } from '../../engine/action-scene-continuity';
+import { prepareMysteryTurn } from './orchestrator';
+import {
+  buildCharacterContinuityCandidateEvidence,
+  validateCharacterContinuityAudit,
+} from '../../memory/character-continuity';
+import { buildTurnCommit, normalizeWorldMemory } from '../../memory/world-memory';
 
 function fixture(): TurnPreparationInput {
   const { game } = useGameStore.getState();
@@ -23,6 +29,86 @@ const interrupted: ResolvedActionOutcome = { id: 'r', cycleCount: 1, startTime: 
   interruption: { id: 'death-news', at: '2024-09-09T16:00:00' } };
 
 describe('execution context projection', () => {
+  it('keeps canonical continuity bindings out of the full Writer payload while retaining public cognition text', async () => {
+    const narrative = [
+      '对话|玩家|calm|收据显示文穗买过牛奶。',
+      '对话|门卫|calm|我听见了。',
+      '对话|玩家|calm|我相信文穗买过牛奶。',
+    ].join('\n');
+    const acceptedScene = {
+      id: 'accepted',
+      lines: [
+        { id: 'accepted:0', speaker: '玩家', text: '收据显示文穗买过牛奶。' },
+        { id: 'accepted:1', speaker: '门卫', text: '我听见了。' },
+        { id: 'accepted:2', speaker: '玩家', text: '我相信文穗买过牛奶。' },
+      ],
+    };
+    const source = {
+      id: 'fact:F001:clue', kind: 'fact' as const, text: '收据显示文穗买过牛奶。', factId: 'F001', level: 'clue' as const,
+    };
+    const evidence = buildCharacterContinuityCandidateEvidence({
+      candidateText: narrative,
+      scene: acceptedScene,
+      assertionAudit: { reviewedFields: ['maintext'], assertions: [{
+        field: 'maintext', quote: '收据显示文穗买过牛奶', proposition: '文穗买过牛奶', status: 'supported',
+        citations: [{ sourceId: source.id, quote: '收据显示文穗买过牛奶' }], reason: '收据支持',
+      }] },
+      assertionSources: [source], possibleAudienceIds: ['school-guard'], resolvedEndTime: '2024-09-09T09:00:00',
+      canonicalPropositionBySourceId: { [source.id]: 'fact:private-canonical-receipt' },
+    });
+    const validation = validateCharacterContinuityAudit({
+      audit: { reviewed: true, disclosures: [{
+        assertionIndex: 0, lineIndex: 0, quote: '收据显示文穗买过牛奶', listenerIds: ['school-guard'],
+        audienceEvidence: [{ lineIndex: 1, quote: '我听见了' }],
+      }], beliefs: [{
+        assertionIndex: 0, observerId: 'player', status: 'believed',
+        evidence: [{ lineIndex: 2, quote: '我相信文穗买过牛奶' }],
+      }], commitments: [] },
+      evidence, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    });
+    expect(validation.approved).toBe(true);
+    const commit = buildTurnCommit({
+      turnId: 'private-binding', turnIndex: 1, createdAt: 1, occurredAt: '2024-09-09T09:00:00',
+      locationId: 'school', cycleCount: 1, summary: '玩家向门卫提到收据。', scene: acceptedScene,
+      beforeVariables: { cycleCount: 1 }, settledVariables: { cycleCount: 1 },
+      narrativeText: narrative, continuityEffects: validation.effects,
+    });
+    const input = fixture();
+    input.userInput = '继续询问门卫';
+    input.variables = {
+      ...input.variables, cycleCount: 1, location: 'school', time: '2024-09-09T09:00:00',
+      worldMemory: commit.worldMemory,
+    };
+    input.gameStatus.time = new Date('2024-09-09T09:00:00');
+    input.currentState = { ...input.currentState, background: 'school-day' };
+    const preparation = buildTurnPreparation(input);
+    const prepared = await prepareMysteryTurn({
+      ...preparation.request,
+      complete: async messages => messages[0].content.includes('事实复核')
+        || messages[0].content.includes('节奏与玩家能动性')
+        ? JSON.stringify({ approved: true, violations: [], corrections: [] })
+        : JSON.stringify({
+            turnGoal: '继续询问门卫', tone: '克制', timeCostMinutes: 1,
+            beats: [{ id: 'b', purpose: '回应', description: '门卫继续回应玩家。',
+              locationId: 'school', speakerIds: ['school-guard'],
+              sourceMemoryIds: ['school-guard|fact:private-canonical-receipt'] }],
+            revelations: [], assetRequests: [], optionIntents: [
+              { id: 'o1', intent: '继续询问', tone: '克制', expectedPressure: 'low' },
+              { id: 'o2', intent: '离开学校', tone: '克制', expectedPressure: 'low' },
+            ],
+          }),
+    });
+    const writerPayload = JSON.stringify(prepared.writerMessages);
+
+    expect(writerPayload).toContain('school-guard 听到 player 陈述：文穗买过牛奶');
+    expect(writerPayload).toContain('heard');
+    expect(writerPayload).toContain('believed');
+    expect(writerPayload).toContain('收据显示文穗买过牛奶');
+    expect(writerPayload).not.toContain('fact:private-canonical-receipt');
+    expect(writerPayload).not.toContain('school-guard|fact:private-canonical-receipt');
+    expect(writerPayload).not.toContain('propositionId');
+  });
+
   it('keeps the legal source map private while projecting only public opportunity fields', () => {
     const prepared = buildTurnPreparation(fixture());
     const id = 'investigation:c1:F001:atmosphere:home';

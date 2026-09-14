@@ -342,6 +342,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     lineIndex,
     speakerId: characterIdFromSpeaker(line.speaker),
     text: line.text,
+    ...(line.background ? { background: line.background } : {}),
   }));
   const possibleAudienceIds = [...new Set([
     'player',

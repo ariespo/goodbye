@@ -476,18 +476,18 @@ export function compileTurnContext(options: {
   const memory = normalizeWorldMemory(options.variables, legacyEpisodesFromMessages(options.history));
   const currentCycle = Number.isSafeInteger(Number(options.variables.cycleCount))
     ? Math.max(1, Number(options.variables.cycleCount)) : 1;
-  let recentMessages = options.history.filter(message => message.role !== 'system').slice(-4);
+  const recentMessageCandidates = options.history.filter(message => message.role !== 'system').slice(-4);
   const terms = [...new Set([options.locationId, ...options.activeNpcIds, ...options.userInput.split(/[\s，。！？、]+/u)])]
     .filter(term => term.length > 1);
   const recentEpisodeIds = new Set(memory.episodes.slice(-2).map(item => item.episodeId));
-  let relevantEpisodes = memory.episodes
+  const episodeCandidates = memory.episodes
     .map(item => ({ item, score: scoreText(`${item.locationId} ${item.actorIds.join(' ')} ${item.summary} ${item.unresolvedTags.join(' ')}`, terms)
       + item.salience * 2 + (recentEpisodeIds.has(item.episodeId) ? 2 : 0) }))
     .filter(entry => entry.score > 1)
     .sort((a, b) => b.score - a.score || b.item.turnIndex - a.item.turnIndex)
     .slice(0, 8)
     .map(entry => entry.item);
-  let relevantCognition = memory.cognition.filter(item => (
+  const cognitionCandidates = memory.cognition.filter(item => (
     item.observerId === 'player'
     || (options.activeNpcIds.includes(item.observerId) && (
       item.provenance === 'authored-baseline'
@@ -495,128 +495,173 @@ export function compileTurnContext(options: {
     ))
   )).slice(-40);
   const fixedBackgroundFacts = relevantFixedBackgroundFacts(options.locationId, options.activeNpcIds);
-  const relevantSoftFacts = memory.softCanonFacts.filter(fact => (
+  const softFactCandidates = memory.softCanonFacts.filter(fact => (
     fact.locationIds.includes(options.locationId)
     || fact.characterIds.some(id => options.activeNpcIds.includes(id))
     || scoreText(fact.text, terms) > 0
   )).slice(-20);
-
-  const maxContext = options.maxContext ?? DEFAULT_CONTEXT_TOKENS;
-  const reservedOutput = options.reservedOutput ?? DEFAULT_OUTPUT_TOKENS;
-  const reservedRepair = Math.max(512, Math.ceil(maxContext * 0.08));
-  const estimatedFixed = estimateTokens(options.fixedPromptText ?? '');
-  // Fixed background authority is mandatory. Optional records are selected whole:
-  // never slice a fact, instruction, or chat message into a misleading fragment.
-  const backgroundCognition = FIXED_NPC_BACKGROUND_COGNITION.filter(item => options.activeNpcIds.includes(item.npcId));
-  let estimatedSelected = estimateTokens(JSON.stringify({ backgroundFacts: fixedBackgroundFacts, backgroundCognition }));
-  const available = maxContext - reservedOutput - reservedRepair - estimatedFixed;
-  if (!Number.isFinite(available) || reservedOutput < 0 || available < estimatedSelected) {
-    throw new ContextBudgetError(`上下文预算不足：固定指令、背景事实、输出和修复预留无法容纳于 ${maxContext}。权威内容未被截断。`);
-  }
-  function selectWithinBudget<T>(items: readonly T[], project: (item: T) => unknown = item => item): T[] {
-    return items.filter(item => {
-      // Include serialized metadata and duplicate selection IDs with headroom.
-      const cost = estimateTokens(JSON.stringify(project(item))) + 32;
-      if (estimatedSelected + cost > available) return false;
-      estimatedSelected += cost;
-      return true;
-    });
-  }
-  // History state/rollback snapshots are local storage metadata, not prompt text.
-  recentMessages = selectWithinBudget([...recentMessages].reverse(), ({ id, role, content }) => ({ id, role, content })).reverse();
-  relevantCognition = selectWithinBudget([...relevantCognition].reverse()).reverse();
-  relevantEpisodes = selectWithinBudget(relevantEpisodes);
-  const relevantBackgroundFacts = [...fixedBackgroundFacts, ...selectWithinBudget([...relevantSoftFacts].reverse()).reverse()];
-  const selectedIds = [
-    ...recentMessages.map(item => `message:${item.id}`),
-    ...relevantEpisodes.map(item => item.episodeId),
-    ...relevantCognition.map(item => item.cognitionId),
-    ...relevantBackgroundFacts.map(item => item.factId),
-  ];
-  const relevantDisclosures = (memory.disclosures ?? []).filter(item => (
+  const disclosureCandidates = (memory.disclosures ?? []).filter(item => (
     item.speakerId === 'player' || item.listenerIds.includes('player')
     || (item.cycleCount === currentCycle && (
       options.activeNpcIds.includes(item.speakerId)
       || item.listenerIds.some(listenerId => options.activeNpcIds.includes(listenerId))
     ))
-  ));
+  )).map((item, index) => ({
+    item,
+    index,
+    priority: (item.cycleCount === currentCycle ? 8 : 0)
+      + (options.activeNpcIds.includes(item.speakerId)
+        || item.listenerIds.some(listenerId => options.activeNpcIds.includes(listenerId)) ? 4 : 0)
+      + scoreText(item.evidenceQuote, terms),
+  })).sort((left, right) => right.priority - left.priority
+    || right.item.cycleCount - left.item.cycleCount || right.index - left.index)
+    .map(entry => entry.item);
   const activeCommitments = (memory.commitments ?? []).filter(item => (
     item.status === 'active' && item.cycleCount === currentCycle
   ));
-  const baseMemoryProjection = {
-    selectedIds,
-    episodes: relevantEpisodes.map(({ episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }) => (
-      { episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }
-    )),
-    cognition: relevantCognition.map(({ cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }) => (
-      { cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }
-    )),
-    disclosures: relevantDisclosures.map(({ cycleCount, speakerId, listenerIds, evidenceQuote }) => (
-      { cycleCount, speakerId, listenerIds, evidenceQuote }
-    )),
-    commitments: activeCommitments
-      .map(({ actorId, recipientId, action, locationId, dueAt, evidenceQuote }) => (
-        { actorId, recipientId, action, locationId, dueAt, evidenceQuote }
-      )),
-  };
-  const directorMemory = {
-    ...baseMemoryProjection,
-    disclosures: relevantDisclosures.map(({ id, cycleCount, speakerId, listenerIds, propositionId, evidenceQuote }) => (
-      { id, cycleCount, speakerId, listenerIds, propositionId, evidenceQuote }
-    )),
-    commitments: activeCommitments,
-    backgroundFacts: relevantBackgroundFacts,
-    backgroundCognition: FIXED_NPC_BACKGROUND_COGNITION.filter(item => options.activeNpcIds.includes(item.npcId)),
-  };
+
+  const maxContext = options.maxContext ?? DEFAULT_CONTEXT_TOKENS;
+  const reservedOutput = options.reservedOutput ?? DEFAULT_OUTPUT_TOKENS;
+  const reservedRepair = Math.max(512, Math.ceil(maxContext * 0.08));
+  const estimatedFixed = estimateTokens(options.fixedPromptText ?? '');
+  const backgroundCognition = FIXED_NPC_BACKGROUND_COGNITION.filter(item => options.activeNpcIds.includes(item.npcId));
+  const available = maxContext - reservedOutput - reservedRepair - estimatedFixed;
+  if (!Number.isFinite(available) || reservedOutput < 0) {
+    throw new ContextBudgetError(`上下文预算不足：固定指令、输出和修复预留无法容纳于 ${maxContext}。`);
+  }
+
+  const recentMessages: ChatMessage[] = [];
+  const relevantEpisodes: EpisodeMemoryRecord[] = [];
+  const relevantCognition: CognitionRecord[] = [];
+  const relevantBackgroundFacts: BackgroundFactRecord[] = [...fixedBackgroundFacts];
+  const relevantDisclosures: DisclosureRecord[] = [];
+
   const expressibleFixedIds = new Set(FIXED_NPC_BACKGROUND_COGNITION
     .filter(item => item.expressibleUnderCover && options.activeNpcIds.includes(item.npcId))
     .map(item => item.factId));
-  const writerBackgroundFacts = relevantBackgroundFacts.filter(fact => (
-    fact.level === 'fixed'
-      ? expressibleFixedIds.has(fact.factId)
-      : options.activeNpcIds.some(npcId => memory.cognition.some(cognition => (
-        cognition.observerId === npcId && cognition.propositionId === `background:${fact.factId}`
-      )))
-  ));
   const hiddenBackgroundCognitionIds = new Set(FIXED_NPC_BACKGROUND_COGNITION
     .filter(item => !item.expressibleUnderCover)
     .map(item => `${item.npcId}|background:${item.factId}`));
-  const writerCognition = relevantCognition.filter(item => (
-    !hiddenBackgroundCognitionIds.has(item.cognitionId)
-    && !((item.observerId === 'detective-a' || item.observerId === 'detective-b')
-      && item.propositionId === 'identity:player-name')
-  ));
-  const writerVisibleIds = new Set([
-    ...recentMessages.map(item => `message:${item.id}`),
-    ...relevantEpisodes.map(item => item.episodeId),
-    ...writerCognition.map(item => item.cognitionId),
-    ...writerBackgroundFacts.map(item => item.factId),
-  ]);
-  const writerMemory = {
-    ...baseMemoryProjection,
-    selectedIds: selectedIds.filter(id => writerVisibleIds.has(id)),
-    cognition: writerCognition.map(({ cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }) => (
-      { cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }
-    )),
-    backgroundFacts: writerBackgroundFacts,
-    rule: '只可表现 backgroundFacts 中的开局前生活史；侦探调查档案等不可表达认知已被裁掉。',
-  };
+
+  function projectSelected() {
+    const selectedIds = [
+      ...recentMessages.map(item => `message:${item.id}`),
+      ...relevantEpisodes.map(item => item.episodeId),
+      ...relevantCognition.map(item => item.cognitionId),
+      ...relevantBackgroundFacts.map(item => item.factId),
+      ...relevantDisclosures.map(item => item.id),
+      ...activeCommitments.map(item => item.id),
+    ];
+    const directorMemory = {
+      selectedIds,
+      episodes: relevantEpisodes.map(({ episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }) => (
+        { episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }
+      )),
+      cognition: relevantCognition.map(({ cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }) => (
+        { cognitionId, observerId, propositionId, subjectId, status, confidence, summary, identityScope }
+      )),
+      disclosures: relevantDisclosures.map(({ id, cycleCount, speakerId, listenerIds, propositionId, evidenceQuote }) => (
+        { id, cycleCount, speakerId, listenerIds, propositionId, evidenceQuote }
+      )),
+      commitments: activeCommitments,
+      backgroundFacts: relevantBackgroundFacts,
+      backgroundCognition,
+    };
+    const writerCognition = relevantCognition.filter(item => (
+      !hiddenBackgroundCognitionIds.has(item.cognitionId)
+      && !((item.observerId === 'detective-a' || item.observerId === 'detective-b')
+        && item.propositionId === 'identity:player-name')
+    ));
+    const writerBackgroundFacts = relevantBackgroundFacts.filter(fact => (
+      fact.level === 'fixed'
+        ? expressibleFixedIds.has(fact.factId)
+        : options.activeNpcIds.some(npcId => memory.cognition.some(cognition => (
+          cognition.observerId === npcId && cognition.propositionId === `background:${fact.factId}`
+        )))
+    ));
+    const writerCognitionProjection = writerCognition.map(({
+      observerId, status, confidence, summary, identityScope,
+    }, index) => ({
+      id: `memory-cognition:${index + 1}`, observerId, status, confidence, summary, identityScope,
+    }));
+    const writerDisclosureProjection = relevantDisclosures.map(({
+      cycleCount, speakerId, listenerIds, evidenceQuote,
+    }, index) => ({
+      id: `memory-disclosure:${index + 1}`, cycleCount, speakerId, listenerIds, evidenceQuote,
+    }));
+    const writerCommitmentProjection = activeCommitments.map(({
+      actorId, recipientId, action, locationId, dueAt, evidenceQuote,
+    }, index) => ({
+      id: `active-commitment:${index + 1}`, actorId, recipientId, action, locationId, dueAt, evidenceQuote,
+    }));
+    const writerSelectedIds = [
+      ...recentMessages.map(item => `message:${item.id}`),
+      ...relevantEpisodes.map(item => item.episodeId),
+      ...writerCognitionProjection.map(item => item.id),
+      ...writerBackgroundFacts.map(item => item.factId),
+      ...writerDisclosureProjection.map(item => item.id),
+      ...writerCommitmentProjection.map(item => item.id),
+    ];
+    const writerMemory = {
+      selectedIds: writerSelectedIds,
+      episodes: relevantEpisodes.map(({ episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }) => (
+        { episodeId, cycleCount, locationId, actorIds, summary, unresolvedTags }
+      )),
+      cognition: writerCognitionProjection,
+      disclosures: writerDisclosureProjection,
+      commitments: writerCommitmentProjection,
+      backgroundFacts: writerBackgroundFacts,
+      rule: '只可表现 backgroundFacts 中的开局前生活史；侦探调查档案等不可表达认知已被裁掉。',
+    };
+    const recentHistory = recentMessages.map(({ role, content }) => ({ role, content }));
+    const estimatedSelected = Math.max(
+      estimateTokens(JSON.stringify({ recentHistory, memoryContext: directorMemory, contextSelectionIds: selectedIds })),
+      estimateTokens(JSON.stringify({ recentHistory, memoryContext: writerMemory, contextSelectionIds: writerSelectedIds })),
+    );
+    return { selectedIds, directorMemory, writerMemory, estimatedSelected };
+  }
+
+  let projection = projectSelected();
+  if (projection.estimatedSelected > available) {
+    throw new ContextBudgetError(`上下文预算不足：固定背景与当前有效承诺无法容纳于 ${maxContext}。必要权威内容未被截断。`);
+  }
+
+  function selectWhole<T>(target: T[], item: T, insert: 'start' | 'end' = 'end'): void {
+    if (insert === 'start') target.unshift(item);
+    else target.push(item);
+    const candidate = projectSelected();
+    if (candidate.estimatedSelected <= available) projection = candidate;
+    else if (insert === 'start') target.shift();
+    else target.pop();
+  }
+
+  // Required active commitments are already present. Optional public records are
+  // selected whole, with current/relevant disclosures ahead of general history.
+  disclosureCandidates.forEach(item => selectWhole(relevantDisclosures, item));
+  [...recentMessageCandidates].reverse().forEach(item => selectWhole(recentMessages, item, 'start'));
+  [...cognitionCandidates].reverse().forEach(item => selectWhole(relevantCognition, item, 'start'));
+  episodeCandidates.forEach(item => selectWhole(relevantEpisodes, item));
+  [...softFactCandidates].reverse().forEach(item => selectWhole(relevantBackgroundFacts, item, 'start'));
+
+  // The final projection is recalculated after every accepted whole record, so
+  // reported selection cost covers actual Director and Writer memory payloads.
+  projection = projectSelected();
   return {
     version: 2,
-    selectedIds,
+    selectedIds: projection.selectedIds,
     recentMessages,
     relevantEpisodes,
     relevantCognition,
     relevantBackgroundFacts,
     lorebookScanText: [options.userInput, options.locationId, ...options.activeNpcIds, ...relevantEpisodes.map(item => item.summary)].join('\n'),
-    directorMemory,
-    writerMemory,
+    directorMemory: projection.directorMemory,
+    writerMemory: projection.writerMemory,
     tokenBudget: {
       maxContext,
       reservedOutput,
       reservedRepair,
       estimatedFixed,
-      estimatedSelected,
+      estimatedSelected: projection.estimatedSelected,
     },
   };
 }

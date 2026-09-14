@@ -291,4 +291,62 @@ describe('unified world memory', () => {
     expect(JSON.stringify(bundle.writerMemory)).not.toContain('fact:canonical-secret');
     expect(bundle.relevantCognition.some(item => item.cognitionId === 'detective-a|claim:old')).toBe(false);
   });
+
+  it('selects complete multi-cycle disclosure records inside the reported context budget', () => {
+    const disclosures = Array.from({ length: 80 }, (_, index) => ({
+      id: `disclosure:history:${index}`,
+      cycleCount: (index % 4) + 1,
+      speakerId: 'player',
+      listenerIds: ['school-guard'],
+      propositionId: `fact:private-history-${index}`,
+      sourceEventId: `turn:history-${index}`,
+      evidenceQuote: `第${index}条完整陈述：${'这段公开回忆必须作为完整记录保留。'.repeat(5)}`,
+      evidenceSpans: [{ lineIndex: 0, quote: `第${index}条完整陈述` }],
+    }));
+    const bundle = compileTurnContext({
+      userInput: '回想以前说过的话', locationId: 'unknown', activeNpcIds: [], history: [],
+      variables: { cycleCount: 4, worldMemory: { ...normalizeWorldMemory({ cycleCount: 4 }), disclosures } },
+      maxContext: 2048, reservedOutput: 256,
+    });
+    const writerMemory = bundle.writerMemory as { disclosures?: Array<{ evidenceQuote: string }> };
+    const selected = writerMemory.disclosures ?? [];
+    const available = bundle.tokenBudget.maxContext - bundle.tokenBudget.reservedOutput
+      - bundle.tokenBudget.reservedRepair - bundle.tokenBudget.estimatedFixed;
+    const actualSelected = estimateTokens(JSON.stringify({
+      memoryContext: bundle.writerMemory,
+      contextSelectionIds: (bundle.writerMemory as { selectedIds?: unknown }).selectedIds,
+      recentHistory: bundle.recentMessages.map(({ role, content }) => ({ role, content })),
+    }));
+
+    expect(selected.length).toBeGreaterThan(0);
+    expect(selected.length).toBeLessThan(disclosures.length);
+    expect(selected.every(item => disclosures.some(source => source.evidenceQuote === item.evidenceQuote))).toBe(true);
+    expect(actualSelected).toBeLessThanOrEqual(available);
+    expect(bundle.tokenBudget.estimatedSelected).toBeGreaterThanOrEqual(actualSelected);
+  });
+
+  it('includes every active current-cycle commitment or fails explicitly when required authority cannot fit', () => {
+    const active = {
+      id: 'commitment:required', cycleCount: 2, actorId: 'school-guard', recipientId: 'player',
+      action: '十点在学校交出值班表', locationId: 'school', dueAt: '2024-09-09T10:00:00',
+      status: 'active' as const, sourceEventId: 'turn:promise', evidenceQuote: '我十点在学校把值班表给你。',
+    };
+    const bundle = compileTurnContext({
+      userInput: '等待约定', locationId: 'unknown', activeNpcIds: [], history: [],
+      variables: { cycleCount: 2, worldMemory: { ...normalizeWorldMemory({ cycleCount: 2 }), commitments: [active] } },
+      maxContext: 2048, reservedOutput: 256,
+    });
+    expect((bundle.writerMemory as { commitments?: unknown[] }).commitments).toEqual([
+      expect.objectContaining({ actorId: 'school-guard', action: '十点在学校交出值班表' }),
+    ]);
+
+    expect(() => compileTurnContext({
+      userInput: '等待约定', locationId: 'unknown', activeNpcIds: [], history: [],
+      variables: { cycleCount: 2, worldMemory: {
+        ...normalizeWorldMemory({ cycleCount: 2 }),
+        commitments: [{ ...active, action: '必须完整保留的行动'.repeat(300) }],
+      } },
+      maxContext: 1024, reservedOutput: 128,
+    })).toThrow(/上下文预算不足|权威内容/i);
+  });
 });

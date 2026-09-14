@@ -455,7 +455,8 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
       resourceInstructions: basePromptUserInput,
       playerIntentPolicy: intentPolicy,
       memoryContext: contextBundle.writerMemory,
-      contextSelectionIds: contextBundle.selectedIds,
+      contextSelectionIds: Array.isArray(contextBundle.writerMemory.selectedIds)
+        ? contextBundle.writerMemory.selectedIds : [],
       publicOpportunities,
       programActions,
     },
