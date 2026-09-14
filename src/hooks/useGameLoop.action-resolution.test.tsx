@@ -423,6 +423,7 @@ describe('resolved action at the real hook boundary', () => {
       game: { ...state.game, currentScene: reloadedScene, sceneComplete: true },
     }));
     const callsBeforeResume = vi.mocked(streamChatCompletion).mock.calls.length;
+    vi.mocked(saveChat).mockRejectedValueOnce(new Error('地图存档失败')).mockResolvedValue(undefined);
     let firstDispatch: boolean | undefined;
     let repeatedDispatch: boolean | undefined;
     act(() => {
@@ -431,6 +432,10 @@ describe('resolved action at the real hook boundary', () => {
     });
     expect(firstDispatch).toBe(true);
     expect(repeatedDispatch).toBe(false);
+    await waitFor(() => expect(useGameStore.getState().ui.notifications.at(-1)?.message).toContain('地图存档失败'));
+    expect(useGameStore.getState().game.isWaitingForAI).toBe(false);
+    expect(useGameStore.getState().tavern.variables.location).toBe('home');
+    act(() => { expect(result.current.selectOption(resumeOption, resumeBinding)).toBe(true); });
     await waitFor(() => expect(useGameStore.getState().tavern.variables.location).toBe('school'));
 
     const arrived = useGameStore.getState();
@@ -443,6 +448,117 @@ describe('resolved action at the real hook boundary', () => {
       .toBe(arrived.tavern.chats[0].messages.at(-1)?.parsed?.observe);
     unmount();
   });
+
+  it.each(['resolve', 'reject'] as const)(
+    'does not let a stale local-map save %s overwrite a new chat request',
+    async settlement => {
+      const startVariables = {
+        ...createDefaultVariables(), cycleCount: 1, location: 'home', time: '2024-09-09T15:55:00',
+        stamina: 100, sanity: 70, knowledgeEvents: [],
+      };
+      const partial = prepareMapTravel({
+        variables: startVariables,
+        gameStatus: { time: new Date(startVariables.time), stamina: 100, sanity: 70, items: [] },
+        destinationLocationId: 'school',
+      });
+      if (partial.kind !== 'travel') throw new Error('expected partial map travel');
+      const partialTransaction = buildMapTravelTransaction({
+        variables: startVariables,
+        gameStatus: { time: new Date(startVariables.time), stamina: 100, sanity: 70, items: [] },
+        prepared: partial,
+        knowledgeEvents: [], endings: [], endingsSeen: [], hasEndingInProgress: false,
+      });
+      const continuationVariables = { ...partialTransaction.variables, deathNews: 'delivered' as const };
+      const optionText = '继续未完成的行动（剩余5分钟）';
+      const binding = {
+        optionIndex: 0, optionText, actionId: partial.actionId, continuationId: partial.actionId,
+      };
+      useGameStore.setState(state => ({
+        tavern: {
+          ...state.tavern,
+          variables: continuationVariables,
+          chats: [{ ...state.tavern.chats[0], variables: continuationVariables }],
+        },
+        api: {
+          ...state.api,
+          parsedContent: { ...state.api.parsedContent, options: [optionText], optionBindings: [binding] },
+        },
+        game: {
+          ...state.game,
+          gameStatus: partialTransaction.gameStatus,
+          sceneComplete: true,
+        },
+      }));
+
+      let settleOldSave!: () => void;
+      let rejectOldSave!: (error: Error) => void;
+      const oldSave = new Promise<void>((resolve, reject) => {
+        settleOldSave = resolve;
+        rejectOldSave = reject;
+      });
+      vi.mocked(saveChat).mockImplementationOnce(() => oldSave).mockResolvedValue(undefined);
+      let releaseNewRequest!: () => void;
+      const newRequestGate = new Promise<void>(resolve => { releaseNewRequest = resolve; });
+      vi.mocked(streamChatCompletion).mockImplementationOnce(async (_api, _messages, _preset, callbacks) => {
+        await newRequestGate;
+        callbacks.onToken(prose);
+        await callbacks.onComplete();
+      });
+      const { result, unmount } = renderHook(() => useGameLoop());
+
+      act(() => { expect(result.current.selectOption(optionText, binding)).toBe(true); });
+      expect(saveChat).toHaveBeenCalledTimes(1);
+
+      const newVariables = {
+        ...createDefaultVariables(), cycleCount: 2, location: 'home', time: '2024-09-10T08:00:00',
+        stamina: 88, sanity: 66,
+      };
+      const newChat: ChatSession = {
+        ...useGameStore.getState().tavern.chats[0],
+        id: 'new-chat', name: 'new chat', messages: [], variables: newVariables,
+      };
+      useGameStore.setState(state => ({
+        tavern: {
+          ...state.tavern,
+          activeChatId: newChat.id,
+          chats: [...state.tavern.chats, newChat],
+          variables: newVariables,
+        },
+        api: {
+          ...state.api,
+          isStreaming: false,
+          parsedContent: { ...state.api.parsedContent, maintext: '', options: ['新会话选项'], optionBindings: undefined },
+        },
+        game: {
+          ...state.game,
+          isWaitingForAI: false,
+          gameStatus: { time: new Date(newVariables.time), stamina: 88, sanity: 66, items: [] },
+        },
+      }));
+      let newRequest!: Promise<void>;
+      act(() => { newRequest = result.current.sendMessage('新会话请求'); });
+      await waitFor(() => expect(useGameStore.getState().api.isStreaming).toBe(true));
+      const newAbortController = useGameStore.getState().api.abortController;
+      const parsedBeforeOldSettlement = useGameStore.getState().api.parsedContent;
+      const notificationCount = useGameStore.getState().ui.notifications.length;
+
+      if (settlement === 'resolve') settleOldSave();
+      else rejectOldSave(new Error('旧地图保存失败'));
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+      const afterOldSettlement = useGameStore.getState();
+      expect(afterOldSettlement.tavern.activeChatId).toBe(newChat.id);
+      expect(afterOldSettlement.game.isWaitingForAI).toBe(true);
+      expect(afterOldSettlement.api.isStreaming).toBe(true);
+      expect(afterOldSettlement.api.abortController).toBe(newAbortController);
+      expect(afterOldSettlement.api.parsedContent).toBe(parsedBeforeOldSettlement);
+      expect(afterOldSettlement.ui.notifications).toHaveLength(notificationCount);
+
+      releaseNewRequest();
+      await act(async () => { await newRequest; });
+      unmount();
+    },
+  );
 
   it('reports a missing API as a non-dispatch so the choice can be used after configuration', () => {
     const optionText = '继续调查';

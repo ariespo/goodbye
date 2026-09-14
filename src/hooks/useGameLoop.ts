@@ -206,7 +206,10 @@ export function useGameLoop() {
   const store = useGameStore();
   const parseStateRef = useRef(createParseState());
   const sendingLockRef = useRef(false);
-  const localActionLockRef = useRef(false);
+  const localActionOperationRef = useRef<{
+    activeChatId: string | null;
+    abortController: AbortController | null;
+  } | null>(null);
   // 异步场景清单补全的竞态令牌：值为目标 assistant 消息 id，入口动作会置空使旧回调作废
   const checklistTokenRef = useRef<string | null>(null);
 
@@ -215,6 +218,7 @@ export function useGameLoop() {
       return;
     }
     sendingLockRef.current = true;
+    localActionOperationRef.current = null;
     checklistTokenRef.current = null;
 
     const liveStore = useGameStore.getState();
@@ -1302,11 +1306,29 @@ export function useGameLoop() {
         return false;
       }
       if (stored.continuationId?.startsWith('map-travel:')) {
-        if (localActionLockRef.current) return false;
-        localActionLockRef.current = true;
+        const pendingOperation = localActionOperationRef.current;
+        if (pendingOperation
+          && pendingOperation.activeChatId === liveStore.tavern.activeChatId
+          && pendingOperation.abortController === liveStore.api.abortController) return false;
+        const operation = {
+          activeChatId: liveStore.tavern.activeChatId,
+          abortController: liveStore.api.abortController,
+        };
+        localActionOperationRef.current = operation;
+        const ownsOperation = () => {
+          const current = useGameStore.getState();
+          return localActionOperationRef.current === operation
+            && current.tavern.activeChatId === operation.activeChatId
+            && current.api.abortController === operation.abortController;
+        };
         liveStore.actions.setIsWaitingForAI(true);
-        void resumeLocalMapTravelContinuation(stored.continuationId)
+        void resumeLocalMapTravelContinuation(stored.continuationId, {
+          assertCurrent: () => {
+            if (!ownsOperation()) throw new Error('地图操作已被新的请求替代');
+          },
+        })
           .then(result => {
+            if (!ownsOperation()) return;
             useGameStore.getState().actions.addNotification({
               type: result.arrived ? 'success' : 'info',
               message: result.arrived
@@ -1316,6 +1338,7 @@ export function useGameLoop() {
             });
           })
           .catch(error => {
+            if (!ownsOperation()) return;
             const current = useGameStore.getState();
             current.actions.addNotification({
               type: 'error',
@@ -1325,7 +1348,8 @@ export function useGameLoop() {
             current.actions.setParsedContent({ options: [...current.api.parsedContent.options] });
           })
           .finally(() => {
-            localActionLockRef.current = false;
+            if (!ownsOperation()) return;
+            localActionOperationRef.current = null;
             useGameStore.getState().actions.setIsWaitingForAI(false);
           });
         return true;

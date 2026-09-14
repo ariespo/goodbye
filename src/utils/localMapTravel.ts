@@ -16,9 +16,14 @@ export interface LocalMapContinuationResult {
   staminaDelta: number;
 }
 
+interface LocalMapContinuationLifecycle {
+  assertCurrent?: () => void;
+}
+
 /** Resumes a map-created continuation through the same deterministic travel authority, without a model turn. */
 export async function resumeLocalMapTravelContinuation(
   continuationId: string,
+  lifecycle?: LocalMapContinuationLifecycle,
 ): Promise<LocalMapContinuationResult> {
   const state = useGameStore.getState();
   const continuation = state.tavern.variables.actionContinuity?.continuation;
@@ -43,15 +48,18 @@ export async function resumeLocalMapTravelContinuation(
     stamina: state.game.gameStatus.stamina,
     sanity: state.game.gameStatus.sanity,
   };
-  const isCurrent = () => {
+  const assertCurrent = () => {
     const current = useGameStore.getState();
-    return current.tavern.activeChatId === captured.activeChatId
+    if (!(current.tavern.activeChatId === captured.activeChatId
       && Number(current.tavern.variables.cycleCount ?? 1) === captured.cycleCount
       && current.tavern.variables.location === captured.location
       && current.game.gameStatus.time.getTime() === captured.time
       && current.game.gameStatus.stamina === captured.stamina
       && current.game.gameStatus.sanity === captured.sanity
-      && current.tavern.variables.actionContinuity?.continuation?.actionId === continuationId;
+      && current.tavern.variables.actionContinuity?.continuation?.actionId === continuationId)) {
+      throw new Error('地图状态已经变化，本次移动结果未提交');
+    }
+    lifecycle?.assertCurrent?.();
   };
   const prepared = prepareMapTravel({
     variables: state.tavern.variables,
@@ -122,11 +130,9 @@ export async function resumeLocalMapTravelContinuation(
   const persistenceAbort = new AbortController();
   await saveChat(updatedChat, {
     signal: persistenceAbort.signal,
-    assertCurrent: () => {
-      if (!isCurrent()) throw new Error('地图状态已经变化，本次移动结果未提交');
-    },
+    assertCurrent,
   });
-  if (!isCurrent()) throw new Error('地图状态已经变化，本次移动结果未提交');
+  assertCurrent();
 
   const actions = useGameStore.getState().actions;
   commitGameTransaction(transaction, scene);
