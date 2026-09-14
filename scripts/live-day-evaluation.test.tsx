@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // Explicit opt-in only. Real models, real history/transactions, isolated disk I/O.
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { transferableAbortController } from 'node:util';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, it, vi, expect } from 'vitest';
@@ -14,19 +15,43 @@ import { invalidatePreplans } from '../src/agents/mystery';
 import { clearOrchestrationLog, getOrchestrationLog } from '../src/agents/mystery/orchestration-log';
 import { clearTurnMetrics, getTurnMetrics } from '../src/agents/mystery/turn-metrics';
 import { createDefaultPreset, DEFAULT_FORMAT_PROMPT, type AppSettings, type ChatPreset } from '../src/sillytavern/types';
-import { callSecondaryApi } from '../src/sillytavern/api-router';
+import {
+  assessFullDayAcceptance,
+  assertAcceptanceOverrides,
+  assertResumeCompatible,
+  buildEvaluationProvenance,
+  classifyCycleReset,
+  compareQuoteToResolution,
+  diffPersistedEvidence,
+  parseDayMode,
+  sameActionRequestIdentity,
+  serializeScrubbed,
+  snapshotPersistedEvidence,
+  summarizeAuditRows,
+} from './live-day-evaluation-harness';
 
-vi.mock('../src/agents/mystery/style-review', async importOriginal => {
-  const actual = await importOriginal<typeof import('../src/agents/mystery/style-review')>();
-  return { ...actual, reviewNarrativeStyle: (options: Parameters<typeof actual.reviewNarrativeStyle>[0]) => {
-    if (process.env.DAY_STYLE_OBSERVE === '1') return actual.reviewNarrativeStyle(options).then(review => {
-      styleFindings.push(review);
-      return { approved: true, violations: [], corrections: [] };
-    });
-    if (process.env.DAY_STYLE_DIAGNOSTIC !== '1') return actual.reviewNarrativeStyle(options);
-    return actual.reviewNarrativeStyle({ ...options, complete: (messages, callOptions) => callSecondaryApi(
-      options.api, messages.map((message, index) => index === 0 ? { ...message, content: `${message.content}\n\n[诊断性审查校准]\n只报告会让玩家明显感到复读的完整句或大段复用。持续天气、共享场景、角色固定特点、已有事实自然重述不属于文风违规；“环境—动作—停顿”等抽象结构不是证据。任何声称近期旧文重复的引句必须确实逐字存在于近期已接受正文，绝不能将候选正文当旧文。下列已授权事实及必要叙事可以重复出现：${JSON.stringify(options.exemptTexts ?? [])}。如果没有可核验的旧文原句与候选原句配对，approved=true、violations=[]。不要用猜测补出旧文。` } : message), options.preset, callOptions),
-    });
+const harnessCapture = vi.hoisted(() => ({ transactions: [] as unknown[], narrativeReviews: [] as unknown[] }));
+
+vi.mock('../src/engine/game-transaction', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/engine/game-transaction')>();
+  return { ...actual, settleGameTransaction: (input: Parameters<typeof actual.settleGameTransaction>[0]) => {
+    harnessCapture.transactions.push(structuredClone({
+      resolvedAction: input.resolvedAction,
+      selectedOpportunity: input.selectedOpportunity,
+      opportunityProgress: input.opportunityProgress,
+    }));
+    return actual.settleGameTransaction(input);
+  } };
+});
+
+vi.mock('../src/agents/mystery', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/agents/mystery')>();
+  return { ...actual, reviewNarrativeAgainstWriterPacket: async (
+    options: Parameters<typeof actual.reviewNarrativeAgainstWriterPacket>[0],
+  ) => {
+    const review = await actual.reviewNarrativeAgainstWriterPacket(options);
+    harnessCapture.narrativeReviews.push(structuredClone(review));
+    return review;
   } };
 });
 
@@ -37,26 +62,41 @@ vi.mock('../src/sillytavern/database', async importOriginal => ({
 
 const enabled = process.env.LIVE_DAY_EVAL === '1';
 const profile = process.env.DAY_PROFILE ?? 'fast';
-const mode = process.env.DAY_MODE === 'strict' ? 'strict' : 'standard';
+const mode = parseDayMode(process.env.DAY_MODE);
+assertAcceptanceOverrides(enabled, process.env);
 const maxTurns = Math.min(120, Number(process.env.DAY_MAX_TURNS) || 90);
+const expectedBaselineCycle = Number(process.env.DAY_EXPECTED_BASELINE_CYCLE ?? 1);
+if (!Number.isSafeInteger(expectedBaselineCycle) || expectedBaselineCycle < 1) {
+  throw new Error('DAY_EXPECTED_BASELINE_CYCLE must be a positive integer');
+}
 const nativeFetch = globalThis.fetch;
 const baseline = useGameStore.getState();
 const root = '.codex-test-tmp/day-evaluation';
-const diagnostic = process.env.DAY_STYLE_OBSERVE === '1' ? 'observe-only' : process.env.DAY_STYLE_DIAGNOSTIC === '1' ? 'calibrated' : false;
 const runTag = (process.env.DAY_RUN_TAG ?? '').replace(/[^a-zA-Z0-9_-]/g, '');
-const label = `${profile}-${mode}${diagnostic ? `-style-${diagnostic}` : ''}${runTag ? `-${runTag}` : ''}`;
-let styleFindings: unknown[] = [];
+const label = `${profile}-${mode.requestedMode}${runTag ? `-${runTag}` : ''}`;
 const file = `${root}/${label}.json`;
 const checkpoint = `${root}/${label}-checkpoint.json`;
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const snapshot = () => {
   const state = useGameStore.getState();
-  return { time: state.game.gameStatus.time.toISOString(), cycleCount: state.tavern.variables.cycleCount,
+  return { time: state.game.gameStatus.time.toISOString(), storyTime: state.tavern.variables.time,
+    cycleCount: state.tavern.variables.cycleCount,
     location: state.tavern.variables.location, stamina: state.game.gameStatus.stamina, sanity: state.game.gameStatus.sanity,
-    knowledge: state.tavern.variables.knowledgeEvents, facts: state.tavern.variables.mysteryKnowledge,
+    knowledge: Array.isArray(state.tavern.variables.knowledgeEvents)
+      ? structuredClone(state.tavern.variables.knowledgeEvents) : [],
+    facts: state.tavern.variables.mysteryKnowledge && typeof state.tavern.variables.mysteryKnowledge === 'object'
+      ? structuredClone(state.tavern.variables.mysteryKnowledge) : {},
     suspicion: state.tavern.variables.suspicion, deathNews: state.tavern.variables.deathNews,
     pendingReset: state.game.pendingCycleReset, pendingEnding: state.game.endingPanel.pendingEndingId,
-    historyLength: state.game.history.length };
+    historyLength: state.game.history.length,
+    persistedEvidence: snapshotPersistedEvidence(state.tavern.variables),
+    latestHistoryEvidence: snapshotPersistedEvidence(state.game.history.at(-1)?.variables) };
+};
+
+const lastUserActionRequest = () => {
+  const state = useGameStore.getState();
+  const chat = state.tavern.chats.find(item => item.id === state.tavern.activeChatId);
+  return structuredClone([...chat?.messages ?? []].reverse().find(message => message.role === 'user')?.actionRequest ?? null);
 };
 
 function playback() {
@@ -97,19 +137,25 @@ const interactions = [
 ];
 
 describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
-  it(`${label}: collects continuous real-model evidence (passing does not imply day completion)`, async () => {
+  it(`${label}: requires a naturally completed real-model calendar day`, async () => {
     const key = process.env.DAY_API_KEY ?? process.env.DEEPSEEK_API_KEY;
     if (!key) throw new Error('DAY_API_KEY or DEEPSEEK_API_KEY is required');
     const baseUrl = process.env.DAY_API_BASE_URL ?? 'https://api.deepseek.com/v1';
     const model = process.env.DAY_MODEL ?? 'deepseek-v4-flash';
+    const testedCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const provenance = buildEvaluationProvenance({
+      testedCommit, profile, mode, model, baseUrl, maxTurns, runTag,
+      baselineCycle: expectedBaselineCycle,
+    });
     vi.stubGlobal('AbortController', class { constructor() { return transferableAbortController(); } });
     let calls: Record<string, unknown>[] = [];
     let pending = 0;
     vi.stubGlobal('fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
       const started = performance.now();
       const body = JSON.parse(String(init?.body ?? '{}'));
-      const call: Record<string, unknown> = { startedAt: Date.now(), stream: !!body.stream,
+      const call: Record<string, unknown> = { requestIndex: calls.length + 1, startedAt: Date.now(), stream: !!body.stream,
         inputChars: JSON.stringify(body.messages ?? []).length, maxTokens: body.max_tokens,
+        requestedModel: body.model,
         system: body.messages?.[0]?.content, user: body.messages?.at(-1)?.content,
         responseFormat: body.response_format?.type };
       calls.push(call); pending++;
@@ -119,6 +165,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
         const copy = response.clone();
         void (body.stream ? copy.text().then(content => { call.content = content; }) : copy.json().then(result => {
           call.content = result.choices?.[0]?.message?.content; call.usage = result.usage;
+          call.responseModel = result.model; call.finishReason = result.choices?.[0]?.finish_reason;
           call.providerError = result.error?.message;
         })).catch(() => {}).finally(() => { call.totalMs = performance.now() - started; pending--; });
         return response;
@@ -135,41 +182,66 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
     const preset = { ...createDefaultPreset(), id: 'day-eval', createdAt: 0, updatedAt: 0 } as ChatPreset;
     const settings = { api: { baseUrl, apiKey: key, model },
       activePresetId: preset.id, activeLorebookIds: [], userName: '李明', characterName: '文穗',
-      playerGender: 'male', playerIdentityConfirmed: true, agentNarrativeMode: mode,
-      formatPromptTemplate: DEFAULT_FORMAT_PROMPT } as AppSettings;
+      playerGender: 'male', playerIdentityConfirmed: true, agentNarrativeMode: mode.settingsValue,
+      formatPromptTemplate: DEFAULT_FORMAT_PROMPT } as unknown as AppSettings;
     useGameStore.setState({ ...baseline, tavern: { ...baseline.tavern, settings, presets: [preset] } }, true);
     mkdirSync(root, { recursive: true });
     let rows: Record<string, any>[] = [];
     let startState: unknown;
     if (process.env.DAY_RESUME === '1' && existsSync(checkpoint)) {
       const saved = JSON.parse(readFileSync(checkpoint,'utf8'));
+      const old = JSON.parse(readFileSync(file,'utf8'));
+      assertResumeCompatible({ expected: provenance, checkpoint: saved, result: old });
       saved.game.gameStatus.time = new Date(saved.game.gameStatus.time);
       useGameStore.setState(state => ({ game: saved.game, tavern: { ...state.tavern, ...saved.tavern },
         api: { ...state.api, ...saved.api, abortController: null, isStreaming: false } }));
-      const old = JSON.parse(readFileSync(file,'utf8')); rows = old.rows; startState = old.startState;
+      rows = old.rows; startState = old.startState;
     } else {
       await act(async () => { await startNewGame(); playback(); await pause(25); });
       startState = snapshot();
+      if (Number((startState as { cycleCount?: unknown }).cycleCount) !== expectedBaselineCycle) {
+        throw new Error(`fresh evaluation began at cycle ${(startState as { cycleCount?: unknown }).cycleCount}; expected ${expectedBaselineCycle}`);
+      }
     }
     const { result, unmount } = renderHook(() => useGameLoop());
     let stopReason = 'turn-cap';
     let consecutiveFailures = 0;
     let successful = rows.filter(row => row.success).length;
+    let programMenuSelections = rows.filter(row => row.actionOrigin === 'program-menu').length;
     const flush = () => {
       const state = useGameStore.getState();
-      writeFileSync(file, JSON.stringify({ profile, mode, baseUrl, model, diagnosticStylePrompt: diagnostic, startState, finalState: snapshot(), stopReason,
-        successful, rows }, null, 2).replaceAll(key,'[redacted]'));
-      writeFileSync(checkpoint, JSON.stringify({ game: state.game,
+      const finalState = snapshot();
+      const audit = summarizeAuditRows(rows);
+      const acceptance = assessFullDayAcceptance({ baselineCycle: expectedBaselineCycle,
+        finalCycle: Number(finalState.cycleCount), successfulRows: successful, stopReason,
+        programMenuRequired: profile === 'program-menu', programMenuSelections });
+      const storageBoundary = {
+        database: 'saveChat/getChats are test doubles; committed in-memory chat, variables, and history snapshots are observed',
+        browserPersistence: 'unverified in this harness; browser reload, IndexedDB durability, and playback require later browser acceptance',
+      };
+      writeFileSync(file, serializeScrubbed({ profile, mode, baseUrl, model, diagnosticsEnabled: false,
+        provenance, startState, finalState, stopReason, successful, programMenuSelections,
+        audit, acceptance, storageBoundary,
+        characterConversationCoverage: 'unrun: no fabricated alive in-person Fumi fixture; legal production route must be determined later',
+        rows }, [key]));
+      writeFileSync(checkpoint, serializeScrubbed({ provenance, baselineCycle: expectedBaselineCycle,
+        currentCycle: Number(finalState.cycleCount), game: state.game,
         tavern: { chats: state.tavern.chats, activeChatId: state.tavern.activeChatId, variables: state.tavern.variables },
-        api: { parsedContent: state.api.parsedContent, turnRecovery: state.api.turnRecovery, error: state.api.error } }));
+        api: { parsedContent: state.api.parsedContent, turnRecovery: state.api.turnRecovery, error: state.api.error } }, [key]));
+      return acceptance;
     };
     try {
       while (successful < maxTurns && rows.length < maxTurns + 40) {
-        calls = []; styleFindings = []; clearTurnMetrics(); clearOrchestrationLog();
+        calls = []; clearTurnMetrics(); clearOrchestrationLog();
         const before = snapshot();
         const state = useGameStore.getState();
         const options = state.api.parsedContent.options ?? [];
         const retry = consecutiveFailures === 1;
+        const transactionCaptureStart = harnessCapture.transactions.length;
+        const reviewCaptureStart = harnessCapture.narrativeReviews.length;
+        const retrySourceActionRequest = retry ? lastUserActionRequest() : null;
+        let selectedProgramAction: Record<string, unknown> | null = null;
+        let actionOrigin = retry ? 'retry' : 'player';
         let input: string;
         if (retry) input = rows.at(-1)!.input;
         else if (consecutiveFailures > 1) input = '我停下来整理刚刚发生的事情，先做目前可以做到的下一步。';
@@ -180,29 +252,78 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
         else if (profile === 'investigator') input = before.deathNews === 'delivered'
           ? '我继续处理刚收到的坏消息，完成当前能做的确认和善后；如果暂时没有可做的事，就回家休息一段时间。'
           : (options.find((option: string) => /去|找|联系|核实|调查|询问/.test(option)) ?? options[0] ?? '我继续寻找文穗。');
-        else input = options[0] ?? '我检查眼前能看到的事情，决定接下来去哪里找文穗。';
+        else if (profile === 'program-menu') {
+          const investigationIndex = state.game.currentScene?.investigateItems?.findIndex(item => !!item.actionId) ?? -1;
+          const actionIndex = state.game.currentScene?.actionItems?.findIndex(item => !!item.actionId) ?? -1;
+          if (investigationIndex >= 0) {
+            const item = state.game.currentScene!.investigateItems![investigationIndex];
+            selectedProgramAction = structuredClone({ type: 'investigate', index: investigationIndex, ...item });
+            input = item.desc; actionOrigin = 'program-menu';
+          } else if (actionIndex >= 0) {
+            const item = state.game.currentScene!.actionItems![actionIndex];
+            selectedProgramAction = structuredClone({ type: 'actions', index: actionIndex, ...item });
+            input = item.desc; actionOrigin = 'program-menu';
+          } else {
+            input = options[0] ?? '我检查眼前能看到的事情，决定接下来去哪里找文穗。';
+            actionOrigin = 'program-menu-bootstrap';
+          }
+        } else input = options[0] ?? '我检查眼前能看到的事情，决定接下来去哪里找文穗。';
         const attemptStarted = Date.now();
         const timer = setTimeout(() => useGameStore.getState().api.abortController?.abort(), 180_000);
-        await act(async () => {
-          if (retry) await result.current.retryTurn();
-          else await result.current.sendMessage(input);
-        });
+        if (selectedProgramAction) {
+          programMenuSelections++;
+          await act(async () => {
+            result.current.performAction(selectedProgramAction!.type as 'investigate' | 'actions', Number(selectedProgramAction!.index));
+            await pause(10);
+          });
+          await waitFor(() => {
+            const current = useGameStore.getState();
+            const committed = current.game.history.length > Number(before.historyLength);
+            const failed = current.api.turnRecovery.phase !== 'idle';
+            if ((!committed && !failed) || current.api.isStreaming) throw new Error('program-menu turn is still running');
+          }, { timeout: 185_000, interval: 100 });
+        } else {
+          await act(async () => {
+            if (retry) await result.current.retryTurn();
+            else await result.current.sendMessage(input);
+          });
+        }
         clearTimeout(timer);
         const afterSend = useGameStore.getState();
         const success = afterSend.game.history.length > Number(before.historyLength);
         const accepted = success ? [...afterSend.tavern.chats.find(c=>c.id===afterSend.tavern.activeChatId)!.messages]
           .reverse().find(message=>message.role==='assistant') : null;
+        const actionRequest = lastUserActionRequest();
+        const transactionCapture = harnessCapture.transactions.slice(transactionCaptureStart).at(-1) as {
+          resolvedAction?: unknown; selectedOpportunity?: unknown; opportunityProgress?: unknown;
+        } | undefined;
+        const after = snapshot();
         const row: Record<string, any> = { attempt: rows.length + 1, turn: successful + 1, input, retry, success,
+          actionOrigin, selectedProgramAction, actionRequest,
+          retrySourceActionRequest,
+          retryIdentityMatches: retry ? sameActionRequestIdentity(retrySourceActionRequest, actionRequest) : undefined,
           before, after: snapshot(), metrics: getTurnMetrics().at(-1),
           error: afterSend.api.error ?? afterSend.api.turnRecovery.errorMessage,
           accepted: accepted?.content, lines: success ? afterSend.game.currentScene?.lines : [],
-          options: [...afterSend.api.parsedContent.options], calls, orchestration: [], styleFindings,
+          options: [...afterSend.api.parsedContent.options], calls, orchestration: [],
+          resolvedAction: transactionCapture?.resolvedAction ?? null,
+          priceVsActual: compareQuoteToResolution(selectedProgramAction, transactionCapture?.resolvedAction),
+          selectedOpportunity: transactionCapture?.selectedOpportunity ?? null,
+          settledOpportunityProgress: transactionCapture?.opportunityProgress ?? null,
+          persistedDelta: diffPersistedEvidence(before.persistedEvidence, after.persistedEvidence),
+          sourceAwards: {
+            completedSourceIds: (transactionCapture?.resolvedAction as { completedSourceIds?: unknown } | undefined)?.completedSourceIds ?? [],
+            knowledgeEvents: (after.knowledge as unknown[]).filter(id => !(before.knowledge as unknown[]).includes(id)),
+            factLevelChanges: Object.entries(after.facts as Record<string, unknown>).filter(([id, level]) =>
+              (before.facts as Record<string, unknown>)[id] !== level),
+          },
           notifications: afterSend.ui.notifications.map(item=>item.message) };
         rows.push(row);
         if(success) { successful++; consecutiveFailures=0; }
         else consecutiveFailures++;
         await act(async () => { await background(); });
         row.orchestration = getOrchestrationLog();
+        row.assertionAudits = harnessCapture.narrativeReviews.slice(reviewCaptureStart);
         row.elapsedIncludingBackgroundMs = Date.now() - attemptStarted;
         row.checklist = useGameStore.getState().game.currentScene && {
           observe: useGameStore.getState().game.currentScene?.observe,
@@ -214,16 +335,20 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
           && !live.game.endingPanel.visible && !live.game.endingPanel.pendingEndingId) {
           row.resetReason = live.game.pendingCycleReset;
           const reason = live.game.pendingCycleReset;
+          const beforeResetTime = String(snapshot().storyTime ?? '');
           await act(async () => {
             live.actions.setPendingCycleReset(null);
             await startNextCycle({variables:settleCycleVariables(live.tavern.variables),reason}); playback();
           });
           row.resetScene = useGameStore.getState().game.currentScene?.lines;
-          stopReason = reason === 'day-end' ? 'completed-calendar-day' : `early-reset-${reason}`;
+          row.afterReset = snapshot();
+          stopReason = classifyCycleReset({ reason, beforeResetTime, afterResetTime: String(row.afterReset.storyTime ?? ''),
+            baselineCycle: expectedBaselineCycle, afterCycle: Number(row.afterReset.cycleCount) });
         }
-        console.log(JSON.stringify({profile,mode,attempt:row.attempt,turn:row.turn,success,
+        console.log(JSON.stringify({profile,mode:mode.requestedMode,attempt:row.attempt,turn:row.turn,success,
           from:before.time,to:row.after.time,stamina:row.after.stamina,sanity:row.after.sanity,
-          playableMs:row.metrics?.playableMs,calls:calls.length,error:row.error,reset:row.resetReason}));
+          playableMs:row.metrics?.playableMs,calls:calls.length,error:row.error,reset:row.resetReason,
+          resolutionId:(row.resolvedAction as {id?:unknown}|null)?.id,actionOrigin}));
         flush();
         if (calls.some(call => call.status === 402)) { stopReason='provider-insufficient-balance'; flush(); break; }
         if (!success && calls.some(call => typeof call.content === 'string'
@@ -231,13 +356,16 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
           && call.content.trim().endsWith('<!-- oai-proxy-error -->'))) {
           stopReason='provider-proxy-error'; flush(); break;
         }
-        if (Number(snapshot().cycleCount)>1) break;
+        const providerHttpError = calls.find(call => Number(call.status) >= 500);
+        if (!success && providerHttpError) { stopReason=`provider-http-${providerHttpError.status}`; flush(); break; }
+        if (Number(snapshot().cycleCount)>expectedBaselineCycle) break;
         if (live.game.endingPanel.pendingEndingId) { stopReason='ending-before-day-reset'; break; }
         if (consecutiveFailures>=6) { stopReason='blocked-six-attempts'; break; }
       }
-      flush();
-      console.log('CAMPAIGN_RESULT', JSON.stringify({profile,mode,diagnostic,successful,attempts:rows.length,stopReason,finalState:snapshot()}));
-      expect(rows.length).toBeGreaterThan(0);
+      const acceptance = flush();
+      console.log('CAMPAIGN_RESULT', JSON.stringify({profile,mode,diagnosticsEnabled:false,successful,
+        attempts:rows.length,stopReason,programMenuSelections,acceptance,finalState:snapshot()}));
+      expect(acceptance.passed, acceptance.reasons.join('; ')).toBe(true);
     } finally { invalidatePreplans(); unmount(); vi.unstubAllGlobals(); }
   }, 7_200_000);
 });
