@@ -254,5 +254,6 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
       context.playerIdentityVariables,
     ),
     sceneContract: context.sceneContract,
+    sceneContracts: context.sceneContracts,
   };
 }

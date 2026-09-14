@@ -14,9 +14,21 @@ import type {
   FactReview,
   FactReviewViolation,
   MysteryBrief,
+  NarrativeSceneContract,
   WriterPacket,
 } from './types';
 import { resolveRegisteredLocation } from '../../data/locations';
+
+function sceneContracts(brief: MysteryBrief): NarrativeSceneContract[] {
+  return brief.sceneContracts ?? (brief.sceneContract ? [brief.sceneContract] : []);
+}
+
+function executedWorkLocations(turnContext?: Record<string, unknown>): Set<string> | null {
+  const resolution = turnContext?.resolvedAction as import('../../engine/action-resolution').ResolvedActionOutcome | undefined;
+  if (!resolution || !Array.isArray(resolution.segments)) return null;
+  return new Set(resolution.segments.filter(segment => segment.executedMinutes > 0
+    && ['inquiry', 'investigation', 'search'].includes(segment.step.kind)).map(segment => segment.step.locationId));
+}
 
 function impliesConfession(description: string): boolean {
   if (/没有否认|不再(?:否认|反驳)|低头沉默|默认(?:承认)?/.test(description)) return true;
@@ -85,7 +97,7 @@ const OPEN_HISTORY_QUESTION = /是否|有没有|有没|可能|吗|未必|不确�
 
 /** 将确定性场景契约落实为导演节拍；只补角色与地点，不新增案件事实。 */
 export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: MysteryBrief): DirectorPlan {
-  const contract = brief.sceneContract;
+  const contracts = sceneContracts(brief);
   const authorizedKnowledgeEvidence = (plan.knowledgeEvents ?? []).map(event => event.evidence).join('\n');
   const stripUngroundedEvidence = plan.revelations.length === 0 && brief.playerKnownFacts.length === 0;
   const hasUngroundedEvidence = (text: string) => {
@@ -111,7 +123,7 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
       description: description || '围绕玩家当前输入进行当下普通互动，不新增既往事实或可调查物件。',
     };
   });
-  if (contract) {
+  if (contracts.length) {
     beats = beats.filter((_, index) => {
       const original = plan.beats[index];
       const originalText = `${original.purpose} ${original.description}`;
@@ -150,52 +162,60 @@ export function enforceNarrativeSceneContract(plan: DirectorPlan, brief: Mystery
     )),
     scenePlan,
   };
-  if (!contract) return sanitizedPlan;
+  if (!contracts.length) return sanitizedPlan;
 
-  const forbidden = new Set(contract.forbiddenNpcIds);
-  beats = beats.map(beat => ({
-    ...beat,
-    speakerIds: beat.speakerIds?.filter(id => !forbidden.has(id)),
-  }));
+  let knowledgeEvents = [...(plan.knowledgeEvents ?? [])];
+  for (const contract of contracts) {
 
-  const destinationIndex = beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
-  const destinationSpeakers = contract.requiredDestinationNpcIds;
-  if (destinationIndex >= 0) {
-    const beat = beats[destinationIndex];
-    beats[destinationIndex] = {
+    const forbidden = new Set(contract.forbiddenNpcIds);
+    beats = beats.map(beat => ({
       ...beat,
-      speakerIds: [...new Set([...(beat.speakerIds ?? []), ...destinationSpeakers])],
-      description: beat.description.includes(contract.directive)
-        ? beat.description
-        : `${beat.description} ${contract.directive}`,
-    };
-  } else {
-    beats.push({
-      id: 'scene-contract-destination',
-      purpose: '抵达目的地并由固定在场人物承接剧情',
-      description: contract.directive,
-      locationId: contract.destinationLocationId,
-      speakerIds: destinationSpeakers,
-    });
-  }
+      speakerIds: beat.locationId === contract.destinationLocationId
+        ? beat.speakerIds?.filter(id => !forbidden.has(id)) : beat.speakerIds,
+    }));
 
-  const missingEnRoute = contract.requiredEnRouteNpcIds.filter(
-    npcId => !beats.some(beat => beat.speakerIds?.includes(npcId)),
-  );
-  if (missingEnRoute.length > 0) {
-    beats = [{
-      id: 'scene-contract-en-route',
-      purpose: '在前往目的地途中落实固定概率遭遇',
-      description: '玩家先在暴雨街道途中遇到本回合已确定的在途人物；只按其公开身份进行短暂而有后果的互动，然后继续前往目的地。',
-      locationId: 'street',
-      speakerIds: missingEnRoute,
-    }, ...beats];
-  }
-  const forbiddenKnowledgeEvents = new Set(contract.forbiddenKnowledgeEventIds);
-  const knowledgeEvents = (plan.knowledgeEvents ?? [])
-    .filter(item => !forbiddenKnowledgeEvents.has(item.eventId));
-  for (const required of contract.requiredKnowledgeEvents) {
-    if (!knowledgeEvents.some(item => item.eventId === required.eventId)) knowledgeEvents.push(required);
+    const destinationIndex = beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
+    const destinationSpeakers = contract.requiredDestinationNpcIds;
+    if (destinationIndex >= 0) {
+      const beat = beats[destinationIndex];
+      beats[destinationIndex] = {
+        ...beat,
+        speakerIds: [...new Set([...(beat.speakerIds ?? []), ...destinationSpeakers])],
+        description: beat.description.includes(contract.directive)
+          ? beat.description
+          : `${beat.description} ${contract.directive}`,
+      };
+    } else {
+      beats.push({
+        id: `scene-contract-destination:${contract.destinationLocationId}`,
+        purpose: '抵达目的地并由固定在场人物承接剧情',
+        description: contract.directive,
+        locationId: contract.destinationLocationId,
+        speakerIds: destinationSpeakers,
+      });
+    }
+
+    const arrivalIndex = beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
+    const priorDestinationIndex = beats.slice(0, arrivalIndex).findLastIndex(beat => beat.locationId !== 'street');
+    const missingEnRoute = contract.requiredEnRouteNpcIds.filter(
+      npcId => !beats.slice(priorDestinationIndex + 1, arrivalIndex)
+        .some(beat => beat.locationId === 'street' && beat.speakerIds?.includes(npcId)),
+    );
+    if (missingEnRoute.length > 0) {
+      beats.splice(arrivalIndex, 0, {
+        id: `scene-contract-en-route:${contract.destinationLocationId}`,
+        purpose: '在前往目的地途中落实固定概率遭遇',
+        description: '玩家先在暴雨街道途中遇到本回合已确定的在途人物；只按其公开身份进行短暂而有后果的互动，然后继续前往目的地。',
+        locationId: 'street',
+        speakerIds: missingEnRoute,
+      });
+    }
+    const forbiddenKnowledgeEvents = new Set(contract.forbiddenKnowledgeEventIds);
+    knowledgeEvents = knowledgeEvents
+      .filter(item => !forbiddenKnowledgeEvents.has(item.eventId));
+    for (const required of contract.requiredKnowledgeEvents) {
+      if (!knowledgeEvents.some(item => item.eventId === required.eventId)) knowledgeEvents.push(required);
+    }
   }
   return { ...sanitizedPlan, beats, knowledgeEvents };
 }
@@ -264,9 +284,13 @@ export function reviewDirectorPlan(
       });
     }
   }
-  const forbiddenNpcIds = new Set(brief.sceneContract?.forbiddenNpcIds ?? []);
+  const contracts = sceneContracts(brief);
+  const workLocations = executedWorkLocations(turnContext);
   const visitedLocations = new Set(plan.beats.map(beat => beat.locationId).filter(Boolean));
   for (const locationId of visitedLocations) {
+    if (workLocations && !workLocations.has(locationId!)) continue;
+    const forbiddenNpcIds = new Set(contracts.filter(contract => contract.destinationLocationId === locationId)
+      .flatMap(contract => contract.forbiddenNpcIds));
     for (const npcId of FIXED_LOCATION_NPC_IDS[locationId!] ?? []) {
       if (forbiddenNpcIds.has(npcId)) continue;
       if (!plan.beats.some(beat => beat.locationId === locationId && beat.speakerIds?.includes(npcId))) {
@@ -349,8 +373,8 @@ export function reviewDirectorPlan(
     }
   }
 
-  if (brief.sceneContract) {
-    const contract = brief.sceneContract;
+  for (const contract of contracts) {
+    if (workLocations && !workLocations.has(contract.destinationLocationId)) continue;
     const destinationIndex = plan.beats.findIndex(beat => beat.locationId === contract.destinationLocationId);
     if (destinationIndex < 0) {
       violations.push({
@@ -367,7 +391,9 @@ export function reviewDirectorPlan(
       }
     }
     for (const npcId of contract.requiredEnRouteNpcIds) {
-      const encounterIndex = plan.beats.findIndex(beat => beat.locationId === 'street' && beat.speakerIds?.includes(npcId));
+      const previousDestinationIndex = plan.beats.slice(0, destinationIndex).findLastIndex(beat => beat.locationId !== 'street');
+      const encounterIndex = plan.beats.findIndex((beat, index) => index > previousDestinationIndex
+        && beat.locationId === 'street' && beat.speakerIds?.includes(npcId));
       if (encounterIndex < 0 || (destinationIndex >= 0 && encounterIndex >= destinationIndex)) {
         violations.push({
           code: 'scene-contract-violation',
@@ -376,7 +402,7 @@ export function reviewDirectorPlan(
       }
     }
     for (const npcId of contract.forbiddenNpcIds) {
-      if (plan.beats.some(beat => beat.speakerIds?.includes(npcId))) {
+      if (plan.beats.some(beat => beat.locationId === contract.destinationLocationId && beat.speakerIds?.includes(npcId))) {
         violations.push({
           code: 'scene-contract-violation',
           message: `当前进入条件不成立，禁止安排 ${npcId} 出场。`,
@@ -477,16 +503,19 @@ export function reviewDirectorPlan(
   }
 
   const proposedKnowledgeEvents = plan.knowledgeEvents ?? [];
-  const proposedDiscoveries = proposedKnowledgeEvents.map(proposal => brief.playerPresentation.allowedDiscoveries
+  const requiredSceneEvents = new Set(contracts.filter(contract => !workLocations || workLocations.has(contract.destinationLocationId))
+    .flatMap(contract => contract.requiredKnowledgeEvents.map(event => event.eventId)));
+  const optionalKnowledgeEvents = proposedKnowledgeEvents.filter(event => !requiredSceneEvents.has(event.eventId));
+  const proposedDiscoveries = optionalKnowledgeEvents.map(proposal => brief.playerPresentation.allowedDiscoveries
     .find(candidate => candidate.eventId === proposal.eventId));
-  const canPairPublicIdentity = proposedKnowledgeEvents.length === 2
+  const canPairPublicIdentity = optionalKnowledgeEvents.length === 2
     && proposedDiscoveries.every(Boolean)
     && proposedDiscoveries[0]?.subjectId === proposedDiscoveries[1]?.subjectId
     && proposedDiscoveries.every(discovery => discovery?.kind === 'identity' || discovery?.kind === 'public-fact');
-  if (proposedKnowledgeEvents.length > 1 && !canPairPublicIdentity) {
+  if (optionalKnowledgeEvents.length > 1 && !canPairPublicIdentity) {
     violations.push({
       code: 'player-knowledge-violation',
-      message: '单回合最多新增一个认知事件；唯一例外是同一人物的“姓名确认+公开职业确认”可由同一组可靠依据同时更新。',
+      message: '除已执行场景的程序规定初见外，单回合最多新增一个认知事件；同一人物的“姓名确认+公开职业确认”可由同一组可靠依据同时更新。',
     });
   }
   for (const proposal of proposedKnowledgeEvents) {
@@ -682,6 +711,7 @@ export function buildWriterPacket(
       actualKnowledgeScope: item.expressibleKnowledgeScope,
     })),
     sceneContract: brief.sceneContract,
+    sceneContracts: brief.sceneContracts,
     saturationPivot: brief.saturationPivot,
   };
 }

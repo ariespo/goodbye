@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildActionAuthorityInput, selectPresentedActionFacts, projectExecutedPlan, buildActionOutcomeSources, type ActionAuthorityContext } from './action-authority';
+import { buildActionAuthorityInput, analyzeActionIntentPlan, selectPresentedActionFacts, projectExecutedPlan, buildActionOutcomeSources, type ActionAuthorityContext } from './action-authority';
 import { resolveAction, type ResolvedActionOutcome } from '../../engine/action-resolution';
 import { resolveActionNarrativeContext } from '../../engine/action-narrative-context';
 import type { DirectorPlan, FactReview, WriterPacket } from './types';
@@ -527,4 +527,117 @@ it('settles inquiry followed by explicit travel as two separately located stages
   expect(input.steps.map(step => ({ kind: step.kind, locationId: step.locationId }))).toEqual([
     { kind: 'inquiry', locationId: 'home' }, { kind: 'travel', locationId: 'school' },
   ]);
+});
+
+describe('requested prefix and reviewed follow-up stages', () => {
+  const extendedPlan: DirectorPlan = { ...plan, knowledgeEvents: [{ eventId: 'prefix-knowledge', evidence: '原行动实际完成的认知' }], actionSteps: [
+    { id: 'requested', kind: 'investigation', scope: 'normal', locationId: 'home' },
+    { id: 'follow-up', kind: 'inquiry', scope: 'normal', locationId: 'school' },
+  ] };
+  const school = resolveActionNarrativeContext('前往学校', new Date(context.startTime), 0, { currentLocationId: 'home', enRouteEncounterRoll: 1 })!;
+  it('analyzes an immutable prefix and cross-location follow-up before requiring scene preparation', () => {
+    expect(analyzeActionIntentPlan(extendedPlan, context)).toMatchObject({ requestedStepCount: 1, extensionStepCount: 1,
+      steps: extendedPlan.actionSteps });
+  });
+  it('settles both stages and travel without moving original rewards to the suffix', () => {
+    const input = buildActionAuthorityInput(extendedPlan, { ...context, sceneContextsByLocation: { school } }, 'follow-up');
+    const outcome = resolveAction(input);
+    expect(input.steps[0].completionSourceIds).toEqual(['fact:F001:clue', 'accepted-event:prefix-knowledge']);
+    expect(input.steps[1].completionSourceIds).toEqual([]);
+    expect(outcome.endLocationId).toBe('school');
+    expect(outcome.executedMinutes).toBeGreaterThan(110);
+    expect(outcome.segments.map(segment => segment.step.kind)).toEqual(['investigation', 'travel', 'inquiry']);
+  });
+  it('requires a program scene contract for a newly appended destination', () => {
+    expect(() => buildActionAuthorityInput(extendedPlan, context, 'missing-scene')).toThrow(/场景/);
+  });
+  it.each(['rest', 'wait', 'event'] as const)('does not let an extension create a %s effect', kind => {
+    expect(() => analyzeActionIntentPlan({ ...extendedPlan, actionSteps: [extendedPlan.actionSteps![0],
+      { id: 'forbidden', kind, scope: 'normal', locationId: 'home' }] }, context)).toThrow();
+  });
+  it('does not permit a trip before the required local work', () => {
+    expect(() => analyzeActionIntentPlan({ ...extendedPlan, actionSteps: [
+      { id: 'detour', kind: 'travel', scope: 'normal', locationId: 'school' }, ...extendedPlan.actionSteps!,
+    ] }, context)).toThrow(/意图|前缀|目的地/);
+  });
+  it('keeps a quiet player action closed to appended work', () => {
+    expect(() => analyzeActionIntentPlan({ ...plan, actionSteps: [
+      { id: 'rest', kind: 'rest', scope: 'normal', locationId: 'home' },
+      { id: 'work', kind: 'investigation', scope: 'normal', locationId: 'home' },
+    ] }, { ...context, originalInput: '休息' })).toThrow();
+  });
+  it('binds a new-location arrival event to arrival, leaving original knowledge on the prefix', () => {
+    const store = resolveActionNarrativeContext('前往便利店', new Date(context.startTime), 0, { currentLocationId: 'home', enRouteEncounterRoll: 1 })!;
+    const input = buildActionAuthorityInput({ ...extendedPlan,
+      knowledgeEvents: [...extendedPlan.knowledgeEvents!, ...store.sceneContract.requiredKnowledgeEvents],
+      actionSteps: [extendedPlan.actionSteps![0], { id: 'store', kind: 'inquiry', scope: 'normal', locationId: 'supermarket' }],
+    }, { ...context, sceneContextsByLocation: { supermarket: store } }, 'store-arrival');
+    expect(input.steps[0].completionSourceIds).toEqual(['fact:F001:clue', 'accepted-event:prefix-knowledge']);
+    expect(input.steps.find(step => step.kind === 'travel')?.completionSourceIds).toEqual(['accepted-event:meet:chen-huihui']);
+    expect(input.steps.at(-1)?.completionSourceIds).toEqual([]);
+  });
+  it('does not paint an interrupted second trip as reception at the overall start', () => {
+    const outcome = resolveAction({ id: 'multileg', cycleCount: 1, startTime: context.startTime,
+      currentLocationId: 'home', stamina: 100, sanity: 70, explicitBudgetMinutes: 76,
+      steps: [{ id: 'first', kind: 'inquiry', scope: 'normal', locationId: 'school', completionSourceIds: [] },
+        { id: 'second', kind: 'inquiry', scope: 'normal', locationId: 'old-man-building', completionSourceIds: [] }] });
+    expect(outcome.segments.at(-1)).toMatchObject({ step: { kind: 'travel' }, completed: false });
+    expect(outcome.endLocationId).toBe('school');
+    const projected = projectExecutedPlan({ ...plan, revelations: [] }, outcome);
+    const travelBeats = projected.beats.filter(beat => beat.description.includes('路程'));
+    expect(travelBeats.every(beat => !beat.locationId || beat.locationId === 'street')).toBe(true);
+  });
+});
+
+it('keeps an initial-location introduction on the original work even if the suffix returns there', () => {
+  const originalInput = '向陈慧慧询问';
+  const store = resolveActionNarrativeContext('调查便利店', new Date(context.startTime), 0, { currentLocationId: 'supermarket', enRouteEncounterRoll: 1 })!;
+  const school = resolveActionNarrativeContext('前往学校', new Date(context.startTime), 0, { currentLocationId: 'supermarket', enRouteEncounterRoll: 1 })!;
+  const input = buildActionAuthorityInput({ ...plan, revelations: [], knowledgeEvents: store.sceneContract.requiredKnowledgeEvents,
+    actionSteps: [{ id: 'original', kind: 'inquiry', scope: 'normal', locationId: 'supermarket' },
+      { id: 'follow', kind: 'inquiry', scope: 'normal', locationId: 'school' },
+      { id: 'return', kind: 'inquiry', scope: 'normal', locationId: 'supermarket' }],
+  }, { ...context, originalInput, currentLocationId: 'supermarket', proposedScene: store, sceneContextsByLocation: { school, supermarket: store } }, 'round-trip');
+  expect(input.steps[0].completionSourceIds).toEqual(['accepted-event:meet:chen-huihui']);
+  expect(input.steps.slice(1).flatMap(step => step.completionSourceIds)).toEqual([]);
+});
+
+it('keeps an explicit stay-put restriction over cross-location extensions', () => {
+  expect(() => analyzeActionIntentPlan({ ...plan, actionSteps: [
+    { id: 'asked', kind: 'inquiry', scope: 'short', locationId: 'school' },
+    { id: 'follow', kind: 'inquiry', scope: 'normal', locationId: 'old-man-building' },
+  ] }, { ...context, currentLocationId: 'school', originalInput: '只向门卫问一句，不离开学校' })).toThrow(/离开|原地|限制/);
+});
+
+it.each([
+  ['只向门卫询问，不做其他调查', 'school'],
+  ['只在学校询问门卫', 'old-man-building'],
+])('respects explicit extension limits: %s', (originalInput, destination) => {
+  expect(() => analyzeActionIntentPlan({ ...plan, actionSteps: [
+    { id: 'requested', kind: 'inquiry', scope: 'normal', locationId: 'school' },
+    { id: 'extra', kind: 'investigation', scope: 'normal', locationId: destination },
+  ] }, { ...context, currentLocationId: 'school', originalInput })).toThrow(/限制|追加|原地/);
+});
+
+it('preserves each completed journey encounter when later work is interrupted', () => {
+  const input = { id: 'two-arrivals', cycleCount: 1, startTime: context.startTime,
+    currentLocationId: 'home', stamina: 100, sanity: 70,
+    steps: [{ id: 'school-work', kind: 'inquiry' as const, scope: 'normal' as const, locationId: 'school', completionSourceIds: [] },
+      { id: 'store-work', kind: 'inquiry' as const, scope: 'normal' as const, locationId: 'supermarket', completionSourceIds: [] }] };
+  const whole = resolveAction(input);
+  const partial = resolveAction({ ...input, explicitBudgetMinutes: whole.executedMinutes - 1 });
+  const school = resolveActionNarrativeContext('前往学校', new Date(context.startTime), 0, { currentLocationId: 'home', enRouteEncounterRoll: 0 })!;
+  const store = resolveActionNarrativeContext('前往便利店', new Date(context.startTime), 0, { currentLocationId: 'school', enRouteEncounterRoll: 0 })!;
+  const projected = projectExecutedPlan({ ...plan, revelations: [] }, partial, [], {}, [school.sceneContract, store.sceneContract]);
+  expect(projected.beats.filter(beat => beat.id.startsWith('executed:en-route:'))).toHaveLength(2);
+  for (const segmentIndex of [0, 2]) {
+    const encounter = projected.beats.findIndex(beat => beat.id === `executed:en-route:${segmentIndex}`);
+    const arrival = projected.beats.findIndex(beat => beat.id === `executed:${segmentIndex}`);
+    expect(encounter).toBeGreaterThanOrEqual(0);
+    expect(encounter).toBeLessThan(arrival);
+  }
+  const resumedJourney = { ...partial, segments: partial.segments.map((segment, index) => index === 0
+    ? { ...segment, cumulativeExecutedMinutes: segment.executedMinutes + 1 } : segment) };
+  const resumed = projectExecutedPlan({ ...plan, revelations: [] }, resumedJourney, [], {}, [school.sceneContract, store.sceneContract]);
+  expect(resumed.beats.filter(beat => beat.id.startsWith('executed:en-route:')).map(beat => beat.id)).toEqual(['executed:en-route:2']);
 });

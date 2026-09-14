@@ -641,7 +641,8 @@ describe('resolved action at the real hook boundary', () => {
         state.api.parsedContent.optionBindings?.[0],
       )).toBe(true);
     });
-    await waitFor(() => expect(useGameStore.getState().tavern.variables.actionContinuity?.continuation).toBeNull());
+    await waitFor(() => expect(useGameStore.getState().tavern.variables.actionContinuity?.continuation,
+      useGameStore.getState().api.error ?? useGameStore.getState().api.turnRecovery.errorMessage).toBeNull());
     expect(useGameStore.getState().tavern.variables).toMatchObject({
       time: '2024-09-09T09:45:00', stamina: 86, sanity: 70,
     });

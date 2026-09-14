@@ -22,14 +22,17 @@ export function resolvePlayerActionIntent(input: string, locationId: string, tim
     if (!scene && hasExplicitTravelIntent(clause)) return null;
     const destination = scene?.locationId ?? current;
     const actionText = clause.replace(/^(?:再|先)?(?:只用|只花|用|花)?[半一二两三四五六七八九十\d]+(?:分钟|小时)(?:来)?/u, '');
+    // A prohibition limits the request; its object is not another attempted action.
+    // Remove only that predicate, leaving any following actual action untouched.
+    const kindText = actionText.replace(/不(?:要)?(?:做|进行|开展|安排)(?:任何)?(?:其他|其它|别的|额外)(?:的)?(?:调查|行动|事情)/gu, '');
     const quietKind = actionText.match(/休息(?!室|时间|记录|地点|区|安排)|小睡|躺下|睡觉|等待(?!时间|记录)|等到|等[半一二两三四五六七八九十\d]/u);
     const quietAttempt = quietKind && !/不|别|没|取消|是否|能否|问|电话|回忆|调查|查看|检查|观察|搜查|翻找|了解|讨论|听说/u.test(actionText.slice(0, quietKind.index));
     const kind = quietAttempt && /休息|小睡|躺下|睡觉/.test(quietKind[0]) ? 'rest'
       : quietAttempt ? 'wait'
-      : /搜查|翻找|搜寻/u.test(clause) ? 'search'
-      : /调查|查看|检查|观察/u.test(clause) ? 'investigation'
-      : /询问|打听|问|交谈|对话|聊|拜访|探访|找/u.test(clause) ? 'inquiry'
-      : isTravelOnlyIntent(actionText) ? 'travel' : 'inquiry';
+      : /搜查|翻找|搜寻/u.test(kindText) ? 'search'
+      : /调查|查看|检查|观察/u.test(kindText) ? 'investigation'
+      : /询问|打听|问|交谈|对话|聊|拜访|探访|找/u.test(kindText) ? 'inquiry'
+      : isTravelOnlyIntent(kindText) ? 'travel' : 'inquiry';
     const scope = /深入|彻底|全面|长时间|仔细搜查/u.test(clause) ? 'deep' : /简短|问一句|简单问|短暂/u.test(clause) ? 'short' : 'normal';
     const targetNpcIds = [
       [/周大爷|周德明/u, 'old-man'], [/陈慧慧/u, 'chen-huihui'], [/灯织|学姐/u, 'touko'],

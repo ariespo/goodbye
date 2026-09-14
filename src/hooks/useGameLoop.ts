@@ -4,6 +4,7 @@ import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
 import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
 import { validateNarrativeContract } from '../engine/narrative-contract';
 import { resolvePlayerActionIntent, type ActionIntentSnapshot } from '../engine/player-action-intent';
+import { actionSequenceNarrativeError } from '../engine/action-sequence-narrative';
 import { selectPresentedActionFacts, type ActionAuthorityContext } from '../agents/mystery/action-authority';
 
 import { useCallback, useRef } from 'react';
@@ -79,7 +80,6 @@ import { deriveAuthorizedFactProgress } from '../agents/mystery/knowledge-progre
 
 import {
   applyActionNarrativeKnowledgeFallback,
-  actionNarrativeContextError,
   resolveActionNarrativeContext,
   type ActionNarrativeContext,
 } from '../engine/action-narrative-context';
@@ -338,12 +338,14 @@ export function useGameLoop() {
 
       let preparedTurn: PreparedMysteryTurn | null = null;
       let resumedNarrativeFailure: CachedNarrativeFailure | null = null;
+      const executedActionContexts = () => preparedTurn?.executedContext?.executedActionContexts
+        ?? (actionNarrativeContext ? [actionNarrativeContext] : []);
       const getAuthorizedKnowledgeEventIds = () => [...new Set([
         ...(preparedTurn?.writerPacket.authorizedKnowledgeEvents.map(event => event.eventId) ?? []),
         ...(actionNarrativeContext?.sceneContract.requiredKnowledgeEvents.map(event => event.eventId) ?? []),
       ])];
-      const parseNarrativeScene = (maintext: string) => applyActionNarrativeKnowledgeFallback(
-        actionNarrativeContext,
+      const parseNarrativeScene = (maintext: string) => executedActionContexts().reduce(
+        (scene, context) => applyActionNarrativeKnowledgeFallback(context, scene),
         maintextToScene(maintext, {
           authorizedKnowledgeEvents: getAuthorizedKnowledgeEventIds(),
           variables: narrativeVariables,
@@ -855,8 +857,8 @@ export function useGameLoop() {
                     message: `选项${index + 1}“${option}”的目的地无法确认。仅修正该选项的表述，使其明确对应获准计划中的注册地点与目标；不得把它换成原地行动或新增目标。` });
                 }
               }
-              if (candidateScene && actionNarrativeContext) {
-                const contextError = actionNarrativeContextError(actionNarrativeContext, candidateScene);
+              if (candidateScene) {
+                const contextError = actionSequenceNarrativeError(executedActionContexts(), candidateScene);
                 if (contextError) {
                   candidateValidationErrors.push({ code: 'ACTION_CONTEXT_MISMATCH', message: contextError });
                 }

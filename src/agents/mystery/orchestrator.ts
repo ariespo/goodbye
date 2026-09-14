@@ -36,7 +36,7 @@ import type { AgentCompletion } from './structured';
 import { buildDirectorRepairTask, mergeRepairResiduals } from './repair-task';
 import type { RepairFailedStage } from './repair-task';
 import type { ActionAuthorityContext } from './action-authority';
-import { buildActionAuthorityInput, projectExecutedPlan, buildActionOutcomeSources, isNonWorkResolution } from './action-authority';
+import { analyzeActionIntentPlan, buildActionAuthorityInput, projectExecutedPlan, buildActionOutcomeSources, isNonWorkResolution } from './action-authority';
 import { resolveAction } from '../../engine/action-resolution';
 import type { ResolvedActionOutcome } from '../../engine/action-resolution';
 import type { ExecutedTurnProjection } from './turn-preparation';
@@ -62,6 +62,10 @@ export interface PrepareMysteryTurnOptions {
   actionAuthority?: ActionAuthorityContext;
   pendingActionSceneContext?: import('../../engine/action-scene-continuity').PendingActionSceneContext;
   executionFingerprint?: string;
+  prepareActionScenes?: (steps: NonNullable<DirectorPlan['actionSteps']>) => {
+    sceneContextsByLocation: Record<string, import('../../engine/action-narrative-context').ActionNarrativeContext>;
+    sceneBriefs: MysteryBrief[];
+  };
   projectExecution?: (resolution: ResolvedActionOutcome) => ExecutedTurnProjection;
   /** Private source-bearing candidates; never included in Director/Writer messages. */
   legalOpportunityMap?: Readonly<Record<string, import('../../engine/investigation-opportunities').InvestigationOpportunity>>;
@@ -484,6 +488,32 @@ async function runMysteryPipeline(
   ];
 
   const supportKey = `${options.api.baseUrl}|${options.api.model}`;
+  const originalBrief = brief;
+  let intentAnalysis: ReturnType<typeof analyzeActionIntentPlan> | undefined;
+  const preparePlanScenes = (plan: DirectorPlan) => {
+    if (!options.actionAuthority) return;
+    intentAnalysis = analyzeActionIntentPlan(plan, options.actionAuthority);
+    const scenes = options.prepareActionScenes?.(intentAnalysis.steps);
+    if (!scenes) return;
+    options = { ...options, actionAuthority: { ...options.actionAuthority,
+      sceneContextsByLocation: scenes.sceneContextsByLocation } };
+    const publicBriefs = scenes.sceneBriefs.map(scene => buildAliasedMysteryBrief(scene, factAliases));
+    // Additional locations supply public scene obligations, never another case-fact budget.
+    brief = { ...originalBrief,
+      sceneContracts: [...new Map(publicBriefs.flatMap(scene => scene.sceneContracts ?? (scene.sceneContract ? [scene.sceneContract] : []))
+        .map(contract => [contract.destinationLocationId, contract])).values()],
+      playerPresentation: { ...originalBrief.playerPresentation, allowedDiscoveries: [...new Map([
+        ...originalBrief.playerPresentation.allowedDiscoveries,
+        ...publicBriefs.flatMap(scene => scene.playerPresentation.allowedDiscoveries),
+      ].map(event => [event.eventId, event])).values()] },
+      npcPlayerKnowledge: [...new Map([
+        ...(originalBrief.npcPlayerKnowledge ?? []), ...publicBriefs.flatMap(scene => scene.npcPlayerKnowledge ?? []),
+      ].map(npc => [npc.npcId, npc])).values()],
+      characterPerformances: [...new Map([
+        ...originalBrief.characterPerformances, ...publicBriefs.flatMap(scene => scene.characterPerformances),
+      ].map(profile => [profile.id, profile])).values()],
+    };
+  };
 
   let directorAttempts = 1;
   observe.setDirectorAttempts(directorAttempts);
@@ -497,6 +527,7 @@ async function runMysteryPipeline(
   // plan still traverses all ordinary fact/pacing gates below.
   if (options.actionAuthority) {
     try {
+      preparePlanScenes(directorPlan);
       buildActionAuthorityInput(directorPlan, options.actionAuthority, 'intent-check');
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -507,7 +538,8 @@ async function runMysteryPipeline(
         ...directorMessages,
         { role: 'user', content: `只修复下列已生成计划中的行动不一致，保留原获准事实范围；不得改写玩家原始意图或发明目的地。原始输入：${options.actionAuthority!.originalInput}\n原计划：${JSON.stringify(directorPlan)}\n错误：${reason}\n仅输出完整修复计划 JSON。` },
       ], { temperature: 0.1, maxTokens: getMaxOutputTokens(options.preset) }, DIRECTOR_PLAN_RESPONSE_FORMAT, parsePlan));
-      buildActionAuthorityInput(directorPlan, options.actionAuthority, 'intent-recheck');
+      preparePlanScenes(directorPlan);
+      buildActionAuthorityInput(directorPlan, options.actionAuthority!, 'intent-recheck');
     }
   }
   directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
@@ -529,6 +561,7 @@ async function runMysteryPipeline(
       parsePlan,
     ));
     hardReviewResiduals = mergeRepairResiduals(hardReviewResiduals, rejectedReview.violations);
+    preparePlanScenes(directorPlan);
     directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
     observe.setDirectorPlan(directorPlan);
     hardReview = await timeStage('hard-review-retry', () => reviewDirectorPlan(directorPlan, brief, options.turnContext));
@@ -563,9 +596,8 @@ async function runMysteryPipeline(
   }
 
   const intentMode = typeof intentPolicy?.mode === 'string' ? intentPolicy.mode : 'normal';
-  const requiredKnowledgeEventIds = new Set(
-    brief.sceneContract?.requiredKnowledgeEvents.map(item => item.eventId) ?? [],
-  );
+  const requiredKnowledgeEventIds = new Set((brief.sceneContracts?.length ? brief.sceneContracts : brief.sceneContract ? [brief.sceneContract] : [])
+    .flatMap(contract => contract.requiredKnowledgeEvents.map(item => item.eventId)));
   const plannedKnowledgeEvents = directorPlan.knowledgeEvents ?? [];
   const deterministicSceneKnowledgeOnly = directorPlan.revelations.length === 0
     && plannedKnowledgeEvents.length > 0
@@ -653,6 +685,7 @@ async function runMysteryPipeline(
           parsePlan,
         ));
         criticResiduals = mergeRepairResiduals(criticResiduals, combinedReview.violations);
+        preparePlanScenes(directorPlan);
         directorPlan = removeUnauthorizedKnowledgeEvents(directorPlan, brief);
         directorPlan = enforceNarrativeSceneContract(directorPlan, brief);
         observe.setDirectorPlan(directorPlan);
@@ -735,8 +768,9 @@ async function runMysteryPipeline(
   let writerPresentation = options.presentationContext;
   if (options.actionAuthority) {
     if (!options.projectExecution) throw new MysteryPipelineBlockedError('行动缺少实际执行场景的投影器。');
+    preparePlanScenes(directorPlan);
     resolvedAction = resolveAction(buildActionAuthorityInput(directorPlan,
-      { ...options.actionAuthority, sourceLocationId: options.truthContext.currentLocation }, crypto.randomUUID()));
+      { ...options.actionAuthority!, sourceLocationId: options.truthContext.currentLocation }, crypto.randomUUID()));
     pendingActionAuthorization = capturePendingActionAuthorization({ plan: directorPlan, brief, aliases: factAliases,
       graph: MYSTERY_TRUTH_GRAPH, resolution: resolvedAction, sourceLocationId: options.truthContext.currentLocation,
       previous: options.actionAuthority.resumeActionId && options.actionAuthority.deathNews !== 'pending'
@@ -746,13 +780,14 @@ async function runMysteryPipeline(
     if (resolvedAction.continuation && !sceneCandidate) throw new MysteryPipelineBlockedError('未完成行动缺少原场景约束。');
     pendingActionSceneContext = resolvedAction.continuation && sceneCandidate
       ? { ...structuredClone(sceneCandidate), actionId: resolvedAction.continuation.actionId } : null;
-    writerTurnContext = executedContext.turnContext;
+    writerTurnContext = { ...executedContext.turnContext, resolvedAction };
     writerPresentation = executedContext.presentationContext;
     const currentBrief = buildAliasedMysteryBrief(buildMysteryBrief(MYSTERY_TRUTH_GRAPH, executedContext.truthContext), factAliases);
     const completed = new Set(resolvedAction.completedSourceIds);
     const earnedFacts = brief.usableFacts.filter(fact => fact.revealOptions.some(option => completed.has(`fact:${fact.id}:${option.level}`)));
     const earnedIds = new Set(earnedFacts.map(fact => fact.id));
-    const usableById = new Map([...currentBrief.usableFacts, ...earnedFacts].map(fact => [fact.id, fact]));
+    const originalUsableIds = new Set(brief.usableFacts.map(fact => fact.id));
+    const usableById = new Map([...currentBrief.usableFacts.filter(fact => originalUsableIds.has(fact.id)), ...earnedFacts].map(fact => [fact.id, fact]));
     // Completed earlier segments may legitimately carry a finding from their
     // own location even when the final segment ends elsewhere.
     const npcKnowledge = new Map(currentBrief.npcKnowledge.map(npc => [npc.npcId, npc]));
@@ -773,7 +808,7 @@ async function runMysteryPipeline(
       writerBrief = { ...writerBrief, sceneContract: undefined, npcPlayerKnowledge: [], characterPerformances: [] };
     }
     directorPlan = projectExecutedPlan(directorPlan, resolvedAction, executedContext.activeNpcIds,
-      executedContext.segmentNpcIdsByLocation, writerBrief.sceneContract);
+      executedContext.segmentNpcIdsByLocation, writerBrief.sceneContracts?.length ? writerBrief.sceneContracts : writerBrief.sceneContract);
     hardReview = reviewDirectorPlan(directorPlan, writerBrief, writerTurnContext);
     observe.setDirectorPlan(directorPlan);
     observe.setHardReview(hardReview);
@@ -787,6 +822,8 @@ async function runMysteryPipeline(
       originalInput: options.actionAuthority!.originalInput,
       startLocationId: options.actionAuthority!.currentLocationId,
       boundIntent: options.actionAuthority!.playerActionIntent,
+      requestedStepCount: intentAnalysis?.requestedStepCount,
+      extensionStepCount: intentAnalysis?.extensionStepCount,
       approvedSteps: approvedActionSteps,
       executedSteps: resolvedAction.segments.map(segment => ({ kind: segment.step.kind,
         scope: segment.step.scope, locationId: segment.step.locationId,

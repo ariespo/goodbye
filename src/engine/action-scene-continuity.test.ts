@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ActionContinuation } from './action-resolution';
 import {
   buildPendingActionSceneContext,
+  extendPendingActionSceneContext,
   selectContinuationSceneContext,
   type ActionSceneContinuity,
 } from './action-scene-continuity';
@@ -23,6 +24,20 @@ const continuation: ActionContinuation = {
 };
 
 describe('program-owned action scene continuity', () => {
+  it('adds registered later destinations without resampling saved original scenes', () => {
+    const time = new Date('2024-09-09T15:00:00');
+    const pending = buildPendingActionSceneContext('调查便利店', time,
+      { currentLocationId: 'home', cycleCount: 1, enRouteEncounterRoll: 1 });
+    const before = structuredClone(pending);
+    const extended = extendPendingActionSceneContext(pending, [
+      { locationId: 'supermarket' }, { locationId: 'school' },
+    ], time, { currentLocationId: 'home', cycleCount: 1, enRouteEncounterRoll: 0, schoolEncounterRoll: 0 });
+    expect(extended.contextsByLocation.supermarket).toEqual(before.contextsByLocation.supermarket);
+    expect(extended.contextsByLocation.school.requiredNpcIds).toContain('school-guard');
+    expect(pending).toEqual(before);
+    expect(() => extendPendingActionSceneContext(pending, [{ locationId: 'invented-place' }], time))
+      .toThrow(/地点/);
+  });
   it('builds a separate original scene contract for every compound destination', () => {
     const pending = buildPendingActionSceneContext(
       '先调查便利店，再去学校调查',

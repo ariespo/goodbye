@@ -444,7 +444,7 @@ describe('execution context projection', () => {
     expect(projected.actionNarrativeContext).toBeNull();
   });
 
-  it('maps completed compound work participants while withholding every scene contract in transit', () => {
+  it('retains executed work contracts while withholding the unreached destination in transit', () => {
     const input = fixture();
     input.userInput = '先调查便利店，再去学校调查';
     input.originalActionInput = input.userInput;
@@ -470,7 +470,24 @@ describe('execution context projection', () => {
     expect(projected.presentationContext.currentBackground).toBe('street');
     expect(projected.activeNpcIds).toEqual([]);
     expect(projected.segmentNpcIdsByLocation).toEqual({ supermarket: ['chen-huihui'] });
+    expect(projected.truthContext.sceneContracts?.map(contract => contract.destinationLocationId)).toEqual(['supermarket']);
+    expect(projected.executedActionContexts?.map(context => context.locationId)).toEqual(['supermarket']);
     expect(projected.pendingActionSceneContext?.contextsByLocation.school.forbiddenNpcIds)
       .toEqual(['liu-renguang']);
+  });
+
+  it('projects travel-only arrival without destination reception or recognition work', () => {
+    const input = fixture();
+    input.userInput = '去便利店';
+    const prepared = buildTurnPreparation(input);
+    prepared.request.prepareActionScenes!([{ id: 'move', kind: 'travel', scope: 'normal', locationId: 'supermarket' }]);
+    const travel = { ...interrupted, endLocationId: 'supermarket', executedMinutes: 15,
+      segments: [{ ...interrupted.segments[0], completed: true, executedMinutes: 15,
+        step: { ...interrupted.segments[0].step, locationId: 'supermarket' } }] };
+    const projected = prepared.request.projectExecution!(travel);
+    expect(projected.truthContext.sceneContracts).toEqual([expect.objectContaining({ destinationLocationId: 'supermarket',
+      requiredDestinationNpcIds: [], requiredKnowledgeEvents: [] })]);
+    expect(projected.executedActionContexts).toEqual([]);
+    expect(projected.actionNarrativeContext).toBeNull();
   });
 });

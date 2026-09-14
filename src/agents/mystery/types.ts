@@ -102,6 +102,7 @@ export interface TruthContext {
   playerIdentity?: PlayerIdentity;
   playerIdentityVariables?: Record<string, unknown>;
   sceneContract?: NarrativeSceneContract;
+  sceneContracts?: NarrativeSceneContract[];
 }
 
 export interface ProjectedFact {
@@ -165,6 +166,7 @@ export interface MysteryBrief {
   characterPerformances: CharacterPerformanceProfile[];
   npcPlayerKnowledge?: NpcPlayerKnowledgeBrief[];
   sceneContract?: NarrativeSceneContract;
+  sceneContracts?: NarrativeSceneContract[];
   /** 当玩家继续追查已达当日上限的角色时，由引擎选定并强制审查的异角色转场。 */
   saturationPivot?: SaturationPivotBrief;
 }
@@ -303,6 +305,8 @@ export interface WriterPacket {
     startLocationId: string;
     boundIntent?: import('../../engine/player-action-intent').ActionIntentSnapshot;
     approvedSteps?: DirectorActionStepProposal[];
+    requestedStepCount?: number;
+    extensionStepCount?: number;
     executedSteps: Array<{ kind: import('../../engine/action-resolution').ActionStep['kind'];
       scope: import('../../engine/action-resolution').ActionScope; locationId: string;
       executedMinutes: number; completed: boolean }>;
@@ -325,6 +329,7 @@ export interface WriterPacket {
   characterPerformances: CharacterPerformanceProfile[];
   npcPlayerKnowledge?: NpcPlayerKnowledgeBrief[];
   sceneContract?: NarrativeSceneContract;
+  sceneContracts?: NarrativeSceneContract[];
   saturationPivot?: SaturationPivotBrief;
 }
 

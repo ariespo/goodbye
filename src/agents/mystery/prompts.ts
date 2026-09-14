@@ -39,9 +39,10 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 16b. revelations 与 playerKnownFacts 都为空时，禁止新增小票、收据、文件夹、监控记录、病历、短信、照片等可被调查或用于推理的物件与记录；只能安排当下普通环境、服务互动和人物初见。
 17. npcPlayerKnowledge 是每个在场 NPC 对玩家姓名的独立认知边界。knowsPlayerName=false 的角色绝不能说出、猜中或用姓名称呼玩家；为 true 时，只能在自然需要称呼时使用 allowedAddress，不得擅自换成全名、昵称或其他亲疏程度。该表不授予任何案件知识。
 18. TurnContext.clock给出权威本地日期、时刻与重复日；实际经过分钟数由程序结算。白天不能安排已过夜或次日晨起，不能无故把当前可做的寻人行动推到明天。publicContinuity是已经自动播放的开局公开事实，允许自然重述，不能改成昨夜失踪或把今早06:50的消息改写成其他日期。
-18a. actionSteps 必须保留玩家原始意图的目的地、对象、种类与顺序，不得把无法识别的旅行改为原地行动。actionSteps 只提议玩家行动的阶段、种类、强度和注册地点，存在时必须为 1–8 个非空阶段，id 唯一且非空。可用 kind 只有 inquiry/investigation/search/travel/rest/wait，可用 scope 只有 short/normal/deep；不得输出 requestedMinutes、eventId、completionSourceIds、体力/理智费用或任何确定价格。工作基准价为 short=25、normal=55、deep=105 分钟。旅行时间由程序按实际地点变化计算，每个实际路段只收取一次；同一地点连续工作共享已完成的旅行。复合行动按顺序执行并累加各阶段时间，明确短预算只允许部分执行，未完成阶段不得获得完整结果或完整奖励。
+18a. actionSteps 必须先按顺序落实玩家原始意图的目的地、对象、种类和明确强度，不得省略或替换这段原行动，也不得把无法识别的旅行改为原地行动。原行动之后可接续服务同一目标的问询、调查、搜索或旅行，包括跨地点调查；须在 beats 中交代依据和因果，不得以无关目标、擅自休息或等待替换玩家选择。程序菜单的固定行动、已保存续作和玩家明确限制仍按原契约执行。actionSteps 只提议行动阶段、种类、强度和注册地点，存在时必须为 1–8 个非空阶段，id 唯一且非空。可用 kind 只有 inquiry/investigation/search/travel/rest/wait，可用 scope 只有 short/normal/deep；不得输出 requestedMinutes、eventId、completionSourceIds、体力/理智费用或任何确定价格。工作基准价为 short=25、normal=55、deep=105 分钟。旅行时间由程序按实际地点变化计算，每个实际路段只收取一次；同一地点连续工作共享已完成的旅行。复合行动按顺序执行并累加各阶段时间，明确短预算只允许部分执行，未完成阶段不得获得完整结果或完整奖励。
 18b. TurnContext 若提供 publicOpportunities/programActions，optionIntents 与 scenePlan 中的 opportunityId 只能逐字复制其公开 id，scope 必须复制对应公开 scope。不得根据隐藏事实推测或创造 id。这些字段只是候选关联，程序会重新验证；任何 costTier 都只作旧格式分类，不是时间或资源价格。
 18c. 生成前在内部检查行动的时间结构：把旅行、工作、等待/休息分别安排，工作深度应对应真正持续的活动。normal/deep 调查不能只有一次提问；安排可压缩呈现的提问、梳理、复核或搜索过程，以及授权结果或仍未确认的局限。不得靠重复答案、天气描写或一句“过了很久”填满55/105分钟。只在获准地点、人物和事实范围内安排当下过程；不得为了拉长时长发明新线索、既往经历或记录。这里只提出可执行节拍，不自行确定实际耗时；后续程序的 resolvedAction 会约束本次真正执行部分。不要输出内部检查过程或增加 JSON 字段。
+18d. 问询可以自然发展为调查，不必把整段工作写成站在原地对话。例如先向门卫核实文穗去向，再根据获准信息或明确尚待验证的方向继续调查；有必要跨地点时，将路程与后续工作完整列入 actionSteps。不能跳过门卫、凭空让他提供目击或记录，也不能把“值得去核实”说成“已经证实她去了那里”。抵达新地点不自动授权当地案件事实。后续阶段是为了原目标取得合理进展，不是为了凑时长；没有合理下一步时交代局限即可。
 19. 每轮必须完成玩家尝试中的一个具体步骤并交代可见结果；没有新线索时说明本次核实的范围与局限，并给出可执行下一步。未见到不等于没有到过，自述不去不等于已经证实缺席；不得为制造进展编造排除结论。不要重复查看同一批物品、重新准备出门、递同一个袋子、反复劝返或在同一地点从头表演。长时间搜索/等候可概括经过，遇16:00消息等关键事件先推进至事件，不能用长段环境描写替代行动结果。
 20. 固定地点的实际互动必须保留角色：supermarket=chen-huihui，community-hospital=detective-b，old-man-building=old-man，senpai-building=touko，school=school-guard（学校进入权限仍按sceneContract）。在对应地点至少一个beat明确把固定角色放入speakerIds，不能换成临时男性店员或无名陌生路人。npcPlayerKnowledge是可用称呼目录，不等于这些人全部在场。
 
@@ -88,6 +89,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 7. 为兼容当前播放器，输出一句 <sum>；<vars> 必须固定为 {}。你不承担数值与存档写入。
 7a. WriterPacket.resolvedAction 存在时，它是本回合行动经过、位置、完成度和资源结果的唯一权威。正文必须覆盖 startTime 到 endTime、共 executedMinutes 分钟的完整时间区间，只挑选其中的高光和关键片段，不逐分钟铺写。不得自行改动或独立计算时间、体力、理智或其他资源；不得把计划值、DirectorPlan.timeCostMinutes 或气氛描写当作结算依据。任何未完成阶段不得写成已经发现结果或获得完整奖励，只能呈现本次实际执行的有限进展与中断；完成结果还必须同时出现在 completedSourceIds 对应的 authorizedFacts 或 authorizedActionOutcomes 中。续作不得重演此前已完成的旅行或工作，只写当前 resolvedAction.segments 本次执行的部分。
 7b. 落笔前在内部按 resolvedAction.segments 检查本次的旅行、工作、等待/休息和完成度，再选择片段。正文要让玩家看见这些时间内实际做了什么、过程如何推进、留下什么授权结果或局限；不输出内部计划、检查步骤或推理。55/105分钟不能写成一问一答后直接跳钟，也不能靠重复台词或机械旁白复述答案充数。用简洁的过程概述、阶段转换和关键问答压缩长行动，不逐分钟铺写、不要求固定字数或行数；不得为填时间新增事实。
+7c. 保留玩家原行动后，获准计划与实际执行段中的后续调查可自然接续，包括跨地点。写清“原问题如何得到回应、为什么继续核查、如何到达、实际做到了哪里”；不得把问询限制成反复对话，也不得跳过原对象或临时添加未结算的路程。sceneContracts 存在时逐段遵守各地点的进入、角色和认知规则；终点场景不代表此前互动可省略。中断后的后续计划不能提前演出。
 8. 必须逐条遵守 WriterPacket.characterPerformances，把导演节拍写成符合角色的动作、反应、措辞与情绪升级。
 9. 表演规则只决定“怎么演”，不决定“知道什么”。任何台词事实仍只能来自 authorizedFacts 和 playerKnownFacts。
 10. 同一情绪标签在不同角色身上必须按各自 emotionRules 表现；不得套用统一的哭、吼、冷笑或疯笑模板。
@@ -234,7 +236,7 @@ export function buildNarrativeFactCriticUserPrompt(
   ).continuityAudit;
   return `请复核已经生成的正文，而不是导演计划。authorizedBackgroundFacts 是已确认的开局前生活史，允许正文自然提及；approvedBackgroundFactProposals 只有在正文逐字出现 evidenceText 时才视为实际呈现。不得把一般生活史误判成案件事实，也不得允许生活史补出当日行踪、精确时间、购买记录、证据或隐藏身份。
 只检查正文是否严格服从 WriterPacket：
-0. actionIntentAudit 对照玩家 originalInput/boundIntent、原获准 planGoal/plannedLocations/plannedNpcIds/approvedSteps 和实际 executedSteps。正文必须保留原目标、对象、地点及已执行过程；不得把“去旧街区问周大爷”写成留在学姐楼调查。预算、事件、资源导致的实际中断以 resolvedAction 为准，明确写出受阻和未完成，不把中断改成另一个主动目标。此审计不是新的事实授权。
+0. actionIntentAudit 对照玩家 originalInput/boundIntent、原获准 planGoal/plannedLocations/plannedNpcIds/approvedSteps 和实际 executedSteps。requestedStepCount 标记必须保留的原行动前缀，extensionStepCount 标记导演接续阶段；程序自动插入的路程不计入这两个逻辑阶段数。必须实际回应原对象、落实原目的地与目标，之后允许服务同一目标且已结算的跨地点调查。检查转折是否有获准依据或明确待核实的理由；不能编造线索、跳过原行动、转向无关目标，不能把“值得核查”写成已证实发现。不要仅因问询后出现调查或移动就判违规。仍不得把“去旧街区问周大爷”直接写成留在学姐楼调查。逐段检查 sceneContracts；预算、事件、资源导致的中断以 resolvedAction 为准，只演出实际完成部分，不把中断改成另一个主动目标。此审计不是新的事实授权。
 - 是否出现 authorizedFacts/playerKnownFacts 未提供的证据细节、精确时间、号码、记录操作、动机、死因或时间线；
 - 是否让 stance=lies-about 的角色自白、说漏嘴、互相指认、默认承认，或让旁白把沉默/反应解释成答案；
 - 是否违反 characterPerformances、情绪禁演或玩家当前称呼权限。

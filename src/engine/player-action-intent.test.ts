@@ -85,3 +85,10 @@ it('does not split an inquiry quotation at its internal punctuation', () => {
   const input = '询问“你说，打听完情况后前往学校”是什么意思';
   expect(resolvePlayerActionIntent(input, 'home', time)?.steps.every(step => step.locationId === 'home')).toBe(true);
 });
+
+it.each(['只向门卫询问，不做其他调查', '只向门卫询问，不进行其他调查'])('does not infer investigation from a prohibition: %s', text => {
+  expect(resolvePlayerActionIntent(text, 'school', time)?.steps[0].kind).toBe('inquiry');
+});
+it('keeps a real action following an explicit prohibition visible to kind detection', () => {
+  expect(resolvePlayerActionIntent('向门卫询问，不做其他调查，但查看眼前的告示', 'school', time)?.steps[0].kind).toBe('investigation');
+});

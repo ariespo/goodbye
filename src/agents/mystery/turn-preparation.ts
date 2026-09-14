@@ -22,6 +22,7 @@ import {
 } from '../../engine/investigation-opportunities';
 import {
   buildPendingActionSceneContext,
+  extendPendingActionSceneContext,
   pendingSceneContextFromSaved,
   selectContinuationSceneContext,
   type ActionSceneContinuity,
@@ -31,6 +32,7 @@ import type { ActionAuthorityContext } from './action-authority';
 import { isNonWorkResolution } from './action-authority';
 import { compileTurnContext, type TurnContextBundle } from '../../memory/world-memory';
 import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
+import { buildMysteryBrief } from './brief';
 import { REVEAL_LEVELS, type RevealLevel, type MysteryRouteId, type MysteryOverlayId, type TruthContext } from './types';
 import type { AgentNarrativeMode, PrepareMysteryTurnOptions } from './orchestrator';
 import type { ApiConfig } from '../../sillytavern/api-router';
@@ -125,6 +127,7 @@ export interface ExecutedTurnProjection {
   activeNpcIds: string[];
   /** Cast for work actually executed at each location, independent of the physical end anchor. */
   segmentNpcIdsByLocation?: Record<string, string[]>;
+  executedActionContexts?: ActionNarrativeContext[];
   /** Program-only original scene contracts for a possible unfinished action. */
   pendingActionSceneContext?: PendingActionSceneContext;
   npcPlayerKnowledge: ReturnType<typeof buildNpcPlayerKnowledgeBrief>;
@@ -284,6 +287,47 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     actionNarrativeContext = { ...actionNarrativeContext, directive,
       sceneContract: { ...actionNarrativeContext.sceneContract, requiredKnowledgeEvents, directive } };
   }
+  const executedActionContexts: ActionNarrativeContext[] = [];
+  const executedScenes = new Map<string, ActionNarrativeContext>();
+  if (resolution) {
+    const workLocations = new Set(resolution.segments.filter(segment => segment.executedMinutes > 0
+      && ['inquiry', 'investigation', 'search'].includes(segment.step.kind)).map(segment => segment.step.locationId));
+    let elapsed = 0;
+    for (const segment of resolution.segments) {
+      elapsed += segment.executedMinutes;
+      const locationId = segment.step.locationId;
+      const isWork = segment.executedMinutes > 0 && ['inquiry', 'investigation', 'search'].includes(segment.step.kind);
+      const isArrival = segment.step.kind === 'travel' && segment.completed;
+      if ((!isWork && !isArrival) || (isArrival && workLocations.has(locationId))) continue;
+      const original = sceneState.pendingActionSceneContext.contextsByLocation[locationId];
+      if (!original) continue;
+      const prefix = resolution.segments.slice(0, resolution.segments.indexOf(segment) + 1);
+      const context = resolveExecutedActionNarrativeContext(original, { ...resolution, segments: prefix,
+        endLocationId: locationId, endTime: advanceClock(resolution.startTime, elapsed), executedMinutes: elapsed });
+      if (!context) continue;
+      if (!isWork) {
+        const directive = `本段仅实际抵达 ${locationId}，尚未进行当地工作；不得演绎接待、调查成果或新增人物认知。`;
+        context.requiredNpcIds = [];
+        context.directive = directive;
+        context.sceneContract = { ...context.sceneContract, requiredDestinationNpcIds: [], requiredKnowledgeEvents: [], directive };
+      } else {
+        const requiredKnowledgeEvents = context.sceneContract.requiredKnowledgeEvents.filter(event =>
+          resolution.completedSourceIds.includes(`accepted-event:${event.eventId}`));
+        if (requiredKnowledgeEvents.length !== context.sceneContract.requiredKnowledgeEvents.length || !segment.completed) {
+          const directive = `在 ${locationId} 仅演绎已执行的 ${segment.executedMinutes} 分钟工作，不预支未获准认知或调查结果。`;
+          context.directive = directive;
+          context.sceneContract = { ...context.sceneContract, requiredKnowledgeEvents, directive };
+        }
+      }
+      executedScenes.set(locationId, context);
+    }
+    for (const [locationId, context] of executedScenes) {
+      if (workLocations.has(locationId)) executedActionContexts.push(context);
+    }
+    if (actionNarrativeContext) actionNarrativeContext = executedScenes.get(actionNarrativeContext.locationId) ?? null;
+  }
+  const sceneContracts = resolution ? [...executedScenes.values()].map(context => context.sceneContract)
+    : actionNarrativeContext ? [actionNarrativeContext.sceneContract] : [];
   const actualLocation = resolution?.endLocationId ?? actionNarrativeContext?.locationId ?? sceneState.baseLocationId;
   const narrativeVariables = actualLocation
     ? { ...tavern.variables, location: actualLocation,
@@ -340,7 +384,7 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
   const contextBundle: TurnContextBundle = compileTurnContext({
     userInput,
     locationId: mysteryLocation,
-    activeNpcIds,
+    activeNpcIds: [...new Set([...activeNpcIds, ...Object.values(segmentNpcIdsByLocation).flat()])],
     history: historyMessages,
     variables: narrativeVariables,
     maxContext: Number(activePreset?.settings?.openai_max_context ?? DEFAULT_CONTEXT_TOKENS),
@@ -373,11 +417,12 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     tripProgress: Number(narrativeVariables.tripProgress ?? 0),
     sanity: game.gameStatus.sanity,
     activeOverlay: readActiveOverlay(narrativeVariables),
-    activeNpcIds,
+    activeNpcIds: [...new Set([...activeNpcIds, ...Object.values(segmentNpcIdsByLocation).flat()])],
     playerPresentation,
     playerIdentity,
     playerIdentityVariables,
     sceneContract: actionNarrativeContext?.sceneContract,
+    sceneContracts,
   };
   const opportunityTime = resolution?.endTime ?? game.gameStatus.time.toISOString();
   const opportunityProgress = normalizeOpportunityProgress(narrativeVariables.opportunityProgress, truthContext.cycleCount);
@@ -427,6 +472,8 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
       playerInput: userInput,
       playerIntentPolicy: intentPolicy,
       sceneContract: actionNarrativeContext?.sceneContract,
+      sceneContracts,
+      ...(resolution ? { resolvedAction: resolution } : {}),
       recentHistory,
       memoryContext: contextBundle.directorMemory,
       contextSelectionIds: contextBundle.selectedIds,
@@ -471,7 +518,7 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
   };
   return { request, actionNarrativeContext, narrativeVariables, narrativeBackground, intentPolicy,
     hadPendingDeathNews, mysteryLocation, activeNpcIds, playerIdentity, introducesPlayerName,
-    knownByNpcIds, npcPlayerKnowledge, contextBundle, segmentNpcIdsByLocation,
+    knownByNpcIds, npcPlayerKnowledge, contextBundle, segmentNpcIdsByLocation, executedActionContexts,
     legalOpportunityMap, legalProgramActionMap };
 }
 
@@ -532,6 +579,20 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
       }).request.legalProgramActionMap
     : undefined;
   const prepared = buildProjection(snapshot, structuredClone(sceneState));
+  prepared.request.prepareActionScenes = steps => {
+    sceneState.pendingActionSceneContext = extendPendingActionSceneContext(sceneState.pendingActionSceneContext,
+      steps, snapshot.gameStatus.time, { currentLocationId, cycleCount,
+        knowledgeEvents: snapshot.variables.knowledgeEvents });
+    prepared.request.pendingActionSceneContext = structuredClone(sceneState.pendingActionSceneContext);
+    const locations = [...new Set(steps.map(step => step.locationId))];
+    const sceneContextsByLocation = Object.fromEntries(locations.map(locationId => [locationId,
+      structuredClone(sceneState.pendingActionSceneContext.contextsByLocation[locationId]) ]));
+    const sceneBriefs = locations.map(locationId => {
+      const scene = buildProjection(snapshot, { ...sceneState, proposed: sceneContextsByLocation[locationId] });
+      return buildMysteryBrief(MYSTERY_TRUTH_GRAPH, scene.request.truthContext);
+    });
+    return { sceneContextsByLocation, sceneBriefs };
+  };
   const continuedOpportunityId = continuity?.continuation?.steps.find(step => step.opportunityId)?.opportunityId;
   let selectedOpportunity: InvestigationOpportunity | undefined;
   let selectedProgramAction: ProgramChecklistAction | undefined;
@@ -617,6 +678,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
       legalOpportunityMap: projected.legalOpportunityMap,
       legalProgramActionMap: projected.legalProgramActionMap,
       segmentNpcIdsByLocation: projected.segmentNpcIdsByLocation,
+      executedActionContexts: projected.executedActionContexts,
       pendingActionSceneContext: projected.request.pendingActionSceneContext,
     };
   };

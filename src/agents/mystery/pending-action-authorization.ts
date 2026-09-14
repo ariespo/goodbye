@@ -262,6 +262,7 @@ function briefAtSource(
     activeNpcIds,
     playerPresentation: projectPlayerPresentation(truthContext, locationId),
     sceneContract: undefined,
+    sceneContracts: undefined,
   }), aliases);
 }
 

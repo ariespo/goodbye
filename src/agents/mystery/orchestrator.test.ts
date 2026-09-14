@@ -686,6 +686,30 @@ describe('action intent consistency before execution', () => {
   const authority = { cycleCount: 2, startTime: '2024-09-09T08:00:00', currentLocationId: 'home', stamina: 100, sanity: 70, originalInput: '调查房间' };
   const projection = () => ({ truthContext, turnContext: {}, presentationContext: {}, activeNpcIds: [], narrativeBackground: 'home' } as unknown as import('./turn-preparation').ExecutedTurnProjection);
   const right: DirectorPlan = { ...validPlan, revelations: [], assetRequests: [], actionSteps: [{ id: 'work', kind: 'investigation', scope: 'normal', locationId: 'home' }] };
+  it('settles a goal-preserving follow-through with one director call and keeps its original prefix in the audit', async () => {
+    const plan: DirectorPlan = { ...right, beats: [
+      { id: 'home', purpose: '核实原目标', description: '检查家中当前情况', locationId: 'home', speakerIds: [] },
+      { id: 'school', purpose: '继续寻找文穗', description: '没有得到确切去向，前往学校向门卫核实，不宣称她已经到校', locationId: 'school', speakerIds: ['school-guard'] },
+    ], actionSteps: [...right.actionSteps!, { id: 'follow', kind: 'inquiry', scope: 'short', locationId: 'school' }] };
+    const prepareActionScenes = vi.fn(() => ({ sceneBriefs: [], sceneContextsByLocation: {
+      school: { locationId: 'school', background: 'school', sceneContract: { destinationLocationId: 'school',
+        requiredDestinationNpcIds: ['school-guard'], requiredEnRouteNpcIds: [], forbiddenNpcIds: [],
+        requiredKnowledgeEvents: [], forbiddenKnowledgeEventIds: [], directive: '仅在校门向门卫核实。' } },
+    } }));
+    const complete = completeApproved(plan);
+    const result = await prepareMysteryTurn({ mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext, turnContext: {}, presentationContext: {}, actionAuthority: authority,
+      prepareActionScenes: prepareActionScenes as unknown as NonNullable<import('./orchestrator').PrepareMysteryTurnOptions['prepareActionScenes']>,
+      projectExecution: () => ({ ...projection(), truthContext: { ...truthContext, currentLocation: 'school' }, activeNpcIds: ['school-guard'] }), complete });
+    expect(prepareActionScenes).toHaveBeenCalled();
+    expect(result.writerPacket.resolvedAction?.segments.map(segment => [segment.step.kind, segment.step.locationId])).toEqual([
+      ['investigation', 'home'], ['travel', 'school'], ['inquiry', 'school'],
+    ]);
+    expect(result.writerPacket.actionIntentAudit).toMatchObject({ requestedStepCount: 1, extensionStepCount: 1, originalInput: '调查房间' });
+    expect(result.writerPacket.authorizedFacts).toEqual([]);
+    expect(result.reviewPolicy.narrative).toBe(true);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
   it('preserves original intent, approved proposal and actual execution in the writer audit', async () => {
     const result = await prepareMysteryTurn({ mode: 'standard', api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
       truthContext, turnContext: {}, presentationContext: {}, actionAuthority: authority, projectExecution: projection, complete: completeApproved(right) });

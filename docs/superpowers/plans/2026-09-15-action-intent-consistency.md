@@ -24,31 +24,41 @@ Files: new `src/engine/player-action-intent.ts` and tests; `src/engine/action-na
 
 Interface: `ActionIntentSnapshot` has `version: 1`, `originalInput`, `startLocationId`, `steps` (kind, scope, locationId, optional targetNpcIds). Export `resolvePlayerActionIntent(input: string, locationId: string, time: Date): ActionIntentSnapshot | null` (null means unresolved explicit action), and `readActionIntentSnapshot(value: unknown): ActionIntentSnapshot | null`. `ActionAuthorityContext.playerActionIntent` carries a validated bound option snapshot. No costs, outcomes, event effects or evidence are accepted from it.
 
-- [ ] Reproduce old-street target case and unknown-travel silent fallback; cover negations and remote contact.
-- [ ] Implement bounded input interpretation and consistency checks, preserving event/continuation precedence.
-- [ ] Add compact original-intent/plan/execution audit to existing writer/reviewer; repair mismatched action proposal at most once where feasible, never silently normalize wrong location.
-- [ ] Focused tests and review.
+- [x] Reproduce old-street target case and unknown-travel silent fallback; cover negations and remote contact.
+- [x] Implement bounded input interpretation and consistency checks, preserving event/continuation precedence.
+- [x] Add compact original-intent/plan/execution audit to existing writer/reviewer; repair mismatched action proposal at most once where feasible, never silently normalize wrong location.
+- [x] Focused tests and review.
 
 ## Task 2: Persisted choice binding
 
 Files: `src/utils/actionPresentation.ts`, `src/hooks/useGameLoop.ts`, `src/agents/mystery/turn-preparation.ts`, `src/sillytavern/types.ts`, related tests.
 
-- [ ] Red tests for ordinary option snapshot, tampering, retry/reload and destination binding.
-- [ ] Bind accepted option text to validated intent before display; unresolved options use explicit failure/repair rather than an invented location.
-- [ ] Thread snapshot through stored actionRequest, preparation, adapter; keep continuation priority and stale-choice rejection.
-- [ ] Hook tests prove same intent reaches resolution and no extra routine model calls.
+- [x] Red tests for ordinary option snapshot, tampering, retry/reload and destination binding.
+- [x] Bind accepted option text to validated intent before display; unresolved options use explicit failure/repair rather than an invented location.
+- [x] Thread snapshot through stored actionRequest, preparation, adapter; keep continuation priority and stale-choice rejection.
+- [x] Hook tests prove same intent reaches resolution and no extra routine model calls.
 
 ## Task 3: Legal loop acceptance
 
 Files: `scripts/live-day-evaluation-harness.ts`, `.test.ts`, `scripts/live-day-evaluation.test.tsx` only.
 
-- [ ] Red tests distinguishing legal resource reset, midnight completion and invalid reset.
-- [ ] Accept legal resource reset when evidence confirms exhaustion and next08:00/cycle+1; report calendar coverage separately.
-- [ ] Preserve immutable campaign provenance, do not retroactively claim old action-mismatch records passed.
-- [ ] Focused tests and review.
+- [x] Red tests distinguishing legal resource reset, midnight completion and invalid reset.
+- [x] Accept legal resource reset when evidence confirms exhaustion and next08:00/cycle+1; report calendar coverage separately.
+- [x] Preserve immutable campaign provenance, do not retroactively claim old action-mismatch records passed.
+- [x] Focused tests and review.
 
 ## Final verification
 
-- [ ] Full suite, lint, types and build, final independent review.
+### Accepted refinement: goal-preserving narrative follow-through
+
+The user explicitly approved cross-location follow-through within one action: it must serve the original goal and charge actual travel. An inquiry need not remain a static conversation for its entire duration.
+
+- Preserve the requested action as the required beginning; later investigation may develop naturally from authorized information or an explicitly uncertain check.
+- Director plans the full sequence before settlement. Writer cannot add unpriced travel after resolution.
+- Reuse the existing final narrative review to check the causal connection, the original interaction, and actual executed stages. Do not invent a clue to justify travel or turn an unconfirmed lead into a finding.
+- Every added location, character, arrival requirement, work stage and boundary remains subject to program validation. Existing selected program actions, explicit player restrictions and pending continuations retain their contracts.
+- Test a school inquiry followed by cross-location investigation, rejected original-target replacement, real travel costs and interrupted follow-through; then repeat real-model acceptance on a frozen commit.
+
+- [x] Full suite, lint, types and build, final independent review (1346 passing tests).
 - [ ] Freeze code commit; real-model continuous options run through a legal reset, inspect target/time/process/reset rows and report waits/retries.
 - [ ] Update evidence report with explicit remaining limits; do not substitute tests for live evidence.

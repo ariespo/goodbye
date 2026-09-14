@@ -19,6 +19,23 @@ function inputs() {
 }
 
 describe('shared foreground and speculative preparation', () => {
+  it('prepares and caches appended public scenes while excluding removed locations from the returned plan', () => {
+    const input = inputs();
+    input.userInput = '调查便利店';
+    const prepared = buildTurnPreparation(input);
+    const initial = structuredClone(prepared.request.pendingActionSceneContext);
+    const steps = [
+      { id: 'first', kind: 'investigation' as const, scope: 'normal' as const, locationId: 'supermarket' },
+      { id: 'next', kind: 'inquiry' as const, scope: 'normal' as const, locationId: 'school' },
+    ];
+    const scenes = prepared.request.prepareActionScenes!(steps);
+    expect(scenes.sceneContextsByLocation.supermarket).toEqual(initial!.contextsByLocation.supermarket);
+    expect(scenes.sceneContextsByLocation.school.requiredNpcIds).toContain('school-guard');
+    const repeated = prepared.request.prepareActionScenes!(steps);
+    expect(repeated).toEqual(scenes);
+    expect(prepared.request.prepareActionScenes!([steps[0]]).sceneContextsByLocation.school).toBeUndefined();
+    expect(prepared.request.prepareActionScenes!(steps)).toEqual(scenes);
+  });
   it('projects the authoritative local clock to Writer and Director even for vague free-form search', () => {
     const input = inputs();
     input.userInput = '我继续在附近寻找文穗，花两个小时搜索或等候。';

@@ -1,4 +1,5 @@
 import type { ActionContinuation } from './action-resolution';
+import { getLocationById, getLocationBackground } from '../data/locations';
 import {
   resolveActionNarrativeContext,
   type ActionNarrativeContext,
@@ -50,6 +51,36 @@ export function buildPendingActionSceneContext(
     currentLocationId = context.locationId;
   }
   return { cycleCount, contextsByLocation };
+}
+
+/** Extend the frozen scene samples; a replan must never reroll an existing destination. */
+export function extendPendingActionSceneContext(
+  pending: PendingActionSceneContext,
+  steps: readonly { locationId: string }[],
+  currentTime: Date,
+  options: BuildSceneContextOptions = {},
+): PendingActionSceneContext {
+  const result = structuredClone(pending);
+  let currentLocationId = options.currentLocationId ?? 'home';
+  for (const step of steps) {
+    const location = getLocationById(step.locationId);
+    if (!location) throw new Error(`无法为未注册地点 ${step.locationId} 建立场景契约。`);
+    if (!result.contextsByLocation[location.id]) {
+      const background = getLocationBackground(location, currentTime);
+      const directive = `在注册地点 ${location.id} 按玩家原目标进行普通当下互动，不新增案件事实。`;
+      result.contextsByLocation[location.id] = resolveActionNarrativeContext(`前往${location.name}`, currentTime, 0, {
+        ...options, currentLocationId, cycleCount: pending.cycleCount, destinationLocationId: location.id,
+      }) ?? {
+        locationId: location.id, background, entryMode: 'destination', requiredNpcIds: [], enRouteNpcIds: [],
+        forbiddenNpcIds: [], presentationMode: 'default', costs: {}, directive,
+        sceneContract: { destinationLocationId: location.id, destinationBackground: background,
+          entryMode: 'destination', requiredDestinationNpcIds: [], requiredEnRouteNpcIds: [],
+          forbiddenNpcIds: [], requiredKnowledgeEvents: [], forbiddenKnowledgeEventIds: [], directive },
+      };
+    }
+    currentLocationId = location.id;
+  }
+  return result;
 }
 
 

@@ -1,9 +1,9 @@
 import { readActionIntentSnapshot, resolvePlayerActionIntent, type ActionIntentSnapshot } from '../../engine/player-action-intent';
 import { getLocationById, resolveRegisteredLocation } from '../../data/locations';
 import { checkCycleFailure } from '../../engine/cycle-failure';
-import { resolveActionNarrativeContext, splitPlayerActionClauses, type ActionNarrativeContext } from '../../engine/action-narrative-context';
+import { splitPlayerActionClauses, type ActionNarrativeContext } from '../../engine/action-narrative-context';
 import type { ActionContinuation, ActionScope, ActionStep, ResolveActionInput, ResolvedActionOutcome } from '../../engine/action-resolution';
-import type { DirectorPlan, FactReview, WriterPacket } from './types';
+import type { DirectorActionStepProposal, DirectorPlan, FactReview, WriterPacket } from './types';
 import type { InvestigationOpportunity } from '../../engine/investigation-opportunities';
 import type { QuietWaitDecision } from '../../engine/scheduled-events';
 import type { ProgramChecklistAction } from './scene-list';
@@ -21,6 +21,7 @@ export interface ActionAuthorityContext {
   sourceLocationId?: string;
   deathNews?: string;
   proposedScene?: ActionNarrativeContext | null;
+  sceneContextsByLocation?: Record<string, ActionNarrativeContext>;
   nextBoundary?: ResolveActionInput['nextBoundary'];
   appliedEventEffectIds?: string[];
   continuation?: ActionContinuation;
@@ -93,11 +94,31 @@ function inferKind(text: string): ActionStep['kind'] {
   return 'inquiry';
 }
 
-export function buildActionAuthorityInput(
+type ActionPlanProposal = Omit<DirectorPlan, 'actionSteps'> & { actionSteps?: unknown };
+export interface ActionIntentPlanAnalysis {
+  requestedStepCount: number;
+  extensionStepCount: number;
+  /** Logical stages before program-inserted arrival/travel stages. */
+  steps: DirectorActionStepProposal[];
+}
+
+export function analyzeActionIntentPlan(plan: ActionPlanProposal, context: ActionAuthorityContext): ActionIntentPlanAnalysis {
+  const input = prepareActionAuthorityInput(plan, context, 'intent-analysis', true);
+  return input.intentAnalysis ?? { requestedStepCount: 0, extensionStepCount: 0, steps: [] };
+}
+
+export function buildActionAuthorityInput(plan: ActionPlanProposal, context: ActionAuthorityContext, id: string): ResolveActionInput {
+  const { intentAnalysis: _analysis, ...input } = prepareActionAuthorityInput(plan, context, id, false);
+  void _analysis;
+  return input;
+}
+
+function prepareActionAuthorityInput(
   plan: Omit<DirectorPlan, 'actionSteps'> & { actionSteps?: unknown },
   context: ActionAuthorityContext,
   id: string,
-): ResolveActionInput {
+  structuralOnly: boolean,
+): ResolveActionInput & { intentAnalysis?: ActionIntentPlanAnalysis } {
   const base = { id, cycleCount: context.cycleCount, startTime: context.startTime,
     currentLocationId: context.currentLocationId, stamina: context.stamina, sanity: context.sanity,
     nextBoundary: context.nextBoundary ? { ...context.nextBoundary } : undefined,
@@ -169,98 +190,151 @@ export function buildActionAuthorityInput(
     throw new Error('导演行动阶段必须是非空且最多八项的数组。');
   }
   const supplied: unknown[] = Array.isArray(proposals) ? proposals : [];
-  if (supplied.length && !selectedOpportunity && !selectedProgramAction && !context.selection) {
-    // A separate travel proposal may precede work; it cannot replace or add work.
-    const semantic = supplied.filter(raw => !(raw && typeof raw === 'object'
-      && (raw as Partial<ActionStep>).kind === 'travel'
-      && recognizedIntent.steps.some(step => step.kind !== 'travel' && step.locationId === (raw as Partial<ActionStep>).locationId)));
-    if (semantic.length !== recognizedIntent.steps.length || semantic.some((raw, index) => {
-      const step = raw as Partial<ActionStep> | null;
-      const expected = recognizedIntent.steps[index];
-      const explicitKind = /调查|查看|检查|观察|搜查|翻找|搜寻|休息|睡|等待|询问|打听|问|交谈|对话|聊|拜访|探访|找|同步|商讨|交流|讨论|谈|梳理/u.test(clauses[index] ?? operativeInput) || expected.kind === 'travel';
-      return !step || ((boundIntent || explicitKind) && step.kind !== expected.kind) || step.locationId !== expected.locationId
-        || (boundIntent && step.scope !== expected.scope);
-    })) throw new Error('导演行动阶段与玩家原始意图的种类或目的地不匹配。');
-  }
-  if ((selectedOpportunity || selectedProgramAction) && supplied.length > 1) {
+  if ((selectedOpportunity || selectedProgramAction || context.selection) && supplied.length > 1) {
     throw new Error('单个程序行动不能被模型扩展为复合行动。');
   }
-  const count = Math.max(clauses.length, supplied.length, 1);
   const steps: ActionStep[] = [];
-  let location = context.currentLocationId;
   const ids = new Set<string>();
-  for (let index = 0; index < count; index += 1) {
-    const clause = clauses[index] ?? context.originalInput;
-    const proposed = supplied[index] as Partial<ActionStep> | undefined;
-    if (index < supplied.length && (!proposed || typeof proposed !== 'object' || Array.isArray(proposed))) throw new Error('无效行动阶段。');
-    const destination = resolveActionNarrativeContext(clause, new Date(context.startTime), 0, {
-      currentLocationId: location, cycleCount: context.cycleCount,
-    })?.locationId ?? (clauses.length === 1 ? context.proposedScene?.locationId : undefined) ?? location;
-    const requestedLocation = proposed?.locationId ?? context.selection?.locationId ?? destination;
-    const registered = resolveRegisteredLocation(requestedLocation, location);
-    if (!registered.accepted || registered.sceneId || (proposed?.locationId && proposed.locationId !== destination)) {
-      throw new Error('行动地点未注册或与玩家请求的目的地不符。');
-    }
-    const kind = context.selection?.kind ?? proposed?.kind ?? recognizedIntent.steps[index]?.kind ?? inferKind(clause);
-    if (!['inquiry', 'investigation', 'search', 'travel', 'rest', 'wait'].includes(kind)
+  const readProposal = (index: number): Partial<ActionStep> | undefined => {
+    const raw = supplied[index];
+    if (index >= supplied.length) return undefined;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('无效行动阶段。');
+    return raw as Partial<ActionStep>;
+  };
+  const addStep = (proposed: Partial<ActionStep> | undefined, expected: ActionIntentSnapshot['steps'][number] | undefined,
+    clause: string, extension: boolean) => {
+    const locationId = proposed?.locationId ?? context.selection?.locationId ?? expected?.locationId;
+    const registered = resolveRegisteredLocation(locationId, context.currentLocationId);
+    if (!registered.accepted || registered.sceneId) throw new Error('行动地点未注册或与玩家请求的目的地不符。');
+    const kind = extension ? proposed?.kind : context.selection?.kind ?? proposed?.kind ?? expected?.kind;
+    if (!kind || !['inquiry', 'investigation', 'search', 'travel', 'rest', 'wait'].includes(kind)
       || proposed?.eventId !== undefined || proposed?.requestedMinutes !== undefined) {
       throw new Error('模型不能创建事件效果或指定确定性行动价格。');
     }
+    if (extension && !['inquiry', 'investigation', 'search', 'travel'].includes(kind)) {
+      throw new Error('后续阶段只能调查或旅行，不能追加休息、等待或事件。');
+    }
     const inputScope = inferScope(clause);
-    const scope = inputScope === 'deep' ? 'deep' : context.selection?.scope ?? proposed?.scope ?? inputScope;
+    const scope = !extension && expected && inputScope !== 'normal' ? inputScope
+      : (!extension ? context.selection?.scope : undefined) ?? proposed?.scope ?? expected?.scope ?? 'normal';
     if (!['short', 'normal', 'deep'].includes(scope)) throw new Error('无效行动强度。');
-    const stepId = proposed?.id ?? `work:${index}`;
+    const stepId = proposed?.id ?? `work:${steps.length}`;
     if (typeof stepId !== 'string' || !stepId.trim() || ids.has(stepId)) throw new Error('行动阶段标识为空或重复。');
     ids.add(stepId);
-    if (proposed?.completionSourceIds !== undefined
-      && (!Array.isArray(proposed.completionSourceIds) || proposed.completionSourceIds.some(source => !allowedSources.has(source)))) {
+    if (proposed?.completionSourceIds !== undefined && (!Array.isArray(proposed.completionSourceIds)
+      || proposed.completionSourceIds.some(source => extension || !allowedSources.has(source)))) {
       throw new Error('行动结果引用了未授权的事实来源。');
     }
-    const duration = context.inputOrigin === 'menu' ? undefined : explicitStageDuration(clause);
-    if ((selectedOpportunity || selectedProgramAction) && proposed
+    if (!extension && (selectedOpportunity || selectedProgramAction) && proposed
       && ((proposed.kind !== undefined && proposed.kind !== context.selection?.kind)
         || (proposed.scope !== undefined && proposed.scope !== context.selection?.scope)
         || (proposed.locationId !== undefined && proposed.locationId !== context.selection?.locationId))) {
       throw new Error('导演行动阶段与已选择调查机会不匹配。');
     }
-    const quietMinutes = kind === 'wait' && duration === undefined
-      ? selectedProgramAction?.requestedMinutes
-        ?? (context.quietWaitDecision?.kind === 'wait' ? context.quietWaitDecision.requestedMinutes : undefined)
-      : undefined;
+    const duration = extension || context.inputOrigin === 'menu' ? undefined : explicitStageDuration(clause);
+    const quietMinutes = kind === 'wait' && duration === undefined ? selectedProgramAction?.requestedMinutes
+      ?? (context.quietWaitDecision?.kind === 'wait' ? context.quietWaitDecision.requestedMinutes : undefined) : undefined;
     steps.push({ id: stepId, kind, scope, locationId: registered.locationId,
-      ...(selectedOpportunity ? { opportunityId: selectedOpportunity.id } : {}), completionSourceIds: [],
+      ...(!extension && selectedOpportunity ? { opportunityId: selectedOpportunity.id } : {}), completionSourceIds: [],
       ...((kind === 'rest' || kind === 'wait') ? { requestedMinutes: duration ?? quietMinutes ?? 60 } : {}) });
-    location = registered.locationId;
+  };
+  let proposalIndex = 0;
+  let location = context.currentLocationId;
+  for (let index = 0; index < recognizedIntent.steps.length; index += 1) {
+    const expected = recognizedIntent.steps[index];
+    const clause = clauses[index] ?? operativeInput;
+    let proposed = readProposal(proposalIndex);
+    // Only the immediately necessary journey to this requested work may precede it.
+    if (proposed?.kind === 'travel' && expected.kind !== 'travel' && expected.locationId !== location
+      && proposed.locationId === expected.locationId && !context.selection) {
+      addStep(proposed, undefined, '', false);
+      proposalIndex += 1;
+      proposed = readProposal(proposalIndex);
+    }
+    if (supplied.length && !proposed) throw new Error('导演行动阶段缺少玩家原始意图的必执行前缀。');
+    const explicitKind = /调查|查看|检查|观察|搜查|翻找|搜寻|休息|睡|等待|询问|打听|问|交谈|对话|聊|拜访|探访|找|同步|商讨|交流|讨论|谈|梳理/u.test(clause)
+      || expected.kind === 'travel';
+    if (proposed && !context.selection && (proposed.locationId !== expected.locationId
+      || ((boundIntent || explicitKind) && proposed.kind !== expected.kind)
+      || (boundIntent && proposed.scope !== expected.scope))) {
+      throw new Error('导演行动阶段与玩家原始意图的种类或目的地不匹配。');
+    }
+    addStep(proposed, expected, clause, false);
+    location = steps.at(-1)!.locationId;
+    proposalIndex += proposed ? 1 : 0;
   }
-  const requiredArrivalEvents = new Set(context.proposedScene?.sceneContract.requiredKnowledgeEvents
-    .map(event => event.eventId) ?? []);
-  const arrivalSources = approvedKnowledgeSources.filter(source => requiredArrivalEvents.has(source.slice('accepted-event:'.length)));
-  const workKnowledgeSources = approvedKnowledgeSources.filter(source => !arrivalSources.includes(source));
-
-  if (arrivalSources.length && context.proposedScene) {
-    const arrivalLocationId = context.proposedScene.locationId;
+  const requestedStepCount = steps.length;
+  const originalSteps = new Set(steps);
+  const originalLocations = new Set([context.currentLocationId, ...steps.map(step => step.locationId)]);
+  const extensionStepCount = supplied.length - proposalIndex;
+  const stayPut = /不(?:离开|出门|外出|去别处|去其他)|留在(?:原地|这里|此处)|只在(?:这里|此处|原地)|只在[^，,。；;！？!?]{1,24}?(?:询问|追问|打听|调查|搜查|查看|检查|观察)/u.test(context.originalInput);
+  const noAdditionalAction = /不(?:要)?(?:做|进行|开展|安排)(?:任何)?(?:其他|其它|别的|额外)(?:的)?(?:调查|行动|事情)/u.test(context.originalInput);
+  if (extensionStepCount && (noAdditionalAction || context.selection || recognizedIntent.steps.some(step => ['rest', 'wait'].includes(step.kind))
+    || !recognizedIntent.steps.some(step => ['inquiry', 'investigation', 'search'].includes(step.kind)))) {
+    throw new Error('原行动不允许追加调查阶段。');
+  }
+  while (proposalIndex < supplied.length) {
+    addStep(readProposal(proposalIndex), undefined, '', true);
+    const appended = steps.at(-1)!;
+    if (stayPut && appended.locationId !== location) throw new Error('后续行动违反玩家不离开原地的明确限制。');
+    if (!structuralOnly && !originalLocations.has(appended.locationId)) {
+      const scene = context.sceneContextsByLocation?.[appended.locationId];
+      if (!scene || scene.locationId !== appended.locationId || scene.sceneContract.destinationLocationId !== appended.locationId) {
+        throw new Error('后续行动目的地缺少匹配的程序场景契约。');
+      }
+    }
+    location = appended.locationId;
+    proposalIndex += 1;
+  }
+  if (steps.length > 8) throw new Error('单次复合行动超过八个阶段，请拆分行动。');
+  const intentAnalysis: ActionIntentPlanAnalysis = { requestedStepCount, extensionStepCount,
+    steps: steps.map(({ id, kind, scope, locationId }) => ({ id, kind: kind as DirectorActionStepProposal['kind'], scope, locationId })) };
+  const scenes = { ...(context.proposedScene ? { [context.proposedScene.locationId]: context.proposedScene } : {}),
+    ...context.sceneContextsByLocation };
+  const arrivalEventIds = new Set(Object.values(scenes).flatMap(scene => scene.sceneContract.requiredKnowledgeEvents.map(event => event.eventId)));
+  const workKnowledgeSources = approvedKnowledgeSources.filter(source => !arrivalEventIds.has(source.slice('accepted-event:'.length)));
+  for (const scene of Object.values(scenes)) {
+    const required = new Set(scene.sceneContract.requiredKnowledgeEvents.map(event => event.eventId));
+    const arrivalSources = approvedKnowledgeSources.filter(source => required.has(source.slice('accepted-event:'.length)));
+    if (!arrivalSources.length) continue;
+    const arrivalLocationId = scene.locationId;
+    // An encounter already requested here cannot migrate to a later return leg.
+    if (arrivalLocationId === context.currentLocationId) {
+      const initialWork = steps.find(step => originalSteps.has(step) && step.locationId === arrivalLocationId
+        && ['inquiry', 'investigation', 'search'].includes(step.kind));
+      if (initialWork) {
+        initialWork.completionSourceIds.push(...arrivalSources);
+        continue;
+      }
+    }
     let priorLocationId = context.currentLocationId;
+    let attached = false;
     for (let index = 0; index < steps.length; index += 1) {
       const step = steps[index];
       if (step.locationId === arrivalLocationId && priorLocationId !== arrivalLocationId) {
-        if (step.kind === 'travel') {
-          step.completionSourceIds = [...arrivalSources];
-        } else {
+        if (step.kind === 'travel') step.completionSourceIds.push(...arrivalSources);
+        else {
           let arrivalId = `arrival:${index}:${arrivalLocationId}`;
           while (ids.has(arrivalId)) arrivalId = `${arrivalId}:program`;
           ids.add(arrivalId);
           steps.splice(index, 0, { id: arrivalId, kind: 'travel', scope: 'normal',
             locationId: arrivalLocationId, completionSourceIds: [...arrivalSources] });
         }
+        attached = true;
         break;
       }
       priorLocationId = step.locationId;
+    }
+    if (!attached && arrivalLocationId === context.currentLocationId) {
+      const introductionWork = steps.find(step => step.locationId === arrivalLocationId
+        && ['inquiry', 'investigation', 'search'].includes(step.kind));
+      if (introductionWork) introductionWork.completionSourceIds.push(...arrivalSources);
     }
   }
 
   // Ambiguous case facts remain tied to the fact gate's location, while other
   // knowledge milestones remain on the final completed work stage.
-  const workSteps = steps.filter(step => ['inquiry', 'investigation', 'search'].includes(step.kind));
+  const workSteps = steps.filter(step => originalSteps.has(step) && ['inquiry', 'investigation', 'search'].includes(step.kind));
   const sourceLocationId = context.sourceLocationId ?? context.currentLocationId;
   const lastEligibleFactWork = [...workSteps].reverse().find(step => step.locationId === sourceLocationId);
   if (lastEligibleFactWork) lastEligibleFactWork.completionSourceIds.push(...approvedFactSources);
@@ -269,11 +343,7 @@ export function buildActionAuthorityInput(
     lastWork.completionSourceIds.push(...workKnowledgeSources);
     lastWork.completionSourceIds = [...new Set(lastWork.completionSourceIds)];
   }
-  if (context.proposedScene?.locationId === context.currentLocationId) {
-    const introductionWork = workSteps.find(step => step.locationId === context.currentLocationId);
-    if (introductionWork) introductionWork.completionSourceIds = [...new Set([...introductionWork.completionSourceIds, ...arrivalSources])];
-  }
-  return { ...base, steps, explicitBudgetMinutes: context.inputOrigin === 'menu' ? undefined : explicitDuration(context.originalInput) };
+  return { ...base, steps, intentAnalysis, explicitBudgetMinutes: context.inputOrigin === 'menu' ? undefined : explicitDuration(context.originalInput) };
 }
 
 /** A passed final audit is necessary; merely planned/summary-only facts are not learned. */
@@ -329,7 +399,7 @@ export function projectExecutedPlan(
   resolution: ResolvedActionOutcome,
   presentNpcIds: readonly string[] = [],
   segmentNpcIdsByLocation: Readonly<Record<string, readonly string[]>> = {},
-  executedSceneContract?: WriterPacket['sceneContract'],
+  executedSceneContract?: WriterPacket['sceneContract'] | NonNullable<WriterPacket['sceneContract']>[],
 ): DirectorPlan {
   const completed = new Set(resolution.completedSourceIds);
   const partial = resolution.executedMinutes < resolution.plannedMinutes
@@ -347,8 +417,8 @@ export function projectExecutedPlan(
     id: `executed:${index}`, purpose: segment.step.kind === 'event' ? '传达定时事件' : '演绎已执行的行动片段',
     description: executedSegmentDescription(segment),
     // Event/transit beats do not imply an in-person reception at the map anchor.
-    ...(!nonWork ? { locationId: segment.step.kind === 'travel' && !segment.completed
-      ? resolution.startLocationId : segment.step.locationId } : {}),
+    ...(!nonWork && segment.step.kind !== 'event'
+      ? { locationId: segment.step.kind === 'travel' ? 'street' : segment.step.locationId } : {}),
     speakerIds: !nonWork && segment.executedMinutes > 0
       && ['inquiry', 'investigation', 'search'].includes(segment.step.kind)
       ? castForSegment(segment.step.locationId) : [],
@@ -356,16 +426,22 @@ export function projectExecutedPlan(
   // A later boundary may withhold work results, but cannot erase an encounter
   // from a journey already completed in this execution. Rebuild only public
   // interaction, never copy plan prose that may depend on withheld findings.
-  const enRouteNpcIds = executedSceneContract?.requiredEnRouteNpcIds ?? [];
-  if (rewriteBeats && !nonWork && enRouteNpcIds.length) {
-    const arrivalIndex = resolution.segments.findIndex(segment => segment.step.kind === 'travel'
-      && segment.step.locationId === executedSceneContract?.destinationLocationId
-      && segment.completed && segment.executedMinutes > 0
-      && segment.cumulativeExecutedMinutes === segment.executedMinutes);
-    if (arrivalIndex >= 0) beats.splice(arrivalIndex, 0, {
-      id: `executed:en-route:${arrivalIndex}`, purpose: '演绎已完成路程中的规定遭遇',
-      description: '在抵达前的路途中，与场景契约规定的人物短暂互动；只按公开身份演绎，不披露未完成调查的结果。',
-      locationId: 'street', speakerIds: [...enRouteNpcIds],
+  const executedContracts = Array.isArray(executedSceneContract)
+    ? executedSceneContract : executedSceneContract ? [executedSceneContract] : [];
+  if (rewriteBeats) {
+    resolution.segments.forEach((segment, segmentIndex) => {
+      if (segment.step.kind !== 'travel' || !segment.completed || segment.executedMinutes <= 0
+        || segment.cumulativeExecutedMinutes !== segment.executedMinutes) return;
+      const enRouteNpcIds = [...new Set(executedContracts
+        .filter(contract => contract.destinationLocationId === segment.step.locationId)
+        .flatMap(contract => contract.requiredEnRouteNpcIds))];
+      if (!enRouteNpcIds.length) return;
+      const arrivalIndex = beats.findIndex(beat => beat.id === `executed:${segmentIndex}`);
+      if (arrivalIndex >= 0) beats.splice(arrivalIndex, 0, {
+        id: `executed:en-route:${segmentIndex}`, purpose: '演绎已完成路程中的规定遭遇',
+        description: '在抵达前的路途中，与场景契约规定的人物短暂互动；只按公开身份演绎，不披露未完成调查的结果。',
+        locationId: 'street', speakerIds: enRouteNpcIds,
+      });
     });
   }
   if (!beats.length) beats.push({ id: 'boundary', purpose: '行动在事件边界暂停',
