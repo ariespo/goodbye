@@ -354,6 +354,17 @@ describe('executed plan projection', () => {
       plannedMinutes: 105, executedMinutes: 30, cumulativeExecutedMinutes: 30, completed: false, staminaDelta: -4 }],
     completedSourceIds: [], eventEffectIds: [], interruption: { id: 'death-news', at: '2024-09-09T16:00:00' },
     resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 96, sanity: 70 } } };
+  it('authorizes the settled reset cause without treating a future plan as a reset', () => {
+    expect(buildActionOutcomeSources(partial).some(source => source.id.startsWith('cycle-boundary:'))).toBe(false);
+    const midnight = { ...partial, endTime: '2024-09-10T00:00:00' };
+    expect(buildActionOutcomeSources(midnight)).toContainEqual(expect.objectContaining({
+      id: 'cycle-boundary:partial', text: expect.stringContaining('午夜已到'),
+    }));
+    const exhausted = { ...partial, resources: { ...partial.resources, after: { stamina: 0, sanity: 70 } } };
+    expect(buildActionOutcomeSources(exhausted)).toContainEqual(expect.objectContaining({
+      id: 'cycle-boundary:partial', text: expect.stringContaining('体力耗尽'),
+    }));
+  });
   it('removes uncompleted finding from revelations, beats and dependent menus', () => {
     const original = { ...plan, beats: [{ id: 'secret', purpose: '发现', description: '发现学校未登记入校的记录' }],
       scenePlan: { observeFocus: '学校未登记入校的记录', investigateIntents: [], actionIntents: [] } };

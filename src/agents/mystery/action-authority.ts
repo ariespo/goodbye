@@ -1,4 +1,5 @@
 import { getLocationById, resolveRegisteredLocation } from '../../data/locations';
+import { checkCycleFailure } from '../../engine/cycle-failure';
 import { resolveActionNarrativeContext, type ActionNarrativeContext } from '../../engine/action-narrative-context';
 import type { ActionContinuation, ActionScope, ActionStep, ResolveActionInput, ResolvedActionOutcome } from '../../engine/action-resolution';
 import type { DirectorPlan, FactReview, WriterPacket } from './types';
@@ -378,6 +379,9 @@ export function buildActionOutcomeSources(resolution: ResolvedActionOutcome, ret
     : `行动结束时，玩家位于${locationName}（${resolution.endLocationId}）。`;
   const sources = [{ id: `resolution:${resolution.id}`,
     text: `本次行动从${resolution.startTime}持续到${resolution.endTime}，共过去${resolution.executedMinutes}分钟。${locationOutcome}体力从${before.stamina}变为${after.stamina}，理智从${before.sanity}变为${after.sanity}。` }];
+  const resetReason = checkCycleFailure({ ...after, time: new Date(resolution.endTime) });
+  if (resetReason) sources.push({ id: `cycle-boundary:${resolution.id}`,
+    text: `本次结算在${resolution.endTime}到达当日行动终止边界，原因是${resetReason === 'day-end' ? '午夜已到' : resetReason === 'stamina' ? '体力耗尽' : '理智耗尽'}。当天行动在此中断，未执行的计划不能继续完成。仅演出已发生的原因与中断；后续进入结局还是重置到9月9日08:00，由程序按结局优先规则决定，当前正文不得提前宣告。` });
   if (resolution.segments.some(segment => !segment.completed)) sources.push({ id: `partial:${resolution.id}`,
     text: '这次行动在全部计划完成前暂停；尚未完成的阶段没有产生完整结果。' });
   if (resolution.interruption) sources.push({ id: `interruption:${resolution.id}`,

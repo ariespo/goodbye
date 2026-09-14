@@ -13,23 +13,12 @@ export { settleCycleVariables } from '../engine/cycle-settlement';
 export const STAY_OPTION_TEXT = '不出门，陪文穗过完今天';
 export const GOODBYE_OPTION_TEXT = '对文穗说再见';
 
-export type CycleResetReason = 'stamina' | 'sanity' | 'day-end' | 'stay';
+import type { CycleResetReason } from '../engine/cycle-failure';
+export { checkCycleFailure, type CycleResetReason } from '../engine/cycle-failure';
 
 export interface CycleTransitionContext {
   lastPlayerChoice?: string;
   lastTurnSummary?: string;
-}
-
-const DAY_END = new Date(2024, 8, 10, 0, 0);
-
-/** 判断本回合结束后是否触发轮回重置(体力/理智耗尽或一天结束) */
-export function checkCycleFailure(status: { stamina: number; sanity: number; time: Date }): CycleResetReason | null {
-  if (status.stamina <= 0) return 'stamina';
-  if (status.sanity <= 0) return 'sanity';
-  if (status.time instanceof Date && !Number.isNaN(status.time.getTime()) && status.time.getTime() >= DAY_END.getTime()) {
-    return 'day-end';
-  }
-  return null;
 }
 
 /**

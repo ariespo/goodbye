@@ -2,6 +2,7 @@ import { maintextToScene } from './scene-parser';
 import type { Scene } from '../sillytavern/types';
 import { clampTimeCost } from './game-clock';
 import type { ResolvedActionOutcome } from './action-resolution';
+import { checkCycleFailure } from './cycle-failure';
 
 /** Evidence must name this victim and report death, not hint at a meeting or her parents. */
 export function hasDeliveredDeathNews(narrative: string | Pick<Scene, 'lines'>): boolean {
@@ -45,6 +46,11 @@ export function validateNarrativeContract(scene: Pick<Scene, 'lines'> | null, op
     errors.push({ code: 'PREMATURE_MIDNIGHT', message: '本回合获准分钟数尚未抵达午夜，不能写午夜已到、过夜或次日晨起；按权威本地时钟重写，日终重置由程序执行。' });
   }
   if (options.resolvedAction) {
+    const resetReason = checkCycleFailure({ ...options.resolvedAction.resources.after, time: new Date(options.resolvedAction.endTime) });
+    if (resetReason && scene.lines.at(-1)?.effect !== 'loop-transition') {
+      errors.push({ code: 'CYCLE_RESET_NOT_RENDERED',
+        message: `程序结算到${options.resolvedAction.endTime}已到当日行动终止边界（${resetReason}），但正文没有边界收尾。请修改剧情：保留实际完成的行动与后果，演出对应的午夜/体力/理智中断；在最后一段旁白之前添加“效果|loop-transition”作为视觉衔接，不得继续当天行动、补完未执行阶段或改动结算。后续进入结局还是08:00重置由程序决定，当前正文不得提前宣告。` });
+    }
     // A narrow numerical sentinel. Semantic assertion review handles other
     // duration claims, figurative language and sub-scenes within this interval.
     const elapsedClaims = narration.matchAll(/(?:^|[。！？\n])(?:这(?:次|场|轮)(?:调查|问询|搜查|走访|行动|休息|等待)|整个(?:过程|调查|行动))(?:共|总共|一共)?(?:耗时|持续了|花了|用了|用去)([零一二两三四五六七八九十百\d]+)(分钟|小时)(?=[。！？\n]|$)/gu);

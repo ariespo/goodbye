@@ -1,7 +1,7 @@
 import type { DynamicRecord, Ending, GameStatus } from '../sillytavern/types';
 import { checkEndingConditions } from '../sillytavern/ending-checker';
 import { mergeVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
-import { checkCycleFailure, type CycleResetReason } from '../utils/cycleLoop';
+import { checkCycleFailure, type CycleResetReason } from './cycle-failure';
 import { advanceClock, clampTimeCost, laterTime } from './game-clock';
 import { checkScheduledEvents } from './scheduled-events';
 import { hasDeliveredDeathNews } from './narrative-contract';

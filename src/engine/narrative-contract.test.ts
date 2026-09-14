@@ -10,6 +10,20 @@ const resolved: ResolvedActionOutcome = { id: 'r', cycleCount: 1,
   resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } } };
 
 describe('rendered narrative contracts', () => {
+  it.each(['stamina', 'sanity'] as const)('also requires an ending when %s is exhausted before midnight', resource => {
+    const outcome = { ...resolved, resources: { ...resolved.resources, after: { ...resolved.resources.after, [resource]: 0 } } };
+    const errors = validateNarrativeContract(maintextToScene('对话|旁白|calm|你还在继续翻找。'), {
+      time: new Date(resolved.startTime), timeMinutes: 55, pendingDeathNews: false, resolvedAction: outcome,
+    });
+    expect(errors).toContainEqual(expect.objectContaining({ code: 'CYCLE_RESET_NOT_RENDERED', message: expect.stringContaining(resource) }));
+  });
+  it('returns a concrete writer correction when settled midnight lacks a reset ending', () => {
+    const outcome = { ...resolved, startTime: '2024-09-09T23:30:00', endTime: '2024-09-10T00:00:00', executedMinutes: 30 };
+    const options = { time: new Date(outcome.startTime), timeMinutes: 30, pendingDeathNews: false, resolvedAction: outcome };
+    expect(validateNarrativeContract(maintextToScene('对话|旁白|calm|你还在继续翻找。'), options))
+      .toContainEqual(expect.objectContaining({ code: 'CYCLE_RESET_NOT_RENDERED' }));
+    expect(validateNarrativeContract(maintextToScene('效果|loop-transition\n对话|旁白|calm|午夜到了。眼前的一切断开，你再也无法继续翻找。'), options)).toEqual([]);
+  });
   it.each(['这次调查耗时两小时。', '整个行动用了120分钟。'])('rejects explicit elapsed duration conflicting with resolution: %s', text => {
     const errors = validateNarrativeContract(maintextToScene(`对话|旁白|calm|${text}`), {
       time: new Date(resolved.startTime), timeMinutes: 55, pendingDeathNews: false, resolvedAction: resolved,
@@ -23,7 +37,7 @@ describe('rendered narrative contracts', () => {
     })).toEqual([]);
   });
   it('uses the resolved long wait end rather than the legacy clock clamp', () => {
-    expect(validateNarrativeContract(maintextToScene('对话|旁白|calm|午夜到了。'), {
+    expect(validateNarrativeContract(maintextToScene('效果|loop-transition\n对话|旁白|calm|午夜到了，这一天到头了。'), {
       time: new Date('2024-09-09T16:00:00'), timeMinutes: 480, pendingDeathNews: false,
       resolvedAction: { ...resolved, startTime: '2024-09-09T16:00:00', endTime: '2024-09-10T00:00:00', executedMinutes: 480, plannedMinutes: 480 },
     })).toEqual([]);

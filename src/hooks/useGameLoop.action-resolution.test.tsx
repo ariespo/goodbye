@@ -265,6 +265,35 @@ beforeEach(() => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('resolved action at the real hook boundary', () => {
+  it.each([true, false])('sends a midnight mismatch to Writer before commit (repair succeeds: %s)', async repaired => {
+    const time = '2024-09-09T23:30:00';
+    useGameStore.setState(state => ({
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, time, deathNews: 'delivered' } },
+      game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date(time) } },
+    }));
+    const fixed = prose.replace('对话|旁白|calm|你在房间里查看四周。',
+      '效果|loop-transition\n对话|旁白|calm|午夜到了。你还没翻完的纸页消失在黑暗里，这一天结束了。');
+    const repairRequests: string[] = [];
+    vi.stubGlobal('fetch', async (_url: unknown, init: RequestInit) => {
+      repairRequests.push(String(init.body));
+      expect(useGameStore.getState().game.history).toHaveLength(0);
+      expect(useGameStore.getState().tavern.variables.time).toBe(time);
+      return new Response(JSON.stringify({ choices: [{ message: { content: repaired ? fixed : prose } }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('继续调查房间'); });
+    expect(repairRequests.length).toBeGreaterThan(0);
+    expect(repairRequests[0]).toContain('CYCLE_RESET_NOT_RENDERED');
+    expect(repairRequests[0]).toContain('cycle-boundary:');
+    const state = useGameStore.getState();
+    expect(state.game.history).toHaveLength(repaired ? 1 : 0);
+    expect(state.tavern.variables.time).toBe(repaired ? '2024-09-10T00:00:00' : time);
+    if (repaired) expect(state.game.pendingCycleReset).toBe('day-end');
+    else expect(runStateAgent).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('rejects a stale checklist click before any model or preparation work starts', () => {
     const menu = { ...maintextToScene('对话|旁白|calm|你看着房间。'), investigateItems: [{
       desc: '检查房间', suspect: '无', style: '现实', time: '2分钟', stamina: 99, sanity: 99,
