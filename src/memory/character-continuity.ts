@@ -275,19 +275,25 @@ function beliefReactionEvidence(
   evidence: CharacterContinuityCandidateEvidence,
   assertion: NarrativeAssertion,
 ): boolean {
-  const pattern = status === 'believed'
-    ? /(?:相信|信了|认同|确信|是真的|有道理|合理)/u
-    : status === 'suspected'
-      ? /(?:怀疑|可疑|不确定|未必|也许|可能)/u
-      : /(?:推断|推测|看来|说明|意味着|所以)/u;
-  const negative = status === 'believed'
-    ? /(?:不|并不|没(?:有)?|未曾?|无法|不能|难以)(?:再|真|完全)?(?:相信|信服|认同|确信)|(?:不|并不|未必)是真的/u
-    : status === 'suspected'
-      ? /(?:不再|并不|没(?:有)?|未曾?)怀疑|(?:一点也不|并不)可疑/u
-      : /(?:不|并不|没(?:有)?|未曾?|无法|不能)(?:据此)?(?:推断|推测|说明|意味着)/u;
+  const reactionPolarity = (text: string): 'positive' | 'negative' | 'none' => {
+    const positive = status === 'believed'
+      ? /(?:相信|信了|认同|确信|是真的|有道理|合理)/u
+      : status === 'suspected'
+        ? /(?:怀疑|可疑|不确定|未必|也许|可能)/u
+        : /(?:推断|推测|看来|说明|意味着|所以)/u;
+    const negative = status === 'believed'
+      ? /(?:不|并不|没(?:有)?|未曾?|无法|不能|难以)(?:再|真|完全)?(?:相信|信服|认同|确信)|(?:不|并不|未必)是真的|(?:不|并不|很不)合理|(?:没(?:有)?|无)(?:什么)?道理/u
+      : status === 'suspected'
+        ? /(?:不再|并不|没(?:有)?|未曾?)怀疑|(?:一点也不|并不|不)可疑/u
+        : /(?:不|并不|没(?:有)?|未曾?|无法|不能)(?:据此)?(?:推断|推测|说明|意味着)/u;
+    if (negative.test(text)) return 'negative';
+    return positive.test(text) ? 'positive' : 'none';
+  };
   return spans.some(span => {
     const line = validSpan(span, evidence);
-    if (!line || !pattern.test(span.quote) || negative.test(line.text)) return false;
+    if (!line) return false;
+    const citedClauses = span.quote.split(/[，。！？,!.?；;]/u).map(text => text.trim()).filter(Boolean);
+    if (!citedClauses.some(clause => reactionPolarity(clause) === 'positive')) return false;
     const belongsToObserver = line.speakerId === observerId
       || (line.speakerId === null && lineMentionsCharacter(line.text, observerId));
     if (!belongsToObserver) return false;
@@ -297,7 +303,8 @@ function beliefReactionEvidence(
     const reactionClauses = line.text.split(/[，。！？,!.?；;]/u).map(text => text.trim()).filter(Boolean);
     const directlyBound = reactionClauses.some(clause => {
       const normalizedClause = clause.replace(/[\s，。！？、,!.?]/g, '');
-      return pattern.test(clause) && assertionReferences.some(reference => normalizedClause.includes(reference));
+      return reactionPolarity(clause) === 'positive'
+        && assertionReferences.some(reference => normalizedClause.includes(reference));
     });
     if (directlyBound) return true;
     const assertionLine = evidence.lines.find(candidate => candidate.text.includes(assertion.quote));
@@ -407,6 +414,17 @@ function actionGrounded(action: string, text: string): boolean {
   return expected.length >= 2 && (rendered.includes(expected) || expected.includes(rendered));
 }
 
+function narratedActionIsPerformed(action: string, actorId: string, text: string): boolean {
+  const actorAlias = (CHARACTER_MENTIONS[actorId] ?? [actorId])
+    .find(alias => text.trim().startsWith(alias));
+  if (!actorAlias) return false;
+  const predicate = text.trim().slice(actorAlias.length).trim()
+    .replace(/^(?:已经|刚刚|刚才|终于|当场|随即)/u, '').trim();
+  const expected = canonicalActionText(action);
+  const renderedPredicate = canonicalActionText(predicate);
+  return expected.length >= 2 && renderedPredicate.startsWith(expected);
+}
+
 function affirmativeUndertaking(
   proposal: CharacterContinuityAudit['commitments'][number],
   spans: readonly ReviewedLineSpan[],
@@ -442,7 +460,7 @@ function actionEvidence(
     const nonPerformance = /(?:还没有|尚未|并未|未曾|没有|还没|没能|不能|无法|不曾|尚没有)/u.test(text);
     const prospective = /(?:如果|假如|要是|可能|也许|或许|会|将要|准备|打算|计划|稍后|等会|待会|到时|想要|想|愿意|承诺|答应|同意|决定|试图|尝试|声称|表示)|[？?]/u.test(text);
     const narratedPerformance = line.speakerId === null
-      && (CHARACTER_MENTIONS[actorId] ?? [actorId]).some(alias => text.trim().startsWith(alias));
+      && narratedActionIsPerformed(action, actorId, text);
     const directPerformance = line.speakerId === actorId && /(?:^|[，,。！？!?；;])\s*我(?:已经|刚刚|刚才|终于)?把/u.test(text);
     const completedPerformance = /(?:已经|刚刚|刚才|终于|完成|完毕|办完|做完)|了[。！？!?；;]?$/u.test(text.trim());
     return actorRendered && !nonPerformance && !prospective

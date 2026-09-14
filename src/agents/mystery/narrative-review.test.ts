@@ -112,6 +112,8 @@ describe('deterministic final narrative review', () => {
     expect(request).toContain('未来时的承诺或打算');
     expect(request).toContain('完整时间表达');
     expect(request).toContain('否定或无关命题的反应');
+    expect(request).toContain('不合理或没有道理');
+    expect(request).toContain('拒绝或正要执行');
     expect(request).not.toContain('a-secret-canonical-id');
   });
 

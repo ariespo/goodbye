@@ -360,6 +360,45 @@ describe('character continuity audit validation', () => {
       evidence: negative, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
     }).approved).toBe(false);
 
+    const negativeReasonableness = evidence({
+      candidateText: '对话|赵刚|calm|我认为文穗买过牛奶的说法很不合理。',
+      scene: scene(['赵刚', '我认为文穗买过牛奶的说法很不合理。']), assertions: [factAssertion],
+      sources: [receiptSource], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ beliefs: [{
+        assertionIndex: 0, observerId: 'detective-a', status: 'believed',
+        evidence: [{ lineIndex: 0, quote: '我认为文穗买过牛奶的说法很不合理' }],
+      }] }),
+      evidence: negativeReasonableness, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(false);
+
+    const noReason = evidence({
+      candidateText: '对话|赵刚|calm|我认为文穗买过牛奶的说法没有道理。',
+      scene: scene(['赵刚', '我认为文穗买过牛奶的说法没有道理。']), assertions: [factAssertion],
+      sources: [receiptSource], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ beliefs: [{
+        assertionIndex: 0, observerId: 'detective-a', status: 'believed',
+        evidence: [{ lineIndex: 0, quote: '我认为文穗买过牛奶的说法没有道理' }],
+      }] }),
+      evidence: noReason, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(false);
+
+    const positiveReasonableness = evidence({
+      candidateText: '对话|赵刚|calm|我认为文穗买过牛奶的说法很合理。',
+      scene: scene(['赵刚', '我认为文穗买过牛奶的说法很合理。']), assertions: [factAssertion],
+      sources: [receiptSource], audience: ['detective-a'],
+    });
+    expect(validateCharacterContinuityAudit({
+      audit: reviewed({ beliefs: [{
+        assertionIndex: 0, observerId: 'detective-a', status: 'believed',
+        evidence: [{ lineIndex: 0, quote: '我认为文穗买过牛奶的说法很合理' }],
+      }] }),
+      evidence: positiveReasonableness, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    }).approved).toBe(true);
+
     const unrelated = evidence({
       candidateText: '对话|玩家|calm|文穗买过牛奶。\n对话|赵刚|calm|我相信今天会下雨，这很合理。',
       scene: scene(['玩家', '文穗买过牛奶。'], ['赵刚', '我相信今天会下雨，这很合理。']),
@@ -557,6 +596,25 @@ describe('character continuity audit validation', () => {
       audit: reviewed({ commitments: [{ operation: 'fulfill', existingCommitmentId: commitment.id, actorId: 'detective-a', recipientId: 'player', evidence: [{ lineIndex: 0, quote: '赵刚把值班表交给玩家' }] }] }),
       evidence: performed, memory, cycleCount: 1,
     }).effects?.commitmentOperations).toEqual([expect.objectContaining({ operation: 'fulfill', existingCommitmentId: commitment.id })]);
+
+    const directNarrationCommitment = { ...commitment, action: '交出值班表' };
+    const directNarrationMemory = normalizeWorldMemory({ cycleCount: 1, worldMemory: {
+      ...normalizeWorldMemory({ cycleCount: 1 }), commitments: [directNarrationCommitment],
+    } });
+    const validateNarratedPerformance = (text: string) => validateCharacterContinuityAudit({
+      audit: reviewed({ commitments: [{
+        operation: 'fulfill', existingCommitmentId: commitment.id, actorId: 'detective-a', recipientId: 'player',
+        evidence: [{ lineIndex: 0, quote: text.replace(/。$/u, '') }],
+      }] }),
+      evidence: evidence({
+        candidateText: `对话|旁白|calm|${text}`, scene: scene(['旁白', text]), assertions: [], audience: ['detective-a'],
+      }),
+      memory: directNarrationMemory, cycleCount: 1,
+    });
+    expect(validateNarratedPerformance('赵刚拒绝交出值班表。').approved).toBe(false);
+    expect(validateNarratedPerformance('赵刚正要交出值班表。').approved).toBe(false);
+    expect(validateNarratedPerformance('赵刚交出值班表。').approved).toBe(true);
+    expect(validateNarratedPerformance('赵刚已经交出值班表。').approved).toBe(true);
 
     const futureOnly = evidence({
       candidateText: '对话|赵刚|calm|我会交出值班表。',
