@@ -751,7 +751,8 @@ async function runMysteryPipeline(
     if (isNonWorkResolution(resolvedAction)) {
       writerBrief = { ...writerBrief, sceneContract: undefined, npcPlayerKnowledge: [], characterPerformances: [] };
     }
-    directorPlan = projectExecutedPlan(directorPlan, resolvedAction, executedContext.activeNpcIds, executedContext.segmentNpcIdsByLocation);
+    directorPlan = projectExecutedPlan(directorPlan, resolvedAction, executedContext.activeNpcIds,
+      executedContext.segmentNpcIdsByLocation, writerBrief.sceneContract);
     hardReview = reviewDirectorPlan(directorPlan, writerBrief, writerTurnContext);
     observe.setDirectorPlan(directorPlan);
     observe.setHardReview(hardReview);

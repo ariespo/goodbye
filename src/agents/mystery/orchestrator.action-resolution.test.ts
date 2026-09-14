@@ -30,6 +30,28 @@ const complete: NonNullable<Parameters<typeof prepareMysteryTurn>[0]['complete']
 };
 
 describe('action resolution before Writer construction', () => {
+  it('keeps a completed en-route encounter when destination work stops at 16:00', async () => {
+    const initial = request('standard', false, { time: '2024-09-09T15:35:00',
+      userInput: '前往文穗的中学周边寻找其他知情者' });
+    expect(initial.truthContext.sceneContract?.requiredEnRouteNpcIds).toContain('detective-a');
+    const prepared = await prepareMysteryTurn({ ...initial, complete: async (messages, ...rest) => {
+      const output = JSON.parse(await complete(messages, ...rest));
+      if (output.beats) output.beats = [
+        { id: 'route', purpose: '途中遭遇', description: '途中与货车司机短暂交谈，不涉及案件事实。',
+          locationId: 'street', speakerIds: ['detective-a'] },
+        { id: 'school', purpose: '核实情况', description: '在校门向门卫打听。',
+          locationId: 'school', speakerIds: ['school-guard'] },
+      ];
+      return JSON.stringify(output);
+    } });
+    expect(prepared.writerPacket.resolvedAction).toMatchObject({ executedMinutes: 25,
+      endTime: '2024-09-09T16:00:00', endLocationId: 'school' });
+    expect(prepared.directorPlan.beats[0]).toMatchObject({ locationId: 'street', speakerIds: ['detective-a'] });
+    expect(prepared.directorPlan.beats.findIndex(beat => beat.locationId === 'school')).toBeGreaterThan(0);
+    expect(prepared.writerPacket.authorizedFacts).toEqual([]);
+    expect(prepared.writerPacket.resolvedAction?.continuation).toBeDefined();
+  });
+
   it('keeps the completed supermarket interaction when the next travel leg is interrupted', async () => {
     const prepared = await prepareMysteryTurn({ ...request('standard', false, { time: '2024-09-09T15:00:00', location: 'supermarket',
       userInput: '先调查便利店，再去学校调查', knowledgeEvents: ['meet:chen-huihui'] }), complete: async (messages, ...rest) => {

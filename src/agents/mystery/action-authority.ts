@@ -307,6 +307,7 @@ export function projectExecutedPlan(
   resolution: ResolvedActionOutcome,
   presentNpcIds: readonly string[] = [],
   segmentNpcIdsByLocation: Readonly<Record<string, readonly string[]>> = {},
+  executedSceneContract?: WriterPacket['sceneContract'],
 ): DirectorPlan {
   const completed = new Set(resolution.completedSourceIds);
   const partial = resolution.executedMinutes < resolution.plannedMinutes
@@ -320,7 +321,7 @@ export function projectExecutedPlan(
     return [...new Set(plan.beats.filter(beat => !beat.locationId || beat.locationId === locationId)
       .flatMap(beat => beat.speakerIds ?? []).filter(npcId => allowed.has(npcId)))];
   };
-  const beats = rewriteBeats ? resolution.segments.map((segment, index) => ({
+  const beats: DirectorPlan['beats'] = rewriteBeats ? resolution.segments.map((segment, index) => ({
     id: `executed:${index}`, purpose: segment.step.kind === 'event' ? '传达定时事件' : '演绎已执行的行动片段',
     description: executedSegmentDescription(segment),
     // Event/transit beats do not imply an in-person reception at the map anchor.
@@ -330,6 +331,21 @@ export function projectExecutedPlan(
       && ['inquiry', 'investigation', 'search'].includes(segment.step.kind)
       ? castForSegment(segment.step.locationId) : [],
   })) : plan.beats.map(cloneBeat);
+  // A later boundary may withhold work results, but cannot erase an encounter
+  // from a journey already completed in this execution. Rebuild only public
+  // interaction, never copy plan prose that may depend on withheld findings.
+  const enRouteNpcIds = executedSceneContract?.requiredEnRouteNpcIds ?? [];
+  if (rewriteBeats && !nonWork && enRouteNpcIds.length) {
+    const arrivalIndex = resolution.segments.findIndex(segment => segment.step.kind === 'travel'
+      && segment.step.locationId === executedSceneContract?.destinationLocationId
+      && segment.completed && segment.executedMinutes > 0
+      && segment.cumulativeExecutedMinutes === segment.executedMinutes);
+    if (arrivalIndex >= 0) beats.splice(arrivalIndex, 0, {
+      id: `executed:en-route:${arrivalIndex}`, purpose: '演绎已完成路程中的规定遭遇',
+      description: '在抵达前的路途中，与场景契约规定的人物短暂互动；只按公开身份演绎，不披露未完成调查的结果。',
+      locationId: 'street', speakerIds: [...enRouteNpcIds],
+    });
+  }
   if (!beats.length) beats.push({ id: 'boundary', purpose: '行动在事件边界暂停',
     description: '尚未执行新的调查。说明当前事件打断，保留后续选择。', speakerIds: [] });
   return {
