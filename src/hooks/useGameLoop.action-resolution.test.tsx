@@ -903,6 +903,69 @@ describe('resolved action at the real hook boundary', () => {
     unmount();
   });
 
+  it('keeps the last accepted parsed projection private from a failed draft and publishes the cached draft only after retry commits', async () => {
+    const acceptedParsed = {
+      ...useGameStore.getState().api.parsedContent,
+      thinking: 'accepted thinking',
+      maintext: 'accepted maintext',
+      options: ['accepted option'],
+      summary: 'accepted summary',
+      vars: { accepted: true },
+      observe: 'accepted observation',
+      investigateItems: [{ desc: 'accepted investigation', suspect: '无', style: '现实', time: '5分钟', stamina: 1, sanity: 0 }],
+      actionItems: [{ desc: 'accepted action', style: '现实', time: '5分钟', stamina: 1, sanity: 0 }],
+      actionType: 'act' as const,
+      actionResult: 'accepted result',
+      actionOutcome: {
+        resolutionId: 'accepted-resolution', actionId: 'accepted-action', executedMinutes: 5,
+        executedWorkMinutes: 5, executedTravelMinutes: 0, endTime: '2024-09-09T08:00:00',
+        staminaDelta: -1, sanityDelta: 0,
+      },
+      optionBindings: [{ optionIndex: 0, optionText: 'accepted option', actionId: 'accepted-action' }],
+    };
+    useGameStore.setState(state => ({ api: { ...state.api, parsedContent: acceptedParsed } }));
+    const draft = [
+      '<maintext>场景|home-day\n对话|旁白|calm|你仔细查看早餐和纸条。</maintext>',
+      '<option>新选项一\n新选项二\n新选项三\n新选项四</option>',
+      '<sum>新的摘要。</sum>',
+      '<hint>新的提示。</hint>',
+      '<observe>新的观察。</observe>',
+      '<investigate>新的调查|无|现实|5分钟|1|0</investigate>',
+      '<action>新的行动|现实|5分钟|1|0</action>',
+      '<vars>{}</vars>',
+    ].join('');
+    vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
+      callbacks.onToken(draft);
+      await callbacks.onComplete();
+    });
+    vi.mocked(reviewNarrativeAgainstWriterPacket)
+      .mockRejectedValueOnce(new Error('critic audit remained malformed'))
+      .mockResolvedValue(approved);
+
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('仔细查看早餐和纸条'); });
+
+    const failed = useGameStore.getState();
+    expect(failed.api.turnRecovery).toMatchObject({ phase: 'failed_stream', repairable: true });
+    expect(failed.api.parsedContent).toEqual(acceptedParsed);
+    expect(failed.api.parsedContent.options).not.toContain('新选项一');
+    expect(failed.game.history).toHaveLength(0);
+    expect(failed.tavern.variables).toMatchObject({ time: '2024-09-09T08:00:00', stamina: 100, sanity: 70 });
+
+    await act(async () => { await result.current.retryTurn(); });
+
+    const committed = useGameStore.getState();
+    expect(streamChatCompletion).toHaveBeenCalledTimes(1);
+    expect(committed.game.history).toHaveLength(1);
+    expect(committed.api.parsedContent).toMatchObject({
+      maintext: expect.stringContaining('你仔细查看早餐和纸条。'),
+      options: ['新选项一', '新选项二', '新选项三', '新选项四'],
+      summary: '新的摘要。',
+      observe: '新的观察。',
+    });
+    unmount();
+  });
+
   it.each([['休息一会儿', 112, '09:00:00'], ['等待一会儿', 100, '16:00:00']] as const)('settles %s through the actual prepared hook', async (input, stamina, endTime) => {
     const { result, unmount } = renderHook(() => useGameLoop());
     await act(async () => { await result.current.sendMessage(input); });

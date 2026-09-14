@@ -318,11 +318,6 @@ export function useGameLoop() {
       actions.setApiError(null);
       actions.setStreaming(true);
       parseStateRef.current = createParseState();
-      actions.setParsedContent({
-        ...parseStateRef.current.parsed,
-        actionOutcome: undefined,
-        optionBindings: undefined,
-      });
 
       const pendingNarrativeContext = actionRequest.narrativeContext ?? null;
       const preparation = buildTurnPreparation({
@@ -928,7 +923,6 @@ export function useGameLoop() {
             parseStateRef.current = acceptedCandidate.parseState;
             let completedScene: Scene | null = acceptedCandidate.scene;
             actions.setStreamBuffer(fullText);
-            actions.setParsedContent(parseStateRef.current.parsed);
 
             if (acceptedCandidate.validationErrors.length > 0 || !completedScene) {
               const errors = acceptedCandidate.validationErrors.length > 0
@@ -1151,7 +1145,6 @@ export function useGameLoop() {
 
                   acceptedNarrativeReview = narrativeReview;
                   actions.setStreamBuffer(fullText);
-                  actions.setParsedContent(parseStateRef.current.parsed);
                 } catch (reviewError) {
                   assertCurrent();
                   cachedNarrativeFailure = {

@@ -55,35 +55,39 @@ describe('deterministic final narrative review', () => {
     });
   });
 
-  it('rejects a new live audit that omits the explicit continuity envelope', async () => {
+  it('fails after the structured retry still omits the explicit continuity envelope', async () => {
     const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
-    const review = await reviewNarrativeAgainstWriterPacket({
+    let calls = 0;
+    await expect(reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority,
       narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
-      complete: async () => JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit }),
-    });
+      complete: async () => {
+        calls += 1;
+        return JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit });
+      },
+    })).rejects.toThrow('正文连续性审查必须返回完整');
 
-    expect(review.approved).toBe(false);
-    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-continuity-audit' }));
-    expect(review.continuityEffects).toBeUndefined();
+    expect(calls).toBe(2);
   });
 
-  it('rejects a malformed live continuity envelope without treating missing arrays as empty', async () => {
+  it('fails after the structured retry keeps a malformed continuity envelope', async () => {
     const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
-    const review = await reviewNarrativeAgainstWriterPacket({
+    let calls = 0;
+    await expect(reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority,
       narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
-      complete: async () => JSON.stringify({
-        approved: true, violations: [], corrections: [], assertionAudit,
-        continuityAudit: { reviewed: true, disclosures: [] },
-      }),
-    });
+      complete: async () => {
+        calls += 1;
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [], assertionAudit,
+          continuityAudit: { reviewed: true, disclosures: [] },
+        });
+      },
+    })).rejects.toThrow('正文连续性审查必须返回完整');
 
-    expect(review.approved).toBe(false);
-    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-continuity-audit' }));
-    expect(review.continuityEffects).toBeUndefined();
+    expect(calls).toBe(2);
   });
 
   it('sends numbered accepted-scene evidence without private canonical bindings', async () => {
@@ -442,7 +446,12 @@ describe('deterministic final narrative review', () => {
       }],
       playerKnownFacts: [],
     } as unknown as WriterPacket;
-    const narrative = '<maintext>旁白|楼梯扶手上的擦痕与已知线索闭合：这是伪装成意外的推落。周德明只说记不清。</maintext>';
+    const narrative = [
+      '<maintext>',
+      '对话|旁白|calm|楼梯扶手上的擦痕与已知线索闭合：这是伪装成意外的推落。',
+      '对话|周德明|calm|只说记不清。',
+      '</maintext>',
+    ].join('\n');
 
     const review = await reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' },
@@ -480,6 +489,9 @@ describe('deterministic final narrative review', () => {
               quote: '这是伪装成意外的推落',
             }],
             reason: '逐项匹配授权确认。',
+          }, {
+            field: 'maintext', quote: '只说记不清。', proposition: '周德明表示记不清',
+            status: 'ordinary-present', citations: [], reason: '当前对话中的普通回应。',
           }],
         },
       }),
@@ -531,40 +543,103 @@ describe('deterministic final narrative review', () => {
     expect(review.assertionAudit?.assertions).toHaveLength(1);
   });
 
-  it('rejects a blanket live approval with no assertion audit', async () => {
-    const review = await reviewNarrativeAgainstWriterPacket({
+  it('fails after the structured retry still returns no assertion audit', async () => {
+    let calls = 0;
+    await expect(reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' },
       preset: null,
       packet: completeEmptyAuthority,
       narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
-      complete: async () => JSON.stringify({
-        approved: true, violations: [], corrections: [], continuityAudit: emptyContinuityAudit,
-      }),
-    });
+      complete: async () => {
+        calls += 1;
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [], continuityAudit: emptyContinuityAudit,
+        });
+      },
+    })).rejects.toThrow('正文断言审查缺少有效字段');
 
-    expect(review.approved).toBe(false);
-    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-assertion-audit' }));
+    expect(calls).toBe(2);
   });
 
-  it('rejects a live audit that covers rain but omits a second material sentence', async () => {
+  it('retries incomplete assertion metadata with the same critic before semantic review', async () => {
+    const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
+    const malformedAudit = {
+      ...assertionAudit,
+      assertions: [{
+        field: 'maintext', quote: '雨还在下。', proposition: '雨还在下。',
+        status: 'ordinary-present', citations: [],
+      }],
+    };
+    const requests: Array<Array<{ role: string; content: string }>> = [];
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
+      complete: async messages => {
+        requests.push(messages);
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [],
+          assertionAudit: requests.length === 1 ? malformedAudit : assertionAudit,
+          continuityAudit: emptyContinuityAudit,
+        });
+      },
+    });
+
+    expect(review.approved).toBe(true);
+    expect(requests).toHaveLength(2);
+    expect(requests[1][2]).toMatchObject({ role: 'assistant', content: expect.stringContaining('"assertionAudit"') });
+    expect(requests[1][3]?.content).toContain('理由');
+  });
+
+  it('does not retry a structurally complete unsupported assertion', async () => {
+    let calls = 0;
+    const claim = '她今天没有到校。';
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: `<maintext>对话|旁白|calm|${claim}</maintext>`,
+      complete: async () => {
+        calls += 1;
+        return JSON.stringify({
+          approved: false, violations: [], corrections: [], continuityAudit: emptyContinuityAudit,
+          assertionAudit: {
+            reviewedFields: ['maintext'],
+            assertions: [{
+              field: 'maintext', quote: claim, proposition: '文穗今天没有到校', status: 'unsupported',
+              citations: [], reason: '没有任何授权来源支持这项考勤结论。',
+            }],
+          },
+        });
+      },
+    });
+
+    expect(calls).toBe(1);
+    expect(review.approved).toBe(false);
+    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'unsupported-assertion' }));
+  });
+
+  it('fails after the structured retry still omits a material sentence', async () => {
     const narrative = [
       '<maintext>',
       '对话|旁白|calm|雨还在下。',
       '对话|旁白|calm|她没有到校。',
       '</maintext>',
     ].join('\n');
-    const review = await reviewNarrativeAgainstWriterPacket({
+    let calls = 0;
+    await expect(reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority, narrative,
-      complete: async () => JSON.stringify({
-        approved: true, violations: [], corrections: [],
-        continuityAudit: emptyContinuityAudit,
-        assertionAudit: ordinaryAudit('maintext', '雨还在下。', 'ordinary-present'),
-      }),
-    });
+      complete: async () => {
+        calls += 1;
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [],
+          continuityAudit: emptyContinuityAudit,
+          assertionAudit: ordinaryAudit('maintext', '雨还在下。', 'ordinary-present'),
+        });
+      },
+    })).rejects.toThrow('没有覆盖全部可播放文字');
 
-    expect(review.approved).toBe(false);
-    expect(review.violations).toContainEqual(expect.objectContaining({ code: 'incomplete-assertion-audit' }));
+    expect(calls).toBe(2);
   });
 
   it.each([
@@ -673,6 +748,7 @@ describe('deterministic final narrative review', () => {
 
   it('requests the narrative assertion schema rather than the plan fact-review schema', async () => {
     let responseName = '';
+    let systemRequest = '';
     let request = '';
     const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
     await reviewNarrativeAgainstWriterPacket({
@@ -680,6 +756,7 @@ describe('deterministic final narrative review', () => {
       packet: completeEmptyAuthority,
       narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
       complete: async (messages, options) => {
+        systemRequest = messages[0]?.content ?? '';
         request = messages[1]?.content ?? '';
         const format = options?.responseFormat;
         responseName = format?.type === 'json_schema' ? format.json_schema.name : '';
@@ -690,6 +767,11 @@ describe('deterministic final narrative review', () => {
     });
 
     expect(responseName).toBe('narrative_fact_review');
+    expect(systemRequest).toContain('前述三字段示例不适用于本调用');
+    expect(systemRequest).toContain('field、quote、proposition、status、citations、reason');
     expect(request).toContain('每个可见句子都必须由 assertion.quote 覆盖');
+    expect(request).toContain('field、quote、proposition、status、citations、reason');
+    expect(request).toContain('reason 必须是非空');
+    expect(request).toContain('continuityAudit');
   });
 });

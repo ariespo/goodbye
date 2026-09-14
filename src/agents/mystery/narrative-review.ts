@@ -31,6 +31,110 @@ import {
 } from './fact-assertion-review';
 import type { FactAliasTable } from './fact-aliases';
 
+const ASSERTION_STATUSES = new Set([
+  'supported', 'unsupported', 'contradicted', 'question', 'hypothesis', 'ordinary-present',
+]);
+const BELIEF_STATUSES = new Set(['believed', 'suspected', 'inferred']);
+const COMMITMENT_OPERATIONS = new Set(['accept', 'fulfill', 'cancel']);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isReviewedLineSpan(value: unknown): boolean {
+  return isRecord(value)
+    && Number.isSafeInteger(value.lineIndex) && Number(value.lineIndex) >= 0
+    && isNonEmptyString(value.quote);
+}
+
+/** Reject incomplete critic metadata inside the structured-output retry boundary. */
+function parseNarrativeFactReview(
+  raw: string,
+  assertionSources: ReturnType<typeof buildAssertionSources>,
+  narrativeFields: Record<string, string>,
+): FactReview {
+  const parsed = extractJson(raw);
+  if (!isRecord(parsed) || typeof parsed.approved !== 'boolean'
+    || !Array.isArray(parsed.violations) || parsed.violations.some(violation => (
+      !isRecord(violation) || !isNonEmptyString(violation.code) || !isNonEmptyString(violation.message)
+      || (violation.factId !== undefined && typeof violation.factId !== 'string')
+    ))
+    || !Array.isArray(parsed.corrections)
+    || parsed.corrections.some(correction => typeof correction !== 'string')) {
+    throw new Error('正文事实复核返回了不可解析的顶层结果。');
+  }
+
+  const assertionAudit = parsed.assertionAudit;
+  if (!isRecord(assertionAudit)
+    || !Array.isArray(assertionAudit.reviewedFields)
+    || assertionAudit.reviewedFields.some(field => !isNonEmptyString(field))
+    || !Array.isArray(assertionAudit.assertions)
+    || assertionAudit.assertions.some(assertion => {
+      if (!isRecord(assertion)
+        || !isNonEmptyString(assertion.field)
+        || !isNonEmptyString(assertion.quote)
+        || !isNonEmptyString(assertion.proposition)
+        || !isNonEmptyString(assertion.status) || !ASSERTION_STATUSES.has(assertion.status)
+        || !Array.isArray(assertion.citations)
+        || !isNonEmptyString(assertion.reason)) return true;
+      return assertion.citations.some(citation => (
+        !isRecord(citation) || !isNonEmptyString(citation.sourceId) || !isNonEmptyString(citation.quote)
+      ));
+    })) {
+    throw new Error('正文断言审查缺少有效字段、原文引文、命题、状态、引用或理由。');
+  }
+  const coverage = validateAssertionAudit(
+    assertionAudit as unknown as AssertionAudit,
+    assertionSources,
+    narrativeFields,
+  );
+  const incompleteCoverage = coverage.violations.filter(violation => violation.code === 'incomplete-assertion-audit');
+  if (incompleteCoverage.length > 0) {
+    throw new Error(incompleteCoverage.map(violation => violation.message).join('\n'));
+  }
+
+  const continuityAudit = parsed.continuityAudit;
+  if (!isRecord(continuityAudit) || continuityAudit.reviewed !== true
+    || !Array.isArray(continuityAudit.disclosures)
+    || !Array.isArray(continuityAudit.beliefs)
+    || !Array.isArray(continuityAudit.commitments)
+    || continuityAudit.disclosures.some(disclosure => (
+      !isRecord(disclosure)
+      || !Number.isSafeInteger(disclosure.assertionIndex) || Number(disclosure.assertionIndex) < 0
+      || !Number.isSafeInteger(disclosure.lineIndex) || Number(disclosure.lineIndex) < 0
+      || !isNonEmptyString(disclosure.quote)
+      || !Array.isArray(disclosure.listenerIds)
+      || disclosure.listenerIds.some(listenerId => !isNonEmptyString(listenerId))
+      || !Array.isArray(disclosure.audienceEvidence)
+      || disclosure.audienceEvidence.some(span => !isReviewedLineSpan(span))
+    ))
+    || continuityAudit.beliefs.some(belief => (
+      !isRecord(belief)
+      || !Number.isSafeInteger(belief.assertionIndex) || Number(belief.assertionIndex) < 0
+      || !isNonEmptyString(belief.observerId)
+      || !isNonEmptyString(belief.status) || !BELIEF_STATUSES.has(belief.status)
+      || !Array.isArray(belief.evidence) || belief.evidence.some(span => !isReviewedLineSpan(span))
+    ))
+    || continuityAudit.commitments.some(commitment => (
+      !isRecord(commitment)
+      || !isNonEmptyString(commitment.operation) || !COMMITMENT_OPERATIONS.has(commitment.operation)
+      || !isNonEmptyString(commitment.actorId) || !isNonEmptyString(commitment.recipientId)
+      || !Array.isArray(commitment.evidence) || commitment.evidence.some(span => !isReviewedLineSpan(span))
+      || (commitment.existingCommitmentId !== undefined && !isNonEmptyString(commitment.existingCommitmentId))
+      || (commitment.action !== undefined && !isNonEmptyString(commitment.action))
+      || (commitment.locationId !== undefined && !isNonEmptyString(commitment.locationId))
+      || (commitment.dueAt !== undefined && !isNonEmptyString(commitment.dueAt))
+    ))) {
+    throw new Error('正文连续性审查必须返回完整、有效的 reviewed、disclosures、beliefs 与 commitments。');
+  }
+
+  return parsed as unknown as FactReview;
+}
+
 export interface NarrativeRepairFailure {
   draft: string;
   /** The draft is valid; retry must resume at the reviewer instead of invoking Writer. */
@@ -270,7 +374,8 @@ continuityContext.publicContinuity 是已经展示的可信开局事件；author
 若 publicContinuity 已展示今早06:50的消息，允许“她今早发消息说今天不去学校”或“她六点五十说今天不去学校”等有限转述；06:50与六点五十是同一时间，消息发送时间不必出现在引号内的消息正文中。转述只证明她这样说过，不能推成确认未到校、已请假或新的购买/去向记录。逐个局部断言比对来源，不要因句中有“她今早”就把整句判成未授权往事。
 只拒绝明确新增且无授权的事实、物证、具体旧事件、时间线矛盾或人物知识/身份越界。例如擅自确认考勤、请假条、过去具体购买记录，或与已展示今早06:50消息矛盾的说法。请指出具体原句及缺失来源或冲突来源。
 普通当下服务动作、当前对话、递交商品和关怀性口吻本身不构成新案件事实；不要因涉及学校、牛奶或善意关怀就拒绝。不要以未逐字复述计划或语气偏好代替事实审核。
-发现违规时要求完整修复问答、旁白和依赖选项，不允许静默删除整条台词使对话断链。`;
+发现违规时要求完整修复问答、旁白和依赖选项，不允许静默删除整条台词使对话断链。
+本调用复核正文，前述三字段示例不适用于本调用。必须返回 approved、violations、corrections、assertionAudit、continuityAudit 五个顶层字段。assertionAudit 必须含 reviewedFields 与 assertions；每条 assertion 必须完整返回 field、quote、proposition、status、citations、reason。continuityAudit 必须含 reviewed=true 以及 disclosures、beliefs、commitments 三个数组。不得省略嵌套字段、编造字段值或用顶层 approved 代替逐项审查。`;
 
 export function sanitizeNarrativeFactReview(
   review: FactReview,
@@ -370,14 +475,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     [...messages],
     { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
     NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT,
-    raw => {
-      const parsed = extractJson(raw) as Partial<FactReview> | null;
-      if (!parsed || typeof parsed.approved !== 'boolean'
-        || !Array.isArray(parsed.violations) || !Array.isArray(parsed.corrections)) {
-        throw new Error('正文事实复核返回了不可解析的结果。');
-      }
-      return parsed as FactReview;
-    },
+    raw => parseNarrativeFactReview(raw, assertionSources, narrativeFields),
   );
   const auditReview = validateAssertionAudit(
     value.assertionAudit as AssertionAudit,

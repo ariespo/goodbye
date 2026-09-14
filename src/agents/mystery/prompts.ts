@@ -230,11 +230,12 @@ authorizedFacts 中的 text 就是本回合可直接呈现的授权内容；deli
 逐项审查 NarrativeFields 中每个字段的每个实质命题，包括 maintext、每个 option、summary、hint、observation、investigate 与 action。reviewedFields 必须逐字列出全部字段名；每个可见句子都必须由 assertion.quote 覆盖，同一行有多个句子时也要全部枚举，普通当下动作也不能省略。场景、音乐、镜头、效果、动作与认知等纯控制指令不算可见句子。不能用顶层 approved 代替逐项审查。
 supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quote 中逐字引用该来源 text 的非空片段。真实 sourceId 或真实但无关的来源片段不等于语义支持；你必须实际比较 proposition 与来源，不能用关键词、相同时间或来源存在本身推断蕴含关系。unsupported/contradicted 必须如实标记，即使顶层可能获准也不能省略。
 问题标为 question，明确带“可能/也许”等不确定性的假设标为 hypothesis，普通当下动作标为 ordinary-present；这三类通常不需要事实引用。否定性考勤、登录、删除、未出现、未到场等仍是事实命题，不能自动视为安全。本次拨号无人接听只说明本次没有接听，不能推成登录、阅读、删除或此前去向。
+  assertionAudit 的每条 assertion 都必须完整返回 field、quote、proposition、status、citations、reason。quote 必须是对应 NarrativeFields 字段中的非空逐字引文，proposition 与 reason 必须是非空字符串；status 只能是 supported、unsupported、contradicted、question、hypothesis、ordinary-present；citations 必须是数组，没有来源时返回 []，有来源时每项都完整返回非空 sourceId 与 quote。不得编造缺失字段或引用。
   不要因为措辞风格或没有复述全部事实而拒绝。
   continuityAudit 必须始终返回 reviewed=true 以及 disclosures、beliefs、commitments 三个数组；没有变化时三个数组都显式返回空数组。只审查 CharacterContinuityEvidence 中按 lineIndex 编号的实际可播放台词，不得从玩家输入、Director 计划、option、sum、hint、observe、investigate 或 action 清单生成角色学习或承诺。
   disclosure 只记录已识别说话者实际说出的 assertion，并逐个 listenerId 用 audienceEvidence 的 lineIndex+exact quote 证明明确称呼、回应、目击对话、听见叙述或电话/消息频道。人物出现在 possibleAudienceIds 只表示可能听见，不证明听见；含糊受众返回空，不得把事实真值授予听众。background 不同表示已切换渲染场景，后一场景的普通台词不能证明听见前一场景内容；只有紧接的同场回应，或正文明确写出的电话、消息等频道证据可以连接。belief 还必须引用该 observer 实际表达相信、怀疑或推断同一 assertion 的反应台词；否定或无关命题的反应不得登记为肯定认知，“不合理或没有道理”是反对而不是相信。玩家说出已知事实只证明听众听到了玩家的说法。
   commitment accept 只记录 obligated actor 实际明确接受的具体同日未来行动，action/locationId/dueAt/recipientId 都必须由同一段肯定承担台词直接支持；dueAt 必须匹配台词中的完整时间表达，不能用“二十点”里包含的“十点”等子串。请求、否定、条件、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；否定、尚未履行或仅到达约定地点都不算履行，未来时的承诺或打算也不是已经完成的行为，旁白写角色拒绝或正要执行同样不等于已经履行。
-  mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。返回带 assertionAudit 与 continuityAudit 的 narrative FactReview JSON。
+  mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。完整输出结构为 {"approved":boolean,"violations":[{"code":"非空字符串","factId":"可选字符串","message":"非空字符串"}],"corrections":["string"],"assertionAudit":{"reviewedFields":["field"],"assertions":[{"field":"field","quote":"逐字引文","proposition":"非空命题","status":"allowed status","citations":[{"sourceId":"非空来源ID","quote":"来源逐字引文"}],"reason":"非空理由"}]},"continuityAudit":{"reviewed":true,"disclosures":[],"beliefs":[],"commitments":[]}}。即使数组为空也不得省略这些键，不得用顶层 approved 代替嵌套审查。
 
 [NarrativeFields]
 ${jsonBlock(narrativeFields)}
