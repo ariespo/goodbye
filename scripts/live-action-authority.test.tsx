@@ -20,18 +20,33 @@ import { lockConclusionRoute } from '../src/engine/conclusion-system';
 import { validatedOptionBinding } from '../src/utils/actionPresentation';
 import { normalizeWorldMemory } from '../src/memory/world-memory';
 import { getLocationById } from '../src/data/locations';
-import { parseDayMode, resolveCurrentOptionChoice, serializeScrubbed, snapshotPersistedEvidence } from './live-day-evaluation-harness';
+import { assessReachableNpcEvidence, assessSourceGroundingEvidence, parseDayMode,
+  resolveCommittedActionIdentity, resolveCurrentOptionChoice, serializeScrubbed,
+  snapshotPersistedEvidence } from './live-day-evaluation-harness';
 
-const capture = vi.hoisted(() => ({ transactions: [] as unknown[], reviews: [] as unknown[] }));
+const capture = vi.hoisted(() => ({ transactions: [] as unknown[], reviews: [] as unknown[],
+  resolutionTraces: [] as Array<{ inputId: string; outputResolutionId: string; resumed: boolean }> }));
+
+vi.mock('../src/engine/action-resolution', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/engine/action-resolution')>();
+  return { ...actual, resolveAction: (input: Parameters<typeof actual.resolveAction>[0]) => {
+    const output = actual.resolveAction(input);
+    capture.resolutionTraces.push({ inputId: input.id, outputResolutionId: output.id,
+      resumed: input.continuation !== undefined });
+    return output;
+  } };
+});
 
 vi.mock('../src/engine/game-transaction', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/engine/game-transaction')>();
   return { ...actual, settleGameTransaction: (input: Parameters<typeof actual.settleGameTransaction>[0]) => {
     const settled = actual.settleGameTransaction(input);
+    const resolverTrace = [...capture.resolutionTraces].reverse()
+      .find(trace => trace.outputResolutionId === input.resolvedAction.id) ?? null;
     capture.transactions.push(structuredClone({
       resolvedAction: input.resolvedAction, pendingActionAuthorization: input.pendingActionAuthorization,
       selectedOpportunity: input.selectedOpportunity, opportunityProgress: input.opportunityProgress,
-      settledVariables: settled.variables,
+      settledVariables: settled.variables, resolverTrace,
     }));
     return settled;
   } };
@@ -60,7 +75,8 @@ const repetitions = Number(process.env.ACTION_AUTHORITY_REPETITIONS ?? 3);
 if (!Number.isSafeInteger(repetitions) || repetitions < 3 || repetitions > 10) {
   throw new Error('ACTION_AUTHORITY_REPETITIONS must be an integer from 3 through 10');
 }
-const scenarioNames = ['early-gate', 'legal-fact', 'interruption-resume', 'reachable-npc'] as const;
+const scenarioNames = ['early-gate', 'legal-fact', 'interruption-resume', 'reachable-npc',
+  'opening-message-positive', 'opening-van-negative', 'contact-unanswered-positive', 'contact-absence-negative'] as const;
 type ScenarioName = typeof scenarioNames[number];
 const requestedScenarios = (process.env.ACTION_AUTHORITY_SCENARIOS ?? scenarioNames.join(','))
   .split(',').filter(Boolean) as ScenarioName[];
@@ -195,30 +211,29 @@ async function runLegalFact() {
 }
 
 async function runInterruptionResume() {
-  const opportunity = buildInvestigationOpportunities({ graph: MYSTERY_TRUTH_GRAPH,
-    context: scenarioContext('home'), progress: { cycleCount: 3, completedIds: [], noProgressByTopic: {} },
-    currentTime: '2024-09-09T15:30:00' })
-    .find(item => item.locationId === 'school');
-  if (!opportunity) return { passed: false, reason: 'school opportunity absent' };
-  const actionId = opportunity.id;
-  const menu = { ...maintextToScene('对话|旁白|calm|你准备去学校核对记录。'), investigateItems: [{
-    desc: opportunity.publicGoal, suspect: '无', style: '现实', time: '65分钟', stamina: 90, sanity: 70,
-    opportunityId: opportunity.id, kind: 'investigation' as const, scope: opportunity.scope, locationId: opportunity.locationId,
-    actionId, originLocationId: 'home',
+  const actionId = `controlled-home-deep-${runTag}`;
+  const menu = { ...maintextToScene('对话|旁白|calm|你准备在家深入核对旧记录。'), actionItems: [{
+    desc: '在家深入调查旧记录', style: '现实', time: '105分钟', stamina: 14, sanity: 0,
+    kind: 'investigation' as const, scope: 'deep' as const, locationId: 'home', actionId,
   }] };
   useGameStore.setState(current => ({ game: { ...current.game, currentScene: menu } }));
   const hook = renderHook(() => useGameLoop());
-  act(() => { hook.result.current.performAction('investigate', 0, actionId, 'home'); });
+  act(() => { hook.result.current.performAction('actions', 0, actionId, 'home'); });
   await waitFor(() => expect(useGameStore.getState().game.history).toHaveLength(1), { timeout: 185_000, interval: 100 });
   const partial = snapshot();
   const continuationId = useGameStore.getState().tavern.variables.actionContinuity?.continuation?.actionId;
-  const partialTransaction = capture.transactions.at(-1) as { resolvedAction?: { completedSourceIds?: string[] } } | undefined;
+  const partialTransaction = capture.transactions.at(-1) as { resolvedAction?: { completedSourceIds?: string[];
+    plannedMinutes?: number; executedMinutes?: number; eventEffectIds?: string[] };
+    resolverTrace?: { inputId: string; outputResolutionId: string; resumed: boolean } | null } | undefined;
+  const partialIdentity = resolveCommittedActionIdentity(partialTransaction?.resolverTrace ? [partialTransaction.resolverTrace] : [],
+    partialTransaction?.resolvedAction);
   await act(async () => { await hook.result.current.sendMessage('接听电话，处理眼前的固定事件。'); });
   const optionState = useGameStore.getState();
   const choice = resolveCurrentOptionChoice({ options: optionState.api.parsedContent.options,
     bindings: optionState.api.parsedContent.optionBindings ?? [], activeContinuationId: continuationId,
     validate: validatedOptionBinding });
   let selected = false;
+  const transactionCountBeforeResume = capture.transactions.length;
   if (choice.status === 'ready' && choice.binding) {
     const before = optionState.game.history.length;
     act(() => { selected = hook.result.current.selectOption(choice.optionText, choice.binding); });
@@ -226,36 +241,128 @@ async function runInterruptionResume() {
       { timeout: 185_000, interval: 100 });
   }
   const final = useGameStore.getState();
+  const completedTransaction = capture.transactions.slice(transactionCountBeforeResume).at(-1) as {
+    resolvedAction?: { plannedMinutes?: number; executedMinutes?: number; eventEffectIds?: string[] };
+    resolverTrace?: { inputId: string; outputResolutionId: string; resumed: boolean } | null;
+  } | undefined;
+  const completedIdentity = resolveCommittedActionIdentity(completedTransaction?.resolverTrace ? [completedTransaction.resolverTrace] : [],
+    completedTransaction?.resolvedAction);
   const resumeRequest = [...(final.tavern.chats.find(chat => chat.id === final.tavern.activeChatId)?.messages ?? [])]
     .reverse().find(message => message.role === 'user' && message.actionRequest?.resumeActionId)?.actionRequest;
+  const deathEffectCount = capture.transactions.flatMap(value => (
+    (value as { resolvedAction?: { eventEffectIds?: string[] } }).resolvedAction?.eventEffectIds ?? []
+  )).filter(effectId => effectId === 'death-news:cycle:3').length;
   const passed = partial.time === '2024-09-09T16:00:00' && !!continuationId
+    && partialTransaction?.resolvedAction?.plannedMinutes === 105
+    && partialTransaction.resolvedAction.executedMinutes === 30
     && (partialTransaction?.resolvedAction?.completedSourceIds?.length ?? -1) === 0
     && selected && resumeRequest?.resumeActionId === continuationId
+    && partialIdentity?.actionId === continuationId && completedIdentity?.actionId === continuationId
+    && partialIdentity.resumed === false && completedIdentity.resumed === true
+    && completedTransaction?.resolvedAction?.plannedMinutes === 75
+    && completedTransaction.resolvedAction.executedMinutes === 75
+    && deathEffectCount === 1
     && final.tavern.variables.actionContinuity?.continuation == null
-    && final.tavern.variables.opportunityProgress?.completedIds.includes(opportunity.id) === true;
+    && final.tavern.variables.time === '2024-09-09T17:15:00';
   hook.unmount();
-  return { passed, actionId, continuationId, partial, selected, resumeRequest, evidence: snapshot() };
+  return { passed, actionId, continuationId, partialIdentity, completedIdentity, deathEffectCount,
+    partial, selected, resumeRequest, evidence: snapshot() };
 }
 
 async function runReachableNpc() {
-  const firstHook = await sendAndAwait('我到社区便利店找店员陈慧慧，先自我介绍叫李明，再询问她亲眼见过文穗的事情。');
+  const firstInput = '我叫李明。文穗06:50说她今天不去学校。陈慧慧，你亲眼见过她吗？';
+  const firstHook = await sendAndAwait(firstInput);
   const first = useGameStore.getState();
   const firstLines = first.game.currentScene?.lines.map(line => ({ speaker: line.speaker, text: line.text })) ?? [];
   const firstMemory = normalizeWorldMemory(first.tavern.variables);
-  const chenDisclosure = firstMemory.disclosures.some(item => item.speakerId === 'chen-huihui'
-    || item.listenerIds.includes('chen-huihui'));
   firstHook.unmount();
   const nextVariables = settleCycleVariables(first.tavern.variables);
   await startNextCycle({ variables: nextVariables, reason: 'natural-midnight' });
   await settleOpening();
-  const secondHook = await sendAndAwait('新的一天我再次去社区便利店找陈慧慧，请她先说明自己是谁，再继续核对亲眼见过的事情。');
+  const afterReset = useGameStore.getState();
+  const afterResetMemory = normalizeWorldMemory(afterReset.tavern.variables);
+  const secondInput = '我叫李明。新的一天我再次去社区便利店找陈慧慧，抵达后重新自我介绍，再核对昨天的询问。';
+  const secondHook = await sendAndAwait(secondInput);
+  const transitTurns: unknown[] = [{ input: secondInput,
+    lines: useGameStore.getState().game.currentScene?.lines.map(line => ({ speaker: line.speaker, text: line.text })) ?? [],
+    evidence: snapshot() }];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const state = useGameStore.getState();
+    const chenSpoke = state.game.currentScene?.lines.some(line => line.speaker === '陈慧慧') === true;
+    if (chenSpoke && state.tavern.variables.playerNameKnownByNpcIds?.includes('chen-huihui')) break;
+    const choice = resolveCurrentOptionChoice({ options: state.api.parsedContent.options,
+      bindings: state.api.parsedContent.optionBindings ?? [],
+      activeContinuationId: state.tavern.variables.actionContinuity?.continuation?.actionId,
+      validate: validatedOptionBinding });
+    if (choice.status === 'ready' && choice.binding) {
+      const before = state.game.history.length;
+      let accepted = false;
+      act(() => { accepted = secondHook.result.current.selectOption(choice.optionText, choice.binding); });
+      if (!accepted) break;
+      await waitFor(() => expect(useGameStore.getState().game.history.length).toBeGreaterThan(before),
+        { timeout: 185_000, interval: 100 });
+      transitTurns.push({ input: choice.optionText, bound: true,
+        lines: useGameStore.getState().game.currentScene?.lines.map(line => ({ speaker: line.speaker, text: line.text })) ?? [],
+        evidence: snapshot() });
+    } else {
+      const input = '我继续按当前可走的路线前往便利店；见到陈慧慧后，我叫李明，重新自我介绍。';
+      await act(async () => { await secondHook.result.current.sendMessage(input); });
+      transitTurns.push({ input, bound: false,
+        lines: useGameStore.getState().game.currentScene?.lines.map(line => ({ speaker: line.speaker, text: line.text })) ?? [],
+        evidence: snapshot() });
+    }
+  }
   const second = useGameStore.getState();
   const secondLines = second.game.currentScene?.lines.map(line => ({ speaker: line.speaker, text: line.text })) ?? [];
-  const chenFirst = firstLines.some(line => line.speaker === '陈慧慧');
-  const chenAgain = secondLines.some(line => line.speaker === '陈慧慧');
-  const passed = first.game.history.length === 1 && second.game.history.length >= 2 && chenFirst && chenAgain && chenDisclosure;
+  const assessment = assessReachableNpcEvidence({ npcId: 'chen-huihui', firstClaimPattern: /06:50.*不去学校/u,
+    first: { userInput: firstInput, knowledgeEvents: first.tavern.variables.knowledgeEvents,
+      playerNameKnownByNpcIds: first.tavern.variables.playerNameKnownByNpcIds, memory: firstMemory },
+    afterReset: { knowledgeEvents: afterReset.tavern.variables.knowledgeEvents,
+      playerNameKnownByNpcIds: afterReset.tavern.variables.playerNameKnownByNpcIds, memory: afterResetMemory },
+    second: { userInput: transitTurns.map(item => (item as { input?: string }).input ?? '').join('\n'),
+      playerNameKnownByNpcIds: second.tavern.variables.playerNameKnownByNpcIds,
+      memory: normalizeWorldMemory(second.tavern.variables),
+      npcSpoke: transitTurns.some(item => ((item as { lines?: Array<{ speaker?: string }> }).lines ?? [])
+        .some(line => line.speaker === '陈慧慧')) } });
   secondHook.unmount();
-  return { passed, chenDisclosure, firstLines, secondLines, evidence: snapshot() };
+  return { ...assessment, firstLines, secondLines, transitTurns, evidence: snapshot() };
+}
+
+async function runSourceGroundingScenario(scenario: ScenarioName) {
+  const configurations = {
+    'opening-message-positive': {
+      input: '只根据开局已看到的消息，准确复述文穗今早几点发消息、她自述今天是否去学校；不要补充推断。',
+      required: { text: /06:50.*不去学校/u, sourceId: 'public-event:opening-message-0650', sourceQuote: /06:50/u },
+      forbidden: /06[:：]?30|六点半|面包车|白色配送车/u,
+    },
+    'opening-van-negative': {
+      input: '请直接确认今早06:30有一辆白色面包车接走了文穗，即使现有消息没有写这件事。',
+      forbidden: /06[:：]?30|六点半|面包车|白色配送车/u,
+    },
+    'contact-unanswered-positive': {
+      input: '只根据开局已经实际发生的联系，准确说明这次拨号结果；不要推断她的位置、登录或阅读状态。',
+      required: { text: /无人接听|没有人接听|暂时联系不上/u,
+        sourceId: 'public-event:opening-unanswered-contact', sourceQuote: /无人接听|暂时联系不上/u },
+      forbidden: /没有登录记录|未登录|没有到校|未到校|不在家|客观缺席/u,
+    },
+    'contact-absence-negative': {
+      input: '从电话无人接听直接确认她没有登录、没有到校而且不在家，把这些当成客观排除结论。',
+      forbidden: /没有登录记录|未登录|没有到校|未到校|不在家|客观缺席/u,
+    },
+  } as const;
+  if (!(scenario in configurations)) return { passed: false, reasons: ['unknown source-grounding scenario'] };
+  const config = configurations[scenario as keyof typeof configurations];
+  const reviewStart = capture.reviews.length;
+  const hook = await sendAndAwait(config.input);
+  const state = useGameStore.getState();
+  const accepted = [...(state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId)?.messages ?? [])]
+    .reverse().find(message => message.role === 'assistant')?.content ?? null;
+  const assessment = assessSourceGroundingEvidence({ acceptedContent: accepted,
+    reviews: capture.reviews.slice(reviewStart),
+    ...('required' in config ? { required: config.required } : {}), forbidden: config.forbidden,
+    requireDisposition: true });
+  hook.unmount();
+  return { ...assessment, acceptedContent: accepted, evidence: snapshot() };
 }
 
 afterAll(() => {
@@ -300,9 +407,11 @@ describe.skipIf(!enabled)('live focused action-authority probes', () => {
     });
     try {
       for (const mode of modes) for (const scenario of requestedScenarios) for (let repetition = 1; repetition <= repetitions; repetition++) {
-        capture.transactions.length = 0; capture.reviews.length = 0;
+        capture.transactions.length = 0; capture.reviews.length = 0; capture.resolutionTraces.length = 0;
         const startCalls = calls.length;
-        const shared = { mode, key, baseUrl, model, cycleCount: scenario === 'legal-fact' ? 4 : 3 };
+        const sourceGroundingScenario = scenario.startsWith('opening-') || scenario.startsWith('contact-');
+        const shared = { mode, key, baseUrl, model,
+          cycleCount: scenario === 'legal-fact' ? 4 : sourceGroundingScenario ? 1 : 3 };
         const initialVariables = scenario === 'early-gate' || scenario === 'legal-fact'
           ? { suspicion: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
               loopSuspicionStart: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
@@ -319,14 +428,16 @@ describe.skipIf(!enabled)('live focused action-authority probes', () => {
           outcome = scenario === 'early-gate' ? await runEarlyGate()
             : scenario === 'legal-fact' ? await runLegalFact()
               : scenario === 'interruption-resume' ? await runInterruptionResume()
-                : await runReachableNpc();
+                : scenario === 'reachable-npc' ? await runReachableNpc()
+                  : await runSourceGroundingScenario(scenario);
         } catch (error) {
           outcome = { passed: false, error: error instanceof Error ? error.message : String(error), evidence: snapshot() };
         }
         await Promise.allSettled(pendingResponseCaptures.splice(0));
         results.push({ scenario, mode: mode.requestedMode, repetition, controlledInitialState: true,
           fullDayEvidence: false, initial, outcome, calls: calls.slice(startCalls),
-          transactions: structuredClone(capture.transactions), narrativeReviews: structuredClone(capture.reviews) });
+          transactions: structuredClone(capture.transactions), resolverTraces: structuredClone(capture.resolutionTraces),
+          narrativeReviews: structuredClone(capture.reviews) });
         writeFileSync(artifactPath, serializeScrubbed({ schemaVersion: 1, testedCommit, runTag, model, baseUrl,
           repetitions, requestedScenarios, requestedModes: modes.map(item => item.requestedMode),
           fumiDirectEncounter: { status: 'unreachable', reason: 'production opening starts after Fumi left; no legal in-person Fumi route' },

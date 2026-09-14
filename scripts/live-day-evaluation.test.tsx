@@ -28,22 +28,37 @@ import {
   diffPersistedEvidence,
   parseDayMode,
   resolveCurrentOptionChoice,
+  resolveCommittedActionIdentity,
   sameActionRequestIdentity,
   serializeScrubbed,
   snapshotPersistedEvidence,
   summarizeAuditRows,
 } from './live-day-evaluation-harness';
 
-const harnessCapture = vi.hoisted(() => ({ transactions: [] as unknown[], narrativeReviews: [] as unknown[] }));
+const harnessCapture = vi.hoisted(() => ({ transactions: [] as unknown[], narrativeReviews: [] as unknown[],
+  resolutionTraces: [] as Array<{ inputId: string; outputResolutionId: string; resumed: boolean }> }));
+
+vi.mock('../src/engine/action-resolution', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/engine/action-resolution')>();
+  return { ...actual, resolveAction: (input: Parameters<typeof actual.resolveAction>[0]) => {
+    const output = actual.resolveAction(input);
+    harnessCapture.resolutionTraces.push({ inputId: input.id, outputResolutionId: output.id,
+      resumed: input.continuation !== undefined });
+    return output;
+  } };
+});
 
 vi.mock('../src/engine/game-transaction', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/engine/game-transaction')>();
   return { ...actual, settleGameTransaction: (input: Parameters<typeof actual.settleGameTransaction>[0]) => {
+    const resolverTrace = [...harnessCapture.resolutionTraces].reverse()
+      .find(trace => trace.outputResolutionId === input.resolvedAction.id) ?? null;
     harnessCapture.transactions.push(structuredClone({
       resolvedAction: input.resolvedAction,
       pendingActionAuthorization: input.pendingActionAuthorization,
       selectedOpportunity: input.selectedOpportunity,
       opportunityProgress: input.opportunityProgress,
+      resolverTrace,
     }));
     return actual.settleGameTransaction(input);
   } };
@@ -163,6 +178,19 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
       testedCommit, profile, mode, model, baseUrl, maxTurns, runTag, campaignId,
       baselineCycle: expectedBaselineCycle,
     });
+    const resumeRequested = process.env.DAY_RESUME === '1';
+    const advanceRequested = process.env.DAY_ADVANCE === '1';
+    if (resumeRequested && advanceRequested) throw new Error('DAY_RESUME and DAY_ADVANCE are mutually exclusive');
+    if (resumeRequested) {
+      if (!existsSync(checkpoint) || !existsSync(file)) throw new Error(`missing current segment artifacts for ${label}`);
+      const saved = JSON.parse(readFileSync(checkpoint, 'utf8'));
+      const old = JSON.parse(readFileSync(file, 'utf8'));
+      const parentPaths = segmentPaths(expectedBaselineCycle - 1);
+      const parentArtifacts = saved.lineage?.source === 'advance'
+        ? { checkpointText: readFileSync(parentPaths.checkpoint, 'utf8'), resultText: readFileSync(parentPaths.file, 'utf8') }
+        : undefined;
+      assertResumeCompatible({ expected: provenance, checkpoint: saved, result: old, parentArtifacts });
+    }
     vi.stubGlobal('AbortController', class { constructor() { return transferableAbortController(); } });
     let calls: Record<string, unknown>[] = [];
     let pending = 0;
@@ -201,13 +229,9 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
       playerGender: 'male', playerIdentityConfirmed: true, agentNarrativeMode: mode.settingsValue,
       formatPromptTemplate: DEFAULT_FORMAT_PROMPT } as unknown as AppSettings;
     useGameStore.setState({ ...baseline, tavern: { ...baseline.tavern, settings, presets: [preset] } }, true);
-    mkdirSync(root, { recursive: true });
     let rows: Record<string, any>[] = [];
     let startState: unknown;
     let lineage: Record<string, unknown> = { source: 'fresh' };
-    const resumeRequested = process.env.DAY_RESUME === '1';
-    const advanceRequested = process.env.DAY_ADVANCE === '1';
-    if (resumeRequested && advanceRequested) throw new Error('DAY_RESUME and DAY_ADVANCE are mutually exclusive');
     const restoreCheckpoint = (saved: Record<string, any>) => {
       saved.game.gameStatus.time = new Date(saved.game.gameStatus.time);
       useGameStore.setState(state => ({ game: saved.game, tavern: { ...state.tavern, ...saved.tavern },
@@ -252,6 +276,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
         throw new Error(`fresh evaluation began at cycle ${(startState as { cycleCount?: unknown }).cycleCount}; expected ${expectedBaselineCycle}`);
       }
     }
+    mkdirSync(root, { recursive: true });
     const { result, unmount } = renderHook(() => useGameLoop());
     let stopReason = 'turn-cap';
     let consecutiveFailures = 0;
@@ -389,25 +414,16 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
         const transactionCapture = harnessCapture.transactions.slice(transactionCaptureStart).at(-1) as {
           resolvedAction?: unknown; pendingActionAuthorization?: unknown;
           selectedOpportunity?: unknown; opportunityProgress?: unknown;
+          resolverTrace?: { inputId: string; outputResolutionId: string; resumed: boolean } | null;
         } | undefined;
         const after = snapshot();
-        const requestRecord = actionRequest && typeof actionRequest === 'object' ? actionRequest as Record<string, any> : {};
-        const requestSelection = requestRecord.selection && typeof requestRecord.selection === 'object'
-          ? requestRecord.selection as Record<string, any> : {};
-        const authorization = transactionCapture?.pendingActionAuthorization as { actionId?: unknown } | undefined;
-        const resolution = transactionCapture?.resolvedAction as { continuation?: { actionId?: unknown } } | undefined;
-        const beforeContinuation = (before.persistedEvidence as any)?.actionContinuity?.continuation?.actionId;
-        const identityCandidates: Array<[string, unknown]> = [
-          ['program-selection', requestSelection.actionId],
-          ['resume-request', requestRecord.resumeActionId],
-          ['before-continuation', beforeContinuation],
-          ['pending-authorization', authorization?.actionId],
-          ['created-continuation', resolution?.continuation?.actionId],
-        ];
-        const stableIdentity = identityCandidates.find(([, value]) => typeof value === 'string' && value.length > 0);
+        const stableIdentity = resolveCommittedActionIdentity(transactionCapture?.resolverTrace ? [transactionCapture.resolverTrace] : [],
+          transactionCapture?.resolvedAction);
         const row: Record<string, any> = { attempt: rows.length + 1, turn: successful + 1, input, retry, success,
           actionOrigin, selectedProgramAction, selectedOptionChoice, optionSelectionAccepted, actionRequest,
-          majorActionIdentity: stableIdentity?.[1] ?? null, majorActionIdentitySource: stableIdentity?.[0] ?? 'unverifiable',
+          majorActionIdentity: stableIdentity?.actionId ?? null,
+          majorActionIdentitySource: stableIdentity?.source ?? 'unverifiable',
+          majorActionResumed: stableIdentity?.resumed ?? null,
           retrySourceActionRequest,
           retryIdentityMatches: retry ? sameActionRequestIdentity(retrySourceActionRequest, actionRequest) : undefined,
           before, after: snapshot(), metrics: getTurnMetrics().at(-1),

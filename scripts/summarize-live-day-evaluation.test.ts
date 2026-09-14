@@ -76,7 +76,7 @@ describe('live day evaluation summary acceptance', () => {
     });
   });
 
-  it('uses executed morning intervals and explicit action identity instead of resolution hashes', () => {
+  it('counts partial plus resume once and abandoned follow-up work as a second resolver-input action', () => {
     const resolution = (id: string, startTime: string, planned: number, executed: number) => ({
       id, startTime, endTime: new Date(new Date(startTime).getTime() + executed * 60_000).toISOString(),
       plannedMinutes: planned, executedMinutes: executed,
@@ -94,13 +94,15 @@ describe('live day evaluation summary acceptance', () => {
           resolvedAction: resolution('resolution-complete', '2024-09-09T16:00:00', 60, 60), before: {}, after: {} },
         { success: true, majorActionIdentity: null, calls: [{ status: 200 }],
           resolvedAction: resolution('resolution-unclassified', '2024-09-09T18:00:00', 30, 30), before: {}, after: {} },
+        { success: true, majorActionIdentity: 'new-work-after-abandon', calls: [{ status: 200 }],
+          resolvedAction: resolution('resolution-new-work', '2024-09-09T19:00:00', 30, 30), before: {}, after: {} },
       ],
     });
     expect(summary.audit).toMatchObject({
-      investigations: { morningExecutionTurns: 1, wholeDayExecutionTurns: 3 },
-      majorActions: { executionTurns: 3, uniqueActionIds: 1, resumedExecutionTurns: 1, unverifiableActionIdentities: 1 },
-      targets: { investigations: { value: 1 }, majorActions: { value: 1 } },
-      provider: { callClassification: { foreground: 0, background: 0, unclassified: 3 } },
+      investigations: { morningExecutionTurns: 1, wholeDayExecutionTurns: 4 },
+      majorActions: { executionTurns: 4, uniqueActionIds: 2, resumedExecutionTurns: 1, unverifiableActionIdentities: 1 },
+      targets: { investigations: { value: 1 }, majorActions: { value: 2 } },
+      provider: { callClassification: { foreground: 0, background: 0, unclassified: 4 } },
     });
   });
 

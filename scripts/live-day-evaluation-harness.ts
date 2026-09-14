@@ -119,6 +119,13 @@ export function assertResumeCompatible(input: {
   const storedCycle = finiteNumber(asRecord(asRecord(checkpoint.tavern).variables).cycleCount);
   const resultStartCycle = finiteNumber(asRecord(result.startState).cycleCount);
   const resultFinalCycle = finiteNumber(asRecord(result.finalState).cycleCount);
+  const artifactsAgreeOnAdvancedCycle = checkpointCycle !== null
+    && checkpointCycle !== input.expected.baselineCycle
+    && checkpointCycle === storedCycle && checkpointCycle === resultFinalCycle;
+  if (artifactsAgreeOnAdvancedCycle
+    || result.stopReason === 'completed-calendar-day' || asRecord(result.acceptance).passed === true) {
+    throw new Error('completed segment cannot use DAY_RESUME; use DAY_ADVANCE with immutable parent artifacts');
+  }
   if (finiteNumber(checkpoint.baselineCycle) !== input.expected.baselineCycle
     || resultStartCycle !== input.expected.baselineCycle
     || checkpointCycle === null || checkpointCycle !== storedCycle
@@ -129,6 +136,111 @@ export function assertResumeCompatible(input: {
     throw new Error('checkpoint and result campaign lineage disagree');
   }
   assertLineageParentDigests(checkpoint.lineage, input.parentArtifacts);
+}
+
+export interface ActionResolutionTrace {
+  inputId: string;
+  outputResolutionId: string;
+  resumed: boolean;
+}
+
+export function resolveCommittedActionIdentity(
+  traces: readonly ActionResolutionTrace[],
+  resolvedAction: unknown,
+): { actionId: string; source: 'resolver-input'; resumed: boolean } | null {
+  const resolutionId = asRecord(resolvedAction).id;
+  if (typeof resolutionId !== 'string' || !resolutionId) return null;
+  const matches = traces.filter(trace => trace.outputResolutionId === resolutionId
+    && typeof trace.inputId === 'string' && trace.inputId.length > 0);
+  if (matches.length !== 1) return null;
+  return { actionId: matches[0].inputId, source: 'resolver-input', resumed: matches[0].resumed };
+}
+
+export function assessReachableNpcEvidence(input: {
+  npcId: string;
+  firstClaimPattern: RegExp;
+  first: { userInput: string; knowledgeEvents: unknown; playerNameKnownByNpcIds: unknown; memory: unknown };
+  afterReset: { knowledgeEvents: unknown; playerNameKnownByNpcIds: unknown; memory: unknown };
+  second: { userInput: string; playerNameKnownByNpcIds: unknown; memory: unknown; npcSpoke: boolean };
+}): { passed: boolean; reasons: string[]; evidence: Record<string, unknown> } {
+  const reasons: string[] = [];
+  const strings = (value: unknown) => Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string') : [];
+  const memoryItems = (value: unknown, key: string) => {
+    const record = asRecord(value);
+    return Array.isArray(record[key]) ? record[key].map(asRecord) : [];
+  };
+  const firstNames = strings(input.first.playerNameKnownByNpcIds);
+  const resetNames = strings(input.afterReset.playerNameKnownByNpcIds);
+  const secondNames = strings(input.second.playerNameKnownByNpcIds);
+  const firstCognition = memoryItems(input.first.memory, 'cognition');
+  const resetCognition = memoryItems(input.afterReset.memory, 'cognition');
+  const firstDisclosures = memoryItems(input.first.memory, 'disclosures');
+  const resetDisclosureIds = new Set(memoryItems(input.afterReset.memory, 'disclosures')
+    .map(item => item.id).filter((id): id is string => typeof id === 'string'));
+  const secondDisclosures = memoryItems(input.second.memory, 'disclosures');
+  const firstClaim = firstDisclosures.find(item => item.speakerId === 'player'
+    && Array.isArray(item.listenerIds) && item.listenerIds.includes(input.npcId)
+    && typeof item.evidenceQuote === 'string' && input.firstClaimPattern.test(item.evidenceQuote));
+  const secondIntroduction = secondDisclosures.find(item => item.speakerId === 'player'
+    && Array.isArray(item.listenerIds) && item.listenerIds.includes(input.npcId)
+    && item.propositionId === 'identity:player-name'
+    && typeof item.id === 'string' && !resetDisclosureIds.has(item.id));
+  const firstNameCognition = firstCognition.some(item => item.observerId === input.npcId
+    && item.propositionId === 'identity:player-name');
+  const resetNameCognition = resetCognition.some(item => item.observerId === input.npcId
+    && item.propositionId === 'identity:player-name');
+  const playerRecallRetained = strings(input.afterReset.knowledgeEvents).includes(`meet:${input.npcId}`);
+  if (!/我叫\s*李明/u.test(input.first.userInput)) reasons.push('first turn did not explicitly request player self-introduction');
+  if (!firstNames.includes(input.npcId) || !firstNameCognition) reasons.push('NPC did not learn the player name on the first accepted turn');
+  if (!firstClaim) reasons.push('first specific claim lacks a player-to-NPC disclosure with matching evidence quote');
+  if (resetNames.includes(input.npcId) || resetNameCognition) reasons.push('NPC player-name recognition remained stale after reset');
+  if (!playerRecallRetained) reasons.push('player recall of meeting the NPC did not survive reset');
+  if (!/我叫\s*李明/u.test(input.second.userInput)) reasons.push('second turn did not explicitly request reintroduction');
+  if (!input.second.npcSpoke || !secondNames.includes(input.npcId) || !secondIntroduction) {
+    reasons.push('second loop lacks accepted NPC reintroduction evidence');
+  }
+  return { passed: reasons.length === 0, reasons, evidence: {
+    firstClaimDisclosureId: firstClaim?.id ?? null,
+    firstNameLearned: firstNames.includes(input.npcId) && firstNameCognition,
+    resetNameRecognitionCleared: !resetNames.includes(input.npcId) && !resetNameCognition,
+    playerRecallRetained, secondIntroductionDisclosureId: secondIntroduction?.id ?? null,
+  } };
+}
+
+export function assessSourceGroundingEvidence(input: {
+  acceptedContent?: string | null;
+  reviews: readonly unknown[];
+  required?: { text: RegExp; sourceId: string; sourceQuote: RegExp };
+  forbidden?: RegExp;
+  requireDisposition?: boolean;
+}): { passed: boolean; reasons: string[]; evidence: Record<string, unknown> } {
+  const assertions = input.reviews.flatMap(review => {
+    const audit = asRecord(asRecord(review).assertionAudit);
+    return Array.isArray(audit.assertions) ? audit.assertions.map(asRecord) : [];
+  });
+  const content = input.acceptedContent ?? '';
+  const supported = input.required ? assertions.find(assertion => assertion.status === 'supported'
+    && typeof assertion.quote === 'string' && input.required!.text.test(assertion.quote)
+    && (Array.isArray(assertion.citations) ? assertion.citations.map(asRecord) : []).some(citation => (
+      citation.sourceId === input.required!.sourceId
+      && typeof citation.quote === 'string' && input.required!.sourceQuote.test(citation.quote)
+    ))) : undefined;
+  const forbiddenPresent = input.forbidden ? input.forbidden.test(content) : false;
+  const unsupportedAssertions = assertions.filter(assertion => assertion.status === 'unsupported');
+  const reasons: string[] = [];
+  if (input.required && !input.required.text.test(content)) reasons.push('accepted content omits the required grounded assertion');
+  if (input.required && !supported) reasons.push('required assertion lacks exact supported source evidence');
+  if (forbiddenPresent) reasons.push('accepted content contains the forbidden unsupported addition');
+  if (input.requireDisposition && content.length === 0 && unsupportedAssertions.length === 0) {
+    reasons.push('probe produced neither corrected accepted content nor an explicit unsupported assertion');
+  }
+  return { passed: reasons.length === 0, reasons, evidence: {
+    accepted: content.length > 0, supportedQuote: supported?.quote ?? null,
+    supportedCitations: supported?.citations ?? [], forbiddenPresent,
+    unsupportedAssertions: unsupportedAssertions
+      .map(assertion => ({ quote: assertion.quote, proposition: assertion.proposition, reason: assertion.reason })),
+  } };
 }
 
 function provenanceWithoutSegment(value: Partial<EvaluationProvenance>): Record<string, unknown> {

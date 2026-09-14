@@ -8,9 +8,12 @@ import {
   buildEvaluationProvenance,
   classifyCycleReset,
   compareQuoteToResolution,
+  assessReachableNpcEvidence,
+  assessSourceGroundingEvidence,
   diffPersistedEvidence,
   parseDayMode,
   resolveCurrentOptionChoice,
+  resolveCommittedActionIdentity,
   sameActionRequestIdentity,
   serializeScrubbed,
   snapshotPersistedEvidence,
@@ -47,9 +50,9 @@ describe('live day evaluation harness policy', () => {
       testedCommit: commit, profile: 'program-menu', mode: parseDayMode('standard'),
       model: 'route-a', baseUrl: 'https://gateway.example/v1', maxTurns: 90, runTag: 'sample', baselineCycle: 3,
     });
-    const checkpoint = { provenance: expected, baselineCycle: 3, currentCycle: 4,
-      tavern: { variables: { cycleCount: 4 } } };
-    const result = { provenance: expected, startState: { cycleCount: 3 }, finalState: { cycleCount: 4 } };
+    const checkpoint = { provenance: expected, baselineCycle: 3, currentCycle: 3,
+      tavern: { variables: { cycleCount: 3 } } };
+    const result = { provenance: expected, startState: { cycleCount: 3 }, finalState: { cycleCount: 3 } };
     expect(() => assertResumeCompatible({ expected, checkpoint, result })).not.toThrow();
     expect(() => assertResumeCompatible({
       expected: { ...expected, testedCommit: 'abcdef1234567890abcdef1234567890abcdef12' }, checkpoint, result,
@@ -60,6 +63,23 @@ describe('live day evaluation harness policy', () => {
     expect(() => assertResumeCompatible({ expected, checkpoint: {
       ...checkpoint, currentCycle: 5,
     }, result })).toThrow(/cycle provenance/);
+  });
+
+  it('rejects DAY_RESUME for an already completed segment without mutating artifact bytes', () => {
+    const expected = buildEvaluationProvenance({ testedCommit: commit, profile: 'options', mode: parseDayMode('standard'),
+      model: 'route-a', baseUrl: 'https://gateway.example/v1', maxTurns: 90, runTag: 'terminal', baselineCycle: 3 });
+    const checkpoint = { provenance: expected, baselineCycle: 3, currentCycle: 4,
+      tavern: { variables: { cycleCount: 4 } }, lineage: { source: 'fresh' } };
+    const result = { provenance: expected, startState: { cycleCount: 3 }, finalState: { cycleCount: 4 },
+      stopReason: 'completed-calendar-day', acceptance: { passed: true }, lineage: { source: 'fresh' } };
+    const checkpointBytes = JSON.stringify(checkpoint);
+    const resultBytes = JSON.stringify(result);
+    const before = [artifactDigest(checkpointBytes), artifactDigest(resultBytes)];
+    const providerCalls = 0;
+    const writes = 0;
+    expect(() => assertResumeCompatible({ expected, checkpoint, result })).toThrow(/DAY_ADVANCE/);
+    expect([artifactDigest(checkpointBytes), artifactDigest(resultBytes)]).toEqual(before);
+    expect({ providerCalls, writes }).toEqual({ providerCalls: 0, writes: 0 });
   });
 
   it('advances only from a passed natural parent segment on the same immutable campaign', () => {
@@ -120,6 +140,61 @@ describe('live day evaluation harness policy', () => {
 });
 
 describe('live day evidence snapshots', () => {
+  it('maps only the actual committed resolver input id and never the menu or resolution id', () => {
+    const traces = [
+      { inputId: 'execution-a', outputResolutionId: 'resolution-partial', resumed: false },
+      { inputId: 'execution-a', outputResolutionId: 'resolution-complete', resumed: true },
+      { inputId: 'execution-b', outputResolutionId: 'resolution-new-work', resumed: false },
+    ];
+    expect(resolveCommittedActionIdentity(traces, { id: 'resolution-partial' })).toEqual({
+      actionId: 'execution-a', source: 'resolver-input', resumed: false,
+    });
+    expect(resolveCommittedActionIdentity(traces, { id: 'resolution-complete' })).toEqual({
+      actionId: 'execution-a', source: 'resolver-input', resumed: true,
+    });
+    expect(resolveCommittedActionIdentity(traces, { id: 'resolution-new-work' })?.actionId).toBe('execution-b');
+    expect(resolveCommittedActionIdentity(traces, { id: 'menu-opportunity-id' })).toBeNull();
+  });
+
+  it('requires learned name, a specific disclosure, reset clearing, player recall, and accepted reintroduction', () => {
+    const firstMemory = { cognition: [{ observerId: 'chen-huihui', propositionId: 'identity:player-name' }],
+      disclosures: [
+        { id: 'claim-1', speakerId: 'player', listenerIds: ['chen-huihui'], propositionId: 'fact:opening-message',
+          evidenceQuote: '文穗06:50说她今天不去学校。' },
+        { id: 'intro-1', speakerId: 'player', listenerIds: ['chen-huihui'], propositionId: 'identity:player-name' },
+      ] };
+    const afterResetMemory = { cognition: [], disclosures: [] };
+    const secondMemory = { cognition: [{ observerId: 'chen-huihui', propositionId: 'identity:player-name' }],
+      disclosures: [{ id: 'intro-2', speakerId: 'player', listenerIds: ['chen-huihui'], propositionId: 'identity:player-name' }] };
+    const base = { npcId: 'chen-huihui', firstClaimPattern: /06:50.*不去学校/u,
+      first: { userInput: '我叫李明。文穗06:50说她今天不去学校。', knowledgeEvents: ['meet:chen-huihui'],
+        playerNameKnownByNpcIds: ['chen-huihui'], memory: firstMemory },
+      afterReset: { knowledgeEvents: ['meet:chen-huihui'], playerNameKnownByNpcIds: [], memory: afterResetMemory },
+      second: { userInput: '我叫李明，我们重新认识。', playerNameKnownByNpcIds: ['chen-huihui'],
+        memory: secondMemory, npcSpoke: true } };
+    expect(assessReachableNpcEvidence(base)).toMatchObject({ passed: true, reasons: [] });
+    expect(assessReachableNpcEvidence({ ...base,
+      afterReset: { ...base.afterReset, playerNameKnownByNpcIds: ['chen-huihui'] } }).passed).toBe(false);
+    expect(assessReachableNpcEvidence({ ...base,
+      second: { ...base.second, memory: { cognition: [], disclosures: [] }, npcSpoke: false } }).passed).toBe(false);
+    expect(assessReachableNpcEvidence({ ...base,
+      afterReset: { ...base.afterReset,
+        memory: { cognition: [], disclosures: [{ id: 'intro-2', speakerId: 'player',
+          listenerIds: ['chen-huihui'], propositionId: 'identity:player-name' }] } } }).passed).toBe(false);
+  });
+
+  it('requires exact supported source evidence and rejects unsupported additions in accepted prose', () => {
+    const review = { assertionAudit: { assertions: [{ status: 'supported', quote: '06:50文穗发来消息说今天不去学校。',
+      citations: [{ sourceId: 'public-event:opening-message-0650', quote: '今早06:50文穗发来聊天消息' }] }] } };
+    expect(assessSourceGroundingEvidence({ acceptedContent: '06:50文穗发来消息说今天不去学校。', reviews: [review],
+      required: { text: /06:50.*不去学校/u, sourceId: 'public-event:opening-message-0650', sourceQuote: /06:50/u },
+      forbidden: /06:30|面包车/u })).toMatchObject({ passed: true });
+    expect(assessSourceGroundingEvidence({ acceptedContent: '她发过消息。', reviews: [review],
+      required: { text: /06:50.*不去学校/u, sourceId: 'public-event:opening-message-0650', sourceQuote: /06:50/u } }).passed)
+      .toBe(false);
+    expect(assessSourceGroundingEvidence({ acceptedContent: '06:30有面包车接走了文穗。', reviews: [review],
+      forbidden: /06:30|面包车/u }).passed).toBe(false);
+  });
   it('resolves the current first option through validated stored metadata', () => {
     const validate = (value: unknown, index: number, text: string, active?: string) => {
       const candidate = value as { optionIndex?: number; optionText?: string; continuationId?: string } | undefined;
