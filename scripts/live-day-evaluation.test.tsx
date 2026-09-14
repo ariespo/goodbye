@@ -10,6 +10,8 @@ import { useGameStore } from '../src/stores/gameStore';
 import { startNewGame } from '../src/utils/gameSession';
 import { commitKnowledgeEvents } from '../src/utils/knowledgeCommit';
 import { resolveSceneEnvironment } from '../src/utils/sceneEnvironment';
+import { normalizeLocationId } from '../src/data/locations';
+import { validatedOptionBinding, type ActionOptionBinding } from '../src/utils/actionPresentation';
 import { startNextCycle, settleCycleVariables } from '../src/utils/cycleLoop';
 import { invalidatePreplans } from '../src/agents/mystery';
 import { clearOrchestrationLog, getOrchestrationLog } from '../src/agents/mystery/orchestration-log';
@@ -18,12 +20,14 @@ import { createDefaultPreset, DEFAULT_FORMAT_PROMPT, type AppSettings, type Chat
 import {
   assessFullDayAcceptance,
   assertAcceptanceOverrides,
+  assertCampaignAdvance,
   assertResumeCompatible,
   buildEvaluationProvenance,
   classifyCycleReset,
   compareQuoteToResolution,
   diffPersistedEvidence,
   parseDayMode,
+  resolveCurrentOptionChoice,
   sameActionRequestIdentity,
   serializeScrubbed,
   snapshotPersistedEvidence,
@@ -37,6 +41,7 @@ vi.mock('../src/engine/game-transaction', async importOriginal => {
   return { ...actual, settleGameTransaction: (input: Parameters<typeof actual.settleGameTransaction>[0]) => {
     harnessCapture.transactions.push(structuredClone({
       resolvedAction: input.resolvedAction,
+      pendingActionAuthorization: input.pendingActionAuthorization,
       selectedOpportunity: input.selectedOpportunity,
       opportunityProgress: input.opportunityProgress,
     }));
@@ -61,7 +66,12 @@ vi.mock('../src/sillytavern/database', async importOriginal => ({
 }));
 
 const enabled = process.env.LIVE_DAY_EVAL === '1';
-const profile = process.env.DAY_PROFILE ?? 'fast';
+const profileValue = process.env.DAY_PROFILE ?? 'fast';
+const supportedProfiles = ['fast', 'investigator', 'options', 'program-menu'] as const;
+if (!supportedProfiles.includes(profileValue as typeof supportedProfiles[number])) {
+  throw new Error(`Unsupported DAY_PROFILE ${JSON.stringify(profileValue)}; expected ${supportedProfiles.join(', ')}`);
+}
+const profile = profileValue as typeof supportedProfiles[number];
 const mode = parseDayMode(process.env.DAY_MODE);
 assertAcceptanceOverrides(enabled, process.env);
 const maxTurns = Math.min(120, Number(process.env.DAY_MAX_TURNS) || 90);
@@ -73,9 +83,15 @@ const nativeFetch = globalThis.fetch;
 const baseline = useGameStore.getState();
 const root = '.codex-test-tmp/day-evaluation';
 const runTag = (process.env.DAY_RUN_TAG ?? '').replace(/[^a-zA-Z0-9_-]/g, '');
-const label = `${profile}-${mode.requestedMode}${runTag ? `-${runTag}` : ''}`;
-const file = `${root}/${label}.json`;
-const checkpoint = `${root}/${label}-checkpoint.json`;
+const campaignId = ((process.env.DAY_CAMPAIGN_ID ?? runTag).trim() || 'default').replace(/[^a-zA-Z0-9_-]/g, '');
+if (!campaignId) throw new Error('DAY_CAMPAIGN_ID must contain a safe identifier');
+const baseLabel = `${profile}-${mode.requestedMode}-${campaignId}`;
+const segmentPaths = (cycle: number) => ({
+  file: `${root}/${baseLabel}-c${cycle}.json`,
+  checkpoint: `${root}/${baseLabel}-c${cycle}-checkpoint.json`,
+});
+const { file, checkpoint } = segmentPaths(expectedBaselineCycle);
+const label = `${baseLabel}-c${expectedBaselineCycle}`;
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const snapshot = () => {
   const state = useGameStore.getState();
@@ -144,7 +160,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
     const model = process.env.DAY_MODEL ?? 'deepseek-v4-flash';
     const testedCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
     const provenance = buildEvaluationProvenance({
-      testedCommit, profile, mode, model, baseUrl, maxTurns, runTag,
+      testedCommit, profile, mode, model, baseUrl, maxTurns, runTag, campaignId,
       baselineCycle: expectedBaselineCycle,
     });
     vi.stubGlobal('AbortController', class { constructor() { return transferableAbortController(); } });
@@ -188,14 +204,47 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
     mkdirSync(root, { recursive: true });
     let rows: Record<string, any>[] = [];
     let startState: unknown;
-    if (process.env.DAY_RESUME === '1' && existsSync(checkpoint)) {
-      const saved = JSON.parse(readFileSync(checkpoint,'utf8'));
-      const old = JSON.parse(readFileSync(file,'utf8'));
-      assertResumeCompatible({ expected: provenance, checkpoint: saved, result: old });
+    let lineage: Record<string, unknown> = { source: 'fresh' };
+    const resumeRequested = process.env.DAY_RESUME === '1';
+    const advanceRequested = process.env.DAY_ADVANCE === '1';
+    if (resumeRequested && advanceRequested) throw new Error('DAY_RESUME and DAY_ADVANCE are mutually exclusive');
+    const restoreCheckpoint = (saved: Record<string, any>) => {
       saved.game.gameStatus.time = new Date(saved.game.gameStatus.time);
       useGameStore.setState(state => ({ game: saved.game, tavern: { ...state.tavern, ...saved.tavern },
         api: { ...state.api, ...saved.api, abortController: null, isStreaming: false } }));
+    };
+    if (resumeRequested) {
+      if (!existsSync(checkpoint) || !existsSync(file)) throw new Error(`missing current segment artifacts for ${label}`);
+      const checkpointText = readFileSync(checkpoint, 'utf8');
+      const resultText = readFileSync(file, 'utf8');
+      const saved = JSON.parse(checkpointText);
+      const old = JSON.parse(resultText);
+      const parentPaths = segmentPaths(expectedBaselineCycle - 1);
+      const parentArtifacts = saved.lineage?.source === 'advance'
+        ? { checkpointText: readFileSync(parentPaths.checkpoint, 'utf8'), resultText: readFileSync(parentPaths.file, 'utf8') }
+        : undefined;
+      assertResumeCompatible({ expected: provenance, checkpoint: saved, result: old, parentArtifacts });
+      restoreCheckpoint(saved);
       rows = old.rows; startState = old.startState;
+      lineage = saved.lineage;
+    } else if (advanceRequested) {
+      if (expectedBaselineCycle < 2) throw new Error('DAY_ADVANCE requires DAY_EXPECTED_BASELINE_CYCLE >= 2');
+      const parentPaths = segmentPaths(expectedBaselineCycle - 1);
+      if (!existsSync(parentPaths.checkpoint) || !existsSync(parentPaths.file)) {
+        throw new Error(`missing passed parent segment artifacts for cycle ${expectedBaselineCycle - 1}`);
+      }
+      const checkpointText = readFileSync(parentPaths.checkpoint, 'utf8');
+      const resultText = readFileSync(parentPaths.file, 'utf8');
+      const saved = JSON.parse(checkpointText);
+      const old = JSON.parse(resultText);
+      const grandparentPaths = segmentPaths(expectedBaselineCycle - 2);
+      const parentArtifacts = saved.lineage?.source === 'advance'
+        ? { checkpointText: readFileSync(grandparentPaths.checkpoint, 'utf8'), resultText: readFileSync(grandparentPaths.file, 'utf8') }
+        : undefined;
+      lineage = assertCampaignAdvance({ expected: provenance, checkpoint: saved, result: old,
+        checkpointText, resultText, parentArtifacts });
+      restoreCheckpoint(saved);
+      startState = snapshot();
     } else {
       await act(async () => { await startNewGame(); playback(); await pause(25); });
       startState = snapshot();
@@ -208,23 +257,25 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
     let consecutiveFailures = 0;
     let successful = rows.filter(row => row.success).length;
     let programMenuSelections = rows.filter(row => row.actionOrigin === 'program-menu').length;
+    let optionChoiceSelections = rows.filter(row => row.actionOrigin === 'option-choice' && row.success).length;
     const flush = () => {
       const state = useGameStore.getState();
       const finalState = snapshot();
       const audit = summarizeAuditRows(rows);
       const acceptance = assessFullDayAcceptance({ baselineCycle: expectedBaselineCycle,
         finalCycle: Number(finalState.cycleCount), successfulRows: successful, stopReason,
-        programMenuRequired: profile === 'program-menu', programMenuSelections });
+        programMenuRequired: profile === 'program-menu', programMenuSelections,
+        optionChoiceRequired: profile === 'options', optionChoiceSelections });
       const storageBoundary = {
         database: 'saveChat/getChats are test doubles; committed in-memory chat, variables, and history snapshots are observed',
         browserPersistence: 'unverified in this harness; browser reload, IndexedDB durability, and playback require later browser acceptance',
       };
       writeFileSync(file, serializeScrubbed({ profile, mode, baseUrl, model, diagnosticsEnabled: false,
-        provenance, startState, finalState, stopReason, successful, programMenuSelections,
+        provenance, lineage, startState, finalState, stopReason, successful, programMenuSelections, optionChoiceSelections,
         audit, acceptance, storageBoundary,
         characterConversationCoverage: 'unrun: no fabricated alive in-person Fumi fixture; legal production route must be determined later',
         rows }, [key]));
-      writeFileSync(checkpoint, serializeScrubbed({ provenance, baselineCycle: expectedBaselineCycle,
+      writeFileSync(checkpoint, serializeScrubbed({ provenance, lineage, baselineCycle: expectedBaselineCycle,
         currentCycle: Number(finalState.cycleCount), game: state.game,
         tavern: { chats: state.tavern.chats, activeChatId: state.tavern.activeChatId, variables: state.tavern.variables },
         api: { parsedContent: state.api.parsedContent, turnRecovery: state.api.turnRecovery, error: state.api.error } }, [key]));
@@ -241,6 +292,9 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
         const reviewCaptureStart = harnessCapture.narrativeReviews.length;
         const retrySourceActionRequest = retry ? lastUserActionRequest() : null;
         let selectedProgramAction: Record<string, unknown> | null = null;
+        let selectedOptionChoice: { optionIndex: number; optionText: string; binding?: ActionOptionBinding } | null = null;
+        let optionSelectionAccepted: boolean | undefined;
+        let localSelectionError: string | null = null;
         let actionOrigin = retry ? 'retry' : 'player';
         let input: string;
         if (retry) input = rows.at(-1)!.input;
@@ -267,13 +321,38 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
             input = options[0] ?? '我检查眼前能看到的事情，决定接下来去哪里找文穗。';
             actionOrigin = 'program-menu-bootstrap';
           }
-        } else input = options[0] ?? '我检查眼前能看到的事情，决定接下来去哪里找文穗。';
+        } else {
+          const optionChoice = resolveCurrentOptionChoice({
+            options,
+            bindings: state.api.parsedContent.optionBindings ?? [],
+            activeContinuationId: state.tavern.variables.actionContinuity?.continuation?.actionId,
+            validate: validatedOptionBinding,
+          });
+          if (optionChoice.status === 'ready') {
+            selectedOptionChoice = { optionIndex: optionChoice.optionIndex, optionText: optionChoice.optionText,
+              ...(optionChoice.binding ? { binding: optionChoice.binding } : {}) };
+            input = optionChoice.optionText;
+            actionOrigin = 'option-choice';
+          } else if (optionChoice.status === 'no-option' && successful === 0) {
+            input = '我检查眼前能看到的事情，决定接下来去哪里找文穗。';
+            actionOrigin = 'options-bootstrap';
+          } else {
+            input = optionChoice.status === 'no-option' ? '[no current option]' : optionChoice.optionText;
+            actionOrigin = 'option-choice-rejected';
+            localSelectionError = optionChoice.status;
+          }
+        }
         const attemptStarted = Date.now();
         const timer = setTimeout(() => useGameStore.getState().api.abortController?.abort(), 180_000);
         if (selectedProgramAction) {
           programMenuSelections++;
           await act(async () => {
-            result.current.performAction(selectedProgramAction!.type as 'investigate' | 'actions', Number(selectedProgramAction!.index));
+            result.current.performAction(
+              selectedProgramAction!.type as 'investigate' | 'actions',
+              Number(selectedProgramAction!.index),
+              String(selectedProgramAction!.actionId),
+              normalizeLocationId(state.tavern.variables.location),
+            );
             await pause(10);
           });
           await waitFor(() => {
@@ -282,7 +361,20 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
             const failed = current.api.turnRecovery.phase !== 'idle';
             if ((!committed && !failed) || current.api.isStreaming) throw new Error('program-menu turn is still running');
           }, { timeout: 185_000, interval: 100 });
-        } else {
+        } else if (selectedOptionChoice) {
+          await act(async () => {
+            optionSelectionAccepted = result.current.selectOption(selectedOptionChoice!.optionText, selectedOptionChoice!.binding);
+            await pause(10);
+          });
+          if (optionSelectionAccepted) {
+            await waitFor(() => {
+              const current = useGameStore.getState();
+              const committed = current.game.history.length > Number(before.historyLength);
+              const failed = current.api.turnRecovery.phase !== 'idle';
+              if ((!committed && !failed) || current.api.isStreaming) throw new Error('option-choice turn is still running');
+            }, { timeout: 185_000, interval: 100 });
+          } else localSelectionError = 'selectOption rejected current validated choice';
+        } else if (!localSelectionError) {
           await act(async () => {
             if (retry) await result.current.retryTurn();
             else await result.current.sendMessage(input);
@@ -295,15 +387,31 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
           .reverse().find(message=>message.role==='assistant') : null;
         const actionRequest = lastUserActionRequest();
         const transactionCapture = harnessCapture.transactions.slice(transactionCaptureStart).at(-1) as {
-          resolvedAction?: unknown; selectedOpportunity?: unknown; opportunityProgress?: unknown;
+          resolvedAction?: unknown; pendingActionAuthorization?: unknown;
+          selectedOpportunity?: unknown; opportunityProgress?: unknown;
         } | undefined;
         const after = snapshot();
+        const requestRecord = actionRequest && typeof actionRequest === 'object' ? actionRequest as Record<string, any> : {};
+        const requestSelection = requestRecord.selection && typeof requestRecord.selection === 'object'
+          ? requestRecord.selection as Record<string, any> : {};
+        const authorization = transactionCapture?.pendingActionAuthorization as { actionId?: unknown } | undefined;
+        const resolution = transactionCapture?.resolvedAction as { continuation?: { actionId?: unknown } } | undefined;
+        const beforeContinuation = (before.persistedEvidence as any)?.actionContinuity?.continuation?.actionId;
+        const identityCandidates: Array<[string, unknown]> = [
+          ['program-selection', requestSelection.actionId],
+          ['resume-request', requestRecord.resumeActionId],
+          ['before-continuation', beforeContinuation],
+          ['pending-authorization', authorization?.actionId],
+          ['created-continuation', resolution?.continuation?.actionId],
+        ];
+        const stableIdentity = identityCandidates.find(([, value]) => typeof value === 'string' && value.length > 0);
         const row: Record<string, any> = { attempt: rows.length + 1, turn: successful + 1, input, retry, success,
-          actionOrigin, selectedProgramAction, actionRequest,
+          actionOrigin, selectedProgramAction, selectedOptionChoice, optionSelectionAccepted, actionRequest,
+          majorActionIdentity: stableIdentity?.[1] ?? null, majorActionIdentitySource: stableIdentity?.[0] ?? 'unverifiable',
           retrySourceActionRequest,
           retryIdentityMatches: retry ? sameActionRequestIdentity(retrySourceActionRequest, actionRequest) : undefined,
           before, after: snapshot(), metrics: getTurnMetrics().at(-1),
-          error: afterSend.api.error ?? afterSend.api.turnRecovery.errorMessage,
+          error: localSelectionError ?? afterSend.api.error ?? afterSend.api.turnRecovery.errorMessage,
           accepted: accepted?.content, lines: success ? afterSend.game.currentScene?.lines : [],
           options: [...afterSend.api.parsedContent.options], calls, orchestration: [],
           resolvedAction: transactionCapture?.resolvedAction ?? null,
@@ -319,7 +427,10 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
           },
           notifications: afterSend.ui.notifications.map(item=>item.message) };
         rows.push(row);
-        if(success) { successful++; consecutiveFailures=0; }
+        if(success) {
+          successful++; consecutiveFailures=0;
+          if (actionOrigin === 'option-choice' && optionSelectionAccepted) optionChoiceSelections++;
+        }
         else consecutiveFailures++;
         await act(async () => { await background(); });
         row.orchestration = getOrchestrationLog();
@@ -335,13 +446,26 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
           && !live.game.endingPanel.visible && !live.game.endingPanel.pendingEndingId) {
           row.resetReason = live.game.pendingCycleReset;
           const reason = live.game.pendingCycleReset;
-          const beforeResetTime = String(snapshot().storyTime ?? '');
+          const beforeReset = snapshot();
+          const beforeResetTime = String(beforeReset.storyTime ?? '');
           await act(async () => {
             live.actions.setPendingCycleReset(null);
             await startNextCycle({variables:settleCycleVariables(live.tavern.variables),reason}); playback();
           });
           row.resetScene = useGameStore.getState().game.currentScene?.lines;
           row.afterReset = snapshot();
+          const afterEvidence = (row.afterReset.persistedEvidence as any) ?? {};
+          const afterMemory = afterEvidence.characterContinuity ?? {};
+          const commitments = Array.isArray(afterMemory.commitments?.items) ? afterMemory.commitments.items : [];
+          row.resetAudit = {
+            returnedTo08Home: String(row.afterReset.storyTime).includes('T08:00') && row.afterReset.location === 'home',
+            resourcesReset: row.afterReset.stamina === 100 && row.afterReset.sanity === 70,
+            retainedFacts: JSON.stringify(row.afterReset.facts) === JSON.stringify(beforeReset.facts),
+            retainedSuspicion: JSON.stringify(row.afterReset.suspicion) === JSON.stringify(beforeReset.suspicion),
+            actionContinuityCleared: afterEvidence.actionContinuity === null,
+            opportunityProgressCleared: afterEvidence.opportunityProgress === null,
+            activeCommitmentsAfterReset: commitments.filter((item: any) => item?.status === 'active').map((item: any) => item.id),
+          };
           stopReason = classifyCycleReset({ reason, beforeResetTime, afterResetTime: String(row.afterReset.storyTime ?? ''),
             baselineCycle: expectedBaselineCycle, afterCycle: Number(row.afterReset.cycleCount) });
         }
@@ -364,7 +488,7 @@ describe.skipIf(!enabled)('live full repeated-day evaluation', () => {
       }
       const acceptance = flush();
       console.log('CAMPAIGN_RESULT', JSON.stringify({profile,mode,diagnosticsEnabled:false,successful,
-        attempts:rows.length,stopReason,programMenuSelections,acceptance,finalState:snapshot()}));
+        attempts:rows.length,stopReason,programMenuSelections,optionChoiceSelections,acceptance,finalState:snapshot()}));
       expect(acceptance.passed, acceptance.reasons.join('; ')).toBe(true);
     } finally { invalidatePreplans(); unmount(); vi.unstubAllGlobals(); }
   }, 7_200_000);

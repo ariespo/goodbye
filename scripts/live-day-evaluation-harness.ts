@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export type DayEvaluationMode = 'standard' | 'strict' | 'legacy';
 
 export interface DayModeProvenance {
@@ -38,11 +40,12 @@ export interface EvaluationProvenance {
   baseUrl: string;
   maxTurns: number;
   runTag: string;
+  campaignId: string;
   baselineCycle: number;
 }
 
 export function buildEvaluationProvenance(
-  input: Omit<EvaluationProvenance, 'schemaVersion'>,
+  input: Omit<EvaluationProvenance, 'schemaVersion' | 'campaignId'> & { campaignId?: string },
 ): EvaluationProvenance {
   if (!/^[0-9a-f]{40}$/u.test(input.testedCommit)) {
     throw new Error('testedCommit must be a full lowercase Git SHA');
@@ -53,13 +56,46 @@ export function buildEvaluationProvenance(
   if (!Number.isSafeInteger(input.maxTurns) || input.maxTurns < 1) {
     throw new Error('maxTurns must be a positive integer');
   }
-  return { schemaVersion: 1, ...structuredClone(input) };
+  const campaignId = (input.campaignId ?? input.runTag).trim() || 'default';
+  if (!/^[a-zA-Z0-9_-]+$/u.test(campaignId)) throw new Error('campaignId must be a safe non-empty identifier');
+  return { schemaVersion: 1, ...structuredClone(input), campaignId };
+}
+
+export interface CampaignLineage {
+  source: 'fresh' | 'advance';
+  parentBaselineCycle?: number;
+  parentCheckpointDigest?: string;
+  parentResultDigest?: string;
+}
+
+export function artifactDigest(serialized: string): string {
+  return createHash('sha256').update(serialized, 'utf8').digest('hex');
+}
+
+function sameLineage(left: unknown, right: unknown): boolean {
+  return JSON.stringify(asRecord(left)) === JSON.stringify(asRecord(right));
+}
+
+function assertLineageParentDigests(
+  lineageValue: unknown,
+  parentArtifacts?: { checkpointText: string; resultText: string },
+): void {
+  const lineage = asRecord(lineageValue);
+  if (lineage.source !== 'advance') return;
+  if (!parentArtifacts) throw new Error('advanced checkpoint resume requires parent artifacts');
+  if (lineage.parentCheckpointDigest !== artifactDigest(parentArtifacts.checkpointText)) {
+    throw new Error('parent checkpoint digest does not match campaign lineage');
+  }
+  if (lineage.parentResultDigest !== artifactDigest(parentArtifacts.resultText)) {
+    throw new Error('parent result digest does not match campaign lineage');
+  }
 }
 
 export function assertResumeCompatible(input: {
   expected: EvaluationProvenance;
   checkpoint: unknown;
   result: unknown;
+  parentArtifacts?: { checkpointText: string; resultText: string };
 }): void {
   const checkpoint = asRecord(input.checkpoint);
   const result = asRecord(input.result);
@@ -70,7 +106,8 @@ export function assertResumeCompatible(input: {
     throw new Error('checkpoint tested commit does not match the current immutable tested commit');
   }
   const withoutCommit = (value: Partial<EvaluationProvenance>) => {
-    const { testedCommit: _testedCommit, ...rest } = value;
+    const rest = { ...value };
+    delete rest.testedCommit;
     return rest;
   };
   const expectedConfig = JSON.stringify(withoutCommit(input.expected));
@@ -88,6 +125,64 @@ export function assertResumeCompatible(input: {
     || resultFinalCycle === null || resultFinalCycle !== checkpointCycle) {
     throw new Error('checkpoint cycle provenance is inconsistent');
   }
+  if (!sameLineage(checkpoint.lineage, result.lineage)) {
+    throw new Error('checkpoint and result campaign lineage disagree');
+  }
+  assertLineageParentDigests(checkpoint.lineage, input.parentArtifacts);
+}
+
+function provenanceWithoutSegment(value: Partial<EvaluationProvenance>): Record<string, unknown> {
+  const rest = { ...value };
+  delete rest.baselineCycle;
+  return rest;
+}
+
+export function assertCampaignAdvance(input: {
+  expected: EvaluationProvenance;
+  checkpoint: unknown;
+  result: unknown;
+  checkpointText: string;
+  resultText: string;
+  parentArtifacts?: { checkpointText: string; resultText: string };
+}): CampaignLineage {
+  const checkpoint = asRecord(input.checkpoint);
+  const result = asRecord(input.result);
+  const checkpointProvenance = asRecord(checkpoint.provenance) as Partial<EvaluationProvenance>;
+  const resultProvenance = asRecord(result.provenance) as Partial<EvaluationProvenance>;
+  if (checkpointProvenance.testedCommit !== input.expected.testedCommit
+    || resultProvenance.testedCommit !== input.expected.testedCommit) {
+    throw new Error('parent tested commit does not match the current immutable tested commit');
+  }
+  const expectedConfig = JSON.stringify(provenanceWithoutSegment(input.expected));
+  if (JSON.stringify(provenanceWithoutSegment(checkpointProvenance)) !== expectedConfig
+    || JSON.stringify(provenanceWithoutSegment(resultProvenance)) !== expectedConfig) {
+    throw new Error('parent campaign configuration does not match the current evaluation configuration');
+  }
+  const parentBaseline = input.expected.baselineCycle - 1;
+  const checkpointCycle = finiteNumber(checkpoint.currentCycle);
+  const storedCycle = finiteNumber(asRecord(asRecord(checkpoint.tavern).variables).cycleCount);
+  const resultStartCycle = finiteNumber(asRecord(result.startState).cycleCount);
+  const resultFinalCycle = finiteNumber(asRecord(result.finalState).cycleCount);
+  if (parentBaseline < 1 || finiteNumber(checkpoint.baselineCycle) !== parentBaseline
+    || finiteNumber(checkpointProvenance.baselineCycle) !== parentBaseline
+    || finiteNumber(resultProvenance.baselineCycle) !== parentBaseline
+    || resultStartCycle !== parentBaseline || resultFinalCycle !== input.expected.baselineCycle
+    || checkpointCycle !== input.expected.baselineCycle || storedCycle !== checkpointCycle) {
+    throw new Error('parent checkpoint does not advance exactly one completed segment into the requested cycle');
+  }
+  if (result.stopReason !== 'completed-calendar-day' || asRecord(result.acceptance).passed !== true) {
+    throw new Error('campaign advance requires a passed natural calendar day');
+  }
+  if (!sameLineage(checkpoint.lineage, result.lineage)) {
+    throw new Error('parent checkpoint and result campaign lineage disagree');
+  }
+  assertLineageParentDigests(checkpoint.lineage, input.parentArtifacts);
+  return {
+    source: 'advance',
+    parentBaselineCycle: parentBaseline,
+    parentCheckpointDigest: artifactDigest(input.checkpointText),
+    parentResultDigest: artifactDigest(input.resultText),
+  };
 }
 
 export function serializeScrubbed(value: unknown, secrets: readonly (string | undefined)[]): string {
@@ -106,6 +201,29 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function resolveCurrentOptionChoice<T>(input: {
+  options: readonly string[];
+  bindings: readonly unknown[];
+  activeContinuationId?: string;
+  validate: (value: unknown, index: number, text: string, activeContinuationId?: string) => T | undefined;
+}): { status: 'no-option' } | {
+  status: 'invalid-stored-binding'; optionIndex: number; optionText: string; storedBinding: true;
+} | {
+  status: 'ready'; optionIndex: number; optionText: string; binding: T | undefined; storedBinding: boolean;
+} {
+  const optionText = input.options[0];
+  if (typeof optionText !== 'string') return { status: 'no-option' };
+  const optionIndex = 0;
+  const rawBinding = input.bindings.find(value => asRecord(value).optionIndex === optionIndex)
+    ?? input.bindings.find(value => asRecord(value).optionText === optionText);
+  if (rawBinding === undefined) {
+    return { status: 'ready', optionIndex, optionText, binding: undefined, storedBinding: false };
+  }
+  const binding = input.validate(rawBinding, optionIndex, optionText, input.activeContinuationId);
+  if (!binding) return { status: 'invalid-stored-binding', optionIndex, optionText, storedBinding: true };
+  return { status: 'ready', optionIndex, optionText, binding, storedBinding: true };
 }
 
 function cloneOrNull(value: unknown): unknown {
@@ -273,8 +391,41 @@ export function summarizeAuditRows(rows: readonly unknown[]): unknown {
   );
   const investigationKinds = new Set(['inquiry', 'investigation', 'search']);
   const majorKinds = new Set(['inquiry', 'investigation', 'search', 'travel', 'rest', 'wait']);
-  const verifiedInvestigationActions = resolutions.filter(resolution => hasExecutedKind(resolution, investigationKinds)).length;
-  const verifiedMajorActions = resolutions.filter(resolution => hasExecutedKind(resolution, majorKinds)).length;
+  const wholeDayInvestigationTurns = resolutions.filter(resolution => hasExecutedKind(resolution, investigationKinds)).length;
+  const storyMinute = (value: unknown): number | null => {
+    if (typeof value !== 'string') return null;
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/u);
+    if (!match) return null;
+    return Math.floor(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5])) / 60_000);
+  };
+  const hasMorningInvestigation = (resolution: Record<string, unknown>): boolean => {
+    let cursor = storyMinute(resolution.startTime);
+    if (cursor === null) return false;
+    const dayStart = cursor - (cursor % 1440);
+    for (const value of Array.isArray(resolution.segments) ? resolution.segments : []) {
+      const segment = asRecord(value);
+      const executed = finiteNumber(segment.executedMinutes) ?? 0;
+      const segmentStart = cursor;
+      const segmentEnd = cursor + executed;
+      cursor = segmentEnd;
+      if (executed > 0 && investigationKinds.has(String(asRecord(segment.step).kind ?? ''))
+        && segmentStart >= dayStart + 8 * 60 && segmentStart < dayStart + 16 * 60
+        && segmentEnd <= dayStart + 16 * 60) return true;
+    }
+    return false;
+  };
+  const morningInvestigationTurns = resolutions.filter(hasMorningInvestigation).length;
+  const majorRows = successful.filter(row => {
+    const resolution = asRecord(row.resolvedAction);
+    return Object.keys(resolution).length > 0 && hasExecutedKind(resolution, majorKinds);
+  });
+  const majorIdentities = majorRows.map(row => typeof row.majorActionIdentity === 'string' && row.majorActionIdentity.trim()
+    ? row.majorActionIdentity : null);
+  const uniqueMajorActionIds = new Set(majorIdentities.filter((value): value is string => value !== null)).size;
+  const unverifiableMajorActionIdentities = majorIdentities.filter(value => value === null).length;
+  const resumedExecutionTurns = majorIdentities.length - unverifiableMajorActionIdentities - uniqueMajorActionIds;
+  const verifiedInvestigationActions = morningInvestigationTurns;
+  const verifiedMajorActions = uniqueMajorActionIds;
   const calls = records.flatMap(row => Array.isArray(row.calls) ? row.calls.map(asRecord) : []);
   const statuses: Record<string, number> = {};
   for (const call of calls) {
@@ -283,6 +434,12 @@ export function summarizeAuditRows(rows: readonly unknown[]): unknown {
   }
   const errorCalls = calls.filter(call => (finiteNumber(call.status) ?? 0) >= 400
     || !!call.error || !!call.providerError).length;
+  const classifiedCalls = { foreground: 0, background: 0, unclassified: 0 };
+  for (const call of calls) {
+    const classification = call.callClassification;
+    if (classification === 'foreground' || classification === 'background') classifiedCalls[classification]++;
+    else classifiedCalls.unclassified++;
+  }
   const playable = successful.map(row => finiteNumber(asRecord(row.metrics).playableMs)).filter((value): value is number => value !== null);
   const foreground = successful.map(row => finiteNumber(asRecord(row.metrics).totalMs)).filter((value): value is number => value !== null);
   const retryRows = records.filter(row => row.retry === true);
@@ -298,13 +455,29 @@ export function summarizeAuditRows(rows: readonly unknown[]): unknown {
       majorActions: { value: verifiedMajorActions, min: 10, max: 16,
         status: targetStatus(verifiedMajorActions, 10, 16) },
     },
+    investigations: {
+      morningExecutionTurns: morningInvestigationTurns,
+      wholeDayExecutionTurns: wholeDayInvestigationTurns,
+      morningWindow: '08:00 <= executed investigation segment and segment end <= 16:00; 16:00 start excluded',
+    },
+    majorActions: {
+      executionTurns: majorRows.length,
+      uniqueActionIds: uniqueMajorActionIds,
+      resumedExecutionTurns,
+      unverifiableActionIdentities: unverifiableMajorActionIdentities,
+    },
     latency: {
       playableMedianMs: quantile(playable, 0.5),
       playableP90Ms: quantile(playable, 0.9),
       playableTotalMs: playable.reduce((total, value) => total + value, 0),
       foregroundTotalMs: foreground.reduce((total, value) => total + value, 0),
     },
-    provider: { calls: calls.length, statuses, errorCalls },
+    provider: { calls: calls.length, statuses, errorCalls, callClassification: {
+      ...classifiedCalls,
+      basis: classifiedCalls.unclassified === 0
+        ? 'explicit per-call stage or orchestration evidence'
+        : 'unclassified without per-call stage or orchestration evidence',
+    } },
     retries: {
       attempts: retryRows.length,
       identityMismatches: retryRows.filter(row => row.retryIdentityMatches === false).length,
@@ -331,6 +504,8 @@ export function assessFullDayAcceptance(input: {
   stopReason: string;
   programMenuRequired?: boolean;
   programMenuSelections?: number;
+  optionChoiceRequired?: boolean;
+  optionChoiceSelections?: number;
 }): { passed: boolean; reasons: string[] } {
   const reasons: string[] = [];
   if (input.stopReason !== 'completed-calendar-day') reasons.push(`stop reason was ${input.stopReason}`);
@@ -340,6 +515,9 @@ export function assessFullDayAcceptance(input: {
   if (input.successfulRows < 2) reasons.push('a single accepted row is not full-day evidence');
   if (input.programMenuRequired && (input.programMenuSelections ?? 0) < 1) {
     reasons.push('program-menu profile did not execute performAction');
+  }
+  if (input.optionChoiceRequired && (input.optionChoiceSelections ?? 0) < 1) {
+    reasons.push('options profile did not execute an accepted selectOption choice');
   }
   return { passed: reasons.length === 0, reasons };
 }

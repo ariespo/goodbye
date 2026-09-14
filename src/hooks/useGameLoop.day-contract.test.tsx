@@ -1,19 +1,27 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameLoop } from './useGameLoop';
 import { useGameStore } from '../stores/gameStore';
 import { prepareMysteryTurn as prepareActual } from '../agents/mystery/orchestrator';
 import type { PreparedMysteryTurn } from '../agents/mystery/orchestrator';
-import { prepareMysteryTurn, invalidatePreplans } from '../agents/mystery';
+import { prepareMysteryTurn, invalidatePreplans, reviewNarrativeAgainstWriterPacket } from '../agents/mystery';
 import { callSecondaryApi, streamChatCompletion } from '../sillytavern/api-router';
 import { runStateAgent } from '../agents/state/state-agent';
 import { saveChat } from '../sillytavern/database';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
 import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatSession } from '../sillytavern/types';
+import { lockConclusionRoute } from '../engine/conclusion-system';
+import { buildInvestigationOpportunities } from '../engine/investigation-opportunities';
+import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
+import { createFactAliasTable } from '../agents/mystery/fact-aliases';
+import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
+import { maintextToScene } from '../engine/scene-parser';
+import type { TruthContext } from '../agents/mystery/types';
 
 vi.mock('../agents/mystery', async importOriginal => ({
   ...await importOriginal<typeof import('../agents/mystery')>(), prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(),
+  reviewNarrativeAgainstWriterPacket: vi.fn(),
 }));
 vi.mock('../agents/mystery/scene-list', async importOriginal => ({
   ...await importOriginal<typeof import('../agents/mystery/scene-list')>(),
@@ -33,6 +41,44 @@ vi.mock('../sillytavern/database', async importOriginal => ({
 const baseline = useGameStore.getState();
 let prepared: PreparedMysteryTurn;
 let draft: string;
+
+async function configureCycle(mode: 'standard' | 'legacy', cycleCount: number, time = '08:00:00', scope: 'normal' | 'deep' = 'normal') {
+  const state = useGameStore.getState();
+  const preset = state.tavern.presets[0]!;
+  const settings = { ...state.tavern.settings, agentNarrativeMode: mode } as unknown as AppSettings;
+  const variables = {
+    ...createDefaultVariables(), cycleCount, time: `2024-09-09T${time}`,
+    suspicion: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
+    loopSuspicionStart: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
+    unlockedClues: ['a-sacrifice-list', 'a-lured-inside'],
+    mysteryKnowledge: { 'a-sacrifice-list': 'clue' as const, 'a-lured-inside': 'clue' as const },
+  };
+  const chat: ChatSession = { id: `day-contract-${mode}-${cycleCount}`, name: 'test', messages: [], variables,
+    characterName: '文穗', userName: '玩家', presetId: preset.id, lorebookIds: [], createdAt: 0, updatedAt: 0 };
+  useGameStore.setState(current => ({
+    tavern: { ...current.tavern, settings, activeChatId: chat.id, variables, chats: [chat] },
+    api: { ...current.api, abortController: null, parsedContent: { ...current.api.parsedContent, options: [] } },
+    game: { ...current.game, history: [], currentScene: null,
+      gameStatus: { time: new Date(`2024-09-09T${time}`), stamina: 100, sanity: 70, items: [] },
+      endingPanel: { ...current.game.endingPanel, visible: false, pendingEndingId: null },
+      endingCheckContext: variablesToEndingContext(variables) as typeof current.game.endingCheckContext },
+  }));
+  prepared = await prepareActual({ mode: mode === 'legacy' ? 'standard' : mode, api: settings.api, preset,
+    truthContext: { cycleCount, currentLocation: 'home', lockedRoute: null,
+      unlockedClueIds: Object.keys(variables.mysteryKnowledge), playerKnowledge: variables.mysteryKnowledge,
+      suspicion: variables.suspicion, activeNpcIds: [] },
+    turnContext: {}, presentationContext: {},
+    complete: async messages => messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
+      ? JSON.stringify({ approved: true, violations: [], corrections: [] })
+      : JSON.stringify({ turnGoal: '核对现有判断', tone: '克制',
+        beats: [{ id: 'beat-1', purpose: '核对', description: '把怀疑和已经核实的事实分开' }],
+        revelations: [], actionSteps: [{ id: 'check', kind: 'investigation', scope, locationId: 'home' }],
+        optionIntents: [{ id: 'option-1', intent: '继续核对', tone: '谨慎', expectedPressure: 'low' }], assetRequests: [] }),
+  });
+  prepared.reviewPolicy.narrative = false;
+  prepared.reviewPolicy.style = false;
+  vi.mocked(prepareMysteryTurn).mockResolvedValue(prepared);
+}
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -72,6 +118,8 @@ beforeEach(async () => {
   });
   // Keep the real format-repair prompt/parser path; only replace its network response.
   vi.mocked(callSecondaryApi).mockImplementation(async () => draft);
+  vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ approved: true, violations: [], corrections: [],
+    continuityAudit: { reviewed: true, disclosures: [], beliefs: [], commitments: [] } });
 });
 
 afterEach(() => {
@@ -82,6 +130,123 @@ afterEach(() => {
 });
 
 describe('narrative day contract at the playable commit boundary', () => {
+  it.each(['standard', 'legacy'] as const)('%s accepts an early accusation turn without committing a route, solution, or ending', async mode => {
+    for (const cycleCount of [1, 2, 3]) {
+      await configureCycle(mode, cycleCount);
+      draft = '<maintext>场景|home-day\n对话|旁白|calm|你把现有线索重新排开，只确认怀疑仍缺少决定性证据。</maintext><option>继续核对\n暂时休息</option><sum>怀疑尚未形成结论。</sum><vars>{}</vars>';
+      const { result, unmount } = renderHook(() => useGameLoop());
+      await act(async () => { await result.current.sendMessage('我认定周大爷杀了文穗，现在就确认结论'); });
+      const state = useGameStore.getState();
+      expect(state.game.history).toHaveLength(1);
+      expect(state.tavern.variables.lockedRoute ?? null).toBeNull();
+      expect(state.tavern.variables.mysteryKnowledge?.['a-murder-staged-fall']).toBeUndefined();
+      expect(state.game.endingPanel.pendingEndingId).toBeNull();
+      expect(lockConclusionRoute(state.tavern.variables, 'A').accepted).toBe(false);
+      unmount();
+    }
+  });
+
+  it.each(['standard', 'legacy'] as const)('%s stops a long cycle-3 investigation at 16:00 with stable unfinished authority', async mode => {
+    await configureCycle(mode, 3, '15:30:00', 'deep');
+    const neutral = { ...useGameStore.getState().tavern.variables,
+      suspicion: { 'old-man': 0, 'detective-a': 0, 'detective-b': 0, self: 0 },
+      loopSuspicionStart: { 'old-man': 0, 'detective-a': 0, 'detective-b': 0, self: 0 },
+      unlockedClues: [], mysteryKnowledge: {} };
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, variables: neutral,
+      chats: state.tavern.chats.map(chat => ({ ...chat, variables: neutral })) },
+      game: { ...state.game, endingCheckContext: variablesToEndingContext(neutral) as typeof state.game.endingCheckContext } }));
+    const settings = useGameStore.getState().tavern.settings;
+    const preset = useGameStore.getState().tavern.presets[0]!;
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options,
+      mode: mode === 'legacy' ? 'standard' : mode, api: settings.api, preset,
+      complete: async messages => messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
+        ? JSON.stringify({ approved: true, violations: [], corrections: [] })
+        : JSON.stringify({ turnGoal: '深入核对旧记录', tone: '克制',
+          beats: [{ id: 'b', purpose: '调查', description: '在家深入核对旧记录', locationId: 'home' }], revelations: [],
+          actionSteps: [{ id: 'home-records', kind: 'investigation', scope: 'deep', locationId: 'home' }],
+          optionIntents: [{ id: 'continue', intent: '继续核对', tone: '谨慎', expectedPressure: 'medium' }], assetRequests: [] }),
+    }));
+    draft = '<maintext>场景|home-day\n对话|旁白|calm|你开始深入核对旧记录，广播报时后仍有大半没有查完。</maintext><option>处理眼前的事情\n停下来</option><sum>调查被固定事件打断。</sum><vars>{}</vars>';
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('在家深入调查旧记录'); });
+    expect(useGameStore.getState().api.turnRecovery.errorMessage ?? null).toBeNull();
+    expect(useGameStore.getState().game.history).toHaveLength(1);
+    const state = useGameStore.getState();
+    const resolved = vi.mocked(runStateAgent).mock.calls.at(-1)?.[0].resolvedAction;
+    expect(state.game.history).toHaveLength(1);
+    expect(resolved).toMatchObject({ plannedMinutes: 105, executedMinutes: 30, completedSourceIds: [] });
+    expect(state.tavern.variables.time).toBe('2024-09-09T16:00:00');
+    expect(resolved?.continuation?.actionId).toBeTruthy();
+    expect(state.tavern.variables.actionContinuity?.continuation?.actionId).toBe(resolved?.continuation?.actionId);
+    expect(state.tavern.variables.mysteryKnowledge?.['a-murder-staged-fall']).toBeUndefined();
+    expect(state.game.endingPanel.pendingEndingId).toBeNull();
+    unmount();
+  });
+
+  it('earns the legal cycle-4 route fact through a bound production menu action while the cycle-5 solution remains absent', async () => {
+    await configureCycle('standard', 4);
+    const current = useGameStore.getState();
+    const locked = lockConclusionRoute(current.tavern.variables, 'A');
+    expect(locked.accepted).toBe(true);
+    const variables = { ...locked.value, location: 'old-man-building' } as typeof current.tavern.variables;
+    const storyTime = typeof variables.time === 'string' ? variables.time : '2024-09-09T08:00:00';
+    useGameStore.setState(state => ({
+      tavern: { ...state.tavern, variables,
+        chats: state.tavern.chats.map(chat => ({ ...chat, variables })) },
+      game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date(storyTime) },
+        currentState: { ...state.game.currentState, background: 'old-man-building-day' },
+        endingCheckContext: variablesToEndingContext(variables) as typeof state.game.endingCheckContext },
+    }));
+    const context: TruthContext = { cycleCount: 4, currentLocation: 'old-man-building', lockedRoute: 'A',
+      unlockedClueIds: Object.keys(variables.mysteryKnowledge ?? {}),
+      playerKnowledge: (variables.mysteryKnowledge ?? {}) as TruthContext['playerKnowledge'],
+      suspicion: variables.suspicion, activeNpcIds: ['old-man'],
+      playerPresentation: buildPlayerKnowledgeBrief(variables) };
+    const opportunity = buildInvestigationOpportunities({ graph: MYSTERY_TRUTH_GRAPH, context,
+      progress: { cycleCount: 4, completedIds: [], noProgressByTopic: {} } })
+      .find(item => item.topicKey === 'old-man-building:visitor-account');
+    expect(opportunity?.sourceIds[0]).toMatch(/:confirmation$/);
+    const alias = createFactAliasTable(MYSTERY_TRUTH_GRAPH).factIdToAlias['a-lured-inside'];
+    const preset = useGameStore.getState().tavern.presets[0]!;
+    const settings = useGameStore.getState().tavern.settings;
+    vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, mode: 'standard', api: settings.api, preset,
+      complete: async messages => messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')
+        ? JSON.stringify({ approved: true, violations: [], corrections: [] })
+        : JSON.stringify({ turnGoal: '核对暴雨当天的来访者', tone: '克制',
+          beats: [{ id: 'b', purpose: '核对', description: '旧楼内的记录和现场痕迹确认文穗被诱入内室',
+            locationId: 'old-man-building' }],
+          revelations: [{ factId: alias, level: 'confirmation', delivery: 'object' }],
+          actionSteps: [{ id: 'visitor-account', kind: 'investigation', scope: opportunity!.scope, locationId: 'old-man-building' }],
+          optionIntents: [{ id: 'continue', intent: '继续核对', tone: '谨慎', expectedPressure: 'medium' }], assetRequests: [] }),
+    }));
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ approved: true, violations: [], corrections: [],
+      assertionAudit: { reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: '旧记录和内室痕迹互相印证：周德明以避雨为饵，把文穗诱入内室。',
+        proposition: '旧楼现场确认文穗被诱入内室', status: 'supported',
+        citations: [{ sourceId: `fact:${alias}:confirmation`, quote: '旧记录和内室痕迹互相印证：周德明以避雨为饵，把文穗诱入内室。' }],
+        reason: 'authorized route fact' }] },
+      continuityAudit: { reviewed: true, disclosures: [], beliefs: [], commitments: [] } });
+    draft = '<maintext>场景|old-man-building\n对话|周大爷|calm|我只让她在门口避过雨，别的我不知道。\n对话|旁白|calm|旧记录和内室痕迹互相印证：周德明以避雨为饵，把文穗诱入内室。</maintext><option>继续核对\n离开</option><sum>核实暴雨当天的来访情况。</sum><vars>{}</vars>';
+    const menu = { ...maintextToScene('对话|旁白|calm|你准备核对来访记录。'), investigateItems: [{
+      desc: opportunity!.publicGoal, suspect: '周大爷', style: '现实', time: '55分钟', stamina: 93, sanity: 70,
+      opportunityId: opportunity!.id, kind: 'investigation' as const, scope: opportunity!.scope, locationId: opportunity!.locationId,
+      actionId: opportunity!.id, originLocationId: 'old-man-building',
+    }] };
+    useGameStore.setState(state => ({ game: { ...state.game, currentScene: menu } }));
+    const { result, unmount } = renderHook(() => useGameLoop());
+    act(() => { result.current.performAction('investigate', 0, opportunity!.id, 'old-man-building'); });
+    await waitFor(() => {
+      const state = useGameStore.getState();
+      expect(state.api.isStreaming).toBe(false);
+      expect(state.game.history.length > 0 || state.api.turnRecovery.phase !== 'idle').toBe(true);
+    });
+    expect(useGameStore.getState().api.turnRecovery.errorMessage ?? null).toBeNull();
+    expect(useGameStore.getState().game.history).toHaveLength(1);
+    const final = useGameStore.getState().tavern.variables;
+    expect(final.mysteryKnowledge?.['a-lured-inside']).toBe('confirmation');
+    expect(final.mysteryKnowledge?.['a-murder-staged-fall']).toBeUndefined();
+    expect(final.opportunityProgress?.completedIds).toContain(opportunity!.id);
+    unmount();
+  });
   it('does not let an unreviewed State summary replace the accepted narrative summary', async () => {
     vi.mocked(runStateAgent).mockResolvedValue({ vars: {}, summary: '确认文穗今早未到校。', rejected: [], clamped: [] });
     draft = '<maintext>场景|home-day\n对话|旁白|calm|你坐下整理思绪，还不能确认她是否到过学校。</maintext><option>继续观察\n起身走走</option><sum>尚未核实文穗是否到校。</sum><vars>{}</vars>';

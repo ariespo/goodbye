@@ -37,7 +37,8 @@ describe('live day evaluation summary acceptance', () => {
   });
 
   it('reports actual verified action, retry, call, latency, and target statistics without turning targets into caps', () => {
-    const resolvedAction = (id: string, kind: string) => ({ id, plannedMinutes: 55, executedMinutes: 55,
+    const resolvedAction = (id: string, kind: string, startTime: string) => ({ id, startTime,
+      endTime: new Date(new Date(startTime).getTime() + 55 * 60_000).toISOString(), plannedMinutes: 55, executedMinutes: 55,
       segments: [{ step: { kind }, plannedMinutes: 55, executedMinutes: 55, completed: true }],
       resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } } });
     const rows = Array.from({ length: 17 }, (_, index) => ({
@@ -45,7 +46,9 @@ describe('live day evaluation summary acceptance', () => {
       before: { time: `2024-09-09T${String(8 + Math.floor(index / 2)).padStart(2, '0')}:00:00.000Z` },
       after: { time: `2024-09-09T${String(8 + Math.floor(index / 2)).padStart(2, '0')}:55:00.000Z` },
       lines: [{ text: '可审计正文。' }], calls: [{ status: 200, totalMs: 500 }],
-      metrics: { playableMs: 1000 + index }, resolvedAction: resolvedAction(`resolution-${index}`, index < 9 ? 'investigation' : 'wait'),
+      metrics: { playableMs: 1000 + index }, majorActionIdentity: `major-${index}`,
+      resolvedAction: resolvedAction(`resolution-${index}`, index < 9 ? 'investigation' : 'wait',
+        `2024-09-09T${String(8 + Math.floor(index / 2)).padStart(2, '0')}:00:00`),
     }));
     rows.push({ attempt: 18, turn: 18, success: false, retry: true, retryIdentityMatches: false,
       before: { time: '2024-09-09T23:55:00.000Z' }, after: { time: '2024-09-09T23:55:00.000Z' },
@@ -70,6 +73,34 @@ describe('live day evaluation summary acceptance', () => {
         retries: { attempts: 1, identityMismatches: 1 },
       },
       storageBoundary: { browserPersistence: 'unverified' },
+    });
+  });
+
+  it('uses executed morning intervals and explicit action identity instead of resolution hashes', () => {
+    const resolution = (id: string, startTime: string, planned: number, executed: number) => ({
+      id, startTime, endTime: new Date(new Date(startTime).getTime() + executed * 60_000).toISOString(),
+      plannedMinutes: planned, executedMinutes: executed,
+      segments: [{ step: { kind: 'investigation' }, plannedMinutes: planned, executedMinutes: executed,
+        cumulativeExecutedMinutes: executed, completed: executed === planned }],
+      resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 95, sanity: 70 } },
+    });
+    const summary = runSummary({
+      profile: 'options', diagnosticsEnabled: false, stopReason: 'completed-calendar-day', optionChoiceSelections: 2,
+      provenance: { baselineCycle: 3 }, startState: { cycleCount: 3 }, finalState: { cycleCount: 4 },
+      rows: [
+        { success: true, majorActionIdentity: 'continued-action', calls: [{ status: 200 }],
+          resolvedAction: resolution('resolution-partial', '2024-09-09T15:30:00', 90, 30), before: {}, after: {} },
+        { success: true, majorActionIdentity: 'continued-action', calls: [{ status: 200 }],
+          resolvedAction: resolution('resolution-complete', '2024-09-09T16:00:00', 60, 60), before: {}, after: {} },
+        { success: true, majorActionIdentity: null, calls: [{ status: 200 }],
+          resolvedAction: resolution('resolution-unclassified', '2024-09-09T18:00:00', 30, 30), before: {}, after: {} },
+      ],
+    });
+    expect(summary.audit).toMatchObject({
+      investigations: { morningExecutionTurns: 1, wholeDayExecutionTurns: 3 },
+      majorActions: { executionTurns: 3, uniqueActionIds: 1, resumedExecutionTurns: 1, unverifiableActionIdentities: 1 },
+      targets: { investigations: { value: 1 }, majorActions: { value: 1 } },
+      provider: { callClassification: { foreground: 0, background: 0, unclassified: 3 } },
     });
   });
 

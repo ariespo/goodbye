@@ -18,13 +18,45 @@ function hasExecutedKind(resolution, kinds) {
   });
 }
 
+function storyMinute(value) {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/u);
+  if (!match) return null;
+  return Math.floor(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5])) / 60000);
+}
+
+function hasMorningInvestigation(resolution, investigationKinds) {
+  let cursor = storyMinute(resolution.startTime);
+  if (cursor === null) return false;
+  const dayStart = cursor - (cursor % 1440);
+  for (const value of array(resolution.segments)) {
+    const segment = object(value);
+    const executed = number(segment.executedMinutes) ?? 0;
+    const segmentStart = cursor;
+    const segmentEnd = cursor + executed;
+    cursor = segmentEnd;
+    if (executed > 0 && investigationKinds.has(String(object(segment.step).kind ?? ''))
+      && segmentStart >= dayStart + 8 * 60 && segmentStart < dayStart + 16 * 60
+      && segmentEnd <= dayStart + 16 * 60) return true;
+  }
+  return false;
+}
+
 function summarizeAudit(rows) {
   const accepted = rows.filter(row => row.success === true);
   const resolutions = accepted.map(row => object(row.resolvedAction)).filter(row => Object.keys(row).length > 0);
   const investigationKinds = new Set(['inquiry', 'investigation', 'search']);
   const majorKinds = new Set(['inquiry', 'investigation', 'search', 'travel', 'rest', 'wait']);
-  const verifiedInvestigationActions = resolutions.filter(value => hasExecutedKind(value, investigationKinds)).length;
-  const verifiedMajorActions = resolutions.filter(value => hasExecutedKind(value, majorKinds)).length;
+  const wholeDayInvestigationTurns = resolutions.filter(value => hasExecutedKind(value, investigationKinds)).length;
+  const morningInvestigationTurns = resolutions.filter(value => hasMorningInvestigation(value, investigationKinds)).length;
+  const majorRows = accepted.filter(row => hasExecutedKind(object(row.resolvedAction), majorKinds));
+  const majorIdentities = majorRows.map(row => typeof row.majorActionIdentity === 'string' && row.majorActionIdentity.trim()
+    ? row.majorActionIdentity : null);
+  const uniqueMajorActionIds = new Set(majorIdentities.filter(Boolean)).size;
+  const unverifiableMajorActionIdentities = majorIdentities.filter(value => value === null).length;
+  const resumedExecutionTurns = majorIdentities.length - unverifiableMajorActionIdentities - uniqueMajorActionIds;
+  const verifiedInvestigationActions = morningInvestigationTurns;
+  const verifiedMajorActions = uniqueMajorActionIds;
   const calls = rows.flatMap(row => array(row.calls));
   const statuses = {};
   for (const call of calls) {
@@ -33,6 +65,12 @@ function summarizeAudit(rows) {
   }
   const playable = accepted.map(row => number(object(row.metrics).playableMs)).filter(value => value !== null);
   const firstToken = accepted.map(row => number(object(row.metrics).firstTokenMs)).filter(value => value !== null);
+  const callClassification = { foreground: 0, background: 0, unclassified: 0 };
+  for (const call of calls) {
+    if (call.callClassification === 'foreground' || call.callClassification === 'background') {
+      callClassification[call.callClassification]++;
+    } else callClassification.unclassified++;
+  }
   const retries = rows.filter(row => row.retry === true);
   const resolutionContradictions = accepted.flatMap(row => {
     const resolution = object(row.resolvedAction);
@@ -57,6 +95,17 @@ function summarizeAudit(rows) {
       investigations: target(verifiedInvestigationActions, 5, 8),
       majorActions: target(verifiedMajorActions, 10, 16),
     },
+    investigations: {
+      morningExecutionTurns: morningInvestigationTurns,
+      wholeDayExecutionTurns: wholeDayInvestigationTurns,
+      morningWindow: '08:00 <= executed investigation segment and segment end <= 16:00; 16:00 start excluded',
+    },
+    majorActions: {
+      executionTurns: majorRows.length,
+      uniqueActionIds: uniqueMajorActionIds,
+      resumedExecutionTurns,
+      unverifiableActionIdentities: unverifiableMajorActionIdentities,
+    },
     latency: {
       playableMedianMs: quantile(playable, 0.5),
       playableP90Ms: quantile(playable, 0.9),
@@ -75,6 +124,12 @@ function summarizeAudit(rows) {
       },
       maxRequestChars: Math.max(0, ...calls.map(call => number(call.inputChars) ?? 0)),
       maxReportedPromptTokens: Math.max(0, ...calls.map(call => number(object(call.usage).prompt_tokens) ?? 0)),
+      callClassification: {
+        ...callClassification,
+        basis: callClassification.unclassified === 0
+          ? 'explicit per-call stage or orchestration evidence'
+          : 'unclassified without per-call stage or orchestration evidence',
+      },
     },
     retries: {
       attempts: retries.length,
@@ -107,6 +162,9 @@ function assessAcceptance(data, audit) {
   }
   if (data.profile === 'program-menu' && (number(data.programMenuSelections) ?? 0) < 1) {
     reasons.push('program-menu profile did not execute performAction');
+  }
+  if (data.profile === 'options' && (number(data.optionChoiceSelections) ?? 0) < 1) {
+    reasons.push('options profile did not execute an accepted selectOption choice');
   }
   return { passed: reasons.length === 0, reasons };
 }
@@ -145,7 +203,10 @@ function summarizeFile(name) {
     tokens: { ...audit.provider.tokens, reported: audit.provider.reportedUsage },
     timeline: accepted.map(row => ({
       turn: row.turn, attempt: row.attempt, input: row.input, actionOrigin: row.actionOrigin,
-      actionRequest: row.actionRequest, resolutionId: object(row.resolvedAction).id ?? null,
+      actionRequest: row.actionRequest, optionChoice: row.selectedOptionChoice ?? null,
+      majorActionIdentity: row.majorActionIdentity ?? null,
+      majorActionIdentitySource: row.majorActionIdentitySource ?? 'unverifiable',
+      resolutionId: object(row.resolvedAction).id ?? null,
       priceVsActual: row.priceVsActual,
       options: row.options, from: object(row.before).time, to: object(row.after).time,
       minutes: typeof object(row.before).time === 'string' && typeof object(row.after).time === 'string'

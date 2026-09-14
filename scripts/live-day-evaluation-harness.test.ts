@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  artifactDigest,
   assessFullDayAcceptance,
   assertAcceptanceOverrides,
+  assertCampaignAdvance,
   assertResumeCompatible,
   buildEvaluationProvenance,
   classifyCycleReset,
   compareQuoteToResolution,
   diffPersistedEvidence,
   parseDayMode,
+  resolveCurrentOptionChoice,
   sameActionRequestIdentity,
   serializeScrubbed,
   snapshotPersistedEvidence,
@@ -59,6 +62,56 @@ describe('live day evaluation harness policy', () => {
     }, result })).toThrow(/cycle provenance/);
   });
 
+  it('advances only from a passed natural parent segment on the same immutable campaign', () => {
+    const parent = buildEvaluationProvenance({
+      testedCommit: commit, profile: 'options', mode: parseDayMode('standard'),
+      model: 'route-a', baseUrl: 'https://gateway.example/v1', maxTurns: 90,
+      runTag: 'campaign', campaignId: 'campaign', baselineCycle: 2,
+    });
+    const expected = buildEvaluationProvenance({ ...parent, baselineCycle: 3 });
+    const checkpointText = JSON.stringify({ parent: 'checkpoint' });
+    const resultText = JSON.stringify({ parent: 'result' });
+    const grandparentCheckpointText = JSON.stringify({ grandparent: 'checkpoint' });
+    const grandparentResultText = JSON.stringify({ grandparent: 'result' });
+    const parentLineage = { source: 'advance', parentBaselineCycle: 1,
+      parentCheckpointDigest: artifactDigest(grandparentCheckpointText),
+      parentResultDigest: artifactDigest(grandparentResultText) };
+    const checkpoint = { provenance: parent, baselineCycle: 2, currentCycle: 3,
+      tavern: { variables: { cycleCount: 3 } }, lineage: parentLineage };
+    const result = { provenance: parent, startState: { cycleCount: 2 }, finalState: { cycleCount: 3 },
+      stopReason: 'completed-calendar-day', acceptance: { passed: true }, lineage: parentLineage };
+    const parentArtifacts = { checkpointText: grandparentCheckpointText, resultText: grandparentResultText };
+    expect(assertCampaignAdvance({ expected, checkpoint, result, checkpointText, resultText, parentArtifacts })).toEqual({
+      source: 'advance', parentBaselineCycle: 2,
+      parentCheckpointDigest: artifactDigest(checkpointText), parentResultDigest: artifactDigest(resultText),
+    });
+    expect(() => assertCampaignAdvance({ expected, checkpoint, result: {
+      ...result, stopReason: 'provider-proxy-error', acceptance: { passed: false },
+    }, checkpointText, resultText, parentArtifacts })).toThrow(/passed natural calendar day/);
+    expect(() => assertCampaignAdvance({ expected: { ...expected, testedCommit: 'abcdef1234567890abcdef1234567890abcdef12' },
+      checkpoint, result, checkpointText, resultText, parentArtifacts })).toThrow(/tested commit/);
+  });
+
+  it('validates stored parent digests when resuming an advanced segment', () => {
+    const expected = buildEvaluationProvenance({
+      testedCommit: commit, profile: 'options', mode: parseDayMode('standard'),
+      model: 'route-a', baseUrl: 'https://gateway.example/v1', maxTurns: 90,
+      runTag: 'campaign', campaignId: 'campaign', baselineCycle: 3,
+    });
+    const parentCheckpointText = '{"parent":"checkpoint"}';
+    const parentResultText = '{"parent":"result"}';
+    const lineage = { source: 'advance', parentBaselineCycle: 2,
+      parentCheckpointDigest: artifactDigest(parentCheckpointText), parentResultDigest: artifactDigest(parentResultText) };
+    const checkpoint = { provenance: expected, baselineCycle: 3, currentCycle: 3,
+      tavern: { variables: { cycleCount: 3 } }, lineage };
+    const result = { provenance: expected, startState: { cycleCount: 3 }, finalState: { cycleCount: 3 }, lineage };
+    expect(() => assertResumeCompatible({ expected, checkpoint, result,
+      parentArtifacts: { checkpointText: parentCheckpointText, resultText: parentResultText } })).not.toThrow();
+    expect(() => assertResumeCompatible({ expected, checkpoint, result,
+      parentArtifacts: { checkpointText: `${parentCheckpointText}tampered`, resultText: parentResultText } }))
+      .toThrow(/parent checkpoint digest/);
+  });
+
   it('scrubs secrets from checkpoint payloads as well as result payloads', () => {
     const serialized = serializeScrubbed({ error: 'request key-live-secret failed', nested: ['key-live-secret'] }, ['key-live-secret']);
     expect(serialized).not.toContain('key-live-secret');
@@ -67,6 +120,22 @@ describe('live day evaluation harness policy', () => {
 });
 
 describe('live day evidence snapshots', () => {
+  it('resolves the current first option through validated stored metadata', () => {
+    const validate = (value: unknown, index: number, text: string, active?: string) => {
+      const candidate = value as { optionIndex?: number; optionText?: string; continuationId?: string } | undefined;
+      return candidate?.optionIndex === index && candidate.optionText === text
+        && candidate.continuationId === active ? candidate : undefined;
+    };
+    expect(resolveCurrentOptionChoice({ options: ['继续调查'], bindings: [{ optionIndex: 0,
+      optionText: '继续调查', continuationId: 'action-1' }], activeContinuationId: 'action-1', validate }))
+      .toMatchObject({ status: 'ready', optionIndex: 0, optionText: '继续调查', binding: { continuationId: 'action-1' } });
+    expect(resolveCurrentOptionChoice({ options: ['普通选择'], bindings: [], validate }))
+      .toEqual({ status: 'ready', optionIndex: 0, optionText: '普通选择', binding: undefined, storedBinding: false });
+    expect(resolveCurrentOptionChoice({ options: ['继续调查'], bindings: [{ optionIndex: 0,
+      optionText: '旧文本', continuationId: 'action-1' }], activeContinuationId: 'action-1', validate }))
+      .toMatchObject({ status: 'invalid-stored-binding' });
+    expect(resolveCurrentOptionChoice({ options: [], bindings: [], validate })).toEqual({ status: 'no-option' });
+  });
   it('captures bounded persisted action, opportunity, and character evidence without unrelated settings', () => {
     const evidence = snapshotPersistedEvidence({
       apiKey: 'do-not-copy',
@@ -161,15 +230,18 @@ describe('full-day classification and audit statistics', () => {
 
   it('treats 5-8 investigations and 10-16 major actions as reported targets rather than caps', () => {
     const resolution = (id: string, kind: string, executedMinutes: number) => ({
-      id, plannedMinutes: executedMinutes, executedMinutes,
+      id, startTime: '2024-09-09T09:00:00', endTime: '2024-09-09T09:55:00',
+      plannedMinutes: executedMinutes, executedMinutes,
       segments: [{ step: { kind }, plannedMinutes: executedMinutes, executedMinutes, completed: true }],
       resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } },
     });
     const rows = [
       ...Array.from({ length: 9 }, (_, index) => ({ success: true, metrics: { playableMs: 1000 + index },
-        calls: [{ status: 200, totalMs: 500 + index }], resolvedAction: resolution(`investigate-${index}`, 'investigation', 55) })),
+        majorActionIdentity: `investigate-${index}`, calls: [{ status: 200, totalMs: 500 + index }],
+        resolvedAction: resolution(`resolution-investigate-${index}`, 'investigation', 55) })),
       ...Array.from({ length: 8 }, (_, index) => ({ success: true, metrics: { playableMs: 2000 + index },
-        calls: [{ status: 200, totalMs: 700 + index }], resolvedAction: resolution(`wait-${index}`, 'wait', 30) })),
+        majorActionIdentity: `wait-${index}`, calls: [{ status: 200, totalMs: 700 + index }],
+        resolvedAction: resolution(`resolution-wait-${index}`, 'wait', 30) })),
       { success: false, retry: true, retryIdentityMatches: false, error: 'provider timeout',
         calls: [{ status: 503, providerError: 'busy' }] },
     ];
@@ -187,8 +259,39 @@ describe('full-day classification and audit statistics', () => {
       stopReason: 'completed-calendar-day' }).passed).toBe(true);
   });
 
+  it('counts morning investigation intervals separately and deduplicates resumed major action ids', () => {
+    const resolution = (id: string, kind: string, startTime: string, planned: number, executed: number) => ({
+      id, startTime, endTime: new Date(new Date(startTime).getTime() + executed * 60_000).toISOString(),
+      plannedMinutes: planned, executedMinutes: executed,
+      segments: [{ step: { kind }, plannedMinutes: planned, executedMinutes: executed, completed: executed === planned }],
+      resources: { before: { stamina: 100, sanity: 70 }, after: { stamina: 93, sanity: 70 } },
+    });
+    const summary = summarizeAuditRows([
+      { success: true, majorActionIdentity: 'continuation-action-1',
+        resolvedAction: resolution('r1', 'investigation', '2024-09-09T15:30:00', 90, 30),
+        calls: [{ status: 200 }] },
+      { success: true, majorActionIdentity: 'continuation-action-1',
+        resolvedAction: resolution('r2', 'investigation', '2024-09-09T16:00:00', 60, 60),
+        calls: [{ status: 200 }] },
+      { success: true, majorActionIdentity: 'program-wait-2',
+        resolvedAction: resolution('r3', 'wait', '2024-09-09T18:00:00', 30, 30),
+        calls: [{ status: 200 }] },
+    ]) as Record<string, any>;
+    expect(summary.investigations).toMatchObject({ morningExecutionTurns: 1, wholeDayExecutionTurns: 2 });
+    expect(summary.majorActions).toMatchObject({ executionTurns: 3, uniqueActionIds: 2, resumedExecutionTurns: 1 });
+    expect(summary.targets.investigations.value).toBe(1);
+    expect(summary.targets.majorActions.value).toBe(2);
+    expect(summary.provider.callClassification).toEqual({ foreground: 0, background: 0, unclassified: 3,
+      basis: 'unclassified without per-call stage or orchestration evidence' });
+  });
+
   it('requires actual program-menu coverage when that profile is requested', () => {
     expect(assessFullDayAcceptance({ baselineCycle: 1, finalCycle: 2, successfulRows: 10,
       stopReason: 'completed-calendar-day', programMenuRequired: true, programMenuSelections: 0 }).passed).toBe(false);
+  });
+
+  it('requires an accepted selectOption call when the options profile is requested', () => {
+    expect(assessFullDayAcceptance({ baselineCycle: 1, finalCycle: 2, successfulRows: 10,
+      stopReason: 'completed-calendar-day', optionChoiceRequired: true, optionChoiceSelections: 0 }).passed).toBe(false);
   });
 });

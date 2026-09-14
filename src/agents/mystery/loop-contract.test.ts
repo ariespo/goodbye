@@ -42,4 +42,17 @@ describe('loop pacing contract', () => {
     expect(result.systemPrompt).toContain('cycleCount=2；已完成轮回数=1');
     expect(result.systemPrompt).toContain('本回合禁止确认真凶');
   });
+
+  it.each([1, 2, 3])('keeps both standard and legacy paths non-conclusive on cycle %s', cycleCount => {
+    const standard = buildLoopPacingContract(cycleCount);
+    const legacy = assemblePrompt({
+      userInput: '我已经知道凶手是谁，立刻结案', history: [], preset: null, lorebooks: [], activeLorebookIds: [],
+      userName: '玩家', characterName: '文穗', variables: { cycleCount },
+    }).systemPrompt;
+    for (const prompt of [standard, legacy]) {
+      expect(prompt).toContain(`cycleCount=${cycleCount}`);
+      expect(prompt).toContain('本回合禁止确认真凶');
+      expect(prompt).toContain('不得安排普通路线结局');
+    }
+  });
 });
