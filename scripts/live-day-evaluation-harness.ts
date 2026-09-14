@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { extractNarrativeFields } from '../src/agents/mystery/fact-assertion-review';
 
 export type DayEvaluationMode = 'standard' | 'strict' | 'legacy';
 
@@ -218,7 +219,9 @@ export function assessSourceGroundingEvidence(input: {
 }): { passed: boolean; reasons: string[]; evidence: Record<string, unknown> } {
   const content = input.acceptedContent ?? '';
   const acceptedCandidateReviews = content.length > 0
-    ? input.reviews.filter(review => asRecord(review).reviewedCandidate === content) : [];
+    ? input.reviews.filter(review => reviewedCandidateMatchesAcceptedContent(
+      asRecord(review).reviewedCandidate, content,
+    )) : [];
   const assertions = acceptedCandidateReviews.flatMap(review => {
     const audit = asRecord(asRecord(review).assertionAudit);
     return Array.isArray(audit.assertions) ? audit.assertions.map(asRecord) : [];
@@ -265,6 +268,13 @@ export function assessSourceGroundingEvidence(input: {
     unsupportedAssertions: unsupportedAssertions
       .map(assertion => ({ quote: assertion.quote, proposition: assertion.proposition, reason: assertion.reason })),
   } };
+}
+
+export function reviewedCandidateMatchesAcceptedContent(reviewedCandidate: unknown, acceptedContent: unknown): boolean {
+  if (typeof reviewedCandidate !== 'string' || typeof acceptedContent !== 'string') return false;
+  const semanticFields = (value: string) => Object.fromEntries(Object.entries(extractNarrativeFields(value))
+    .filter(([field]) => field === 'maintext' || field.startsWith('option:') || field === 'hint' || field === 'summary'));
+  return JSON.stringify(semanticFields(reviewedCandidate)) === JSON.stringify(semanticFields(acceptedContent));
 }
 
 function provenanceWithoutSegment(value: Partial<EvaluationProvenance>): Record<string, unknown> {

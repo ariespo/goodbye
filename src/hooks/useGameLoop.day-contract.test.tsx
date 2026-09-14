@@ -18,6 +18,7 @@ import { createFactAliasTable } from '../agents/mystery/fact-aliases';
 import { buildPlayerKnowledgeBrief } from '../data/playerKnowledge';
 import { maintextToScene } from '../engine/scene-parser';
 import type { TruthContext } from '../agents/mystery/types';
+import { assessSourceGroundingEvidence } from '../../scripts/live-day-evaluation-harness';
 
 const actionResolutionCapture = vi.hoisted(() => ({
   traces: [] as Array<{ inputId: string; outputResolutionId: string; resumed: boolean }>,
@@ -300,6 +301,18 @@ describe('narrative day contract at the playable commit boundary', () => {
     expect(final.mysteryKnowledge?.['a-lured-inside']).toBe('confirmation');
     expect(final.mysteryKnowledge?.['a-murder-staged-fall']).toBeUndefined();
     expect(final.opportunityProgress?.completedIds).toContain(opportunity!.id);
+    const committedContent = useGameStore.getState().tavern.chats[0].messages.at(-1)?.content ?? '';
+    expect(committedContent).not.toBe(draft);
+    expect(committedContent).toMatch(/<investigate>[\s\S]*<\/investigate>/u);
+    expect(assessSourceGroundingEvidence({ acceptedContent: committedContent, reviews: [{
+      approved: true, reviewedCandidate: draft,
+      assertionAudit: { assertions: [{ status: 'supported',
+        quote: '旧记录和内室痕迹互相印证：周德明以避雨为饵，把文穗诱入内室。',
+        citations: [{ sourceId: `fact:${alias}:confirmation`, quote: '周德明以避雨为饵，把文穗诱入内室' }] }] },
+    }], required: { text: /周德明以避雨为饵，把文穗诱入内室/u,
+      sourceId: `fact:${alias}:confirmation`, sourceQuote: /周德明以避雨为饵/u } })).toMatchObject({
+      passed: true, evidence: { acceptedCandidateReviewCount: 1 },
+    });
     unmount();
   });
   it('does not let an unreviewed State summary replace the accepted narrative summary', async () => {

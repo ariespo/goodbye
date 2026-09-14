@@ -14,6 +14,7 @@ import {
   parseDayMode,
   resolveCurrentOptionChoice,
   resolveCommittedActionIdentity,
+  reviewedCandidateMatchesAcceptedContent,
   sameActionRequestIdentity,
   serializeScrubbed,
   snapshotPersistedEvidence,
@@ -221,6 +222,18 @@ describe('live day evidence snapshots', () => {
     expect(assessSourceGroundingEvidence({ acceptedContent: null, reviews: [{
       approved: false, reviewedCandidate: '<malformed>', violations: [{ message: '主输出协议缺少标签' }],
     }], forbidden, requireDisposition: true }).passed).toBe(false);
+  });
+
+  it('links only exact semantic fields while allowing program-owned checklist replacement', () => {
+    const reviewed = '<maintext>对话|旁白|calm|06:50文穗说今天不去学校。</maintext><option>核对消息\n拨打电话</option><hint>先看现有记录。</hint><sum>复述开局消息。</sum><vars>{}</vars>';
+    const committed = '<maintext>对话|旁白|calm|06:50文穗说今天不去学校。\n<investigate>核对考勤|老师|现实|55分钟|7|0|program</investigate>\n<action>原地等待|现实|25分钟|2|0|program</action></maintext><option>核对消息\n拨打电话</option><hint>先看现有记录。</hint><sum>复述开局消息。</sum><vars>{}</vars>';
+    expect(reviewedCandidateMatchesAcceptedContent(reviewed, committed)).toBe(true);
+    expect(reviewedCandidateMatchesAcceptedContent(reviewed,
+      committed.replace('今天不去学校', '06:30乘面包车离开'))).toBe(false);
+    expect(reviewedCandidateMatchesAcceptedContent(reviewed,
+      committed.replace('拨打电话', '直接确认未登录'))).toBe(false);
+    expect(reviewedCandidateMatchesAcceptedContent(reviewed,
+      committed.replace('复述开局消息', '确认客观缺席'))).toBe(false);
   });
   it('resolves the current first option through validated stored metadata', () => {
     const validate = (value: unknown, index: number, text: string, active?: string) => {
