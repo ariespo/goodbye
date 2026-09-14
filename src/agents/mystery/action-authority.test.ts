@@ -10,6 +10,19 @@ const plan: DirectorPlan = { turnGoal: '调查', tone: 'calm', beats: [], assetR
   revelations: [{ factId: 'F001', level: 'clue', delivery: 'object' }] };
 
 describe('trusted action input adapter', () => {
+  it('settles the live community-store choice as travel and inquiry at the store', () => {
+    const originalInput = '前往社区便利店向店员陈慧慧打听文穗的去向';
+    const input = buildActionAuthorityInput({ ...plan, revelations: [] }, {
+      ...context, currentLocationId: 'school', originalInput,
+    }, 'live-community-store');
+    const outcome = resolveAction(input);
+    expect(outcome.endLocationId).toBe('supermarket');
+    expect(outcome.segments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ step: expect.objectContaining({ kind: 'travel', locationId: 'supermarket' }), completed: true }),
+      expect.objectContaining({ step: expect.objectContaining({ kind: 'inquiry', locationId: 'supermarket' }), executedMinutes: 55 }),
+    ]));
+  });
+
   it('binds an exactly revalidated menu opportunity without treating its private source as a grant', () => {
     const selectedOpportunity = {
       id: 'investigation:c1:F001:atmosphere:home',

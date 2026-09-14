@@ -34,7 +34,7 @@ interface DestinationRule {
 }
 
 const DESTINATIONS: DestinationRule[] = [
-  { locationId: 'supermarket', aliases: /便利店|便民超市|社区超市/ },
+  { locationId: 'supermarket', aliases: /社区便利店|便利店|便民超市|社区超市/ },
   { locationId: 'community-hospital', aliases: /社区医院|医院/ },
   { locationId: 'school', aliases: /文穗的中学|中学|学校|校门|校园|校内|教学楼|操场|体育办公室/ },
   { locationId: 'old-man-building', aliases: /周大爷(?:家|住处|房子)?|周德明(?:家|住处|房子)?|老头楼|麻将馆楼上/ },
