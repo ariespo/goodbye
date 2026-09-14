@@ -10,8 +10,10 @@ const plan: DirectorPlan = { turnGoal: '调查', tone: 'calm', beats: [], assetR
   revelations: [{ factId: 'F001', level: 'clue', delivery: 'object' }] };
 
 describe('trusted action input adapter', () => {
-  it('settles the live community-store choice as travel and inquiry at the store', () => {
-    const originalInput = '前往社区便利店向店员陈慧慧打听文穗的去向';
+  it.each([
+    '前往社区便利店向店员陈慧慧打听文穗的去向',
+    '前往附近文穗常去的社区便利店询问店员陈慧慧',
+  ])('settles the live store choice as travel and inquiry: %s', originalInput => {
     const input = buildActionAuthorityInput({ ...plan, revelations: [] }, {
       ...context, currentLocationId: 'school', originalInput,
     }, 'live-community-store');
