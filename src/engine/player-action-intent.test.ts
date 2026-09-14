@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePlayerActionIntent, readActionIntentSnapshot } from './player-action-intent';
 const time = new Date('2024-09-09T08:00:00');
+it.each(['我检查眼前能看到的事情，决定接下来去哪里找文穗。', '检查房间，考虑去哪个地方寻找线索', '检查房间，决定去何处调查'])('keeps a contemplated destination from becoming an unresolved journey: %s', text => {
+  expect(resolvePlayerActionIntent(text, 'home', time)?.steps.every(step => step.locationId === 'home')).toBe(true);
+});
 describe('player action intent', () => {
   it('binds the old street choice to Zhou at his building', () => {
     expect(resolvePlayerActionIntent('前往旧街区向周大爷打听清晨动静', 'senpai-building', time)?.steps).toEqual([

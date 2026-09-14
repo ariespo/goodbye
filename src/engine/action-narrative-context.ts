@@ -122,6 +122,8 @@ export function hasExplicitTravelIntent(input: string): boolean {
     for (const verb of clause.matchAll(/前往|赶往|赶到|走向|走到|走进|进入|到达|抵达|返回|回到|去找|去/g)) {
       const prefix = clause.slice(0, verb.index);
       if (NON_ACTION_CONTEXT.test(prefix) || /[？?]|(?:吗|么)\s*$/.test(clause)) continue;
+      const destination = clause.slice(verb.index + verb[0].length).trimStart();
+      if (/^(?:哪里|哪儿|何处|哪(?:个|家|座|条|一))/u.test(destination)) continue;
       if (verb[0] === '去' && (/^去向/u.test(clause.slice(verb.index)) || /过$/u.test(prefix))) continue;
       return true;
     }
