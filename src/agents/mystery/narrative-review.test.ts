@@ -8,6 +8,7 @@ import {
 import { buildAssertionSources, extractNarrativeFields } from './fact-assertion-review';
 import { FIXED_BACKGROUND_FACTS, reviewBackgroundFactProposal } from '../../data/backgroundHistory';
 import type { WriterPacket } from './types';
+import { NARRATIVE_FACT_REVIEW_JSON_SCHEMA } from './schemas';
 
 const emptyAuthority = { authorizedFacts: [], playerKnownFacts: [] };
 const disclosedMorningMessage = {
@@ -66,7 +67,7 @@ describe('deterministic final narrative review', () => {
         calls += 1;
         return JSON.stringify({ approved: true, violations: [], corrections: [], assertionAudit });
       },
-    })).rejects.toThrow('正文连续性审查必须返回完整');
+    })).rejects.toThrow('continuityAudit 必须是对象');
 
     expect(calls).toBe(2);
   });
@@ -85,9 +86,57 @@ describe('deterministic final narrative review', () => {
           continuityAudit: { reviewed: true, disclosures: [] },
         });
       },
-    })).rejects.toThrow('正文连续性审查必须返回完整');
+    })).rejects.toThrow('continuityAudit.beliefs 必须是数组');
 
     expect(calls).toBe(2);
+  });
+
+  it.each([
+    ['disclosure listener list', {
+      reviewed: true, disclosures: [{
+        assertionIndex: 0, lineIndex: 0, quote: '雨还在下。', audienceEvidence: [],
+      }], beliefs: [], commitments: [],
+    }, 'continuityAudit.disclosures[0].listenerIds'],
+    ['belief status', {
+      reviewed: true, disclosures: [], beliefs: [{
+        assertionIndex: 0, observerId: 'player', status: 'certain', evidence: [],
+      }], commitments: [],
+    }, 'continuityAudit.beliefs[0].status'],
+    ['accepted commitment action', {
+      reviewed: true, disclosures: [], beliefs: [], commitments: [{
+        operation: 'accept', actorId: 'detective-a', recipientId: 'player', evidence: [],
+        locationId: 'school', dueAt: '2024-09-09T10:00:00',
+      }],
+    }, 'continuityAudit.commitments[0].action'],
+    ['fulfilled commitment id', {
+      reviewed: true, disclosures: [], beliefs: [], commitments: [{
+        operation: 'fulfill', actorId: 'detective-a', recipientId: 'player', evidence: [],
+      }],
+    }, 'continuityAudit.commitments[0].existingCommitmentId'],
+    ['cancelled commitment id', {
+      reviewed: true, disclosures: [], beliefs: [], commitments: [{
+        operation: 'cancel', actorId: 'detective-a', recipientId: 'player', evidence: [],
+      }],
+    }, 'continuityAudit.commitments[0].existingCommitmentId'],
+  ])('repairs malformed %s metadata with an exact property path', async (_name, malformedContinuityAudit, expectedPath) => {
+    const assertionAudit = ordinaryAudit('maintext', '雨还在下。', 'ordinary-present');
+    const requests: Array<Array<{ role: string; content: string }>> = [];
+    const review = await reviewNarrativeAgainstWriterPacket({
+      api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: completeEmptyAuthority,
+      narrative: '<maintext>对话|旁白|calm|雨还在下。</maintext>',
+      complete: async messages => {
+        requests.push(messages);
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [], assertionAudit,
+          continuityAudit: requests.length === 1 ? malformedContinuityAudit : emptyContinuityAudit,
+        });
+      },
+    });
+
+    expect(review.approved).toBe(true);
+    expect(requests).toHaveLength(2);
+    expect(requests[1][3]?.content).toContain(expectedPath);
   });
 
   it('sends numbered accepted-scene evidence without private canonical bindings', async () => {
@@ -123,21 +172,26 @@ describe('deterministic final narrative review', () => {
 
   it('rejects continuity learning from an auxiliary checklist review', async () => {
     const assertionAudit = ordinaryAudit('observation', '陈慧慧听见了。', 'ordinary-present');
+    let calls = 0;
     const review = await reviewNarrativeAgainstWriterPacket({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
       packet: completeEmptyAuthority,
       narrative: '<observe>陈慧慧听见了。</observe>',
       continuityMode: 'auxiliary',
-      complete: async () => JSON.stringify({
-        approved: true, violations: [], corrections: [], assertionAudit,
-        continuityAudit: {
-          reviewed: true,
-          disclosures: [{ assertionIndex: 0, lineIndex: 0, quote: '听见了', listenerIds: ['chen-huihui'], audienceEvidence: [] }],
-          beliefs: [], commitments: [],
-        },
-      }),
+      complete: async () => {
+        calls += 1;
+        return JSON.stringify({
+          approved: true, violations: [], corrections: [], assertionAudit,
+          continuityAudit: {
+            reviewed: true,
+            disclosures: [{ assertionIndex: 0, lineIndex: 0, quote: '听见了', listenerIds: ['chen-huihui'], audienceEvidence: [] }],
+            beliefs: [], commitments: [],
+          },
+        });
+      },
     });
 
+    expect(calls).toBe(1);
     expect(review.approved).toBe(false);
     expect(review.violations).toContainEqual(expect.objectContaining({ code: 'auxiliary-continuity-effect' }));
     expect(review.continuityEffects).toBeUndefined();
@@ -773,5 +827,11 @@ describe('deterministic final narrative review', () => {
     expect(request).toContain('field、quote、proposition、status、citations、reason');
     expect(request).toContain('reason 必须是非空');
     expect(request).toContain('continuityAudit');
+    const continuitySchema = (
+      NARRATIVE_FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>
+    ).continuityAudit;
+    expect(request).toContain(JSON.stringify(continuitySchema));
+    expect(request).toContain('operation=accept');
+    expect(request).toContain('operation=fulfill 或 cancel');
   });
 });

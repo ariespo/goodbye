@@ -45,10 +45,89 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isReviewedLineSpan(value: unknown): boolean {
-  return isRecord(value)
-    && Number.isSafeInteger(value.lineIndex) && Number(value.lineIndex) >= 0
-    && isNonEmptyString(value.quote);
+function metadataError(path: string, expectation: string): never {
+  throw new Error(`${path} ${expectation}。`);
+}
+
+function recordAt(value: unknown, path: string): Record<string, unknown> {
+  if (!isRecord(value)) metadataError(path, '必须是对象');
+  return value;
+}
+
+function arrayAt(value: unknown, path: string): unknown[] {
+  if (!Array.isArray(value)) metadataError(path, '必须是数组');
+  return value;
+}
+
+function nonEmptyStringAt(value: unknown, path: string): string {
+  if (!isNonEmptyString(value)) metadataError(path, '必须是非空字符串');
+  return value;
+}
+
+function indexAt(value: unknown, path: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) metadataError(path, '必须是非负整数');
+  return Number(value);
+}
+
+function assertReviewedLineSpan(value: unknown, path: string): void {
+  const span = recordAt(value, path);
+  indexAt(span.lineIndex, `${path}.lineIndex`);
+  nonEmptyStringAt(span.quote, `${path}.quote`);
+}
+
+function assertContinuityAuditShape(value: unknown): asserts value is CharacterContinuityAudit {
+  const audit = recordAt(value, 'continuityAudit');
+  if (audit.reviewed !== true) metadataError('continuityAudit.reviewed', '必须为 true');
+
+  const disclosures = arrayAt(audit.disclosures, 'continuityAudit.disclosures');
+  disclosures.forEach((value, index) => {
+    const path = `continuityAudit.disclosures[${index}]`;
+    const disclosure = recordAt(value, path);
+    indexAt(disclosure.assertionIndex, `${path}.assertionIndex`);
+    indexAt(disclosure.lineIndex, `${path}.lineIndex`);
+    nonEmptyStringAt(disclosure.quote, `${path}.quote`);
+    arrayAt(disclosure.listenerIds, `${path}.listenerIds`)
+      .forEach((listenerId, listenerIndex) => {
+        nonEmptyStringAt(listenerId, `${path}.listenerIds[${listenerIndex}]`);
+      });
+    arrayAt(disclosure.audienceEvidence, `${path}.audienceEvidence`)
+      .forEach((span, spanIndex) => assertReviewedLineSpan(span, `${path}.audienceEvidence[${spanIndex}]`));
+  });
+
+  const beliefs = arrayAt(audit.beliefs, 'continuityAudit.beliefs');
+  beliefs.forEach((value, index) => {
+    const path = `continuityAudit.beliefs[${index}]`;
+    const belief = recordAt(value, path);
+    indexAt(belief.assertionIndex, `${path}.assertionIndex`);
+    nonEmptyStringAt(belief.observerId, `${path}.observerId`);
+    const status = nonEmptyStringAt(belief.status, `${path}.status`);
+    if (!BELIEF_STATUSES.has(status)) metadataError(`${path}.status`, '不是允许的认知状态');
+    arrayAt(belief.evidence, `${path}.evidence`)
+      .forEach((span, spanIndex) => assertReviewedLineSpan(span, `${path}.evidence[${spanIndex}]`));
+  });
+
+  const commitments = arrayAt(audit.commitments, 'continuityAudit.commitments');
+  commitments.forEach((value, index) => {
+    const path = `continuityAudit.commitments[${index}]`;
+    const commitment = recordAt(value, path);
+    const operation = nonEmptyStringAt(commitment.operation, `${path}.operation`);
+    if (!COMMITMENT_OPERATIONS.has(operation)) metadataError(`${path}.operation`, '不是允许的承诺操作');
+    nonEmptyStringAt(commitment.actorId, `${path}.actorId`);
+    nonEmptyStringAt(commitment.recipientId, `${path}.recipientId`);
+    arrayAt(commitment.evidence, `${path}.evidence`)
+      .forEach((span, spanIndex) => assertReviewedLineSpan(span, `${path}.evidence[${spanIndex}]`));
+
+    for (const property of ['existingCommitmentId', 'action', 'locationId', 'dueAt'] as const) {
+      if (commitment[property] !== undefined) nonEmptyStringAt(commitment[property], `${path}.${property}`);
+    }
+    if (operation === 'accept') {
+      nonEmptyStringAt(commitment.action, `${path}.action`);
+      nonEmptyStringAt(commitment.locationId, `${path}.locationId`);
+      nonEmptyStringAt(commitment.dueAt, `${path}.dueAt`);
+    } else {
+      nonEmptyStringAt(commitment.existingCommitmentId, `${path}.existingCommitmentId`);
+    }
+  });
 }
 
 /** Reject incomplete critic metadata inside the structured-output retry boundary. */
@@ -97,40 +176,7 @@ function parseNarrativeFactReview(
     throw new Error(incompleteCoverage.map(violation => violation.message).join('\n'));
   }
 
-  const continuityAudit = parsed.continuityAudit;
-  if (!isRecord(continuityAudit) || continuityAudit.reviewed !== true
-    || !Array.isArray(continuityAudit.disclosures)
-    || !Array.isArray(continuityAudit.beliefs)
-    || !Array.isArray(continuityAudit.commitments)
-    || continuityAudit.disclosures.some(disclosure => (
-      !isRecord(disclosure)
-      || !Number.isSafeInteger(disclosure.assertionIndex) || Number(disclosure.assertionIndex) < 0
-      || !Number.isSafeInteger(disclosure.lineIndex) || Number(disclosure.lineIndex) < 0
-      || !isNonEmptyString(disclosure.quote)
-      || !Array.isArray(disclosure.listenerIds)
-      || disclosure.listenerIds.some(listenerId => !isNonEmptyString(listenerId))
-      || !Array.isArray(disclosure.audienceEvidence)
-      || disclosure.audienceEvidence.some(span => !isReviewedLineSpan(span))
-    ))
-    || continuityAudit.beliefs.some(belief => (
-      !isRecord(belief)
-      || !Number.isSafeInteger(belief.assertionIndex) || Number(belief.assertionIndex) < 0
-      || !isNonEmptyString(belief.observerId)
-      || !isNonEmptyString(belief.status) || !BELIEF_STATUSES.has(belief.status)
-      || !Array.isArray(belief.evidence) || belief.evidence.some(span => !isReviewedLineSpan(span))
-    ))
-    || continuityAudit.commitments.some(commitment => (
-      !isRecord(commitment)
-      || !isNonEmptyString(commitment.operation) || !COMMITMENT_OPERATIONS.has(commitment.operation)
-      || !isNonEmptyString(commitment.actorId) || !isNonEmptyString(commitment.recipientId)
-      || !Array.isArray(commitment.evidence) || commitment.evidence.some(span => !isReviewedLineSpan(span))
-      || (commitment.existingCommitmentId !== undefined && !isNonEmptyString(commitment.existingCommitmentId))
-      || (commitment.action !== undefined && !isNonEmptyString(commitment.action))
-      || (commitment.locationId !== undefined && !isNonEmptyString(commitment.locationId))
-      || (commitment.dueAt !== undefined && !isNonEmptyString(commitment.dueAt))
-    ))) {
-    throw new Error('正文连续性审查必须返回完整、有效的 reviewed、disclosures、beliefs 与 commitments。');
-  }
+  assertContinuityAuditShape(parsed.continuityAudit);
 
   return parsed as unknown as FactReview;
 }

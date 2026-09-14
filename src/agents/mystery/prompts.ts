@@ -4,6 +4,7 @@ import { LOOP_PACING_CONTRACT } from './loop-contract';
 import { buildDoNotRepeatBlock, buildProtocolDoNotRepeatBlock } from './repair-task';
 import { DEFAULT_FORMAT_PROMPT } from '../../sillytavern/types';
 import { buildAssertionSources, extractNarrativeFields } from './fact-assertion-review';
+import { NARRATIVE_FACT_REVIEW_JSON_SCHEMA } from './schemas';
 
 export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 
@@ -221,6 +222,9 @@ export function buildNarrativeFactCriticUserPrompt(
 ): string {
   const narrativeFields = extractNarrativeFields(narrative);
   const assertionSources = buildAssertionSources(packet, narrativeFields);
+  const continuityAuditSchema = (
+    NARRATIVE_FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>
+  ).continuityAudit;
   return `请复核已经生成的正文，而不是导演计划。authorizedBackgroundFacts 是已确认的开局前生活史，允许正文自然提及；approvedBackgroundFactProposals 只有在正文逐字出现 evidenceText 时才视为实际呈现。不得把一般生活史误判成案件事实，也不得允许生活史补出当日行踪、精确时间、购买记录、证据或隐藏身份。
 只检查正文是否严格服从 WriterPacket：
 - 是否出现 authorizedFacts/playerKnownFacts 未提供的证据细节、精确时间、号码、记录操作、动机、死因或时间线；
@@ -234,8 +238,12 @@ supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quo
   不要因为措辞风格或没有复述全部事实而拒绝。
   continuityAudit 必须始终返回 reviewed=true 以及 disclosures、beliefs、commitments 三个数组；没有变化时三个数组都显式返回空数组。只审查 CharacterContinuityEvidence 中按 lineIndex 编号的实际可播放台词，不得从玩家输入、Director 计划、option、sum、hint、observe、investigate 或 action 清单生成角色学习或承诺。
   disclosure 只记录已识别说话者实际说出的 assertion，并逐个 listenerId 用 audienceEvidence 的 lineIndex+exact quote 证明明确称呼、回应、目击对话、听见叙述或电话/消息频道。人物出现在 possibleAudienceIds 只表示可能听见，不证明听见；含糊受众返回空，不得把事实真值授予听众。background 不同表示已切换渲染场景，后一场景的普通台词不能证明听见前一场景内容；只有紧接的同场回应，或正文明确写出的电话、消息等频道证据可以连接。belief 还必须引用该 observer 实际表达相信、怀疑或推断同一 assertion 的反应台词；否定或无关命题的反应不得登记为肯定认知，“不合理或没有道理”是反对而不是相信。玩家说出已知事实只证明听众听到了玩家的说法。
-  commitment accept 只记录 obligated actor 实际明确接受的具体同日未来行动，action/locationId/dueAt/recipientId 都必须由同一段肯定承担台词直接支持；dueAt 必须匹配台词中的完整时间表达，不能用“二十点”里包含的“十点”等子串。请求、否定、条件、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；否定、尚未履行或仅到达约定地点都不算履行，未来时的承诺或打算也不是已经完成的行为，旁白写角色拒绝或正要执行同样不等于已经履行。
+  commitment 的 operation=accept 时必须完整返回 operation、actorId、recipientId、evidence、action、locationId、dueAt；operation=fulfill 或 cancel 时必须完整返回 operation、existingCommitmentId、actorId、recipientId、evidence。accept 只记录 obligated actor 实际明确接受的具体同日未来行动，action/locationId/dueAt/recipientId 都必须由同一段肯定承担台词直接支持；dueAt 必须匹配台词中的完整时间表达，不能用“二十点”里包含的“十点”等子串。请求、否定、条件、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；否定、尚未履行或仅到达约定地点都不算履行，未来时的承诺或打算也不是已经完成的行为，旁白写角色拒绝或正要执行同样不等于已经履行。
   mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。完整输出结构为 {"approved":boolean,"violations":[{"code":"非空字符串","factId":"可选字符串","message":"非空字符串"}],"corrections":["string"],"assertionAudit":{"reviewedFields":["field"],"assertions":[{"field":"field","quote":"逐字引文","proposition":"非空命题","status":"allowed status","citations":[{"sourceId":"非空来源ID","quote":"来源逐字引文"}],"reason":"非空理由"}]},"continuityAudit":{"reviewed":true,"disclosures":[],"beliefs":[],"commitments":[]}}。即使数组为空也不得省略这些键，不得用顶层 approved 代替嵌套审查。
+
+[ContinuityAuditOutputSchema]
+${jsonBlock(continuityAuditSchema)}
+只在实际台词提供上述字段所需证据时返回非空记录；没有相应变化时返回空数组。不得为了满足 schema 编造记录、索引、人物、引文、承诺或其他字段值。
 
 [NarrativeFields]
 ${jsonBlock(narrativeFields)}
