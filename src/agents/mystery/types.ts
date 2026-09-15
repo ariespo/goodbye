@@ -318,6 +318,8 @@ export interface WriterPacket {
   continuityContext?: Record<string, unknown>;
   plan: Omit<DirectorPlan, 'revelations' | 'knowledgeEvents' | 'backgroundFactProposals'>;
   playerKnownFacts: ProjectedFact[];
+  /** Program-owned, current-turn permission to repeat an exact known fact level. Legacy packets grant no NPC speakers. */
+  knownFactSpeakers?: Array<{ factId: string; level: RevealLevel; speakerIds: string[] }>;
   authorizedFacts: WriterFact[];
   authorizedKnowledgeEvents: Array<{ eventId: string; evidence: string }>;
   authorizedActionOutcomes?: Array<{ id: string; text: string; speakerIds?: string[] }>;

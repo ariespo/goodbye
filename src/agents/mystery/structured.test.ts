@@ -1,7 +1,127 @@
 import { describe, expect, it, vi } from 'vitest';
-import { completeParsedStructured, completeStructured, resetResponseFormatSupportCache } from './structured';
+import { completeParsedStructured, completeStructured, extractJson, resetResponseFormatSupportCache } from './structured';
 
 describe('completeParsedStructured', () => {
+  it('includes the current schema and root fields when metadata validation fails in JSON Object mode', async () => {
+    resetResponseFormatSupportCache();
+    const schema = {
+      type: 'object',
+      required: ['approved', 'assertionAudit', 'continuityAudit', 'actionAudit'],
+      properties: {
+        approved: { type: 'boolean' },
+        assertionAudit: { type: 'object', additionalProperties: false },
+        continuityAudit: { type: 'object' },
+        actionAudit: { type: 'object' },
+      },
+      additionalProperties: false,
+    };
+    const misplaced = '{"approved":false,"assertionAudit":{"continuityAudit":{},"actionAudit":{}}}';
+    const corrected = '{"approved":false,"assertionAudit":{},"continuityAudit":{},"actionAudit":{}}';
+    const parse = (text: string) => {
+      const value = JSON.parse(text);
+      if (!value.continuityAudit || !value.actionAudit) {
+        throw new Error('continuityAudit / actionAudit 必须为根对象字段');
+      }
+      return value;
+    };
+    const complete = vi.fn().mockResolvedValueOnce(misplaced).mockResolvedValueOnce(corrected);
+    const messages = [{ role: 'user' as const, content: 'review this' }];
+    const controller = new AbortController();
+
+    await expect(completeParsedStructured(complete, 'https://api.deepseek.com/v1|deepseek-v4-flash',
+      messages, { temperature: 0.6, abortSignal: controller.signal },
+      { type: 'json_schema', json_schema: { name: 'review', schema } }, parse))
+      .resolves.toEqual({ approved: false, assertionAudit: {}, continuityAudit: {}, actionAudit: {} });
+
+    expect(complete).toHaveBeenCalledTimes(2);
+    const [retryMessages, retryOptions] = complete.mock.calls[1];
+    expect(retryOptions).toEqual({ temperature: 0, abortSignal: controller.signal, responseFormat: { type: 'json_object' } });
+    expect(retryMessages.slice(0, -1)).toEqual([...messages, { role: 'assistant', content: misplaced }]);
+    const instruction = retryMessages.at(-1).content;
+    expect(instruction).toContain('校验失败');
+    expect(instruction).not.toContain('不可解析');
+    expect(instruction).toContain(JSON.stringify(schema));
+    expect(instruction).toContain('根对象必需字段');
+    expect(instruction).toContain(JSON.stringify(schema.required));
+    expect(instruction).toContain('同一层级');
+    expect(instruction).toContain('不得嵌套');
+    expect(instruction).toContain('不得编造');
+    expect(instruction).toContain('默认值');
+  });
+
+  it.each([
+    ['root object', '{"approved":false,"assertions":[{"reason":"现场描述"}]'],
+    ['array and root object', '{"approved":false,"assertions":[{"reason":"现场描述"}'],
+  ])('identifies an unfinished %s as an end-of-JSON error', async (_name, malformed) => {
+    const corrected = '{"approved":false,"assertions":[{"reason":"现场描述"}]}';
+    const complete = vi.fn().mockResolvedValueOnce(malformed).mockResolvedValueOnce(corrected);
+
+    await expect(completeParsedStructured(complete, `unfinished-${_name}`, [], {},
+      { type: 'json_object' }, extractJson)).resolves.toEqual(JSON.parse(corrected));
+
+    expect(complete).toHaveBeenCalledTimes(2);
+    const instruction = complete.mock.calls[1][0].at(-1).content;
+    expect(instruction).toContain('JSON 语法');
+    expect(instruction).toContain('末尾');
+    expect(instruction).toContain('闭合');
+    expect(instruction).toContain('}');
+    expect(instruction).toContain(']');
+    expect(instruction).not.toContain('字符串之外');
+    expect(complete.mock.calls[1][0].at(-2)).toEqual({ role: 'assistant', content: malformed });
+  });
+
+  it('throws a repeated metadata validation failure after the one retry', async () => {
+    const invalid = '{"approved":true}';
+    const complete = vi.fn().mockResolvedValue(invalid);
+    const validationError = new Error('actionAudit 缺少原文证据');
+
+    await expect(completeParsedStructured(complete, 'repeated-invalid-metadata', [], {},
+      { type: 'json_object' }, text => {
+        JSON.parse(text);
+        throw validationError;
+      })).rejects.toBe(validationError);
+
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete.mock.calls[1][0].at(-1).content).toContain('校验失败');
+  });
+
+  it('recognizes an unexpected-end syntax error without a reported position', async () => {
+    const malformed = '{"approved":false';
+    const complete = vi.fn().mockResolvedValueOnce(malformed).mockResolvedValueOnce('{"approved":false}');
+    const parse = (text: string) => {
+      try {
+        return JSON.parse(text);
+      } catch {
+        // Older JSON.parse engines report EOF without a character offset.
+        throw new SyntaxError('Unexpected end of JSON input');
+      }
+    };
+
+    await expect(completeParsedStructured(complete, 'unexpected-end', [], {},
+      { type: 'json_object' }, parse)).resolves.toEqual({ approved: false });
+    expect(complete.mock.calls[1][0].at(-1).content).toContain('末尾');
+    expect(complete.mock.calls[1][0].at(-1).content).toContain('闭合');
+  });
+
+  it('returns valid structured content without requesting a repair', async () => {
+    const complete = vi.fn().mockResolvedValue('{"approved":false}');
+
+    await expect(completeParsedStructured(complete, 'valid-first-response', [], {},
+      { type: 'json_object' }, JSON.parse)).resolves.toEqual({ approved: false });
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('propagates completion aborts without further calls (during retry: %s)', async duringRetry => {
+    const abort = new DOMException('The operation was aborted.', 'AbortError');
+    const complete = vi.fn();
+    if (duringRetry) complete.mockResolvedValueOnce('{"approved":');
+    complete.mockRejectedValue(abort);
+
+    await expect(completeParsedStructured(complete, `abort-${duringRetry}`, [], {},
+      { type: 'json_object' }, JSON.parse)).rejects.toBe(abort);
+    expect(complete).toHaveBeenCalledTimes(duringRetry ? 2 : 1);
+  });
+
   it('pinpoints stray tokens for the existing retry without accepting an invalid review', async () => {
     const malformed = '{"approved":true,"assertions":[{"reason":"现场描述"}遮]}';
     const corrected = '{"approved":true,"assertions":[{"reason":"现场描述"}]}';

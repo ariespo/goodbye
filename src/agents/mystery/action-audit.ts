@@ -5,6 +5,7 @@ export type ActionAuditStatus = 'pass' | 'fail' | 'not-applicable';
 export interface ActionAuditJudgment {
   status: ActionAuditStatus;
   quote: string;
+  evidenceLineIndices?: number[];
   reason: string;
 }
 export interface ActionAudit {
@@ -69,8 +70,47 @@ function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function referencedQuote(value: Record<string, unknown>, visibleLines: readonly string[], path: string): string {
+  const indices = value.evidenceLineIndices;
+  if (!Array.isArray(indices)) throw new Error(`${path}.evidenceLineIndices 必须是数组。`);
+  if (indices.length === 0 && value.status !== 'fail' && value.status !== 'not-applicable') {
+    throw new Error(`${path}.evidenceLineIndices 只有 fail 或 not-applicable 可以没有正文依据。`);
+  }
+  let previous = -1;
+  const quotes: string[] = [];
+  for (const [offset, index] of indices.entries()) {
+    if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0 || index >= visibleLines.length) {
+      throw new Error(`${path}.evidenceLineIndices[${offset}] 必须是当前可见正文范围内的非负安全整数。`);
+    }
+    if (index <= previous) throw new Error(`${path}.evidenceLineIndices[${offset}] 必须按升序排列且不能重复。`);
+    previous = index;
+    quotes.push(visibleLines[index]);
+  }
+  return quotes.join('\n');
+}
+
+/** Hydrates compact references without replacing contradictory evidence or repairing malformed judgments. */
+export function resolveActionAuditReferences(audit: unknown, visibleLines: readonly string[]): unknown {
+  if (!record(audit)) return audit;
+  const resolve = (value: unknown, path: string): unknown => {
+    if (!record(value) || !('evidenceLineIndices' in value)) return value;
+    const quote = referencedQuote(value, visibleLines, path);
+    if ('quote' in value && value.quote !== quote) {
+      throw new Error(`${path}.quote 必须与 evidenceLineIndices 指定的当前可见正文逐行完全一致。`);
+    }
+    return { ...value, quote };
+  };
+  return { ...audit,
+    originalRequest: resolve(audit.originalRequest, 'actionAudit.originalRequest'),
+    followThrough: resolve(audit.followThrough, 'actionAudit.followThrough'),
+    segments: Array.isArray(audit.segments)
+      ? audit.segments.map((segment, index) => resolve(segment, `actionAudit.segments[${index}]`)) : audit.segments,
+  };
+}
+
 /** Checks report coverage and authentic visible-maintext quotes; meaning is reviewed by the existing critic. */
-export function validateActionAudit(audit: unknown, requirements: ActionAuditRequirements | null, visibleMaintext: string): {
+export function validateActionAudit(audit: unknown, requirements: ActionAuditRequirements | null, visibleMaintext: string,
+  visibleLines?: readonly string[]): {
   approved: boolean; metadataValid: boolean; metadataErrors: string[]; violations: FactReviewViolation[]; corrections: string[];
 } {
   const violations: FactReviewViolation[] = [];
@@ -83,6 +123,9 @@ export function validateActionAudit(audit: unknown, requirements: ActionAuditReq
     reject('缺少完整 actionAudit，不能用已写句子的事实审查代替原请求与过程落实审查。');
     return finish();
   }
+  if (visibleLines && visibleLines.join('\n') !== visibleMaintext) {
+    reject('visibleLines 与当前实际可见正文不一致，不能使用其他场景的行号依据。');
+  }
   const check = (value: unknown, applicable: boolean, label: string) => {
     if (!record(value) || typeof value.status !== 'string' || !['pass', 'fail', 'not-applicable'].includes(value.status)
       || typeof value.quote !== 'string' || typeof value.reason !== 'string' || !value.reason.trim()) {
@@ -92,7 +135,18 @@ export function validateActionAudit(audit: unknown, requirements: ActionAuditReq
     if (applicable && value.status === 'not-applicable') reject(`${label} 已实际执行，不能跳过审查。`);
     if (!applicable && value.status !== 'not-applicable') reject(`${label} 未执行或属于事件，不应要求新的行动过程/结果。`);
     if (value.status === 'pass' && !value.quote.trim()) reject(`${label} 的 pass 缺少正文引文。`);
-    if (value.quote && !visibleMaintext.includes(value.quote)) reject(`${label} 引文不在实际可见正文中，不得引用选项、摘要、计划或编造引文。`);
+    if ('evidenceLineIndices' in value) {
+      if (!visibleLines) reject(`${label} 缺少当前可见正文行，不能验证 evidenceLineIndices。`);
+      else {
+        try {
+          if (value.quote !== referencedQuote(value, visibleLines, label)) reject(`${label} 引文与 evidenceLineIndices 指定的当前正文行不一致。`);
+        } catch (error) {
+          reject(error instanceof Error ? error.message : `${label} evidenceLineIndices 无效。`);
+        }
+      }
+    } else if (value.quote && !visibleMaintext.includes(value.quote)) {
+      reject(`${label} 引文不在实际可见正文中，不得引用选项、摘要、计划或编造引文。`);
+    }
     if (value.status === 'fail') violations.push({ code: 'scene-contract-violation', message: `行动审查：${label} 未落实：${value.reason}` });
   };
   check(audit.originalRequest, requirements.originalRequest.applicable, 'originalRequest 原请求');

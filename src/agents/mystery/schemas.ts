@@ -261,11 +261,11 @@ const characterContinuityAuditSchema: Record<string, unknown> = {
 
 const actionAuditJudgmentProperties = {
   status: { type: 'string', enum: ['pass', 'fail', 'not-applicable'] },
-  quote: { type: 'string' },
+  evidenceLineIndices: { type: 'array', items: { type: 'integer', minimum: 0 } },
   reason: { type: 'string', minLength: 1 },
 };
 const actionAuditJudgmentSchema = {
-  type: 'object', additionalProperties: false, required: ['status', 'quote', 'reason'],
+  type: 'object', additionalProperties: false, required: ['status', 'evidenceLineIndices', 'reason'],
   properties: actionAuditJudgmentProperties,
 };
 export const ACTION_AUDIT_JSON_SCHEMA = {
@@ -274,7 +274,7 @@ export const ACTION_AUDIT_JSON_SCHEMA = {
     originalRequest: actionAuditJudgmentSchema,
     followThrough: actionAuditJudgmentSchema,
     segments: { type: 'array', items: {
-      type: 'object', additionalProperties: false, required: ['segmentId', 'status', 'quote', 'reason'],
+      type: 'object', additionalProperties: false, required: ['segmentId', 'status', 'evidenceLineIndices', 'reason'],
       properties: { segmentId: { type: 'string' }, ...actionAuditJudgmentProperties },
     } },
   },

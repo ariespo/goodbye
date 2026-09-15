@@ -883,8 +883,9 @@ describe('deterministic final narrative review', () => {
     });
 
     expect(responseName).toBe('narrative_fact_review');
-    expect(systemRequest).toContain('前述三字段示例不适用于本调用');
-    expect(systemRequest).toContain('field、quote、proposition、status、citations、reason');
+    expect(systemRequest).toContain('六个同级顶层字段');
+    expect(systemRequest).not.toContain('只检查导演计划');
+    expect(systemRequest).not.toContain('"factId":"string?"');
     expect(request).toContain('每个可见句子都必须由 assertion.quote 覆盖');
     expect(request).toContain('field、quote、proposition、status、citations、reason');
     expect(request).toContain('reason 必须是非空');
@@ -917,12 +918,85 @@ describe('same-call structured action review', () => {
   const response = (actionAudit?: unknown) => JSON.stringify({ approved: true, violations: [], corrections: [],
     assertionAudit: ordinaryAudit('maintext', quote, 'ordinary-present'), continuityAudit: emptyContinuityAudit,
     ...(actionAudit === undefined ? {} : { actionAudit }) });
+  it('uses one root schema and resolves disjoint action evidence lines before validation', async () => {
+    const lines = ['你问文穗有没有回复她。', '她收起手机。', '她明确拒绝回答，你仍未得到答案。'];
+    const candidate = `<maintext>${lines.map(text => `对话|旁白|calm|${text}`).join('\n')}</maintext>`;
+    const report = { approved: true, violations: [], corrections: [],
+      assertionAudit: { reviewedFields: ['maintext'], assertions: lines.map(quote => ({
+        field: 'maintext', quote, proposition: quote, status: 'ordinary-present', citations: [], reason: '当下动作与问答。',
+      })) }, continuityAudit: emptyContinuityAudit,
+      actionAudit: { originalRequest: { status: 'pass', evidenceLineIndices: [0, 2], reason: '问题与拒答均已表现。' },
+        followThrough: { status: 'not-applicable', evidenceLineIndices: [], reason: '没有后续。' },
+        segments: [{ segmentId: 'segment:0', status: 'pass', evidenceLineIndices: [0, 2], reason: '实际问答及局限。' }] } };
+    let calls = 0;
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'indexed-action', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative: candidate, complete: async messages => {
+        calls += 1;
+        expect(messages[0].content).not.toContain('五个顶层字段');
+        expect(messages[1].content).toContain('[NarrativeReviewOutputSchema]');
+        expect(messages[1].content).not.toContain('[ContinuityAuditOutputSchema]');
+        return JSON.stringify(report);
+      } });
+    expect(reviewed.approved).toBe(true);
+    expect(reviewed.actionAudit?.originalRequest.quote).toBe([lines[0], lines[2]].join('\n'));
+    expect(calls).toBe(1);
+  });
+  it.each(['actionAudit', 'continuityAudit'])('diagnoses misplaced %s without silently moving the report', async field => {
+    const malformed = JSON.parse(response(pass));
+    malformed.assertionAudit[field] = malformed[field];
+    delete malformed[field];
+    let calls = 0;
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: `nested-${field}`, apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, complete: async messages => {
+        calls += 1;
+        if (calls === 1) return JSON.stringify(malformed);
+        expect(messages.at(-1)?.content).toContain(`$.assertionAudit.${field}`);
+        expect(messages.at(-1)?.content).toContain(`$.${field}`);
+        return response(pass);
+      } });
+    expect(reviewed.approved).toBe(true);
+    expect(calls).toBe(2);
+    calls = 0;
+    await expect(reviewNarrativeAgainstWriterPacket({ api: { baseUrl: `nested-${field}-invalid`, apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, complete: async () => { calls += 1; return JSON.stringify(malformed); } })).rejects.toThrow(`$.assertionAudit.${field}`);
+    expect(calls).toBe(2);
+  });
   it('retries missing action metadata in the existing critic boundary', async () => {
     let calls = 0;
     const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'test', apiKey: 'test', model: 'critic' }, preset: null,
       packet, narrative, complete: async () => ++calls === 1 ? response() : response(pass) });
     expect(reviewed.approved).toBe(true);
     expect(calls).toBe(2);
+  });
+  it('reports action and audience errors together in the one critic correction', async () => {
+    const spoken = '今天在校门口见过文穗。';
+    const next = '你在传达室外向门卫详细核对上午的情况，并在校门周边仔细观察与等候。';
+    const candidate = `<maintext>对话|school-guard|calm|${spoken}\n对话|旁白|calm|${next}</maintext>`;
+    const current = { ...packet, authorizedFacts: [{ id: 'seen', level: 'atmosphere', text: spoken,
+      delivery: 'dialogue', speakerId: 'school-guard' }] } as WriterPacket;
+    const validAction = { ...pass, originalRequest: { ...pass.originalRequest, quote: next },
+      segments: [{ ...pass.segments[0], quote: next }] };
+    const report = { approved: true, violations: [], corrections: [],
+      assertionAudit: { reviewedFields: ['maintext'], assertions: [
+        { field: 'maintext', quote: spoken, proposition: spoken, status: 'supported',
+          citations: [{ sourceId: 'fact:seen:atmosphere', quote: spoken }], reason: '获准门卫发言。' },
+        { field: 'maintext', quote: next, proposition: next, status: 'ordinary-present', citations: [], reason: '当下行动。' },
+      ] }, continuityAudit: { ...emptyContinuityAudit, disclosures: [
+        { assertionIndex: 0, lineIndex: 0, quote: spoken, listenerIds: ['player'], audienceEvidence: [{ lineIndex: 1, quote: next }] },
+      ] }, actionAudit: { ...validAction, originalRequest: { ...validAction.originalRequest, quote: '并不存在的句子。' } } };
+    let calls = 0;
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'combined-metadata', apiKey: 'test', model: 'critic' }, preset: null,
+      packet: current, narrative: candidate, complete: async messages => {
+        calls += 1;
+        if (calls === 1) return JSON.stringify(report);
+        expect(messages.at(-1)?.content).toContain('originalRequest');
+        expect(messages.at(-1)?.content).toContain('unproved listener or audience');
+        expect(messages.at(-1)?.content).toContain('不得修改正文来凑出听众证据');
+        return JSON.stringify({ ...report, actionAudit: validAction, continuityAudit: emptyContinuityAudit });
+      } });
+    expect(calls).toBe(2);
+    expect(reviewed.approved).toBe(true);
+    expect(reviewed.continuityEffects?.disclosures ?? []).toEqual([]);
   });
   it.each(['quote', 'segmentId', 'not-applicable'])('leaves repeated invalid %s metadata at review failure, not Writer repair', async field => {
     const invalid = structuredClone(pass);
@@ -960,5 +1034,16 @@ describe('same-call structured action review', () => {
     const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'test', apiKey: 'test', model: 'critic' }, preset: null,
       packet, narrative, continuityMode: 'auxiliary', complete: async () => response() });
     expect(reviewed.approved).toBe(true);
+  });
+  it('ignores unused action references in auxiliary review without requesting a correction', async () => {
+    let calls = 0;
+    const reviewed = await reviewNarrativeAgainstWriterPacket({ api: { baseUrl: 'test', apiKey: 'test', model: 'critic' }, preset: null,
+      packet, narrative, continuityMode: 'auxiliary', complete: async () => {
+        calls += 1;
+        return response({ ...pass, originalRequest: { status: 'pass', evidenceLineIndices: [999], reason: 'unused' } });
+      } });
+    expect(reviewed.approved).toBe(true);
+    expect(reviewed.actionAudit).toBeNull();
+    expect(calls).toBe(1);
   });
 });

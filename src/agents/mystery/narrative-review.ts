@@ -6,11 +6,11 @@ import {
   buildNarrativeFactCriticUserPrompt,
   buildNarrativeFormatRepairPrompt,
   buildNarrativeRepairPrompt,
-  FACT_CRITIC_SYSTEM_PROMPT,
   buildWriterSystemPrompt,
 } from './prompts';
+import { LOOP_PACING_CONTRACT } from './loop-contract';
 import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
-import { buildActionAuditRequirements, validateActionAudit } from './action-audit';
+import { buildActionAuditRequirements, resolveActionAuditReferences, validateActionAudit } from './action-audit';
 import { mergeRepairResiduals } from './repair-task';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 import type { ValidationError } from '../../sillytavern/output-protocol';
@@ -149,6 +149,12 @@ function parseNarrativeFactReview(
   }
 
   const assertionAudit = parsed.assertionAudit;
+  if (isRecord(assertionAudit)) {
+    const misplaced = ['actionAudit', 'continuityAudit'].filter(key => Object.hasOwn(assertionAudit, key));
+    if (misplaced.length) {
+      throw new Error(misplaced.map(key => `$.assertionAudit.${key} 放错层级，必须位于 $.${key}，与 $.assertionAudit 同级；assertionAudit 仅包含 reviewedFields 和 assertions，不得把其他审查塞进其中`).join('\n'));
+    }
+  }
   if (!isRecord(assertionAudit)
     || !Array.isArray(assertionAudit.reviewedFields)
     || assertionAudit.reviewedFields.some(field => !isNonEmptyString(field))
@@ -417,13 +423,13 @@ export function removeUngroundedNarrativeLines(
   return narrative;
 }
 
-const NARRATIVE_CONTINUITY_REVIEW = `你正在审核实际正文与已知公开连续性，而不是要求每句正文都成为新的事实提案。
+const NARRATIVE_CONTINUITY_REVIEW = `你是《漫长的告别》的正文审查 Agent，只判断候选正文是否符合获准事实、角色权限、实际行动及公开连续性。你不改写剧情，不输出隐藏真相，不修改状态；程序会再次验证你的审查报告。不是要求每句正文都成为新的事实提案。
 continuityContext.publicContinuity 是已经展示的可信开局事件；authorizedBackgroundFacts 是已授权生活史，二者均可自然重述，无须再次 proposal。clock 是当前时钟；recentHistory/memory 用于检查承接，不把玩家愿望或猜测变成事实。
 若 publicContinuity 已展示今早06:50的消息，允许“她今早发消息说今天不去学校”或“她六点五十说今天不去学校”等有限转述；06:50与六点五十是同一时间，消息发送时间不必出现在引号内的消息正文中。转述只证明她这样说过，不能推成确认未到校、已请假或新的购买/去向记录。逐个局部断言比对来源，不要因句中有“她今早”就把整句判成未授权往事。
 事实方面只拒绝明确新增且无授权的事实、物证、具体旧事件、时间线矛盾或人物知识/身份越界。例如擅自确认考勤、请假条、过去具体购买记录，或与已展示今早06:50消息矛盾的说法。请指出具体原句及缺失来源或冲突来源。对实际可播放正文还需按 resolvedAction.segments 检查已执行行动的过程覆盖；这不是要求复述全部事实或按字数评价。辅助清单不承担行动演出覆盖。
 普通当下服务动作、当前对话、递交商品和关怀性口吻本身不构成新案件事实；不要因涉及学校、牛奶或善意关怀就拒绝。不要以未逐字复述计划或语气偏好代替事实审核。
 发现违规时要求完整修复问答、旁白和依赖选项，不允许静默删除整条台词使对话断链。
-本调用复核正文，前述三字段示例不适用于本调用。必须返回 approved、violations、corrections、assertionAudit、continuityAudit 五个顶层字段。assertionAudit 必须含 reviewedFields 与 assertions；每条 assertion 必须完整返回 field、quote、proposition、status、citations、reason。continuityAudit 必须含 reviewed=true 以及 disclosures、beliefs、commitments 三个数组。不得省略嵌套字段、编造字段值或用顶层 approved 代替逐项审查。`;
+严格遵守本次 NarrativeReviewOutputSchema：approved、violations、corrections、assertionAudit、continuityAudit、actionAudit 是六个同级顶层字段。assertionAudit 内仅含 reviewedFields 和 assertions；continuityAudit 与 actionAudit 不得嵌入 assertionAudit。行动审查使用可见正文行号，程序回填引文；完整性不等于语义通过，仍须实际判断每项。辅助或无执行记录时 actionAudit 为 null。不得为了凑齐字段补造依据、违规或通过结论。`;
 
 export function sanitizeNarrativeFactReview(
   review: FactReview,
@@ -509,7 +515,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     id, actorId, recipientId, action, locationId, dueAt, evidenceQuote,
   }));
   const messages = [
-    { role: 'system', content: `${FACT_CRITIC_SYSTEM_PROMPT}\n\n${NARRATIVE_CONTINUITY_REVIEW}` },
+    { role: 'system', content: `${LOOP_PACING_CONTRACT}\n\n${NARRATIVE_CONTINUITY_REVIEW}` },
     { role: 'user', content: buildNarrativeFactCriticUserPrompt(options.packet, options.narrative, {
       mode: options.continuityMode ?? 'playable',
       lines: evidenceLines,
@@ -528,8 +534,17 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
     actionRequirements ? ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT : NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT,
     raw => {
       const value = parseNarrativeFactReview(raw, assertionSources, narrativeFields);
-      const actionReview = validateActionAudit(value.actionAudit, actionRequirements, scene.lines.map(line => line.text).join('\n'));
-      if (!actionReview.metadataValid) throw new Error(actionReview.metadataErrors.join('\n'));
+      const visibleLines = scene.lines.map(line => line.text);
+      const reportErrors: string[] = [];
+      if (actionRequirements) {
+        try {
+          value.actionAudit = resolveActionAuditReferences(value.actionAudit, visibleLines) as FactReview['actionAudit'];
+        } catch (error) {
+          reportErrors.push(error instanceof Error ? error.message : String(error));
+        }
+      }
+      const actionReview = validateActionAudit(value.actionAudit, actionRequirements, visibleLines.join('\n'), visibleLines);
+      reportErrors.push(...actionReview.metadataErrors);
       const continuityEvidence = buildCharacterContinuityCandidateEvidence({
         candidateText: options.narrative,
         scene,
@@ -547,8 +562,12 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
         playerIdentityName: options.playerIdentityName,
       });
       if (options.continuityMode !== 'auxiliary' && !continuity.approved) {
-        throw new Error(continuity.violations.join('\n'));
+        reportErrors.push(...continuity.violations.map(message => `continuityAudit：${message}`));
+        if (continuity.violations.some(message => /listener|audience/.test(message))) {
+          reportErrors.push('听众修正：逐项复查被拒绝的 disclosure 与 audienceEvidence；在场、继续询问、观察、移动不证明听见该句。找不到直接称呼、紧接回应或明确电话/消息证据时，不登记该条披露；没有合格披露可返回 disclosures: []，但保留其他有证据的记录。不得修改正文来凑出听众证据。');
+        }
       }
+      if (reportErrors.length) throw new Error([...new Set(reportErrors)].join('\n'));
       return { value, continuity, actionReview };
     },
   );

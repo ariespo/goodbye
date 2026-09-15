@@ -4,7 +4,7 @@ import { LOOP_PACING_CONTRACT } from './loop-contract';
 import { buildDoNotRepeatBlock, buildProtocolDoNotRepeatBlock } from './repair-task';
 import { DEFAULT_FORMAT_PROMPT } from '../../sillytavern/types';
 import { buildAssertionSources, extractNarrativeFields } from './fact-assertion-review';
-import { ACTION_AUDIT_JSON_SCHEMA, NARRATIVE_FACT_REVIEW_JSON_SCHEMA } from './schemas';
+import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import { buildActionAuditRequirements } from './action-audit';
 
 export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
@@ -79,6 +79,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 事实边界：
 0. WriterPacket.continuityContext中的clock、publicContinuity和已经接受的事件记忆必须贯穿正文与修复。公开开局与authorizedBackgroundFacts本身已授权重述，不需要另提backgroundFactProposal；玩家的提问/猜测仍只是尝试。不得因为有一条已知衣柜异常，就自行创造学校考勤、请假条字迹、购物偏好或物证成因。
 1. 只能使用 WriterPacket.authorizedFacts 和 playerKnownFacts 中的事实。
+1a. playerKnownFacts 表示玩家已知，不代表每个 NPC 都知道。NPC 复述其中事实时，只能按 knownFactSpeakers 对该 factId、level 明确列出的 speakerIds 发言；不得升级披露层级或补充原文没有的内容。authorizedFacts 的本次交付仍遵守各自的角色权限。
 2. authorizedFacts.text 是允许表达的最深含义；不得用旁白、措辞、反应或选项暗示更深答案。
 2a. 呈现授权线索时保留 text 中的具体事实原文，文风变化放在玩家动作与情绪上；不要给线索添加尺寸、类别、来源、成因、行为者或意图。atmosphere 级异常只呈现异常本身，不能用“似乎”“像是”等措辞补出更深解释。
 3. 不得新增凶手、动机、证据、死因、时间线节点或 NPC 知情内容。
@@ -244,9 +245,8 @@ export function buildNarrativeFactCriticUserPrompt(
   const narrativeFields = extractNarrativeFields(narrative);
   const assertionSources = buildAssertionSources(packet, narrativeFields);
   const actionRequirements = buildActionAuditRequirements(packet, characterContinuityEvidence?.mode ?? 'playable');
-  const continuityAuditSchema = (
-    NARRATIVE_FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>
-  ).continuityAudit;
+  const reviewFormat = actionRequirements ? ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT : NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT;
+  const outputSchema = reviewFormat.type === 'json_schema' ? reviewFormat.json_schema.schema : {};
   return `请复核已经生成的正文，而不是导演计划。authorizedBackgroundFacts 是已确认的开局前生活史，允许正文自然提及；approvedBackgroundFactProposals 只有在正文逐字出现 evidenceText 时才视为实际呈现。不得把一般生活史误判成案件事实，也不得允许生活史补出当日行踪、精确时间、购买记录、证据或隐藏身份。
 只检查正文是否严格服从 WriterPacket：
 0. actionIntentAudit 对照玩家 originalInput/boundIntent、原获准 planGoal/plannedLocations/plannedNpcIds/approvedSteps 和实际 executedSteps。requestedStepCount 标记必须保留的原行动前缀，extensionStepCount 标记导演接续阶段；程序自动插入的路程不计入这两个逻辑阶段数。必须实际回应原对象、落实原目的地与目标，之后允许服务同一目标且已结算的跨地点调查。检查转折是否有获准依据或明确待核实的理由；不能编造线索、跳过原行动、转向无关目标，不能把“值得核查”写成已证实发现。不要仅因问询后出现调查或移动就判违规。仍不得把“去旧街区问周大爷”直接写成留在学姐楼调查。逐段检查 sceneContracts；预算、事件、资源导致的中断以 resolvedAction 为准，只演出实际完成部分，不把中断改成另一个主动目标。此审计不是新的事实授权。
@@ -262,25 +262,25 @@ supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quo
   continuityAudit 必须始终返回 reviewed=true 以及 disclosures、beliefs、commitments 三个数组；没有变化时三个数组都显式返回空数组。只审查 CharacterContinuityEvidence 中按 lineIndex 编号的实际可播放台词，不得从玩家输入、Director 计划、option、sum、hint、observe、investigate 或 action 清单生成角色学习或承诺。
   disclosure 只记录已识别说话者实际说出的 assertion，并逐个 listenerId 用 audienceEvidence 的 lineIndex+exact quote 证明明确称呼、回应、目击对话、听见叙述或电话/消息频道。audienceEvidence 不得早于 disclosure 的 source line；默认只能引用 disclosure 当行或同背景紧接的下一行，更远的行必须逐字写出电话、消息等连接频道。普通移动或另一个问题不证明听见。人物出现在 possibleAudienceIds 只表示可能听见，不证明听见；含糊受众返回空，不得把事实真值授予听众。background 不同表示已切换渲染场景，后一场景的普通台词不能证明听见前一场景内容；只有紧接的同场回应，或正文明确写出的电话、消息等频道证据可以连接。belief 还必须引用该 observer 实际表达相信、怀疑或推断同一 assertion 的反应台词；否定或无关命题的反应不得登记为肯定认知，“不合理或没有道理”是反对而不是相信。玩家说出已知事实只证明听众听到了玩家的说法。
   commitment 的 operation=accept 时必须完整返回 operation、actorId、recipientId、evidence、action、locationId、dueAt；operation=fulfill 或 cancel 时必须完整返回 operation、existingCommitmentId、actorId、recipientId、evidence。accept 只记录 obligated actor 实际明确接受的具体同日未来行动，action/locationId/dueAt/recipientId 都必须由同一段肯定承担台词直接支持；dueAt 必须匹配台词中的完整时间表达，不能用“二十点”里包含的“十点”等子串。请求、否定、条件、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；否定、尚未履行或仅到达约定地点都不算履行，未来时的承诺或打算也不是已经完成的行为，旁白写角色拒绝或正要执行同样不等于已经履行。
-  mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。既有审查字段结构为 {"approved":boolean,"violations":[{"code":"非空字符串","factId":"可选字符串","message":"非空字符串"}],"corrections":["string"],"assertionAudit":{"reviewedFields":["field"],"assertions":[{"field":"field","quote":"逐字引文","proposition":"非空命题","status":"allowed status","citations":[{"sourceId":"非空来源ID","quote":"来源逐字引文"}],"reason":"非空理由"}]},"continuityAudit":{"reviewed":true,"disclosures":[],"beliefs":[],"commitments":[]}}。即使数组为空也不得省略这些键，不得用顶层 approved 代替嵌套审查。另须按下方 ActionAuditRequirements 返回 actionAudit 对象或 null。
+  mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。报告唯一结构如下：六个顶层字段必须同级；assertionAudit 只含 reviewedFields 和 assertions，闭合后再写 continuityAudit 与 actionAudit，不能把它们放进 assertionAudit。空数组也必须明确返回，不用 approved 代替嵌套审查。不输出冗长论证，reason 简短说明实际判断依据；字段和覆盖不得为精简而省略。
 
-[ContinuityAuditOutputSchema]
-${jsonBlock(continuityAuditSchema)}
+[NarrativeReviewOutputSchema]
+${jsonBlock(outputSchema)}
 只在实际台词提供上述字段所需证据时返回非空记录；没有相应变化时返回空数组。不得为了满足 schema 编造记录、索引、人物、引文、承诺或其他字段值。
 
 [ActionAuditRequirements]
 ${jsonBlock(actionRequirements)}
-[ActionAuditOutputSchema]
-${jsonBlock(ACTION_AUDIT_JSON_SCHEMA)}
-ActionAuditRequirements 为 null 时 actionAudit 返回 null，不要求辅助清单或历史无执行包补演行动；否则必须在同一结果中完整返回 actionAudit，不能只审已写出的句子而遗漏玩家原问题。
+ActionAuditRequirements 为 null 时顶层 $.actionAudit 返回 null，不要求辅助清单或历史无执行包补演行动；否则按上述唯一 schema 完整返回 $.actionAudit，与 $.continuityAudit、$.assertionAudit 同级。原问题、实际后续及每个程序 segmentId 都须审查。事件中断且没有可执行工作时仍完整返回对象，将程序标记不适用的条目填 not-applicable 和 evidenceLineIndices: []，不能省略整块审查。
 originalRequest 核对具体原对象、原问题及已执行尝试。已完成问询必须实际提出原具体问题，并呈现获准回答，或清楚可见的拒答、回避及未获答状态；只安抚、岔开话题却不曾提出原问题不能通过。拒答不要求强行得到答案，也不能为了通过审查编造“文穗没有回复”等未授权事实。只执行途中或部分工作时，仅要求本次实际尝试、进展和中断，不强迫尚未发生的提问、完整结果或抵达。
 followThrough 只审 requirements 指定的实际已执行追加阶段及其服务原目标的关系；未执行的未来阶段不能判已完成，也不能要求补演。segments 必须完整且不重复地返回全部程序 segmentId，不得自己增删或改变适用性。applicable=false 必须 not-applicable；applicable=true 必须 pass 或 fail。
 每个阶段核对具体活动、进展或局限是否支撑实际执行时间；不按字数、段落或转折数量判定。报时、直接宣称“过了55分钟”或机械重复动作不是充分过程依据；也不强求新线索或新事件，只要真实持续活动及其局限得到适当演绎。旅行须区分途中与抵达，休息/等待不假装调查，零分钟或纯事件段不要求新过程。
-quote 只能逐字引用 CharacterContinuityEvidence.lines 的实际可见正文，可用换行连接相邻台词的完整文本；不得引用计划、摘要、选项、控制指令或臆造缺失台词。适用项 pass 必须有非空引文及具体理由；fail 如整项未写可 quote="" 并说明遗漏，否则引用违规正文；not-applicable 可 quote=""。任何 fail 都必须拒绝并给出 scene-contract-violation 的最小修复要求；顶层 approved 不能覆盖 actionAudit 的失败。
+actionAudit 不复制 quote，只在 evidenceLineIndices 中按升序选择 CharacterContinuityEvidence.lines 的零起点 lineIndex；可选择不相邻的多行，不重复、不臆造编号。程序会从本次可见正文回填逐字引文，不把控制指令、选项或摘要当作正文。适用项 pass 必须选择至少一行并说明这些行如何回应原问题或呈现具体阶段，行号存在不等于语义充分；fail 若整项缺失可选择 [] 并说明遗漏，否则选择违规行；not-applicable 使用 []。任一 fail 都必须拒绝并给出最小修复要求，顶层 approved 不能覆盖失败。
 
 ${characterContinuityEvidence?.mode === 'auxiliary'
     ? '本次是辅助清单审查，不检查行动演出覆盖，不得因清单缺少旅行或工作过程而拒绝。'
     : EXECUTED_ACTION_COVERAGE_RULES}
+
+known-fact 来源的 speakerIds 已由程序按本次场景、事实层级与角色知情权限生成；列出的 NPC 可以复述该来源 text 支持的有限内容，无须再次新增事实。玩家已有事实不因地点变化而遗忘；未列出的 NPC 不因玩家已知而自动获准知情。实际断言仍须与来源逐项比对，不得用 speakerIds 代替语义依据。
 
 [NarrativeFields]
 ${jsonBlock(narrativeFields)}

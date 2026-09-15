@@ -142,7 +142,7 @@ export function buildAssertionSources(
       text: fact.text,
       factId: fact.id,
       level: fact.level,
-      speakerIds: [],
+      speakerIds: [...(packet.knownFactSpeakers?.find(grant => grant.factId === fact.id && grant.level === fact.level)?.speakerIds ?? [])],
     })),
     ...publicRecords(continuity.publicContinuity).map(event => ({
       id: `public-event:${event.id}`,

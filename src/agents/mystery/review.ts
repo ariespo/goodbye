@@ -671,9 +671,27 @@ export function buildWriterPacket(
     factId,
     speakerIds: [...speakerIds],
   }));
+  const forbiddenKnownSpeakers = new Set(sceneContracts(brief).flatMap(contract => contract.forbiddenNpcIds));
+  if (brief.saturationPivot) forbiddenKnownSpeakers.add(brief.saturationPivot.blockedActorId);
+  const intentPolicy = turnContext?.playerIntentPolicy as { mode?: string; targetedActorId?: string | null } | undefined;
+  if (intentPolicy?.mode === 'divert' && intentPolicy.targetedActorId) {
+    forbiddenKnownSpeakers.add(intentPolicy.targetedActorId);
+  }
+  const knownFactSpeakers = brief.playerKnownFacts.flatMap(known => {
+    const usable = brief.usableFacts.find(fact => fact.id === known.id);
+    // Old player memory is not a new NPC permission: require the exact currently gated projection.
+    if (!usable || !isRevealAtMost(known.level, usable.maxRevealLevel)
+      || !usable.revealOptions.some(option => option.id === known.id
+        && option.level === known.level && option.text === known.text)) return [];
+    const speakerIds = [...new Set(brief.npcKnowledge.filter(npc => !forbiddenKnownSpeakers.has(npc.npcId)
+      && npc.facts.some(fact => fact.factId === known.id && fact.stance === 'knows'
+        && isRevealAtMost(known.level, fact.maxRevealLevel))).map(npc => npc.npcId))];
+    return speakerIds.length > 0 ? [{ factId: known.id, level: known.level, speakerIds }] : [];
+  });
   return {
     plan: writerPlan,
     playerKnownFacts: brief.playerKnownFacts,
+    knownFactSpeakers,
     authorizedFacts: plan.revelations.map((revelation) => {
       const fact = brief.usableFacts.find((candidate) => candidate.id === revelation.factId);
       const option = fact?.revealOptions.find((candidate) => candidate.level === revelation.level);

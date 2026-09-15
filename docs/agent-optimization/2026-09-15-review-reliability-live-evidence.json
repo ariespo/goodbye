@@ -1,0 +1,290 @@
+{
+  "kind": "interrupted-live-fixed-critic-replay",
+  "sourceFile": "live-2026-09-15T07-53-24-553Z.json",
+  "sourceSha256": "e5e6f8e1f2d8255bb9f9c6b09f21fca98b97bf6ae2641b0d7cc2f1c4956615f6",
+  "testedCommit": "8b148f384de4438751f3dfa81e6f94eba66ba402",
+  "workingTreeDirty": true,
+  "workingTreeDiffSha256": "e93eeb1eb33b0321a1bb2f1f58248e7319617fb9ef4ffcb64729e6259c0e8c1f",
+  "model": "gemini-3.7-flash【果汁】",
+  "baseUrl": "https://oneapi.hakoyu.com/v1",
+  "requestedAttempts": [
+    6,
+    7,
+    8,
+    10,
+    13,
+    16,
+    18
+  ],
+  "stopReason": "Manually interrupted after repeated provider failures, including a decoded HTTP 503 proxy error; no valid critic report was obtained in the completed sample records.",
+  "accountingLimit": "Only completed samples were persisted by this first harness revision. Later in-flight requests may have occurred before interruption; these records are not a complete request or cost total. The harness now persists each request before sending.",
+  "samples": [
+    {
+      "attempt": 6,
+      "status": "exception",
+      "approved": null,
+      "violations": [],
+      "exception": {
+        "name": "ApiCallError",
+        "message": "请求已中止"
+      },
+      "httpCalls": 3,
+      "correction": false,
+      "durationMs": 7212,
+      "input": {
+        "attempt": 6,
+        "turn": 6,
+        "originalError": "正文审查失败，未播放也未写入存档：disclosure 0 has an unproved listener or audience",
+        "actionId": "action-1skbz0q",
+        "criticRequestIndex": 18,
+        "directorAttempt": 6,
+        "directorRequestIndex": 1,
+        "narrativeSha256": "aa38f5b13740625142ef60f6aa4c1be03a1e6da88c796fb95cd11ff655d108fc",
+        "narrativeChars": 658,
+        "originalPacketSha256": "ebc40fb39abd8903a79edf072ecdfc7d67461414ab57a1a0bf9898d99c3b00bd",
+        "replayPacketSha256": "aa9c86fb322ec5cc4ddc16c24be6571463bbc9f25841cd9a7f38bc37c96f6425",
+        "directorRequestSha256": "3ec05561d543e15eba47cde081b23931d95a32f96acebc57df10995b8261030f",
+        "originalCriticInputSha256": "eb47bca67a13504a19fd0d8ac9523e2ea5a3962ae20f457d2103d5a8cc293bce",
+        "originalCriticSystemUserChars": 45018,
+        "originalCriticUsage": {
+          "prompt_tokens": 21161,
+          "completion_tokens": 2347,
+          "total_tokens": 23508,
+          "billing_usage": {
+            "source": "gemini_chat",
+            "semantic": "gemini",
+            "gemini_usage_metadata": {
+              "promptTokenCount": 21161,
+              "toolUsePromptTokenCount": 0,
+              "candidatesTokenCount": 2347,
+              "totalTokenCount": 23508,
+              "thoughtsTokenCount": 0,
+              "cachedContentTokenCount": 0,
+              "promptTokensDetails": [
+                {
+                  "modality": "TEXT",
+                  "tokenCount": 21161
+                }
+              ],
+              "toolUsePromptTokensDetails": [],
+              "candidatesTokensDetails": []
+            }
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "text_tokens": 21161,
+            "audio_tokens": 0,
+            "image_tokens": 0
+          },
+          "completion_tokens_details": {
+            "text_tokens": 0,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "input_tokens_details": null,
+          "claude_cache_creation_5_m_tokens": 0,
+          "claude_cache_creation_1_h_tokens": 0
+        },
+        "originalResponseFormat": "json_object",
+        "projection": "buildWriterPacket",
+        "projectionError": null,
+        "knownFactSpeakers": [
+          {
+            "factId": "F002",
+            "level": "atmosphere",
+            "speakerIds": [
+              "school-guard"
+            ]
+          }
+        ],
+        "limitations": [
+          "The recorded Director brief predates execution-time re-gating; this is a fixed-input critic replay, not a full turn replay.",
+          "World-memory events/cognition/disclosures/commitments are restored from the untruncated before snapshot; episode and soft-canon archives are not restored."
+        ]
+      },
+      "currentFirstRequestSystemUserChars": 44837,
+      "calls": [
+        {
+          "httpAttempt": 1,
+          "responseFormat": "json_schema",
+          "correction": false,
+          "status": 200,
+          "finishReason": "content_filter",
+          "durationMs": 1811,
+          "requestSha256": "4c5075fbc2b1b051cd25e7a69ab876ad4382170a0a89e1fc7f209e4b3f34d52c",
+          "responseSha256": "067dbfb49fc3a855676987482efb176cd6fb0beb9a1437ea509ea696392f0027",
+          "exception": null,
+          "promptTokens": 21205,
+          "completionTokens": 166,
+          "usageEstimated": true
+        },
+        {
+          "httpAttempt": 2,
+          "responseFormat": "json_object",
+          "correction": false,
+          "status": 200,
+          "finishReason": "content_filter",
+          "durationMs": 1138,
+          "requestSha256": "cc99581eb58a85f1ceeba73999150ba797b5fe6482e104ab4639e1451148e6eb",
+          "responseSha256": "1963300ed34de9ce600e49ef3d5feb6c8b9e1c5f4aacf6c767387007858f6143",
+          "exception": null,
+          "promptTokens": 21205,
+          "completionTokens": 283,
+          "usageEstimated": true
+        },
+        {
+          "httpAttempt": 3,
+          "responseFormat": "json_object",
+          "correction": false,
+          "status": 200,
+          "finishReason": "content_filter",
+          "durationMs": 1201,
+          "requestSha256": "cc99581eb58a85f1ceeba73999150ba797b5fe6482e104ab4639e1451148e6eb",
+          "responseSha256": "c12e3d9edc9f0001a6a8718e49f36a3e4f581901304eef205241dc924a203495",
+          "exception": null,
+          "promptTokens": 21205,
+          "completionTokens": 306,
+          "usageEstimated": true
+        }
+      ]
+    },
+    {
+      "attempt": 7,
+      "status": "exception",
+      "approved": null,
+      "violations": [],
+      "exception": {
+        "name": "ApiCallError",
+        "message": "网关返回代理错误（HTTP 503）"
+      },
+      "httpCalls": 3,
+      "correction": false,
+      "durationMs": 45717,
+      "input": {
+        "attempt": 7,
+        "turn": 6,
+        "originalError": "正文审查失败，未播放也未写入存档：actionAudit：originalRequest 原请求 引文不在实际可见正文中，不得引用选项、摘要、计划或编造引文。",
+        "actionId": "action-1skbz0q",
+        "criticRequestIndex": 4,
+        "directorAttempt": 6,
+        "directorRequestIndex": 1,
+        "narrativeSha256": "b68ef3ec3930bf0450a57a5ed68c099a15cb0c7e338fef577668a4a4767d5835",
+        "narrativeChars": 658,
+        "originalPacketSha256": "ebc40fb39abd8903a79edf072ecdfc7d67461414ab57a1a0bf9898d99c3b00bd",
+        "replayPacketSha256": "aa9c86fb322ec5cc4ddc16c24be6571463bbc9f25841cd9a7f38bc37c96f6425",
+        "directorRequestSha256": "3ec05561d543e15eba47cde081b23931d95a32f96acebc57df10995b8261030f",
+        "originalCriticInputSha256": "b4faab1c58f0b9c2ce5c3ea3390c482b855bb4bcf01883b8a810a4527a43db99",
+        "originalCriticSystemUserChars": 45029,
+        "originalCriticUsage": {
+          "prompt_tokens": 21148,
+          "completion_tokens": 1796,
+          "total_tokens": 22944,
+          "billing_usage": {
+            "source": "gemini_chat",
+            "semantic": "gemini",
+            "gemini_usage_metadata": {
+              "promptTokenCount": 21148,
+              "toolUsePromptTokenCount": 0,
+              "candidatesTokenCount": 1796,
+              "totalTokenCount": 22944,
+              "thoughtsTokenCount": 0,
+              "cachedContentTokenCount": 0,
+              "promptTokensDetails": [
+                {
+                  "modality": "TEXT",
+                  "tokenCount": 21148
+                }
+              ],
+              "toolUsePromptTokensDetails": [],
+              "candidatesTokensDetails": []
+            }
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "text_tokens": 21148,
+            "audio_tokens": 0,
+            "image_tokens": 0
+          },
+          "completion_tokens_details": {
+            "text_tokens": 0,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "input_tokens_details": null,
+          "claude_cache_creation_5_m_tokens": 0,
+          "claude_cache_creation_1_h_tokens": 0
+        },
+        "originalResponseFormat": "json_object",
+        "projection": "buildWriterPacket",
+        "projectionError": null,
+        "knownFactSpeakers": [
+          {
+            "factId": "F002",
+            "level": "atmosphere",
+            "speakerIds": [
+              "school-guard"
+            ]
+          }
+        ],
+        "limitations": [
+          "The recorded Director brief predates execution-time re-gating; this is a fixed-input critic replay, not a full turn replay.",
+          "World-memory events/cognition/disclosures/commitments are restored from the untruncated before snapshot; episode and soft-canon archives are not restored."
+        ]
+      },
+      "currentFirstRequestSystemUserChars": 44848,
+      "calls": [
+        {
+          "httpAttempt": 4,
+          "responseFormat": "json_object",
+          "correction": false,
+          "status": null,
+          "finishReason": null,
+          "durationMs": 30006,
+          "requestSha256": "a672a30fd2fa914b9ac0689364b09755c0380ea968c193e26a3a6caf6d8a30be",
+          "responseSha256": null,
+          "exception": {
+            "name": "ApiCallError",
+            "message": "请求超时（30s 无响应）"
+          },
+          "promptTokens": null,
+          "completionTokens": null,
+          "usageEstimated": null
+        },
+        {
+          "httpAttempt": 5,
+          "responseFormat": "json_object",
+          "correction": false,
+          "status": 200,
+          "finishReason": "content_filter",
+          "durationMs": 11478,
+          "requestSha256": "a672a30fd2fa914b9ac0689364b09755c0380ea968c193e26a3a6caf6d8a30be",
+          "responseSha256": "6760c607e9733356c1ad3961f230e3be388063c20b1827d1d4e915dd89bde83a",
+          "exception": null,
+          "promptTokens": 21213,
+          "completionTokens": 306,
+          "usageEstimated": true
+        },
+        {
+          "httpAttempt": 6,
+          "responseFormat": "json_object",
+          "correction": false,
+          "status": 200,
+          "finishReason": "content_filter",
+          "durationMs": 1216,
+          "requestSha256": "a672a30fd2fa914b9ac0689364b09755c0380ea968c193e26a3a6caf6d8a30be",
+          "responseSha256": "6760c607e9733356c1ad3961f230e3be388063c20b1827d1d4e915dd89bde83a",
+          "exception": null,
+          "promptTokens": 21213,
+          "completionTokens": 306,
+          "usageEstimated": true
+        }
+      ]
+    }
+  ]
+}
