@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useGameStore } from './stores/gameStore';
-import { initializeDatabase, getSettings, getLorebooks, getPresets, getChats, saveChat, savePreset, saveSettings } from './sillytavern/database';
+import { initializeDatabase, getSettings, getLorebooks, getPresets, getChats, getSaves, saveChat, savePreset, saveSettings } from './sillytavern/database';
 import { GameCanvas } from './components/game/GameCanvas';
 import { CustomCursor } from './components/system/CustomCursor';
 import { OpeningVideo } from './components/system/OpeningVideo';
@@ -35,21 +35,29 @@ const OrchestrationLogPanel = lazy(() => import('./components/system/Orchestrati
 function App() {
   const actions = useGameStore(state => state.actions);
   const fontFamily = useGameStore(state => state.tavern.settings?.fontFamily);
+  const [startupLoaded, setStartupLoaded] = useState(false);
+  const [openingVideoEnded, setOpeningVideoEnded] = useState(false);
 
   useEffect(() => {
     applyFontFamily(fontFamily);
   }, [fontFamily]);
 
   useEffect(() => {
+    let cancelled = false;
     const loadData = async () => {
       try {
         const dbReady = await initializeDatabase();
-        const [settings, lorebooks, presets, chats] = await Promise.all([
+        if (cancelled) return;
+        const [settings, lorebooks, presets, chats, saves] = await Promise.all([
           getSettings(),
           getLorebooks(),
           getPresets(),
           getChats(),
+          getSaves(),
         ]);
+        if (cancelled) return;
+        // 必须在创建默认开局会话之前判断，首次访问不能把新建会话当作已有存档。
+        const hasSavedGame = saves.length > 0 || chats.length > 0;
 
         if (!dbReady) {
           actions.addNotification({
@@ -130,31 +138,50 @@ function App() {
           actions.setActiveChatId(activeId);
         }
 
+        if (cancelled) return;
+        if (hasSavedGame) {
+          actions.setShowTitle(true);
+          actions.setIntroPlayed(true);
+          actions.setTitleRevealed(true);
+          setOpeningVideoEnded(true);
+        }
+
         actions.addNotification({
           type: 'success',
           message: '游戏数据加载完成',
           duration: 3000,
         });
       } catch (error) {
+        if (cancelled) return;
         actions.addNotification({
           type: 'error',
           message: '数据加载失败: ' + (error instanceof Error ? error.message : '未知错误'),
           duration: 5000,
         });
+      } finally {
+        if (!cancelled) setStartupLoaded(true);
       }
     };
 
-    loadData();
+    void loadData();
+    return () => { cancelled = true; };
   }, [actions]);
 
   const showTitle = useGameStore(state => state.ui.showTitle);
   const showPromptInspector = useGameStore(state => state.ui.showPromptInspector);
   const showOrchestrationLog = useGameStore(state => state.ui.showOrchestrationLog);
-  const [openingVideoEnded, setOpeningVideoEnded] = useState(false);
   const showCharacterPoseLab = new URLSearchParams(window.location.search).get('characterLab') === '1';
 
   if (showCharacterPoseLab) {
     return <Suspense fallback={null}><CharacterPoseLab /></Suspense>;
+  }
+
+  if (!startupLoaded) {
+    return (
+      <div className="relative flex w-full h-full items-center justify-center overflow-hidden bg-bg-primary">
+        <p role="status" className="text-sm text-text-secondary tracking-widest">正在加载游戏数据…</p>
+      </div>
+    );
   }
 
   if (!openingVideoEnded) {
