@@ -31,7 +31,7 @@ import {
 import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
 import type { DirectorPlan, FactReview, MysteryBrief, TruthContext, WriterPacket } from './types';
 import { selectSaturationPivot } from './saturation-pivot';
-import { completeStructured, extractJson, getResponseFormatSupport } from './structured';
+import { completeParsedStructured, extractJson, getResponseFormatSupport } from './structured';
 import type { AgentCompletion } from './structured';
 import { buildDirectorRepairTask, mergeRepairResiduals } from './repair-task';
 import type { RepairFailedStage } from './repair-task';
@@ -155,24 +155,7 @@ async function completeParsed<T>(
   responseFormat: typeof DIRECTOR_PLAN_RESPONSE_FORMAT | typeof FACT_REVIEW_RESPONSE_FORMAT,
   parse: (text: string) => T,
 ): Promise<T> {
-  const first = await completeStructured(complete, supportKey, messages, callOptions, responseFormat);
-  try {
-    return parse(first);
-  } catch (error) {
-    const retryMessages: ChatCompletionMessage[] = [
-      ...messages,
-      { role: 'assistant', content: first },
-      { role: 'user', content: `上一响应不是可解析的严格 JSON：${error instanceof Error ? error.message : String(error)}。只重新输出一个完整、合法、无 Markdown 的 JSON 对象；不得省略、截断或添加解释。` },
-    ];
-    const retry = await completeStructured(
-      complete,
-      supportKey,
-      retryMessages,
-      { ...callOptions, temperature: 0 },
-      responseFormat,
-    );
-    return parse(retry);
-  }
+  return completeParsedStructured(complete, supportKey, messages, callOptions, responseFormat, parse);
 }
 
 function sanitizeFactReview(

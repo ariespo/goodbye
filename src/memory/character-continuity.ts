@@ -1,4 +1,6 @@
 import type { AssertionAudit, AssertionSource, NarrativeAssertion } from '../agents/mystery/fact-assertion-review';
+import { extractNarrativeFields } from '../agents/mystery/fact-assertion-review';
+import { cloneAssertionWithReference, trustedAssertionReference } from '../agents/mystery/assertion-references';
 import { characterIdFromSpeaker } from '../data/npcPlayerKnowledge';
 import { getLocationById } from '../data/locations';
 import type { ScheduledBoundary } from '../engine/scheduled-events';
@@ -137,10 +139,13 @@ export function buildCharacterContinuityCandidateEvidence(input: {
     text: line.text,
     ...(line.background ? { background: line.background } : {}),
   }));
+  const fields = extractNarrativeFields(input.candidateText);
   return {
     candidateId: candidateFingerprint(input.candidateText),
     lines,
-    assertionAudit: structuredClone(input.assertionAudit),
+    assertionAudit: { ...structuredClone(input.assertionAudit), assertions: input.assertionAudit.assertions.map(assertion => (
+      cloneAssertionWithReference(assertion, fields, input.scene)
+    )) },
     assertionSources: structuredClone(input.assertionSources),
     canonicalPropositionBySourceId: Object.fromEntries(Object.entries(input.canonicalPropositionBySourceId ?? {})
       .filter(([sourceId, propositionId]) => (
@@ -239,6 +244,11 @@ function acceptedAssertion(
   const assertion = evidence.assertionAudit.assertions[index];
   if (!assertion || assertion.field !== 'maintext') return null;
   if (assertion.status === 'unsupported' || assertion.status === 'contradicted') return null;
+  if (assertion.unitId || assertion.reference) {
+    const reference = trustedAssertionReference(assertion);
+    const line = reference?.playableLineIndex !== undefined ? evidence.lines[reference.playableLineIndex] : undefined;
+    if (!reference || !line || line.text !== reference.playableText || (reference.speakerId ?? null) !== line.speakerId) return null;
+  }
   return assertion;
 }
 
@@ -297,7 +307,8 @@ function beliefReactionEvidence(
     const belongsToObserver = line.speakerId === observerId
       || (line.speakerId === null && lineMentionsCharacter(line.text, observerId));
     if (!belongsToObserver) return false;
-    const assertionReferences = [assertion.quote, assertion.proposition]
+    const reference = trustedAssertionReference(assertion);
+    const assertionReferences = [reference?.playableText ?? assertion.quote, assertion.proposition]
       .map(text => text.replace(/[\s，。！？、,!.?]/g, ''))
       .filter(Boolean);
     const reactionClauses = line.text.split(/[，。！？,!.?；;]/u).map(text => text.trim()).filter(Boolean);
@@ -307,7 +318,9 @@ function beliefReactionEvidence(
         && assertionReferences.some(reference => normalizedClause.includes(reference));
     });
     if (directlyBound) return true;
-    const assertionLine = evidence.lines.find(candidate => candidate.text.includes(assertion.quote));
+    const assertionLine = reference?.playableLineIndex !== undefined
+      ? evidence.lines[reference.playableLineIndex]
+      : evidence.lines.find(candidate => candidate.text.includes(assertion.quote));
     if (!assertionLine || line.lineIndex !== assertionLine.lineIndex + 1
       || !/(?:这|此事|这件事|你说的|刚才|那个说法|有道理|合理)/u.test(line.text)) return false;
     const referentialResidue = line.text
@@ -508,7 +521,9 @@ export function validateCharacterContinuityAudit(input: {
   audit.disclosures.forEach((proposal, proposalIndex) => {
     const assertion = acceptedAssertion(proposal.assertionIndex, input.evidence);
     const sourceLine = validSpan({ lineIndex: proposal.lineIndex, quote: proposal.quote }, input.evidence);
-    if (!assertion || !sourceLine || !sourceLine.text.includes(assertion.quote)) {
+    const reference = assertion ? trustedAssertionReference(assertion) : undefined;
+    if (!assertion || !sourceLine || !sourceLine.text.includes(reference?.playableText ?? assertion.quote)
+      || (reference && reference.playableLineIndex !== proposal.lineIndex)) {
       violations.push(`disclosure ${proposalIndex} is not bound to an accepted assertion and source line`);
       return;
     }

@@ -89,23 +89,43 @@ function referencedQuote(value: Record<string, unknown>, visibleLines: readonly 
   return quotes.join('\n');
 }
 
-/** Hydrates compact references without replacing contradictory evidence or repairing malformed judgments. */
+export class ActionAuditReferenceError extends Error {
+  readonly resolvedAudit: unknown;
+  readonly errors: string[];
+
+  constructor(resolvedAudit: unknown, errors: string[]) {
+    super(errors.join('\n'));
+    this.name = 'ActionAuditReferenceError';
+    this.resolvedAudit = resolvedAudit;
+    this.errors = errors;
+  }
+}
+
+/** Hydrates independent judgments, then reports every bad reference without discarding successful work. */
 export function resolveActionAuditReferences(audit: unknown, visibleLines: readonly string[]): unknown {
   if (!record(audit)) return audit;
+  const errors: string[] = [];
   const resolve = (value: unknown, path: string): unknown => {
     if (!record(value) || !('evidenceLineIndices' in value)) return value;
-    const quote = referencedQuote(value, visibleLines, path);
-    if ('quote' in value && value.quote !== quote) {
-      throw new Error(`${path}.quote 必须与 evidenceLineIndices 指定的当前可见正文逐行完全一致。`);
+    try {
+      const quote = referencedQuote(value, visibleLines, path);
+      if ('quote' in value && value.quote !== quote) {
+        throw new Error(`${path}.quote 必须与 evidenceLineIndices 指定的当前可见正文逐行完全一致。`);
+      }
+      return { ...value, quote };
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `${path} evidenceLineIndices 无效。`);
+      return value;
     }
-    return { ...value, quote };
   };
-  return { ...audit,
+  const resolvedAudit = { ...audit,
     originalRequest: resolve(audit.originalRequest, 'actionAudit.originalRequest'),
     followThrough: resolve(audit.followThrough, 'actionAudit.followThrough'),
     segments: Array.isArray(audit.segments)
       ? audit.segments.map((segment, index) => resolve(segment, `actionAudit.segments[${index}]`)) : audit.segments,
   };
+  if (errors.length) throw new ActionAuditReferenceError(resolvedAudit, errors);
+  return resolvedAudit;
 }
 
 /** Checks report coverage and authentic visible-maintext quotes; meaning is reviewed by the existing critic. */
@@ -115,7 +135,7 @@ export function validateActionAudit(audit: unknown, requirements: ActionAuditReq
 } {
   const violations: FactReviewViolation[] = [];
   const metadataErrors: string[] = [];
-  const reject = (message: string) => metadataErrors.push(`actionAudit：${message}`);
+  const reject = (message: string) => metadataErrors.push(message.startsWith('actionAudit.') ? message : `actionAudit：${message}`);
   const finish = () => ({ approved: metadataErrors.length === 0 && violations.length === 0,
     metadataValid: metadataErrors.length === 0, metadataErrors, violations, corrections: violations.map(item => item.message) });
   if (!requirements) return finish();
@@ -126,44 +146,45 @@ export function validateActionAudit(audit: unknown, requirements: ActionAuditReq
   if (visibleLines && visibleLines.join('\n') !== visibleMaintext) {
     reject('visibleLines 与当前实际可见正文不一致，不能使用其他场景的行号依据。');
   }
-  const check = (value: unknown, applicable: boolean, label: string) => {
+  const check = (value: unknown, applicable: boolean, path: string, label: string) => {
+    const locatedLabel = `${path} ${label}`;
     if (!record(value) || typeof value.status !== 'string' || !['pass', 'fail', 'not-applicable'].includes(value.status)
       || typeof value.quote !== 'string' || typeof value.reason !== 'string' || !value.reason.trim()) {
-      reject(`${label} 缺少合法 status、quote 或具体 reason。`);
+      reject(`${locatedLabel} 缺少合法 status、quote 或具体 reason。`);
       return;
     }
-    if (applicable && value.status === 'not-applicable') reject(`${label} 已实际执行，不能跳过审查。`);
-    if (!applicable && value.status !== 'not-applicable') reject(`${label} 未执行或属于事件，不应要求新的行动过程/结果。`);
-    if (value.status === 'pass' && !value.quote.trim()) reject(`${label} 的 pass 缺少正文引文。`);
+    if (applicable && value.status === 'not-applicable') reject(`${locatedLabel} 已实际执行，不能跳过审查。`);
+    if (!applicable && value.status !== 'not-applicable') reject(`${locatedLabel} 未执行或属于事件，不应要求新的行动过程/结果。`);
+    if (value.status === 'pass' && !value.quote.trim()) reject(`${locatedLabel} 的 pass 缺少正文引文。`);
     if ('evidenceLineIndices' in value) {
-      if (!visibleLines) reject(`${label} 缺少当前可见正文行，不能验证 evidenceLineIndices。`);
+      if (!visibleLines) reject(`${locatedLabel} 缺少当前可见正文行，不能验证 evidenceLineIndices。`);
       else {
         try {
-          if (value.quote !== referencedQuote(value, visibleLines, label)) reject(`${label} 引文与 evidenceLineIndices 指定的当前正文行不一致。`);
+          if (value.quote !== referencedQuote(value, visibleLines, path)) reject(`${locatedLabel} 引文与 evidenceLineIndices 指定的当前正文行不一致。`);
         } catch (error) {
-          reject(error instanceof Error ? error.message : `${label} evidenceLineIndices 无效。`);
+          reject(error instanceof Error ? error.message : `${locatedLabel} evidenceLineIndices 无效。`);
         }
       }
     } else if (value.quote && !visibleMaintext.includes(value.quote)) {
-      reject(`${label} 引文不在实际可见正文中，不得引用选项、摘要、计划或编造引文。`);
+      reject(`${locatedLabel} 引文不在实际可见正文中，不得引用选项、摘要、计划或编造引文。`);
     }
     if (value.status === 'fail') violations.push({ code: 'scene-contract-violation', message: `行动审查：${label} 未落实：${value.reason}` });
   };
-  check(audit.originalRequest, requirements.originalRequest.applicable, 'originalRequest 原请求');
-  check(audit.followThrough, requirements.followThrough.applicable, 'followThrough 后续行动');
+  check(audit.originalRequest, requirements.originalRequest.applicable, 'actionAudit.originalRequest', 'originalRequest 原请求');
+  check(audit.followThrough, requirements.followThrough.applicable, 'actionAudit.followThrough', 'followThrough 后续行动');
   if (!Array.isArray(audit.segments)) {
     reject('segments 必须逐项返回程序指定的全部 segmentId。');
     return finish();
   }
   const expected = new Map(requirements.segments.map(segment => [segment.segmentId, segment]));
   const seen = new Set<string>();
-  for (const item of audit.segments) {
+  for (const [index, item] of audit.segments.entries()) {
     if (!record(item) || typeof item.segmentId !== 'string' || !expected.has(item.segmentId) || seen.has(item.segmentId)) {
       reject('segments 存在未知、缺失或重复的 segmentId。');
       continue;
     }
     seen.add(item.segmentId);
-    check(item, expected.get(item.segmentId)!.applicable, item.segmentId);
+    check(item, expected.get(item.segmentId)!.applicable, `actionAudit.segments[${index}]`, item.segmentId);
   }
   for (const id of expected.keys()) if (!seen.has(id)) reject(`segments 漏审 ${id}。`);
   return finish();

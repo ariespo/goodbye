@@ -185,6 +185,10 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
             const systemUserChars = messages.filter(message => message.role === 'system' || message.role === 'user')
               .reduce((sum, message) => sum + message.content.length, 0);
             const call: Record<string, unknown> = { httpAttempt: ++totalHttp, responseFormat: body.response_format?.type ?? 'text',
+              responseSchemaName: body.response_format?.json_schema?.name ?? null,
+              responseSchemaSha256: body.response_format?.json_schema?.schema ? hash(JSON.stringify(body.response_format.json_schema.schema)) : null,
+              schemaContainsAdditionalProperties: body.response_format?.json_schema?.schema
+                ? JSON.stringify(body.response_format.json_schema.schema).includes('"additionalProperties":') : null,
               systemUserChars, correction: messages.some(message => message.role === 'assistant'),
               requestSha256: hash(String(init?.body ?? '')), maxTokens: body.max_tokens, temperature: body.temperature };
             calls.push(call);
@@ -197,6 +201,7 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
               const response = await nativeFetch(url, init);
               call.status = response.status;
               const data = await response.clone().json().catch(() => null);
+              call.errorResponse = response.ok ? null : data?.error ?? null;
               call.usage = data?.usage ?? null;
               call.responseModel = data?.model ?? null;
               call.finishReason = data?.choices?.[0]?.finish_reason ?? null;

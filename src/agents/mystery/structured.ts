@@ -1,4 +1,5 @@
 import type { ChatCompletionMessage, ResponseFormat, SecondaryApiOptions } from '../../sillytavern/api-router';
+import { schemaWithoutAdditionalProperties, validateAdaptedSchemaValue } from './schema-compatibility';
 
 export type AgentCompletion = (
   messages: ChatCompletionMessage[],
@@ -10,13 +11,16 @@ export type StructuredOutputMode = 'json_schema' | 'json_object' | 'text';
 /** 记录各服务端可用的最高结构化输出能力，避免每次调用都重复撞 400。 */
 const responseFormatSupportCache = new Map<string, StructuredOutputMode>();
 /** JSON Schema 方言兼容性取决于完整 schema，不能由同端点的另一个 schema 覆盖。 */
-const jsonSchemaSupportCache = new Map<string, boolean>();
+const jsonSchemaSupportCache = new Map<string, 'native' | 'without-additional-properties' | false>();
 const jsonObjectSupportCache = new Map<string, boolean>();
+/** Only an explicit observed keyword rejection may guide another schema on this endpoint/model. */
+const additionalPropertiesUnsupportedHints = new Set<string>();
 
 export function resetResponseFormatSupportCache(): void {
   responseFormatSupportCache.clear();
   jsonSchemaSupportCache.clear();
   jsonObjectSupportCache.clear();
+  additionalPropertiesUnsupportedHints.clear();
 }
 
 export function getResponseFormatSupport(key: string): boolean | undefined {
@@ -34,14 +38,44 @@ function isAbortError(error: unknown): boolean {
 
 function isResponseFormatUnsupportedError(error: unknown): boolean {
   if (!(error instanceof Error) || isAbortError(error)) return false;
+  const status = (error as Error & { status?: number }).status;
+  if (status === 429 || (typeof status === 'number' && status >= 500)) return false;
   return isResponseFormatUnsupportedText(error.message);
 }
 
 function isResponseFormatUnsupportedText(text: string): boolean {
+  if (/(?:HTTP|API error)\s*[:(]?\s*(?:429|5\d\d)\b/i.test(text)) return false;
   if (!/(response[_ ]?format|response[_ ]?schema|json_schema|json_object|generation_config\.response_schema)/i.test(text)) {
     return false;
   }
   return /(unavailable|unsupported|not supported|invalid_request_error|unknown (?:name|field)|additionalProperties|\bconst\b|(?:HTTP|API error)\s*(400|404|422))/i.test(text);
+}
+
+function isAdditionalPropertiesUnsupportedText(text: string): boolean {
+  return isResponseFormatUnsupportedText(text)
+    && /(?:unknown (?:name|field)\s*["']?additionalProperties\b|additionalProperties\b.{0,100}(?:not supported|unsupported)|(?:not supported|unsupported).{0,100}\badditionalProperties\b)/i.test(text);
+}
+
+/** Keep the rejected response for the existing, bounded report-correction path. */
+export class AdaptedSchemaResponseError extends Error {
+  readonly responseText: string;
+  readonly validationError: unknown;
+
+  constructor(responseText: string, validationError: unknown) {
+    super(validationError instanceof Error ? validationError.message : String(validationError));
+    this.name = 'AdaptedSchemaResponseError';
+    this.responseText = responseText;
+    this.validationError = validationError;
+  }
+}
+
+function validateAdaptedResponse(text: string, responseFormat: Extract<ResponseFormat, { type: 'json_schema' }>): string {
+  try {
+    validateAdaptedSchemaValue(extractJson(text), responseFormat.json_schema.schema);
+  } catch (error) {
+    throw new AdaptedSchemaResponseError(text, error);
+  }
+  return text;
 }
 
 function canonicalJson(value: unknown): unknown {
@@ -89,17 +123,58 @@ export async function completeStructured(
     ? schemaSupportKey(supportKey, responseFormat) : undefined;
   if (responseFormat.type === 'json_schema' && prefersJsonObject(supportKey)) {
     responseFormatSupportCache.set(supportKey, 'json_object');
-  } else if (schemaKey && jsonSchemaSupportCache.get(schemaKey) !== false) {
-    try {
-      const result = await complete(messages, { ...options, responseFormat });
-      if (!isResponseFormatUnsupportedText(result)) {
-        jsonSchemaSupportCache.set(schemaKey, true);
-        responseFormatSupportCache.set(supportKey, 'json_schema');
-        return result;
+  } else if (responseFormat.type === 'json_schema' && schemaKey && jsonSchemaSupportCache.get(schemaKey) !== false) {
+    const remembered = jsonSchemaSupportCache.get(schemaKey);
+    const hintedSchema = remembered !== 'native' && additionalPropertiesUnsupportedHints.has(supportKey)
+      ? schemaWithoutAdditionalProperties(responseFormat.json_schema.schema) : undefined;
+    let needsAdaptation = remembered === 'without-additional-properties' || hintedSchema !== undefined;
+    if (!needsAdaptation) {
+      let incompatibility: string;
+      try {
+        const result = await complete(messages, { ...options, responseFormat });
+        if (!isResponseFormatUnsupportedText(result)) {
+          jsonSchemaSupportCache.set(schemaKey, 'native');
+          responseFormatSupportCache.set(supportKey, 'json_schema');
+          return result;
+        }
+        incompatibility = result;
+      } catch (error) {
+        if (!isResponseFormatUnsupportedError(error)) throw error;
+        incompatibility = (error as Error).message;
       }
+      needsAdaptation = isAdditionalPropertiesUnsupportedText(incompatibility);
+      if (needsAdaptation) additionalPropertiesUnsupportedHints.add(supportKey);
       jsonSchemaSupportCache.set(schemaKey, false);
-    } catch (error) {
-      if (!isResponseFormatUnsupportedError(error)) throw error;
+    }
+    if (needsAdaptation) {
+      const adaptedSchema = hintedSchema ?? schemaWithoutAdditionalProperties(responseFormat.json_schema.schema);
+      if (adaptedSchema) {
+        const adaptedFormat: Extract<ResponseFormat, { type: 'json_schema' }> = {
+          ...responseFormat, json_schema: { ...responseFormat.json_schema, schema: adaptedSchema },
+        };
+        const adaptedKey = schemaSupportKey(supportKey, adaptedFormat);
+        if (jsonSchemaSupportCache.get(adaptedKey) !== false) {
+          // A transient error during this probe leaves the compatible candidate
+          // available for the next call; it is not evidence for json_object.
+          jsonSchemaSupportCache.set(schemaKey, 'without-additional-properties');
+          let result: string | undefined;
+          try {
+            result = await complete(messages, { ...options, responseFormat: adaptedFormat });
+            if (isResponseFormatUnsupportedText(result)) result = undefined;
+          } catch (error) {
+            if (!isResponseFormatUnsupportedError(error)) throw error;
+          }
+          if (result !== undefined) {
+            jsonSchemaSupportCache.set(schemaKey, 'without-additional-properties');
+            jsonSchemaSupportCache.set(adaptedKey, 'native');
+            responseFormatSupportCache.set(supportKey, 'json_schema');
+            // Outside the transport catch: invalid content must trigger report repair,
+            // never a response-format downgrade or silent loss of the original schema.
+            return validateAdaptedResponse(result, responseFormat);
+          }
+          jsonSchemaSupportCache.set(adaptedKey, false);
+        }
+      }
       jsonSchemaSupportCache.set(schemaKey, false);
     }
   }
@@ -127,6 +202,14 @@ export async function completeStructured(
   return complete(messages, options);
 }
 
+export type StructuredCorrection<T> = {
+  messages: ChatCompletionMessage[];
+  responseFormat: ResponseFormat;
+  parse: (raw: string) => T;
+};
+
+export type StructuredCorrectionStrategy<T> = (first: string, error: unknown) => StructuredCorrection<T> | undefined;
+
 /** 对结构化 Agent 的内容再提供一次“带原响应纠错”的解析机会。 */
 export async function completeParsedStructured<T>(
   complete: AgentCompletion,
@@ -135,11 +218,27 @@ export async function completeParsedStructured<T>(
   options: SecondaryApiOptions,
   responseFormat: ResponseFormat,
   parse: (text: string) => T,
+  correctionStrategy?: StructuredCorrectionStrategy<T>,
 ): Promise<T> {
-  const first = await completeStructured(complete, supportKey, messages, options, responseFormat);
+  let first: string;
+  let adaptedError: AdaptedSchemaResponseError | undefined;
   try {
+    first = await completeStructured(complete, supportKey, messages, options, responseFormat);
+  } catch (error) {
+    if (!(error instanceof AdaptedSchemaResponseError)) throw error;
+    first = error.responseText;
+    adaptedError = error;
+  }
+  try {
+    if (adaptedError) throw adaptedError.validationError;
     return parse(first);
   } catch (error) {
+    const correction = correctionStrategy?.(first, error);
+    if (correction) {
+      const retry = await completeStructured(complete, supportKey, correction.messages,
+        { ...options, temperature: 0 }, correction.responseFormat);
+      return correction.parse(retry);
+    }
     const errorMessage = error instanceof Error ? error.message : String(error);
     const syntaxError = error instanceof SyntaxError;
     const failure = syntaxError ? '上一响应 JSON 语法错误，不可解析' : '上一响应的结构、元数据或证据校验失败';

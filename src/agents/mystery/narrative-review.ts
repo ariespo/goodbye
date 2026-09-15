@@ -9,8 +9,8 @@ import {
   buildWriterSystemPrompt,
 } from './prompts';
 import { LOOP_PACING_CONTRACT } from './loop-contract';
-import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
-import { buildActionAuditRequirements, resolveActionAuditReferences, validateActionAudit } from './action-audit';
+import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, NARRATIVE_FACT_REVIEW_JSON_SCHEMA, NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
+import { ActionAuditReferenceError, buildActionAuditRequirements, resolveActionAuditReferences, validateActionAudit } from './action-audit';
 import { mergeRepairResiduals } from './repair-task';
 import type { FactReview, FactReviewViolation, WriterPacket } from './types';
 import type { ValidationError } from '../../sillytavern/output-protocol';
@@ -31,6 +31,9 @@ import {
   type AssertionAudit,
 } from './fact-assertion-review';
 import type { FactAliasTable } from './fact-aliases';
+import { AssertionReferenceError, buildAssertionReferenceTable, resolveAssertionAuditReferences, type AssertionReferenceTable } from './assertion-references';
+import { buildNarrativeReportRepairStrategy, NarrativeReportRepairError, type NarrativeReportRepairTarget } from './narrative-report-repair';
+import { validateAdaptedSchemaValue } from './schema-compatibility';
 
 const ASSERTION_STATUSES = new Set([
   'supported', 'unsupported', 'contradicted', 'question', 'hypothesis', 'ordinary-present',
@@ -136,6 +139,7 @@ function parseNarrativeFactReview(
   raw: string,
   assertionSources: ReturnType<typeof buildAssertionSources>,
   narrativeFields: Record<string, string>,
+  references: AssertionReferenceTable,
 ): FactReview {
   const parsed = extractJson(raw);
   if (!isRecord(parsed) || typeof parsed.approved !== 'boolean'
@@ -148,13 +152,16 @@ function parseNarrativeFactReview(
     throw new Error('正文事实复核返回了不可解析的顶层结果。');
   }
 
-  const assertionAudit = parsed.assertionAudit;
+  let assertionAudit = parsed.assertionAudit;
   if (isRecord(assertionAudit)) {
-    const misplaced = ['actionAudit', 'continuityAudit'].filter(key => Object.hasOwn(assertionAudit, key));
+    const auditRecord = assertionAudit;
+    const misplaced = ['actionAudit', 'continuityAudit'].filter(key => Object.hasOwn(auditRecord, key));
     if (misplaced.length) {
-      throw new Error(misplaced.map(key => `$.assertionAudit.${key} 放错层级，必须位于 $.${key}，与 $.assertionAudit 同级；assertionAudit 仅包含 reviewedFields 和 assertions，不得把其他审查塞进其中`).join('\n'));
+      throw new Error(misplaced.map(key => `$.assertionAudit.${key} 放错层级，必须位于 $.${key}，与 $.assertionAudit 同级；assertionAudit 仅包含 assertions，不得把其他审查塞进其中`).join('\n'));
     }
   }
+  assertionAudit = resolveAssertionAuditReferences(assertionAudit, references);
+  parsed.assertionAudit = assertionAudit;
   if (!isRecord(assertionAudit)
     || !Array.isArray(assertionAudit.reviewedFields)
     || assertionAudit.reviewedFields.some(field => !isNonEmptyString(field))
@@ -186,6 +193,68 @@ function parseNarrativeFactReview(
   assertContinuityAuditShape(parsed.continuityAudit);
 
   return parsed as unknown as FactReview;
+}
+
+/** Only program-emitted, precisely located metadata errors authorize a partial report edit. */
+function locateReportRepair(error: unknown, raw: string, references: AssertionReferenceTable,
+  actionRequirements: ReturnType<typeof buildActionAuditRequirements>, visibleLines: readonly string[]): Error {
+  const fallback = error instanceof Error ? error : new Error(String(error));
+  let report: unknown;
+  try { report = extractJson(raw); } catch { return fallback; }
+  if (!isRecord(report) || !isRecord(report.assertionAudit)
+    || Object.hasOwn(report.assertionAudit, 'reviewedFields') || !Array.isArray(report.assertionAudit.assertions)) return fallback;
+  // A first shape error can hide later ones. Partial correction is reserved for a
+  // complete wire envelope; malformed shapes get the single full correction.
+  try { validateAdaptedSchemaValue(report, NARRATIVE_FACT_REVIEW_JSON_SCHEMA); }
+  catch { return fallback; }
+  const targets: NarrativeReportRepairTarget[] = [];
+  if (error instanceof AssertionReferenceError) {
+    if (error.requiresFullRepair) return fallback;
+    // Continuity depends on the unresolved assertions. Do not authorize a patch
+    // before we can check those dependent records; a full correction can fix both.
+    const continuity = report.continuityAudit as Record<string, unknown[]>;
+    if (['disclosures', 'beliefs', 'commitments'].some(key => continuity[key].length > 0)) return fallback;
+    try {
+      const action = resolveActionAuditReferences(report.actionAudit, visibleLines);
+      if (!validateActionAudit(action, actionRequirements, visibleLines.join('\n'), visibleLines).metadataValid) return fallback;
+    } catch { return fallback; }
+    for (const index of error.assertionIndices) {
+      const assertion = report.assertionAudit.assertions[index];
+      const validUnit = isRecord(assertion) && references.units.some(unit => unit.unitId === assertion.unitId);
+      targets.push({ kind: 'assertion', index, ...(!validUnit ? { unlockUnitId: true } : {}), issue: error.message });
+    }
+    targets.push(...error.missingUnitIds.map(unitId => ({ kind: 'missing-assertion' as const, unitId, issue: error.message })));
+  } else {
+    for (const issue of fallback.message.split('\n')) {
+      // This explanatory suffix is added only after the precise continuity diagnostics below.
+      if (issue.startsWith('听众修正：')) continue;
+      const continuity = /^(?:continuityAudit：(disclosure|belief|commitment) (\d+) |continuityAudit\.(disclosures|beliefs|commitments)\[(\d+)\])/.exec(issue);
+      if (continuity) {
+        const collection = continuity[3] ?? ({ disclosure: 'disclosures', belief: 'beliefs', commitment: 'commitments' } as const)[continuity[1] as 'disclosure' | 'belief' | 'commitment'];
+        targets.push({ kind: 'continuity', collection: collection as 'disclosures' | 'beliefs' | 'commitments', index: Number(continuity[2] ?? continuity[4]), allowDelete: true, issue });
+        continue;
+      }
+      const action = /^actionAudit(?:：|\.)(originalRequest|followThrough)(?:\s|\.)/.exec(issue);
+      if (action) {
+        targets.push({ kind: 'action', judgment: action[1] as 'originalRequest' | 'followThrough', issue });
+        continue;
+      }
+      const segment = /^actionAudit\.segments\[(\d+)\]/.exec(issue);
+      if (segment) {
+        targets.push({ kind: 'action-segment', index: Number(segment[1]), issue });
+        continue;
+      }
+      return fallback;
+    }
+  }
+  const unique = new Map<string, NarrativeReportRepairTarget>();
+  for (const target of targets) {
+    const { issue, ...identity } = target;
+    const key = JSON.stringify(identity);
+    const prior = unique.get(key);
+    unique.set(key, prior ? { ...target, issue: `${prior.issue}\n${issue}` } : target);
+  }
+  return unique.size ? new NarrativeReportRepairError(fallback.message, [...unique.values()]) : fallback;
 }
 
 export interface NarrativeRepairFailure {
@@ -429,7 +498,7 @@ continuityContext.publicContinuity 是已经展示的可信开局事件；author
 事实方面只拒绝明确新增且无授权的事实、物证、具体旧事件、时间线矛盾或人物知识/身份越界。例如擅自确认考勤、请假条、过去具体购买记录，或与已展示今早06:50消息矛盾的说法。请指出具体原句及缺失来源或冲突来源。对实际可播放正文还需按 resolvedAction.segments 检查已执行行动的过程覆盖；这不是要求复述全部事实或按字数评价。辅助清单不承担行动演出覆盖。
 普通当下服务动作、当前对话、递交商品和关怀性口吻本身不构成新案件事实；不要因涉及学校、牛奶或善意关怀就拒绝。不要以未逐字复述计划或语气偏好代替事实审核。
 发现违规时要求完整修复问答、旁白和依赖选项，不允许静默删除整条台词使对话断链。
-严格遵守本次 NarrativeReviewOutputSchema：approved、violations、corrections、assertionAudit、continuityAudit、actionAudit 是六个同级顶层字段。assertionAudit 内仅含 reviewedFields 和 assertions；continuityAudit 与 actionAudit 不得嵌入 assertionAudit。行动审查使用可见正文行号，程序回填引文；完整性不等于语义通过，仍须实际判断每项。辅助或无执行记录时 actionAudit 为 null。不得为了凑齐字段补造依据、违规或通过结论。`;
+严格遵守本次 NarrativeReviewOutputSchema：approved、violations、corrections、assertionAudit、continuityAudit、actionAudit 是六个同级顶层字段。assertionAudit 内仅含 assertions，通过 unitId 与 citations 的 sourceUnitId 引用本次材料；continuityAudit 与 actionAudit 不得嵌入 assertionAudit。正文断言和行动审查由程序回填引文；完整性不等于语义通过，仍须实际判断每项。辅助或无执行记录时 actionAudit 为 null。不得为了凑齐字段补造依据、违规或通过结论。`;
 
 export function sanitizeNarrativeFactReview(
   review: FactReview,
@@ -493,6 +562,7 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
   const narrativeFields = extractNarrativeFields(options.narrative);
   const assertionSources = buildAssertionSources(options.packet, narrativeFields);
   const scene = options.scene ?? maintextToScene(narrativeFields.maintext ?? options.narrative);
+  const references = buildAssertionReferenceTable(narrativeFields, assertionSources, scene);
   const actionRequirements = buildActionAuditRequirements(options.packet, options.continuityMode ?? 'playable');
   const memory = options.continuityMemory ?? normalizeWorldMemory({});
   const cycleCount = options.cycleCount ?? options.packet.resolvedAction?.cycleCount ?? 1;
@@ -522,25 +592,23 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       possibleAudienceIds,
       activeCommitments,
       resolvedEndTime,
-    }) },
+    }, references) },
   ] as const;
   const canonicalPropositionBySourceId = options.canonicalPropositionBySourceId
     ?? (options.factAliases ? buildCanonicalPropositionBySourceId(assertionSources, options.factAliases) : undefined);
-  const reviewed = await completeParsedStructured(
-    complete,
-    `${options.api.baseUrl}|${options.api.model}`,
-    [...messages],
-    { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
-    actionRequirements ? ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT : NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT,
-    raw => {
-      const value = parseNarrativeFactReview(raw, assertionSources, narrativeFields);
+  const parseReview = (raw: string) => {
+    try {
+      const value = parseNarrativeFactReview(raw, assertionSources, narrativeFields, references);
       const visibleLines = scene.lines.map(line => line.text);
       const reportErrors: string[] = [];
       if (actionRequirements) {
         try {
           value.actionAudit = resolveActionAuditReferences(value.actionAudit, visibleLines) as FactReview['actionAudit'];
         } catch (error) {
-          reportErrors.push(error instanceof Error ? error.message : String(error));
+          if (error instanceof ActionAuditReferenceError) {
+            value.actionAudit = error.resolvedAudit as FactReview['actionAudit'];
+            reportErrors.push(...error.errors);
+          } else reportErrors.push(error instanceof Error ? error.message : String(error));
         }
       }
       const actionReview = validateActionAudit(value.actionAudit, actionRequirements, visibleLines.join('\n'), visibleLines);
@@ -569,7 +637,19 @@ export async function reviewNarrativeAgainstWriterPacket(options: {
       }
       if (reportErrors.length) throw new Error([...new Set(reportErrors)].join('\n'));
       return { value, continuity, actionReview };
-    },
+    } catch (error) {
+      throw locateReportRepair(error, raw, references, actionRequirements, scene.lines.map(line => line.text));
+    }
+  };
+  const responseFormat = actionRequirements ? ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT : NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT;
+  const reviewed = await completeParsedStructured(
+    complete,
+    `${options.api.baseUrl}|${options.api.model}`,
+    [...messages],
+    { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal },
+    responseFormat,
+    parseReview,
+    buildNarrativeReportRepairStrategy({ messages: [...messages], responseFormat, parse: parseReview }),
   );
   const { value, continuity, actionReview } = reviewed;
   const auditReview = validateAssertionAudit(

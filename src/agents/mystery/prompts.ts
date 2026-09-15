@@ -4,6 +4,7 @@ import { LOOP_PACING_CONTRACT } from './loop-contract';
 import { buildDoNotRepeatBlock, buildProtocolDoNotRepeatBlock } from './repair-task';
 import { DEFAULT_FORMAT_PROMPT } from '../../sillytavern/types';
 import { buildAssertionSources, extractNarrativeFields } from './fact-assertion-review';
+import { buildAssertionReferenceTable, type AssertionReferenceTable } from './assertion-references';
 import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import { buildActionAuditRequirements } from './action-audit';
 
@@ -241,9 +242,14 @@ export function buildNarrativeFactCriticUserPrompt(
     }>;
     resolvedEndTime: string;
   },
+  referenceTable?: AssertionReferenceTable,
 ): string {
   const narrativeFields = extractNarrativeFields(narrative);
   const assertionSources = buildAssertionSources(packet, narrativeFields);
+  const references = referenceTable ?? buildAssertionReferenceTable(narrativeFields, assertionSources);
+  const sourceUnits = references.sourceUnits.map(unit => ({
+    ...assertionSources.find(source => source.id === unit.sourceId), ...unit,
+  }));
   const actionRequirements = buildActionAuditRequirements(packet, characterContinuityEvidence?.mode ?? 'playable');
   const reviewFormat = actionRequirements ? ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT : NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT;
   const outputSchema = reviewFormat.type === 'json_schema' ? reviewFormat.json_schema.schema : {};
@@ -254,15 +260,15 @@ export function buildNarrativeFactCriticUserPrompt(
 - 是否让 stance=lies-about 的角色自白、说漏嘴、互相指认、默认承认，或让旁白把沉默/反应解释成答案；
 - 是否违反 characterPerformances、情绪禁演或玩家当前称呼权限。
 authorizedFacts 中的 text 就是本回合可直接呈现的授权内容；delivery=narration/object/environment 规定呈现渠道，不代表还要另找证据才能表达。不得把已授权 confirmation 本身判为越权，只检查正文是否超出 text 或用了错误渠道。
-逐项审查 NarrativeFields 中每个字段的每个实质命题，包括 maintext、每个 option、summary、hint、observation、investigate 与 action。reviewedFields 必须逐字列出全部字段名；每个可见句子都必须由 assertion.quote 覆盖，同一行有多个句子时也要全部枚举，普通当下动作也不能省略。场景、音乐、镜头、效果、动作与认知等纯控制指令不算可见句子。不能用顶层 approved 代替逐项审查。
-supported 必须引用 AssertionSources 中真实 sourceId，并在 citation.quote 中逐字引用该来源 text 的非空片段。真实 sourceId 或真实但无关的来源片段不等于语义支持；你必须实际比较 proposition 与来源，不能用关键词、相同时间或来源存在本身推断蕴含关系。unsupported/contradicted 必须如实标记，即使顶层可能获准也不能省略。
+逐项审查 NarrativeUnits 中每个 unitId 的全部实质命题，包括 maintext、每个 option、summary、hint、observation、investigate 与 action。每个 unitId 至少返回一项断言；同一单元含多个事实时，按实质命题分别返回同一 unitId 的多项断言，不能用局部来源替整句背书。普通当下动作也要审查。程序已排除纯控制指令，并从编号回填字段、逐字正文和覆盖清单；不要输出 reviewedFields、field、quote 或位置元数据。不能用顶层 approved 代替逐项审查。
+supported 的 citations 必须选择 AssertionSourceUnits 中真实 sourceUnitId 字符串；程序回填完整来源，保留其否定、时限和权限上下文。来源存在不等于语义支持；实际比较 proposition 与来源，不能用关键词、相同时间或来源存在本身推断蕴含关系。unsupported/contradicted 必须如实标记，即使顶层可能获准也不能省略。
 问题标为 question，明确带“可能/也许”等不确定性的假设标为 hypothesis，普通当下动作标为 ordinary-present；这三类通常不需要事实引用。否定性考勤、登录、删除、未出现、未到场等仍是事实命题，不能自动视为安全。本次拨号无人接听只说明本次没有接听，不能推成登录、阅读、删除或此前去向。
-  assertionAudit 的每条 assertion 都必须完整返回 field、quote、proposition、status、citations、reason。quote 必须是对应 NarrativeFields 字段中的非空逐字引文，proposition 与 reason 必须是非空字符串；status 只能是 supported、unsupported、contradicted、question、hypothesis、ordinary-present；citations 必须是数组，没有来源时返回 []，有来源时每项都完整返回非空 sourceId 与 quote。不得编造缺失字段或引用。
+  assertionAudit 只包含 assertions；每条完整返回 unitId、proposition、status、citations、reason。proposition 准确保留原话的肯定/否定、确定程度、主体与时间范围，不能把“肯定会”改成猜测后判 hypothesis；reason 简短指出依据或缺口。status 只能是 supported、unsupported、contradicted、question、hypothesis、ordinary-present；citations 没有来源时为 []，有来源时为 sourceUnitId 字符串数组，不重复抄写引文。一次未接听不能证明此后始终没有回应；复合断言的各部分必须分别有依据。不得编造编号。
   不要因为措辞风格或没有复述全部事实而拒绝；这不免除下述已执行行动的过程覆盖检查。
   continuityAudit 必须始终返回 reviewed=true 以及 disclosures、beliefs、commitments 三个数组；没有变化时三个数组都显式返回空数组。只审查 CharacterContinuityEvidence 中按 lineIndex 编号的实际可播放台词，不得从玩家输入、Director 计划、option、sum、hint、observe、investigate 或 action 清单生成角色学习或承诺。
   disclosure 只记录已识别说话者实际说出的 assertion，并逐个 listenerId 用 audienceEvidence 的 lineIndex+exact quote 证明明确称呼、回应、目击对话、听见叙述或电话/消息频道。audienceEvidence 不得早于 disclosure 的 source line；默认只能引用 disclosure 当行或同背景紧接的下一行，更远的行必须逐字写出电话、消息等连接频道。普通移动或另一个问题不证明听见。人物出现在 possibleAudienceIds 只表示可能听见，不证明听见；含糊受众返回空，不得把事实真值授予听众。background 不同表示已切换渲染场景，后一场景的普通台词不能证明听见前一场景内容；只有紧接的同场回应，或正文明确写出的电话、消息等频道证据可以连接。belief 还必须引用该 observer 实际表达相信、怀疑或推断同一 assertion 的反应台词；否定或无关命题的反应不得登记为肯定认知，“不合理或没有道理”是反对而不是相信。玩家说出已知事实只证明听众听到了玩家的说法。
   commitment 的 operation=accept 时必须完整返回 operation、actorId、recipientId、evidence、action、locationId、dueAt；operation=fulfill 或 cancel 时必须完整返回 operation、existingCommitmentId、actorId、recipientId、evidence。accept 只记录 obligated actor 实际明确接受的具体同日未来行动，action/locationId/dueAt/recipientId 都必须由同一段肯定承担台词直接支持；dueAt 必须匹配台词中的完整时间表达，不能用“二十点”里包含的“十点”等子串。请求、否定、条件、选项、假设或第三方代答都不算。fulfill/cancel 必须引用 ActiveCommitments 中的 existingCommitmentId 并给出实际履行或明确取消台词；否定、尚未履行或仅到达约定地点都不算履行，未来时的承诺或打算也不是已经完成的行为，旁白写角色拒绝或正要执行同样不等于已经履行。
-  mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。报告唯一结构如下：六个顶层字段必须同级；assertionAudit 只含 reviewedFields 和 assertions，闭合后再写 continuityAudit 与 actionAudit，不能把它们放进 assertionAudit。空数组也必须明确返回，不用 approved 代替嵌套审查。不输出冗长论证，reason 简短说明实际判断依据；字段和覆盖不得为精简而省略。
+  mode=auxiliary 时 continuityAudit 的三个数组必须全部为空。报告唯一结构如下：六个顶层字段必须同级；assertionAudit 只含 assertions，闭合后再写 continuityAudit 与 actionAudit，不能把它们放进 assertionAudit。空数组也必须明确返回，不用 approved 代替嵌套审查。不输出冗长论证，reason 简短说明实际判断依据；字段和覆盖不得为精简而省略。
 
 [NarrativeReviewOutputSchema]
 ${jsonBlock(outputSchema)}
@@ -282,11 +288,11 @@ ${characterContinuityEvidence?.mode === 'auxiliary'
 
 known-fact 来源的 speakerIds 已由程序按本次场景、事实层级与角色知情权限生成；列出的 NPC 可以复述该来源 text 支持的有限内容，无须再次新增事实。玩家已有事实不因地点变化而遗忘；未列出的 NPC 不因玩家已知而自动获准知情。实际断言仍须与来源逐项比对，不得用 speakerIds 代替语义依据。
 
-[NarrativeFields]
-${jsonBlock(narrativeFields)}
+[NarrativeUnits]
+${jsonBlock(references.units)}
 
-[AssertionSources]
-${jsonBlock(assertionSources)}
+[AssertionSourceUnits]
+${jsonBlock(sourceUnits)}
 
 [CharacterContinuityEvidence]
 ${jsonBlock(characterContinuityEvidence ?? {

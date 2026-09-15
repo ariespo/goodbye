@@ -174,10 +174,9 @@ export const FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
 const narrativeAssertionSchema: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
-  required: ['field', 'quote', 'proposition', 'status', 'citations', 'reason'],
+  required: ['unitId', 'proposition', 'status', 'citations', 'reason'],
   properties: {
-    field: { type: 'string' },
-    quote: { type: 'string' },
+    unitId: { type: 'string', minLength: 1 },
     proposition: { type: 'string' },
     status: {
       type: 'string',
@@ -185,12 +184,7 @@ const narrativeAssertionSchema: Record<string, unknown> = {
     },
     citations: {
       type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['sourceId', 'quote'],
-        properties: { sourceId: { type: 'string' }, quote: { type: 'string' } },
-      },
+      items: { type: 'string', minLength: 1 },
     },
     reason: { type: 'string' },
   },
@@ -289,9 +283,8 @@ export const NARRATIVE_FACT_REVIEW_JSON_SCHEMA: Record<string, unknown> = {
     assertionAudit: {
       type: 'object',
       additionalProperties: false,
-      required: ['reviewedFields', 'assertions'],
+      required: ['assertions'],
       properties: {
-        reviewedFields: { type: 'array', items: { type: 'string' } },
         assertions: { type: 'array', items: narrativeAssertionSchema },
       },
     },

@@ -3,6 +3,7 @@ import { getItemByReference } from '../../data/itemAssets';
 import { characterIdFromSpeaker } from '../../data/npcPlayerKnowledge';
 import type { FactAliasTable } from './fact-aliases';
 import type { FactReview, RevealLevel, WriterPacket } from './types';
+import { trustedAssertionReference, type AssertionReferenceBinding } from './assertion-references';
 
 export interface AssertionSource {
   id: string;
@@ -15,6 +16,8 @@ export interface AssertionSource {
 }
 
 export interface NarrativeAssertion {
+  unitId?: string;
+  reference?: AssertionReferenceBinding;
   field: string;
   quote: string;
   proposition: string;
@@ -265,9 +268,14 @@ function materialCoverageMask(field: string, text: string): boolean[] {
   return mask;
 }
 
-function assertionCoverageMask(fieldText: string, assertions: NarrativeAssertion[]): boolean[] {
+function assertionCoverageMask(fieldText: string, assertions: NarrativeAssertion[], fields: Record<string, string>): boolean[] {
   const mask = Array.from({ length: fieldText.length }, () => false);
   for (const assertion of assertions) {
+    if (assertion.unitId || assertion.reference) {
+      const reference = trustedAssertionReference(assertion, fields);
+      if (reference) for (let cursor = reference.start; cursor < reference.end; cursor += 1) mask[cursor] = true;
+      continue;
+    }
     const quote = typeof assertion?.quote === 'string' ? assertion.quote.trim() : '';
     if (!quote) continue;
     let offset = 0;
@@ -324,7 +332,7 @@ export function validateAssertionAudit(
       continue;
     }
     const required = materialMasks.get(field) ?? [];
-    const covered = assertionCoverageMask(narrativeFields[field] ?? '', fieldAssertions);
+    const covered = assertionCoverageMask(narrativeFields[field] ?? '', fieldAssertions, narrativeFields);
     if (required.some((isRequired, index) => isRequired && !covered[index])) {
       violations.push({
         code: 'incomplete-assertion-audit',
@@ -335,12 +343,14 @@ export function validateAssertionAudit(
 
   const statuses = new Set(['supported', 'unsupported', 'contradicted', 'question', 'hypothesis', 'ordinary-present']);
   for (const assertion of assertions) {
+    const reference = trustedAssertionReference(assertion, narrativeFields);
     const fieldText = typeof assertion?.field === 'string' ? narrativeFields[assertion.field] : undefined;
     const quote = typeof assertion?.quote === 'string' ? assertion.quote.trim() : '';
     const proposition = typeof assertion?.proposition === 'string' ? assertion.proposition.trim() : '';
     const reason = typeof assertion?.reason === 'string' ? assertion.reason.trim() : '';
     const citations = Array.isArray(assertion?.citations) ? assertion.citations : [];
     if (!fieldText || !reviewed.has(assertion.field) || !quote || !fieldText.includes(quote)
+      || ((assertion.unitId || assertion.reference) && !reference)
       || !proposition || !reason || !statuses.has(assertion.status)) {
       violations.push({
         code: 'incomplete-assertion-audit',
@@ -358,7 +368,9 @@ export function validateAssertionAudit(
         badCitation = true;
         continue;
       }
-      const speakers = assertion.field === 'maintext' ? dialogueSpeakersForQuote(fieldText, quote) : [];
+      const speakers = assertion.field === 'maintext'
+        ? reference ? (reference.speakerId ? [reference.speakerId] : []) : dialogueSpeakersForQuote(fieldText, quote)
+        : [];
       if (speakers.some(speaker => !(
         source.id.startsWith('known-fact:') && speaker === 'player'
       ) && (!Array.isArray(source.speakerIds) || !source.speakerIds.includes(speaker)))) {

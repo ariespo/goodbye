@@ -12,6 +12,9 @@ import {
   type CommitmentRecord,
 } from './character-continuity';
 import { buildTurnCommit, normalizeWorldMemory } from './world-memory';
+import { buildAssertionReferenceTable, resolveAssertionAuditReferences } from '../agents/mystery/assertion-references';
+import { extractNarrativeFields } from '../agents/mystery/fact-assertion-review';
+import { maintextToScene } from '../engine/scene-parser';
 
 const receiptSource: AssertionSource = {
   id: 'fact:receipt', kind: 'fact', text: '收据显示文穗买过牛奶。', factId: 'F001', level: 'clue',
@@ -53,6 +56,83 @@ function reviewed(overrides: Partial<CharacterContinuityAudit> = {}): CharacterC
 }
 
 describe('character continuity audit validation', () => {
+  it.each([' | ', ' ｜ '])('allows exact disclosure from rendered %s content while retaining raw assertion offsets', separator => {
+    const candidateText = `<maintext>对话${separator}门卫${separator}平静${separator}今天见过文穗。${separator}但是没看见她进校。\n对话|玩家|平静|我听见了。</maintext>`;
+    const fields = extractNarrativeFields(candidateText);
+    const currentScene = maintextToScene(fields.maintext);
+    const table = buildAssertionReferenceTable(fields, [], currentScene);
+    const resolved = resolveAssertionAuditReferences({ assertions: table.units.map(unit => ({
+      unitId: unit.unitId, proposition: unit.text, status: 'ordinary-present', citations: [], reason: '当前发言',
+    })) }, table);
+    const currentEvidence = buildCharacterContinuityCandidateEvidence({ candidateText, scene: currentScene, assertionAudit: resolved,
+      assertionSources: [], possibleAudienceIds: ['player'], resolvedEndTime: '2024-09-09T09:00:00' });
+    const result = validateCharacterContinuityAudit({
+      audit: reviewed({ disclosures: [{ assertionIndex: 0, lineIndex: 0, quote: '今天见过文穗。|但是没看见她进校。', listenerIds: ['player'], audienceEvidence: [{ lineIndex: 1, quote: '我听见了。' }] }] }),
+      evidence: currentEvidence, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    });
+    expect(result.approved).toBe(true);
+    expect(result.effects?.disclosures[0].speakerId).toBe('school-guard');
+  });
+
+  it('cannot move a unit-bound assertion to an identical later utterance', () => {
+    const candidateText = '<maintext>对话|玩家|平静|我看到收据了。\n对话|赵刚|平静|我听见了。\n对话|玩家|平静|我看到收据了。\n对话|林静|平静|我听见了。</maintext>';
+    const fields = extractNarrativeFields(candidateText);
+    const currentScene = maintextToScene(fields.maintext);
+    const table = buildAssertionReferenceTable(fields, [], currentScene);
+    const resolved = resolveAssertionAuditReferences({ assertions: table.units.map(unit => ({
+      unitId: unit.unitId, proposition: unit.text, status: 'ordinary-present', citations: [], reason: '当前发言',
+    })) }, table);
+    const currentEvidence = buildCharacterContinuityCandidateEvidence({ candidateText, scene: currentScene, assertionAudit: resolved,
+      assertionSources: [], possibleAudienceIds: ['detective-a', 'detective-b'], resolvedEndTime: '2024-09-09T09:00:00' });
+    const result = validateCharacterContinuityAudit({
+      audit: reviewed({ disclosures: [{ assertionIndex: 0, lineIndex: 2, quote: '我看到收据了。', listenerIds: ['detective-b'], audienceEvidence: [{ lineIndex: 3, quote: '我听见了。' }] }] }),
+      evidence: currentEvidence, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    });
+    expect(result.approved).toBe(false);
+    expect(result.violations.join(' ')).toMatch(/bound/);
+    const correct = validateCharacterContinuityAudit({
+      audit: reviewed({ disclosures: [{ assertionIndex: 2, lineIndex: 2, quote: '我看到收据了。', listenerIds: ['detective-b'], audienceEvidence: [{ lineIndex: 3, quote: '我听见了。' }] }] }),
+      evidence: currentEvidence, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    });
+    expect(correct.approved).toBe(true);
+  });
+
+  it('binds a referential belief reaction to the selected repeated unit, not the first text match', () => {
+    const candidateText = '对话|玩家|平静|我看到收据了。\n对话|赵刚|平静|我不信。\n对话|玩家|平静|我看到收据了。\n对话|林静|平静|我相信你说的。';
+    const fields = extractNarrativeFields(candidateText);
+    const currentScene = maintextToScene(fields.maintext);
+    const table = buildAssertionReferenceTable(fields, [], currentScene);
+    const resolved = resolveAssertionAuditReferences({ assertions: table.units.map(unit => ({
+      unitId: unit.unitId, proposition: unit.text, status: 'ordinary-present', citations: [], reason: '当前发言',
+    })) }, table);
+    const currentEvidence = buildCharacterContinuityCandidateEvidence({ candidateText, scene: currentScene, assertionAudit: resolved,
+      assertionSources: [], possibleAudienceIds: ['detective-a', 'detective-b'], resolvedEndTime: '2024-09-09T09:00:00' });
+    const result = validateCharacterContinuityAudit({
+      audit: reviewed({ beliefs: [{ assertionIndex: 2, observerId: 'detective-b', status: 'believed', evidence: [{ lineIndex: 3, quote: '我相信你说的。' }] }] }),
+      evidence: currentEvidence, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+    });
+    expect(result.approved).toBe(true);
+  });
+
+  it('does not grant disclosure from an option or a reference transplanted into a changed scene', () => {
+    const candidateText = '<maintext>场景|校门\n对话|玩家|平静|我看到收据了。\n对话|赵刚|平静|我听见了。</maintext><option>我看到收据了。</option>';
+    const fields = extractNarrativeFields(candidateText);
+    const currentScene = maintextToScene(fields.maintext);
+    const table = buildAssertionReferenceTable(fields, [], currentScene);
+    const resolved = resolveAssertionAuditReferences({ assertions: table.units.map(unit => ({
+      unitId: unit.unitId, proposition: unit.text, status: 'ordinary-present', citations: [], reason: '当前发言',
+    })) }, table);
+    for (const [assertionIndex, current] of [[2, currentScene], [0, { ...currentScene, lines: currentScene.lines.map(line => ({ ...line, background: '旅馆' })) }]] as const) {
+      const currentEvidence = buildCharacterContinuityCandidateEvidence({ candidateText, scene: current, assertionAudit: resolved,
+        assertionSources: [], possibleAudienceIds: ['detective-a'], resolvedEndTime: '2024-09-09T09:00:00' });
+      const result = validateCharacterContinuityAudit({
+        audit: reviewed({ disclosures: [{ assertionIndex, lineIndex: 0, quote: '我看到收据了。', listenerIds: ['detective-a'], audienceEvidence: [{ lineIndex: 1, quote: '我听见了。' }] }] }),
+        evidence: currentEvidence, memory: normalizeWorldMemory({ cycleCount: 1 }), cycleCount: 1,
+      });
+      expect(result.approved).toBe(false);
+    }
+  });
+
   it('grants heard cognition only to the listener with line-bound hearing evidence', () => {
     const acceptedScene = scene(
       ['玩家', '赵刚，我看到收据了。'],

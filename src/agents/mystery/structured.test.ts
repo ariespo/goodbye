@@ -205,7 +205,7 @@ describe('completeParsedStructured', () => {
     });
 
     expect(calls).toEqual([
-      'json_schema:nested-audit', 'json_object',
+      'json_schema:nested-audit', 'json_schema:nested-audit', 'json_object',
       'json_schema:simple-review',
       'json_object',
     ]);
@@ -219,5 +219,200 @@ describe('completeParsedStructured', () => {
       type: 'json_schema', json_schema: { name: 'review', schema: { type: 'object' } },
     })).rejects.toThrow('invalid request payload');
     expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('adapts only an explicitly rejected additionalProperties keyword and reuses the exact-schema variant', async () => {
+    resetResponseFormatSupportCache();
+    const format = { type: 'json_schema' as const, json_schema: { name: 'audit', strict: true, schema: {
+      type: 'object', additionalProperties: false, required: ['additionalProperties', 'nested'], properties: {
+        additionalProperties: { type: 'string', description: 'ordinary property' },
+        nested: { type: 'array', items: { anyOf: [
+          { type: 'object', additionalProperties: false, required: ['kind', 'a'], properties: { kind: { const: 'a' }, a: { type: 'string' } } },
+          { type: 'object', additionalProperties: false, required: ['kind', 'b'], properties: { kind: { const: 'b' }, b: { type: 'number' } } },
+        ] } },
+      },
+    } } };
+    const original = JSON.stringify(format);
+    const valid = '{"additionalProperties":"user value","nested":[{"kind":"b","b":1}]}';
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: Unknown name "additionalProperties" at generation_config.response_schema'))
+      .mockResolvedValue(valid);
+    const key = 'https://proxy.test/v1|additional-properties';
+    await expect(completeParsedStructured(complete, key, [], {}, format, JSON.parse)).resolves.toEqual(JSON.parse(valid));
+    await expect(completeParsedStructured(complete, key, [], {}, format, JSON.parse)).resolves.toEqual(JSON.parse(valid));
+    expect(complete).toHaveBeenCalledTimes(3);
+    const adapted = complete.mock.calls[1][1].responseFormat;
+    expect(adapted.type).toBe('json_schema');
+    expect(adapted.json_schema.schema.additionalProperties).toBeUndefined();
+    expect(adapted.json_schema.schema.properties.additionalProperties).toEqual({ type: 'string', description: 'ordinary property' });
+    expect(adapted.json_schema.schema.properties.nested.items.anyOf[1].additionalProperties).toBeUndefined();
+    expect(complete.mock.calls[2][1].responseFormat).toEqual(adapted);
+    expect(JSON.stringify(format)).toBe(original);
+  });
+
+  it.each(['{"approved":true,"extra":1}', '{"approved":true,"nested":{"safe":"ok","extra":1}}'])(
+    'rejects adapted output with unknown properties and repairs it only once: %s', async invalid => {
+    resetResponseFormatSupportCache();
+    const format = { type: 'json_schema' as const, json_schema: { name: 'audit', schema: {
+      type: 'object', additionalProperties: false, properties: {
+        approved: { type: 'boolean' }, nested: { type: 'object', additionalProperties: false, properties: { safe: { type: 'string' } } },
+      },
+    } } };
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: response_schema: additionalProperties is not supported'))
+      .mockResolvedValueOnce(invalid).mockResolvedValue('{"approved":true}');
+    await expect(completeParsedStructured(complete, 'unknown-properties', [], {}, format, JSON.parse))
+      .resolves.toEqual({ approved: true });
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete.mock.calls[2][0].at(-2)).toEqual({ role: 'assistant', content: invalid });
+    expect(complete.mock.calls[2][0].at(-1).content).toContain('extra');
+    expect(complete.mock.calls.map(call => call[1].responseFormat.type)).toEqual(['json_schema', 'json_schema', 'json_schema']);
+
+    const repeated = vi.fn().mockResolvedValue(invalid);
+    await expect(completeParsedStructured(repeated, 'unknown-properties', [], {}, format, JSON.parse)).rejects.toThrow('extra');
+    expect(repeated).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares the observed unsupported keyword with a new schema while retaining its original local constraints', async () => {
+    resetResponseFormatSupportCache();
+    const withProperty = (property: string) => ({ type: 'json_schema' as const, json_schema: { name: 'audit', schema: {
+      type: 'object', additionalProperties: false, properties: { [property]: { type: 'boolean' } },
+    } } });
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: Unknown name "additionalProperties" at response_schema'))
+      .mockResolvedValue('{}');
+    await completeStructured(complete, 'same-model', [], {}, withProperty('a'));
+    await completeStructured(complete, 'same-model', [], {}, withProperty('b'));
+    expect(complete.mock.calls[2][1].responseFormat.type).toBe('json_schema');
+    expect(complete.mock.calls[2][1].responseFormat.json_schema.schema.additionalProperties).toBeUndefined();
+    expect(complete.mock.calls[2][1].responseFormat.json_schema.schema.properties).toEqual({ b: { type: 'boolean' } });
+    complete.mockResolvedValueOnce('{"a":true}');
+    await expect(completeStructured(complete, 'same-model', [], {}, withProperty('b'))).rejects.toThrow('$.a');
+  });
+
+  it('does not share an observed keyword incompatibility with another endpoint or model and resets the hint', async () => {
+    resetResponseFormatSupportCache();
+    const format = { type: 'json_schema' as const, json_schema: { name: 'audit', schema: { type: 'object', additionalProperties: false } } };
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: Unknown name "additionalProperties" at response_schema'))
+      .mockResolvedValue('{}');
+    await completeStructured(complete, 'https://proxy.test/v1|model-a', [], {}, format);
+    await completeStructured(complete, 'https://another.test/v1|model-a', [], {}, format);
+    await completeStructured(complete, 'https://proxy.test/v1|model-b', [], {}, format);
+    resetResponseFormatSupportCache();
+    await completeStructured(complete, 'https://proxy.test/v1|model-a', [], {}, format);
+    expect(complete.mock.calls.slice(2).map(call => call[1].responseFormat.json_schema.schema.additionalProperties))
+      .toEqual([false, false, false]);
+  });
+
+  it('does not apply a keyword hint to constraints outside the local validation dialect or overwrite known native support', async () => {
+    resetResponseFormatSupportCache();
+    const format = (name: string, schema: Record<string, unknown>) => ({ type: 'json_schema' as const, json_schema: { name, schema } });
+    const native = format('native', { type: 'object', additionalProperties: false });
+    const complete = vi.fn().mockResolvedValueOnce('{}')
+      .mockRejectedValueOnce(new Error('API error 400: response_schema additionalProperties is not supported'))
+      .mockResolvedValue('{}');
+    await completeStructured(complete, 'mixed-dialect', [], {}, native);
+    await completeStructured(complete, 'mixed-dialect', [], {}, format('nested', { type: 'object', properties: {
+      item: { type: 'object', additionalProperties: false },
+    } }));
+    await completeStructured(complete, 'mixed-dialect', [], {}, format('outside-dialect', {
+      type: 'object', additionalProperties: false, patternProperties: { '^value': { type: 'number' } },
+    }));
+    await completeStructured(complete, 'mixed-dialect', [], {}, native);
+    expect(complete.mock.calls.slice(3).map(call => call[1].responseFormat.json_schema.schema.additionalProperties))
+      .toEqual([false, false]);
+  });
+
+  it('repairs with a different patch schema within three HTTP calls after the one cold incompatibility probe', async () => {
+    resetResponseFormatSupportCache();
+    const format = (name: string, property: string) => ({ type: 'json_schema' as const, json_schema: { name, schema: {
+      type: 'object', additionalProperties: false, properties: { [property]: { type: 'boolean' } }, required: [property],
+    } } });
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: response_schema additionalProperties is not supported'))
+      .mockResolvedValueOnce('{"approved":true}').mockResolvedValueOnce('{"replacement":false}');
+    await expect(completeParsedStructured(complete, 'full-to-patch', [], {}, format('full', 'approved'),
+      () => { throw new Error('one report entry needs repair'); }, () => ({ messages: [],
+        responseFormat: format('patch', 'replacement'), parse: raw => ({ approved: JSON.parse(raw).replacement }),
+      }))).resolves.toEqual({ approved: false });
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete.mock.calls.map(call => call[1].responseFormat.json_schema.schema.additionalProperties))
+      .toEqual([false, undefined, undefined]);
+  });
+
+  it('does not adapt unrelated unsupported keywords', async () => {
+    resetResponseFormatSupportCache();
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: Unknown name "const" at generation_config.response_schema'))
+      .mockResolvedValue('{}');
+    await completeStructured(complete, 'unsupported-const', [], {}, { type: 'json_schema', json_schema: {
+      name: 'audit', schema: { type: 'object', additionalProperties: false },
+    } });
+    expect(complete.mock.calls.map(call => call[1].responseFormat.type)).toEqual(['json_schema', 'json_object']);
+  });
+
+  it.each([429, 503])('does not downgrade or adapt a response schema request after HTTP %s', async status => {
+    resetResponseFormatSupportCache();
+    const error = new Error(`API error ${status}: response_schema additionalProperties unavailable`);
+    const complete = vi.fn().mockRejectedValue(error);
+    await expect(completeStructured(complete, `error-${status}`, [], {}, { type: 'json_schema', json_schema: {
+      name: 'audit', schema: { type: 'object', additionalProperties: false },
+    } })).rejects.toBe(error);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a custom correction request and parser within the one existing correction attempt', async () => {
+    const first = '{"approved":true}';
+    const error = new Error('replace one field');
+    const complete = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce('{"replacement":false}');
+    const correctionStrategy = vi.fn(() => ({ messages: [{ role: 'user' as const, content: 'only return replacement' }],
+      responseFormat: { type: 'json_object' as const }, parse: (raw: string) => ({ approved: JSON.parse(raw).replacement }) }));
+    await expect(completeParsedStructured(complete, 'custom-correction', [], {}, { type: 'json_object' },
+      () => { throw error; }, correctionStrategy)).resolves.toEqual({ approved: false });
+    expect(correctionStrategy).toHaveBeenCalledExactlyOnceWith(first, error);
+    expect(complete.mock.calls[1][0]).toEqual([{ role: 'user', content: 'only return replacement' }]);
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses the adaptation after a transient failure without learning a downgrade', async () => {
+    resetResponseFormatSupportCache();
+    const format = { type: 'json_schema' as const, json_schema: { name: 'transient', schema: {
+      type: 'object', additionalProperties: false,
+    } } };
+    const error = new Error('API error 503: upstream unavailable');
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: Unknown name "additionalProperties" at response_schema'))
+      .mockRejectedValueOnce(error).mockResolvedValue('{}');
+    await expect(completeStructured(complete, 'transient-adaptation', [], {}, format)).rejects.toBe(error);
+    await expect(completeStructured(complete, 'transient-adaptation', [], {}, format)).resolves.toBe('{}');
+    expect(complete.mock.calls[2][1].responseFormat.type).toBe('json_schema');
+    expect(complete.mock.calls[2][1].responseFormat.json_schema.schema.additionalProperties).toBeUndefined();
+  });
+
+  it('does not learn compatibility from errors carrying a transient HTTP status', async () => {
+    resetResponseFormatSupportCache();
+    const error = Object.assign(new Error('response_schema unsupported temporarily'), { status: 503 });
+    const complete = vi.fn().mockRejectedValue(error);
+    await expect(completeStructured(complete, 'status-error', [], {}, { type: 'json_schema', json_schema: {
+      name: 'transient', schema: { type: 'object', additionalProperties: false },
+    } })).rejects.toBe(error);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes an adapted JSON syntax failure to the existing correction with its original response', async () => {
+    resetResponseFormatSupportCache();
+    const malformed = '{"approved":true,"values":[Wildcard]}';
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: response_schema additionalProperties is not supported'))
+      .mockResolvedValueOnce(malformed).mockResolvedValueOnce('{"approved":false}');
+    await expect(completeParsedStructured(complete, 'adapted-syntax', [], {}, { type: 'json_schema', json_schema: {
+      name: 'audit', schema: { type: 'object', additionalProperties: false, properties: { approved: { type: 'boolean' } } },
+    } }, JSON.parse)).resolves.toEqual({ approved: false });
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete.mock.calls[2][0].at(-2)).toEqual({ role: 'assistant', content: malformed });
+    expect(complete.mock.calls[2][0].at(-1).content).toContain('JSON 语法');
+    expect(complete.mock.calls[2][1].responseFormat.type).toBe('json_schema');
+  });
+
+  it('does not add another correction when a custom correction is malformed', async () => {
+    const complete = vi.fn().mockResolvedValueOnce('{}').mockResolvedValueOnce('{"replacement":Wildcard}');
+    await expect(completeParsedStructured(complete, 'custom-invalid', [], {}, { type: 'json_object' },
+      () => { throw new Error('invalid metadata'); }, () => ({
+        messages: [], responseFormat: { type: 'json_object' }, parse: JSON.parse,
+      }))).rejects.toThrow(SyntaxError);
+    expect(complete).toHaveBeenCalledTimes(2);
   });
 });

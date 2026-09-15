@@ -29,6 +29,65 @@ function compactPassing(requirements: NonNullable<ReturnType<typeof buildActionA
     segments: audit.segments.map(segment => ({ ...compact(segment), segmentId: segment.segmentId })) };
 }
 describe('structured action audit', () => {
+  it('collects two bad reference targets while retaining successful hydration for every other judgment', () => {
+    const requirements = buildActionAuditRequirements(packet(true))!;
+    const compact = compactPassing(requirements);
+    compact.originalRequest.evidenceLineIndices = [3];
+    compact.segments[2].evidenceLineIndices = [99];
+    let failure: unknown;
+    try { resolveActionAuditReferences(compact, visibleLines); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ name: 'ActionAuditReferenceError', errors: [
+      expect.stringMatching(/^actionAudit\.originalRequest\.evidenceLineIndices/),
+      expect.stringMatching(/^actionAudit\.segments\[2\]\.evidenceLineIndices/),
+    ] });
+    const resolved = (failure as { resolvedAudit: ActionAudit }).resolvedAudit;
+    expect(resolved.followThrough.quote).toBe(nonadjacentQuote);
+    expect(resolved.segments[0].quote).toBe(nonadjacentQuote);
+    expect(resolved.segments[1].quote).toBe(nonadjacentQuote);
+    expect(compact.followThrough).not.toHaveProperty('quote');
+    const review = validateActionAudit(resolved, requirements, text, visibleLines);
+    expect(review.metadataValid).toBe(false);
+    expect(review.metadataErrors).toHaveLength(2);
+    expect(review.metadataErrors[0]).toMatch(/^actionAudit\.originalRequest/);
+    expect(review.metadataErrors[1]).toMatch(/^actionAudit\.segments\[2\]/);
+  });
+  it('keeps one bad segment from manufacturing missing-quote errors on valid judgments', () => {
+    const requirements = buildActionAuditRequirements(packet(true))!;
+    const compact = compactPassing(requirements);
+    compact.segments[1].evidenceLineIndices = [3];
+    let failure: unknown;
+    try { resolveActionAuditReferences(compact, visibleLines); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ name: 'ActionAuditReferenceError', errors: [expect.stringContaining('segments[1]')] });
+    const review = validateActionAudit((failure as { resolvedAudit: ActionAudit }).resolvedAudit, requirements, text, visibleLines);
+    expect(review.metadataErrors).toEqual([expect.stringMatching(/^actionAudit\.segments\[1\]/)]);
+    expect(review.metadataErrors[0]).toContain(requirements.segments[1].segmentId);
+    expect(review.approved).toBe(false);
+  });
+  it('preserves a real action failure while exposing an unrelated repairable reference error', () => {
+    const requirements = buildActionAuditRequirements(packet(true))!;
+    const compact = compactPassing(requirements);
+    compact.originalRequest = { status: 'fail', evidenceLineIndices: [], reason: '没有提出原问题。' };
+    compact.segments[1].evidenceLineIndices = [3];
+    let failure: unknown;
+    try { resolveActionAuditReferences(compact, visibleLines); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ name: 'ActionAuditReferenceError' });
+    const review = validateActionAudit((failure as { resolvedAudit: ActionAudit }).resolvedAudit, requirements, text, visibleLines);
+    expect(review.violations).toEqual([{ code: 'scene-contract-violation', message: expect.stringContaining('没有提出原问题。') }]);
+    expect(review.approved).toBe(false);
+  });
+  it('uses stable report paths for semantic metadata checks and retains the human-readable segment ID', () => {
+    const requirements = buildActionAuditRequirements(packet(true))!;
+    const audit = passing(requirements);
+    audit.originalRequest.status = 'not-applicable';
+    audit.followThrough.status = 'not-applicable';
+    audit.segments[1].status = 'not-applicable';
+    const review = validateActionAudit(audit, requirements, text);
+    expect(review.metadataErrors).toHaveLength(3);
+    expect(review.metadataErrors[0]).toMatch(/^actionAudit\.originalRequest /);
+    expect(review.metadataErrors[1]).toMatch(/^actionAudit\.followThrough /);
+    expect(review.metadataErrors[2]).toMatch(/^actionAudit\.segments\[1\] /);
+    expect(review.metadataErrors[2]).toContain(requirements.segments[1].segmentId);
+  });
   it('hydrates non-adjacent current lines for every judgment without changing the wire report', () => {
     const requirements = buildActionAuditRequirements(packet(true))!;
     const compact = compactPassing(requirements);

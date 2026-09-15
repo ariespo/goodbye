@@ -672,7 +672,7 @@ describe('deterministic final narrative review', () => {
           approved: true, violations: [], corrections: [], continuityAudit: emptyContinuityAudit,
         });
       },
-    })).rejects.toThrow('正文断言审查缺少有效字段');
+    })).rejects.toThrow('$.assertionAudit.assertions 必须是数组');
 
     expect(calls).toBe(2);
   });
@@ -886,9 +886,9 @@ describe('deterministic final narrative review', () => {
     expect(systemRequest).toContain('六个同级顶层字段');
     expect(systemRequest).not.toContain('只检查导演计划');
     expect(systemRequest).not.toContain('"factId":"string?"');
-    expect(request).toContain('每个可见句子都必须由 assertion.quote 覆盖');
-    expect(request).toContain('field、quote、proposition、status、citations、reason');
-    expect(request).toContain('reason 必须是非空');
+    expect(request).toContain('每个 unitId 至少返回一项断言');
+    expect(request).toContain('unitId、proposition、status、citations、reason');
+    expect(request).toContain('程序回填完整来源');
     expect(request).toContain('continuityAudit');
     const continuitySchema = (
       NARRATIVE_FACT_REVIEW_JSON_SCHEMA.properties as Record<string, unknown>
