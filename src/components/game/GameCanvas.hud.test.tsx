@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { within, render } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, within, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GameCanvas } from './GameCanvas';
 
 const storeMocks = vi.hoisted(() => ({
@@ -10,8 +10,14 @@ const storeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../stores/gameStore', () => ({
-  useGameStore: (selector: (state: unknown) => unknown) => selector({
-    game: { currentState: { mood: 'calm' }, currentScene: {}, },
+  useGameStore: (selector: (state: unknown) => unknown = state => state) => selector({
+    game: {
+      currentState: { mood: 'calm', background: 'home' },
+      currentScene: { investigateItems: [{ desc: '检查桌上的耳塞和马克杯' }] },
+      sceneComplete: true,
+      isWaitingForAI: false,
+      actionPanel: { visible: false },
+    },
     tavern: { chats: [], activeChatId: null },
     actions: { setCurrentScene: storeMocks.setCurrentScene },
     ui: { showEndingEditor: false },
@@ -23,7 +29,6 @@ vi.mock('./RainOverlay', () => ({ RainOverlay: () => null }));
 vi.mock('./MoodOverlay', () => ({ MoodOverlay: () => null }));
 vi.mock('./EffectOverlay', () => ({ EffectOverlay: () => null }));
 vi.mock('./ItemCallout', () => ({ ItemCallout: () => null }));
-vi.mock('./InvestigationHotspots', () => ({ InvestigationHotspots: () => null }));
 vi.mock('./CharacterSprite', () => ({ CharacterSprite: () => null }));
 vi.mock('./ChoiceMenu', () => ({ ChoiceMenu: () => null }));
 vi.mock('./DialogueBox', () => ({ DialogueBox: () => null }));
@@ -43,6 +48,8 @@ vi.mock('./ApiGuideCard', () => ({ ApiGuideCard: () => null }));
 vi.mock('../system/LoadingOverlay', () => ({ LoadingOverlay: () => null }));
 
 describe('GameCanvas HUD containment', () => {
+  afterEach(cleanup);
+
   it('always mounts the first-batch overlays inside the virtual HUD canvas', () => {
     const { container } = render(<GameCanvas />);
     const hud = container.querySelector('.hud-design-canvas');
@@ -51,5 +58,14 @@ describe('GameCanvas HUD containment', () => {
     expect(within(hud as HTMLElement).getByTestId('action-panel-mock')).toBeInTheDocument();
     expect(within(hud as HTMLElement).getByTestId('clue-modal-mock')).toBeInTheDocument();
     expect(within(hud as HTMLElement).getByTestId('map-modal-mock')).toBeInTheDocument();
+  });
+
+  it('does not overlay legacy investigation buttons after a scene with available investigations ends', () => {
+    const { container, queryByLabelText, queryByRole } = render(<GameCanvas />);
+
+    expect(queryByLabelText('场景调查点')).not.toBeInTheDocument();
+    expect(queryByRole('button', { name: '调查：检查桌上的耳塞和马克杯' })).not.toBeInTheDocument();
+    expect(container.querySelector('.investigation-hotspots')).toBeNull();
+    expect(within(container).getByTestId('action-panel-mock')).toBeInTheDocument();
   });
 });

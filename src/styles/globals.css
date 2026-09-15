@@ -1685,75 +1685,24 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   color: #86a8f2 !important;
 }
 
-.investigation-hotspots {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
-  pointer-events: none;
-}
-
 .status-panel-toggle { display: none; }
 .action-panel-meta { margin-left: 52px; }
 
-.investigation-hotspot {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #b9ccf4;
-  transform: translate(-50%, -50%);
-  pointer-events: auto;
+@media (max-width: 700px) {
+  .item-callout { gap: 12px; padding: 16px 12px; }
+  .item-callout__art { width: 88px !important; height: 88px !important; }
+  .item-callout__art img { max-width: 72px; max-height: 72px !important; }
+  .item-callout__title { padding-right: 36px; font-size: 18px; line-height: 1.5; }
+  .item-callout__description { font-size: 14px; line-height: 1.6; }
 }
-
-.investigation-hotspot__reticle {
-  display: flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(134, 168, 242, 0.48);
-  background: rgba(4, 7, 12, 0.45);
-  opacity: 0.58;
-  box-shadow: 0 0 0 3px rgba(134, 168, 242, 0.06);
-  animation: hotspotPulse 1800ms steps(4, end) infinite;
-}
-
-.investigation-hotspot__label {
-  max-width: 190px;
-  padding: 5px 7px;
-  border-left: 2px solid #86a8f2;
-  background: rgba(5, 7, 11, 0.9);
-  color: #deded8;
-  font-size: 11px;
-  line-height: 1.35;
-  opacity: 0;
-  transform: translateX(-5px);
-  transition: opacity 100ms linear, transform 100ms steps(2, end);
-}
-
-.investigation-hotspot:hover .investigation-hotspot__reticle,
-.investigation-hotspot:focus-visible .investigation-hotspot__reticle { opacity: 1; border-color: #a9c2ff; }
-.investigation-hotspot:hover .investigation-hotspot__label,
-.investigation-hotspot:focus-visible .investigation-hotspot__label { opacity: 1; transform: translateX(0); }
-
-@keyframes hotspotPulse { 0%, 100% { opacity: 0.42; } 50% { opacity: 0.76; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .status-reactive, .status-meter, .clue-discovery, .clue-discovery__scan, .knowledge-update, .knowledge-update__scan, .investigation-hotspot__reticle { animation: none !important; }
+  .status-reactive, .status-meter, .clue-discovery, .clue-discovery__scan, .knowledge-update, .knowledge-update__scan { animation: none !important; }
 }
 
 /* Single authoritative portrait breakpoint: gameplay, modals and onboarding. */
 @media (max-width: 700px) {
 
-  .character-profile-shell { padding: var(--mobile-safe-top, 10px) var(--mobile-safe-right, 10px) var(--mobile-safe-bottom, 10px) var(--mobile-safe-left, 10px) !important; }
-  .character-profile-modal { display: flex !important; width: 100% !important; height: calc(100dvh - var(--mobile-safe-top, 10px) - var(--mobile-safe-bottom, 10px)) !important; max-width: none !important; max-height: none !important; flex-direction: column; }
-  .character-profile-list { flex: 0 0 auto; padding: 14px !important; border-right: 0 !important; border-bottom: 2px solid #292c33; }
-  .character-profile-list > div:last-child { display: flex; max-height: none !important; gap: 8px; overflow-x: auto; overflow-y: hidden; }
-  .character-profile-list-item { width: 168px !important; min-width: 168px; }
-  .character-profile-detail { flex: 1; min-height: 0; overflow-y: auto !important; }
-  .character-profile-portrait { width: 42% !important; opacity: 0.38; }
-  .character-profile-copy { margin-left: 0 !important; padding: 54px 20px 28px !important; }
-  .character-profile-copy h2 { font-size: 30px !important; }
   .knowledge-update { top: calc(var(--mobile-safe-top, 10px) + 64px); grid-template-columns: 62px 1fr; min-height: 86px; gap: 11px; padding: 10px; }
   .knowledge-update__visual { width: 62px; height: 62px; }
 
@@ -1911,8 +1860,6 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 
   .clue-discovery { top: calc(var(--mobile-safe-top, 10px) + 94px); padding: 11px 12px; }
   .clue-discovery__content > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .investigation-hotspot__reticle { width: 34px; height: 34px; opacity: 0.72; }
-  .investigation-hotspot__label { display: none; }
 
   html, body, #root { min-width: 0; touch-action: manipulation; }
   .game-canvas {
@@ -3975,6 +3922,8 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
     z-index: 90;
     inset: 0;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     place-items: center;
     padding: 48px;
     background: rgba(5, 5, 5, .78);
@@ -3984,6 +3933,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   .pixel-modal-shell.is-compact { padding: 72px 140px; }
 
   .pixel-modal-frame {
+    min-width: 0;
     width: min(1120px, 100%);
     max-height: 100%;
     clip-path: none;
@@ -3993,6 +3943,8 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
 
   .pixel-modal-frame-content {
     display: flex;
+    min-width: 0;
+    min-height: 0;
     max-height: min(760px, calc(100vh - 96px));
     flex-direction: column;
     overflow: hidden;
@@ -4345,6 +4297,7 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   display: grid;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   grid-template-columns: 300px 1fr;
   overflow: hidden;
   background: #050505;
@@ -4531,21 +4484,22 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   .character-profile-shell.pixel-modal-shell,
   .save-modal-shell.pixel-modal-shell,
   .settings-modal-shell.pixel-modal-shell,
-  .api-setup-shell.pixel-modal-shell { padding: 10px; }
+  .api-setup-shell.pixel-modal-shell { padding: var(--mobile-safe-top) var(--mobile-safe-right) var(--mobile-safe-bottom) var(--mobile-safe-left); }
 
   .character-profile-shell > .pixel-modal-frame,
   .save-modal-shell > .pixel-modal-frame,
   .settings-modal-shell > .pixel-modal-frame,
-  .api-setup-shell > .pixel-modal-frame { width: 100%; height: calc(100dvh - 20px); max-width: none; max-height: none; }
+  .api-setup-shell > .pixel-modal-frame { width: 100%; height: calc(100dvh - var(--mobile-safe-top) - var(--mobile-safe-bottom)); max-width: 100%; max-height: 100%; }
 
   .character-profile-modal { display: flex; flex-direction: column; }
   .character-profile-list { flex: 0 0 auto; padding: 12px; border-right: 0; border-bottom: 3px solid #f2f2f0; }
-  .character-profile-list-header { margin-bottom: 10px; padding-bottom: 10px; }
+  .character-profile-list-header { margin-bottom: 10px; padding: 4px 54px 14px 4px; }
+  .character-profile-close { top: 16px; right: 16px; width: 44px; height: 44px; }
   .character-profile-list-scroll { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; }
   .character-profile-list-item { width: 180px; min-width: 180px; margin: 0; }
   .character-profile-detail { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .character-profile-portrait { width: 42%; opacity: .32; }
-  .character-profile-copy { margin-left: 0; padding: 58px 20px 28px; background: rgba(5, 5, 5, .76); }
+  .character-profile-copy { height: auto; min-height: 100%; margin-left: 0; justify-content: flex-start; overflow: visible; padding: 24px 20px 28px; background: rgba(5, 5, 5, .76); }
   .character-profile-copy h3 { font-size: 32px; }
   .settings-tabs button { min-height: 48px; font-size: 13px; }
   .settings-tabs button svg { display: none; }

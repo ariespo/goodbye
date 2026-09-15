@@ -16,7 +16,6 @@ import { EffectOverlay } from './EffectOverlay';
 import { ItemCallout } from './ItemCallout';
 import { GameplayGuide } from './GameplayGuide';
 import { ClueDiscoveryOverlay } from './ClueDiscoveryOverlay';
-import { InvestigationHotspots } from './InvestigationHotspots';
 import { CharacterProfileModal } from './CharacterProfileModal';
 import { ApiGuideCard } from './ApiGuideCard';
 import { KnowledgeUpdateOverlay } from './KnowledgeUpdateOverlay';
@@ -70,7 +69,6 @@ export function GameCanvas() {
         }}
       />
 
-      <InvestigationHotspots />
       <CharacterSprite />
       <ChoiceMenu />
       <CharacterProfileModal />

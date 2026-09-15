@@ -74,6 +74,14 @@ export function CharacterProfileModal() {
       labelledBy="character-profile-title"
       className="character-profile-shell"
     >
+      <button
+        type="button"
+        aria-label="关闭人物简介"
+        onClick={close}
+        className="pixel-modal-close character-profile-close"
+      >
+        <GameIcon name="close" size={16} />
+      </button>
       <section className="character-profile-modal">
         <aside className="character-profile-list">
           <div className="character-profile-list-header">
@@ -112,15 +120,6 @@ export function CharacterProfileModal() {
 
         {selected && (
           <div className="character-profile-detail">
-            <button
-              type="button"
-              aria-label="关闭人物简介"
-              onClick={close}
-              className="pixel-modal-close character-profile-close"
-            >
-              <GameIcon name="close" size={16} />
-            </button>
-
             <div className="character-profile-portrait">
               {usesAnimatedProfile && (
                 <CharacterAnimationPlayer
