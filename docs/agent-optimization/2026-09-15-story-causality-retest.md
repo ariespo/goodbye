@@ -22,7 +22,18 @@
 
 ## 真实模型小样本
 
-待填写结果。使用显式开启的 `scripts/live-action-authority.test.tsx`，在第3日16:00初报待送达的受控状态，分别运行standard与legacy，检查真实生成、审查、已接受正文和状态事务。每种模式一次，仅是局部冒烟验证。
+测试代码提交：`b0bba4fc8b6300bb31e75b6e9d74fb9dcbe07481`。模型为用户已允许替换使用的 `gemini-3.7-flash【神秘】`，未改变游戏默认模型。
+
+使用显式开启的 `scripts/live-action-authority.test.tsx`，在第3日16:00初报待送达的受控状态，分别运行standard与legacy，检查真实生成、审查、已接受正文和状态事务。每种模式一次，仅是局部冒烟验证。
+
+| 模式 | 结果 | 已接受剧情 | 通报事件提交 | 提前锁线/结局 |
+| --- | --- | --- | --- | --- |
+| standard | 通过 | 1回合 | 1次 | 无 |
+| legacy | 通过 | 1回合 | 1次 | 无 |
+
+两份实际正文均明确“疑似文穗的死者”和初步通报，身份、死亡时间与死因待核实；正文审查均批准，无违规。standard的一次结构化输出请求被网关以HTTP400拒绝（上游不接受schema的`additionalProperties`/`const`），现有回退机制恢复后成功完成。这是已恢复的接口兼容失败，不能把本次记录表述为所有API请求均无错误。
+
+完整本地证据：`.codex-test-tmp/action-authority/story-causality-20260915-b0bba4fc8b6300bb31e75b6e9d74fb9dcbe07481.json`，已脱敏；Vitest报告：`.codex-test-tmp/story-real-model.json`。
 
 数据库使用测试替身，因此不证明浏览器重载后的持久化；本次也不声称完整日程通关或模型语义错误已经消除。
 
