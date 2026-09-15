@@ -43,6 +43,8 @@
 
 `lieflat-less-ai-tone` 只用于成稿后的白名单式检查。它不能改变剧情结构、事实、段落顺序或信息密度，也不能把小说中的问句和有意使用的文学表达当成 AI 痕迹删除。
 
+运行时编剧的适配规则见 [剧情写作规范](narrative-writing-guide.md)。固定开局仍按本节保持原有结构；运行时通过既有 Writer 提示词指导生成并做局部语言自检，不加载 Skill，也不增加清理调用。
+
 ## 实现位置
 
 - 剧本与开局认知事件：`src/engine/opening-storyline.ts`
