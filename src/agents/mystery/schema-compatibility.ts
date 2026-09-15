@@ -9,19 +9,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+export type AdaptableSchemaKeyword = 'additionalProperties' | 'const';
+
 /** Never traverse enum/default values or property-name maps as if they were schema nodes. */
-export function schemaWithoutAdditionalProperties(schema: Record<string, unknown>): Record<string, unknown> | undefined {
+export function adaptSchemaForUnsupportedKeywords(
+  schema: Record<string, unknown>, keywords: ReadonlySet<AdaptableSchemaKeyword>,
+): Record<string, unknown> | undefined {
   let removed = false;
   let supported = true;
   const visit = (node: unknown): unknown => {
     if (typeof node === 'boolean') return node;
     if (!isRecord(node)) { supported = false; return node; }
     const result: Record<string, unknown> = {};
+    const adaptConst = keywords.has('const') && Object.hasOwn(node, 'const');
+    if (adaptConst && Array.isArray(node.enum) && !node.enum.some(item => sameJson(item, node.const))) supported = false;
     for (const [key, value] of Object.entries(node)) {
       if (!supportedKeywords.has(key)) supported = false;
-      if (key === 'additionalProperties') {
+      if (key === 'additionalProperties' && keywords.has('additionalProperties')) {
         removed = true;
         if (typeof value !== 'boolean') visit(value);
+      } else if (key === 'const' && adaptConst) {
+        removed = true;
+        // The gateway's legacy Gemini Schema supports string enums only. Keep
+        // boolean/numeric/object const checks local instead of adding invalid enums.
+        if (typeof value === 'string') result.enum = [value];
+      } else if (key === 'enum' && adaptConst && typeof node.const === 'string') {
+        continue;
+      } else if (key === 'additionalProperties' && isRecord(value)) {
+        result[key] = visit(value);
       } else if (key === 'properties' && isRecord(value)) {
         result[key] = Object.fromEntries(Object.entries(value).map(([name, item]) => [name, visit(item)]));
       } else if (key === 'items') {
@@ -38,6 +53,10 @@ export function schemaWithoutAdditionalProperties(schema: Record<string, unknown
   };
   const adapted = visit(schema);
   return removed && supported ? adapted as Record<string, unknown> : undefined;
+}
+
+export function schemaWithoutAdditionalProperties(schema: Record<string, unknown>): Record<string, unknown> | undefined {
+  return adaptSchemaForUnsupportedKeywords(schema, new Set(['additionalProperties']));
 }
 
 function sameJson(left: unknown, right: unknown): boolean {

@@ -21,6 +21,7 @@ if (!attempts.length || new Set(attempts).size !== attempts.length || attempts.s
 }
 const dryRun = process.env.REVIEW_RELIABILITY_DRY_RUN === '1';
 const enabled = process.env.LIVE_REVIEW_RELIABILITY === '1';
+const injectInvalidCitation = process.env.REVIEW_RELIABILITY_INJECT_INVALID_CITATION === '1';
 const sourcePath = '.codex-test-tmp/day-evaluation/options-standard-audit946ce32-g37juice-c1.json';
 const outputRoot = '.codex-test-tmp/review-reliability';
 const maxHttpPerSample = 3;
@@ -151,6 +152,7 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
       model, sourceModel: recorded.model,
       comparison: model === recorded.model ? 'same-model-fixed-candidates' : 'different-model-flow-validation',
       requestedAttempts: attempts,
+      faultInjection: injectInvalidCitation ? 'Replace the first returned citation list once with an invalid ID to exercise a real bounded patch call; not a natural failure-rate sample.' : null,
       baseUrl, maxHttpAttempts: attempts.length * maxHttpPerSample, perSampleTimeoutMs: 120_000,
       costMetricNote: 'JavaScript system+user character counts are not exact tokens or monetary cost; provider usage is retained separately.',
       samples: results };
@@ -189,6 +191,8 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
               responseSchemaSha256: body.response_format?.json_schema?.schema ? hash(JSON.stringify(body.response_format.json_schema.schema)) : null,
               schemaContainsAdditionalProperties: body.response_format?.json_schema?.schema
                 ? JSON.stringify(body.response_format.json_schema.schema).includes('"additionalProperties":') : null,
+              schemaContainsConst: body.response_format?.json_schema?.schema
+                ? JSON.stringify(body.response_format.json_schema.schema).includes('"const":') : null,
               systemUserChars, correction: messages.some(message => message.role === 'assistant'),
               requestSha256: hash(String(init?.body ?? '')), maxTokens: body.max_tokens, temperature: body.temperature };
             calls.push(call);
@@ -218,7 +222,22 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
           const api = { baseUrl, apiKey: key!, model };
           const preset = { ...createDefaultPreset(), id: 'review-reliability', createdAt: 0, updatedAt: 0 };
           if (sample.maxTokens !== undefined) preset.settings.openai_max_tokens = sample.maxTokens;
-          const complete: AgentCompletion = (messages, options) => callSecondaryApi(api, messages, preset, options);
+          let injected = false;
+          const complete: AgentCompletion = async (messages, options) => {
+            const response = await callSecondaryApi(api, messages, preset, options);
+            if (injectInvalidCitation && !injected && !messages.some(message => message.role === 'assistant')) {
+              let parsed;
+              try { parsed = JSON.parse(response); } catch { return response; }
+              const assertion = parsed?.assertionAudit?.assertions?.[0];
+              if (typeof assertion?.unitId !== 'string' || !Array.isArray(assertion.citations)) return response;
+              result.injectedFault = { assertionIndex: 0, originalCitations: assertion.citations, invalidCitation: '__live_test_invalid_source__' };
+              assertion.citations = ['__live_test_invalid_source__'];
+              injected = true;
+              persist();
+              return JSON.stringify(parsed);
+            }
+            return response;
+          };
           const review: FactReview = await reviewNarrativeAgainstWriterPacket({ api, preset, complete,
             abortSignal: AbortSignal.timeout(120_000),
             narrative: sample.narrative, packet: sample.packet, continuityMemory: sample.continuityMemory,

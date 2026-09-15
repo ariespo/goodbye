@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { completeParsedStructured, completeStructured, extractJson, resetResponseFormatSupportCache } from './structured';
+import { ApiCallError } from '../../sillytavern/api-router';
+import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 
 describe('completeParsedStructured', () => {
   it('includes the current schema and root fields when metadata validation fails in JSON Object mode', async () => {
@@ -414,5 +416,78 @@ describe('completeParsedStructured', () => {
         messages: [], responseFormat: { type: 'json_object' }, parse: JSON.parse,
       }))).rejects.toThrow(SyntaxError);
     expect(complete).toHaveBeenCalledTimes(2);
+  });
+
+  it('handles the actual escaped Gemini HTTP 400 envelope and adapts the complete review schema in one request', async () => {
+    resetResponseFormatSupportCache();
+    const message = 'Invalid JSON payload received. Unknown name "additionalProperties" at \'generation_config.response_schema.properties[3].***.properties[0].***.***.properties[1].***.items\': Cannot find field.\n'
+      + 'Invalid JSON payload received. Unknown name "const" at \'generation_config.response_schema.properties[3].***.properties[3].value\': Cannot find field.';
+    const error = new ApiCallError(`API error 400: ${JSON.stringify({ error: { message, type: 'upstream_error', param: '', code: 400 } })}`, 'http4xx', 400);
+    const judgment = { status: 'not-applicable', evidenceLineIndices: [], reason: '无对应行动' };
+    const valid = { approved: true, violations: [], corrections: [], assertionAudit: { assertions: [] },
+      continuityAudit: { reviewed: true, disclosures: [], beliefs: [], commitments: [] },
+      actionAudit: { originalRequest: judgment, followThrough: judgment, segments: [] } };
+    const complete = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(JSON.stringify(valid));
+    const original = JSON.stringify(ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT);
+    const key = 'https://oneapi.hakoyu.com/v1|gemini-3.7-flash【神秘】';
+    await expect(completeParsedStructured(complete, key, [], {}, ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, JSON.parse))
+      .resolves.toEqual(valid);
+    await expect(completeParsedStructured(complete, key, [], {}, ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT, JSON.parse))
+      .resolves.toEqual(valid);
+    expect(complete).toHaveBeenCalledTimes(3);
+    const adapted = complete.mock.calls[1][1].responseFormat;
+    expect(adapted.type).toBe('json_schema');
+    expect(JSON.stringify(adapted)).not.toContain('"additionalProperties":');
+    expect(JSON.stringify(adapted)).not.toContain('"const":');
+    expect(adapted.json_schema.schema.properties.continuityAudit.properties.reviewed).toEqual({ type: 'boolean' });
+    expect(complete.mock.calls[2][1].responseFormat).toEqual(adapted);
+    expect(JSON.stringify(ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT)).toBe(original);
+  });
+
+  it('adapts only an explicitly rejected const, retains additionalProperties, and checks the original const locally', async () => {
+    resetResponseFormatSupportCache();
+    const format = { type: 'json_schema' as const, json_schema: { name: 'const-only', schema: {
+      type: 'object', additionalProperties: false, required: ['reviewed'], properties: { reviewed: { type: 'boolean', const: true } },
+    } } };
+    const error = new ApiCallError('API error 400: {"error":{"message":"Unknown name \\"const\\" at response_schema.properties[0]: Cannot find field."}}', 'http4xx', 400);
+    const complete = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce('{"reviewed":false}').mockResolvedValueOnce('{"reviewed":true}');
+    await expect(completeParsedStructured(complete, 'const-only', [], {}, format, JSON.parse)).resolves.toEqual({ reviewed: true });
+    expect(complete).toHaveBeenCalledTimes(3);
+    const adapted = complete.mock.calls[1][1].responseFormat;
+    expect(adapted.type).toBe('json_schema');
+    expect(adapted.json_schema.schema.additionalProperties).toBe(false);
+    expect(adapted.json_schema.schema.properties.reviewed).toEqual({ type: 'boolean' });
+    expect(complete.mock.calls[2][0].at(-1).content).toContain('const');
+  });
+
+  it('shares the explicitly observed const hint with a patch schema without inventing an additionalProperties hint', async () => {
+    resetResponseFormatSupportCache();
+    const format = (name: string) => ({ type: 'json_schema' as const, json_schema: { name, schema: {
+      type: 'object', additionalProperties: false, properties: { status: { type: 'string', const: 'pass' } },
+    } } });
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: Unknown name "const" at response_schema'))
+      .mockResolvedValue('{"status":"pass"}');
+    await completeStructured(complete, 'const-hint', [], {}, format('full'));
+    await completeStructured(complete, 'const-hint', [], {}, format('patch'));
+    const patch = complete.mock.calls[2][1].responseFormat;
+    expect(patch.type).toBe('json_schema');
+    expect(patch.json_schema.schema.additionalProperties).toBe(false);
+    expect(patch.json_schema.schema.properties.status).toEqual({ type: 'string', enum: ['pass'] });
+  });
+
+  it('does not chain compatible probes when the gateway reveals a second unsupported keyword later', async () => {
+    resetResponseFormatSupportCache();
+    const format = { type: 'json_schema' as const, json_schema: { name: 'progressive', schema: {
+      type: 'object', additionalProperties: false, properties: { reviewed: { type: 'boolean', const: true } },
+    } } };
+    const complete = vi.fn().mockRejectedValueOnce(new Error('API error 400: response_schema additionalProperties is not supported'))
+      .mockRejectedValueOnce(new Error('API error 400: response_schema const is not supported')).mockResolvedValue('{"reviewed":true}');
+    await completeStructured(complete, 'progressive-keywords', [], {}, format);
+    expect(complete.mock.calls.map(call => call[1].responseFormat.type)).toEqual(['json_schema', 'json_schema', 'json_object']);
+    await completeStructured(complete, 'progressive-keywords', [], {}, format);
+    const next = complete.mock.calls[3][1].responseFormat;
+    expect(next.type).toBe('json_schema');
+    expect(next.json_schema.schema.additionalProperties).toBeUndefined();
+    expect(next.json_schema.schema.properties.reviewed).toEqual({ type: 'boolean' });
   });
 });

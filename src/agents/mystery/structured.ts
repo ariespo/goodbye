@@ -1,5 +1,5 @@
 import type { ChatCompletionMessage, ResponseFormat, SecondaryApiOptions } from '../../sillytavern/api-router';
-import { schemaWithoutAdditionalProperties, validateAdaptedSchemaValue } from './schema-compatibility';
+import { adaptSchemaForUnsupportedKeywords, validateAdaptedSchemaValue, type AdaptableSchemaKeyword } from './schema-compatibility';
 
 export type AgentCompletion = (
   messages: ChatCompletionMessage[],
@@ -11,16 +11,16 @@ export type StructuredOutputMode = 'json_schema' | 'json_object' | 'text';
 /** 记录各服务端可用的最高结构化输出能力，避免每次调用都重复撞 400。 */
 const responseFormatSupportCache = new Map<string, StructuredOutputMode>();
 /** JSON Schema 方言兼容性取决于完整 schema，不能由同端点的另一个 schema 覆盖。 */
-const jsonSchemaSupportCache = new Map<string, 'native' | 'without-additional-properties' | false>();
+const jsonSchemaSupportCache = new Map<string, 'native' | 'adapted' | false>();
 const jsonObjectSupportCache = new Map<string, boolean>();
 /** Only an explicit observed keyword rejection may guide another schema on this endpoint/model. */
-const additionalPropertiesUnsupportedHints = new Set<string>();
+const unsupportedSchemaKeywordHints = new Map<string, Set<AdaptableSchemaKeyword>>();
 
 export function resetResponseFormatSupportCache(): void {
   responseFormatSupportCache.clear();
   jsonSchemaSupportCache.clear();
   jsonObjectSupportCache.clear();
-  additionalPropertiesUnsupportedHints.clear();
+  unsupportedSchemaKeywordHints.clear();
 }
 
 export function getResponseFormatSupport(key: string): boolean | undefined {
@@ -51,9 +51,19 @@ function isResponseFormatUnsupportedText(text: string): boolean {
   return /(unavailable|unsupported|not supported|invalid_request_error|unknown (?:name|field)|additionalProperties|\bconst\b|(?:HTTP|API error)\s*(400|404|422))/i.test(text);
 }
 
-function isAdditionalPropertiesUnsupportedText(text: string): boolean {
-  return isResponseFormatUnsupportedText(text)
-    && /(?:unknown (?:name|field)\s*["']?additionalProperties\b|additionalProperties\b.{0,100}(?:not supported|unsupported)|(?:not supported|unsupported).{0,100}\badditionalProperties\b)/i.test(text);
+function rememberUnsupportedSchemaKeywords(supportKey: string, text: string): boolean {
+  if (!isResponseFormatUnsupportedText(text)) return false;
+  // API errors retain JSON-encoded upstream bodies, so quoted keyword names may
+  // arrive as \"name\". Decode only quote escaping for capability recognition.
+  const readable = text.replace(/\\+(["'])/g, '$1');
+  const hints = unsupportedSchemaKeywordHints.get(supportKey) ?? new Set<AdaptableSchemaKeyword>();
+  const previousSize = hints.size;
+  for (const keyword of ['additionalProperties', 'const'] as const) {
+    const pattern = new RegExp(`(?:unknown (?:name|field)\\s*["']?${keyword}\\b|${keyword}\\b.{0,100}(?:not supported|unsupported)|(?:not supported|unsupported).{0,100}\\b${keyword}\\b)`, 'i');
+    if (pattern.test(readable)) hints.add(keyword);
+  }
+  if (hints.size > 0) unsupportedSchemaKeywordHints.set(supportKey, hints);
+  return hints.size > previousSize;
 }
 
 /** Keep the rejected response for the existing, bounded report-correction path. */
@@ -125,9 +135,10 @@ export async function completeStructured(
     responseFormatSupportCache.set(supportKey, 'json_object');
   } else if (responseFormat.type === 'json_schema' && schemaKey && jsonSchemaSupportCache.get(schemaKey) !== false) {
     const remembered = jsonSchemaSupportCache.get(schemaKey);
-    const hintedSchema = remembered !== 'native' && additionalPropertiesUnsupportedHints.has(supportKey)
-      ? schemaWithoutAdditionalProperties(responseFormat.json_schema.schema) : undefined;
-    let needsAdaptation = remembered === 'without-additional-properties' || hintedSchema !== undefined;
+    const hintedKeywords = unsupportedSchemaKeywordHints.get(supportKey);
+    const hintedSchema = remembered !== 'native' && hintedKeywords
+      ? adaptSchemaForUnsupportedKeywords(responseFormat.json_schema.schema, hintedKeywords) : undefined;
+    let needsAdaptation = remembered === 'adapted' || hintedSchema !== undefined;
     if (!needsAdaptation) {
       let incompatibility: string;
       try {
@@ -142,12 +153,13 @@ export async function completeStructured(
         if (!isResponseFormatUnsupportedError(error)) throw error;
         incompatibility = (error as Error).message;
       }
-      needsAdaptation = isAdditionalPropertiesUnsupportedText(incompatibility);
-      if (needsAdaptation) additionalPropertiesUnsupportedHints.add(supportKey);
+      rememberUnsupportedSchemaKeywords(supportKey, incompatibility);
+      needsAdaptation = unsupportedSchemaKeywordHints.has(supportKey);
       jsonSchemaSupportCache.set(schemaKey, false);
     }
     if (needsAdaptation) {
-      const adaptedSchema = hintedSchema ?? schemaWithoutAdditionalProperties(responseFormat.json_schema.schema);
+      const keywords = unsupportedSchemaKeywordHints.get(supportKey) ?? new Set<AdaptableSchemaKeyword>();
+      const adaptedSchema = hintedSchema ?? adaptSchemaForUnsupportedKeywords(responseFormat.json_schema.schema, keywords);
       if (adaptedSchema) {
         const adaptedFormat: Extract<ResponseFormat, { type: 'json_schema' }> = {
           ...responseFormat, json_schema: { ...responseFormat.json_schema, schema: adaptedSchema },
@@ -156,16 +168,21 @@ export async function completeStructured(
         if (jsonSchemaSupportCache.get(adaptedKey) !== false) {
           // A transient error during this probe leaves the compatible candidate
           // available for the next call; it is not evidence for json_object.
-          jsonSchemaSupportCache.set(schemaKey, 'without-additional-properties');
+          jsonSchemaSupportCache.set(schemaKey, 'adapted');
           let result: string | undefined;
+          let learnedAnotherKeyword = false;
           try {
             result = await complete(messages, { ...options, responseFormat: adaptedFormat });
-            if (isResponseFormatUnsupportedText(result)) result = undefined;
+            if (isResponseFormatUnsupportedText(result)) {
+              learnedAnotherKeyword = rememberUnsupportedSchemaKeywords(supportKey, result);
+              result = undefined;
+            }
           } catch (error) {
             if (!isResponseFormatUnsupportedError(error)) throw error;
+            learnedAnotherKeyword = rememberUnsupportedSchemaKeywords(supportKey, (error as Error).message);
           }
           if (result !== undefined) {
-            jsonSchemaSupportCache.set(schemaKey, 'without-additional-properties');
+            jsonSchemaSupportCache.set(schemaKey, 'adapted');
             jsonSchemaSupportCache.set(adaptedKey, 'native');
             responseFormatSupportCache.set(supportKey, 'json_schema');
             // Outside the transport catch: invalid content must trigger report repair,
@@ -173,9 +190,17 @@ export async function completeStructured(
             return validateAdaptedResponse(result, responseFormat);
           }
           jsonSchemaSupportCache.set(adaptedKey, false);
+          if (learnedAnotherKeyword) {
+            // Do not chain schema probes inside this request. The next call can
+            // use the newly observed combined variant, still checked locally.
+            jsonSchemaSupportCache.set(schemaKey, 'adapted');
+          } else {
+            jsonSchemaSupportCache.set(schemaKey, false);
+          }
         }
+      } else {
+        jsonSchemaSupportCache.set(schemaKey, false);
       }
-      jsonSchemaSupportCache.set(schemaKey, false);
     }
   }
 

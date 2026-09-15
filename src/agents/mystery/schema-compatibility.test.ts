@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { schemaWithoutAdditionalProperties, validateAdaptedSchemaValue } from './schema-compatibility';
+import { adaptSchemaForUnsupportedKeywords, schemaWithoutAdditionalProperties, validateAdaptedSchemaValue } from './schema-compatibility';
 import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 
 describe('schema compatibility local constraints', () => {
@@ -60,5 +60,17 @@ describe('schema compatibility local constraints', () => {
     expect(adapted).toBeDefined();
     expect(adapted?.required).toEqual(format.json_schema.schema.required);
     expect(() => validateAdaptedSchemaValue({ approved: true }, format.json_schema.schema)).toThrow('$.assertionAudit');
+  });
+
+  it('uses string enums, keeps enum intersection, and leaves nonstring const validation local', () => {
+    const schema = { type: 'object', additionalProperties: false, properties: {
+      const: { type: 'string', const: 'pass', enum: ['pass', 'fail'] },
+      value: { const: { const: 'ordinary data' } },
+    } };
+    expect(adaptSchemaForUnsupportedKeywords(schema, new Set(['const']))).toEqual({ type: 'object', additionalProperties: false, properties: {
+      const: { type: 'string', enum: ['pass'] }, value: {},
+    } });
+    expect(adaptSchemaForUnsupportedKeywords({ type: 'boolean', enum: [false], const: true }, new Set(['const'])))
+      .toBeUndefined();
   });
 });
