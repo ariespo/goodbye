@@ -1,0 +1,1665 @@
+{
+  "kind": "fixed-critic-retest-with-explicit-alternate-route",
+  "runtimeCommit": "bf239698ae047349891c4625fea5aefe9a813c83",
+  "scope": "Frozen failed candidates; no Writer or state commit; main batch and retry remain separate.",
+  "finalPipelineOutcome": {
+    "failedAttempts": [
+      7
+    ],
+    "semanticCaveatAttempts": [
+      8,
+      16,
+      18
+    ],
+    "approvedAttempts": [
+      6,
+      8,
+      10,
+      13,
+      16,
+      18
+    ]
+  },
+  "runs": [
+    {
+      "sourceFile": "live-2026-09-15T08-09-27-453Z.json",
+      "sourceSha256": "e5e6f8e1f2d8255bb9f9c6b09f21fca98b97bf6ae2641b0d7cc2f1c4956615f6",
+      "model": "gemini-3.7-flash【神秘】",
+      "sourceModel": "gemini-3.7-flash【果汁】",
+      "comparison": "different-model-flow-validation",
+      "testedCommit": "bf239698ae047349891c4625fea5aefe9a813c83",
+      "workingTreeDiffSha256": "e5d9cb9ab71cc29d8c39a867944a39f79db90f0375e2d1b0db3d859a08198f72",
+      "harnessSha256": "946c28d573ea8065d54dc3c16663118d49417162268ade7b0be14f137cf73d9b",
+      "samples": [
+        {
+          "attempt": 6,
+          "status": "approved",
+          "approved": true,
+          "exception": null,
+          "httpCalls": 2,
+          "correction": false,
+          "durationMs": 19509,
+          "narrativeSha256": "aa38f5b13740625142ef60f6aa4c1be03a1e6da88c796fb95cd11ff655d108fc",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [
+            {
+              "factId": "F002",
+              "level": "atmosphere",
+              "speakerIds": [
+                "school-guard"
+              ]
+            }
+          ],
+          "review": {
+            "approved": true,
+            "violations": [],
+            "corrections": [],
+            "assertionAudit": {
+              "reviewedFields": [
+                "maintext",
+                "option:0",
+                "option:1",
+                "option:2",
+                "option:3",
+                "summary",
+                "hint"
+              ],
+              "assertions": [
+                {
+                  "field": "maintext",
+                  "quote": "你再次推开公寓大门走入暴雨之中，撑着伞顶着风雨快步朝文穗的中学走去。",
+                  "proposition": "玩家推开公寓大门走入暴雨，撑伞前往文穗的中学。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "普通的当下移动与环境描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "街面上的积水漫过脚踝，浑浊的雨水沿着街道边缘哗哗流淌，整条道路在雨幕中显得格外冷清。",
+                  "proposition": "暴雨中街面积水漫过脚踝，道路冷清。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "暴雨天气的当下氛围与环境描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "大约十分钟后，你赶到了中学门口。",
+                  "proposition": "玩家经过约十分钟路程抵达中学门口。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:resolution:action-1skbz0q",
+                      "quote": "行动结束时，玩家位于中学（school）。"
+                    }
+                  ],
+                  "reason": "路程耗时与抵达地点与行动结算一致。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "学校的大铁门依旧紧闭，门卫室的玻璃窗上布满水汽。",
+                  "proposition": "学校大铁门紧闭，门卫室窗户布满水汽。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "学校门口的常规当下环境描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你走到传达室窗口前敲了敲玻璃，门卫拉开移窗，神情谨慎地看向你。",
+                  "proposition": "玩家敲窗，门卫拉开窗户看向玩家。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "与NPC接触的当下交互动作。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "“雨下得这么大，还没找到文穗那孩子吗？”",
+                  "proposition": "门卫询问是否还没找到文穗。",
+                  "status": "question",
+                  "citations": [],
+                  "reason": "门卫的关切询问台词。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你向门卫再次询问文穗的下落，门卫翻了翻桌上的登记册，神情务实而谨慎。",
+                  "proposition": "玩家向门卫询问文穗下落，门卫翻看登记册。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "问询调查过程的当下描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "“我今天在校门口见过文穗。别的我就不清楚了。”",
+                  "proposition": "门卫表示今天在校门口见过文穗，其余不清楚。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "known-fact:F002:atmosphere",
+                      "quote": "门卫说，今天在校门口见过文穗。"
+                    }
+                  ],
+                  "reason": "与门卫已知事实完全相符且由获准NPC表达。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你在传达室外向门卫详细核对上午的情况，并在校门周边仔细观察与等候。",
+                  "proposition": "玩家核对情况并在校门周边观察等候。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "调查工作的当下过程推进。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "风雨持续抽打着紧闭的铁门，操场上空无一人，大半个小时过去，校门附近始终没有文穗的身影。",
+                  "proposition": "大半个小时过去，校门附近没有文穗身影。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "调查持续时间及现场结果呈现，符合本次行动时长。"
+                },
+                {
+                  "field": "option:0",
+                  "quote": "前往社区便利店周边排查",
+                  "proposition": "选项提供前往社区便利店排查。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "系统提供的合法行动选项。"
+                },
+                {
+                  "field": "option:1",
+                  "quote": "前往灯织住的商住楼商议",
+                  "proposition": "选项提供前往灯织住的商住楼商议。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "系统提供的合法行动选项。"
+                },
+                {
+                  "field": "option:2",
+                  "quote": "返回家中查看是否有新动静",
+                  "proposition": "选项提供返回家中查看。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "系统提供的合法行动选项。"
+                },
+                {
+                  "field": "option:3",
+                  "quote": "在校门旁稍作休息整理线索",
+                  "proposition": "选项提供在校门旁休息整理线索。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "系统提供的合法行动选项。"
+                },
+                {
+                  "field": "summary",
+                  "quote": "前往文穗的中学向门卫复核，门卫确认今天曾在校门口见过文穗，但未有更多动向线索。",
+                  "proposition": "总结前往中学复核及门卫告知的已知事实。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "known-fact:F002:atmosphere",
+                      "quote": "门卫说，今天在校门口见过文穗。"
+                    }
+                  ],
+                  "reason": "准确总结本回合调查过程与结果。"
+                },
+                {
+                  "field": "hint",
+                  "quote": "门卫确认今天曾在校门口见过文穗，但未能提供更多动向，需要转向其他地点继续排查。",
+                  "proposition": "提示门卫已确认见闻但无更多线索，建议转向其他地点。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "known-fact:F002:atmosphere",
+                      "quote": "门卫说，今天在校门口见过文穗。"
+                    }
+                  ],
+                  "reason": "基于已知事实提出的下一步引导。"
+                }
+              ]
+            },
+            "actionAudit": {
+              "originalRequest": {
+                "status": "pass",
+                "evidenceLineIndices": [
+                  0,
+                  2,
+                  3,
+                  5,
+                  6,
+                  7,
+                  8
+                ],
+                "reason": "正文完整演绎了前往文穗中学的路程以及在校门口向门卫核实文穗线索的调查过程。",
+                "quote": "你再次推开公寓大门走入暴雨之中，撑着伞顶着风雨快步朝文穗的中学走去。\n大约十分钟后，你赶到了中学门口。学校的大铁门依旧紧闭，门卫室的玻璃窗上布满水汽。\n你走到传达室窗口前敲了敲玻璃，门卫拉开移窗，神情谨慎地看向你。\n你向门卫再次询问文穗的下落，门卫翻了翻桌上的登记册，神情务实而谨慎。\n“我今天在校门口见过文穗。别的我就不清楚了。”\n你在传达室外向门卫详细核对上午的情况，并在校门周边仔细观察与等候。\n风雨持续抽打着紧闭的铁门，操场上空无一人，大半个小时过去，校门附近始终没有文穗的身影。"
+              },
+              "followThrough": {
+                "status": "not-applicable",
+                "evidenceLineIndices": [],
+                "reason": "本次行动无追加接续阶段。",
+                "quote": ""
+              },
+              "segments": [
+                {
+                  "segmentId": "segment:0",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    0,
+                    1,
+                    2
+                  ],
+                  "reason": "正文第0至2行具体演绎了顶着暴雨步行前往中学约10分钟的路程与抵达。",
+                  "quote": "你再次推开公寓大门走入暴雨之中，撑着伞顶着风雨快步朝文穗的中学走去。\n街面上的积水漫过脚踝，浑浊的雨水沿着街道边缘哗哗流淌，整条道路在雨幕中显得格外冷清。\n大约十分钟后，你赶到了中学门口。学校的大铁门依旧紧闭，门卫室的玻璃窗上布满水汽。"
+                },
+                {
+                  "segmentId": "segment:1",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
+                  ],
+                  "reason": "正文第3至8行具体呈现了在传达室敲窗问询、门卫查阅登记册并作答、以及随后在校门周边核对等候大半个小时的过程。",
+                  "quote": "你走到传达室窗口前敲了敲玻璃，门卫拉开移窗，神情谨慎地看向你。\n“雨下得这么大，还没找到文穗那孩子吗？”\n你向门卫再次询问文穗的下落，门卫翻了翻桌上的登记册，神情务实而谨慎。\n“我今天在校门口见过文穗。别的我就不清楚了。”\n你在传达室外向门卫详细核对上午的情况，并在校门周边仔细观察与等候。\n风雨持续抽打着紧闭的铁门，操场上空无一人，大半个小时过去，校门附近始终没有文穗的身影。"
+                }
+              ]
+            },
+            "continuityAudit": {
+              "reviewed": true,
+              "disclosures": [],
+              "beliefs": [],
+              "commitments": []
+            },
+            "continuityEffects": {
+              "candidateId": "candidate:87504c17:446",
+              "cognitionDeltas": [],
+              "disclosures": [],
+              "commitmentOperations": []
+            }
+          },
+          "calls": [
+            {
+              "httpAttempt": 1,
+              "responseFormat": "json_schema",
+              "status": 400,
+              "correction": false,
+              "finishReason": null,
+              "exception": null,
+              "durationMs": 5885,
+              "requestSha256": "4ac8666d72d3c26c7d56dc66d945cfcce0badb6235126f59e17a7e77ca95106b",
+              "responseSha256": null,
+              "responseChars": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "responseText": null
+            },
+            {
+              "httpAttempt": 2,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 13561,
+              "requestSha256": "f67a987046f7ccd583efd50b672529d2d7c0c09ba5c0edfef7dfccfa3e4dca82",
+              "responseSha256": "f9190f3bc4611f9056a49dc674b64d64d073d7d16da6434b767371420e162582",
+              "responseChars": 5535,
+              "inputTokens": 20816,
+              "outputTokens": 2115,
+              "responseText": null
+            }
+          ]
+        },
+        {
+          "attempt": 7,
+          "status": "exception",
+          "approved": null,
+          "exception": {
+            "name": "ApiCallError",
+            "message": "API error 401: {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: 202609150809559509320568268d9d6YI88bZbz)\",\"type\":\"new_api_error\"}}"
+          },
+          "httpCalls": 2,
+          "correction": false,
+          "durationMs": 10041,
+          "narrativeSha256": "b68ef3ec3930bf0450a57a5ed68c099a15cb0c7e338fef577668a4a4767d5835",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [
+            {
+              "factId": "F002",
+              "level": "atmosphere",
+              "speakerIds": [
+                "school-guard"
+              ]
+            }
+          ],
+          "review": null,
+          "calls": [
+            {
+              "httpAttempt": 3,
+              "responseFormat": "json_object",
+              "status": null,
+              "correction": false,
+              "finishReason": null,
+              "exception": {
+                "name": "TypeError",
+                "message": "fetch failed"
+              },
+              "durationMs": 5050,
+              "requestSha256": "46276fed3bce029ca8d8785cde769488b34cb1e25f700a77be2f21853dd8aa6b",
+              "responseSha256": null,
+              "responseChars": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "responseText": null
+            },
+            {
+              "httpAttempt": 4,
+              "responseFormat": "json_object",
+              "status": 401,
+              "correction": false,
+              "finishReason": null,
+              "exception": null,
+              "durationMs": 4956,
+              "requestSha256": "46276fed3bce029ca8d8785cde769488b34cb1e25f700a77be2f21853dd8aa6b",
+              "responseSha256": null,
+              "responseChars": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "responseText": null
+            }
+          ]
+        },
+        {
+          "attempt": 8,
+          "status": "approved",
+          "approved": true,
+          "exception": null,
+          "httpCalls": 1,
+          "correction": false,
+          "durationMs": 7975,
+          "narrativeSha256": "0f38f2dc8e7fb1e1f739ffc3be148e0503b00bc27a9dc4711f15ec9f4b0798f6",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [],
+          "review": {
+            "approved": true,
+            "violations": [],
+            "corrections": [],
+            "assertionAudit": {
+              "reviewedFields": [
+                "maintext",
+                "option:0",
+                "option:1",
+                "option:2",
+                "option:3",
+                "summary",
+                "hint"
+              ],
+              "assertions": [
+                {
+                  "field": "maintext",
+                  "quote": "你在餐桌旁拉开椅子坐下，暂时停住脚步，把一上午奔波收集到的零碎信息逐一在脑海中铺开。",
+                  "proposition": "玩家在餐桌旁坐下并开始梳理上午收集到的信息。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "当下动作与心理状态描写，属于合规当下行动。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "清晨留下的便签依然压在星月夜马克杯旁，字条上写着公交卡在外层口袋、今天可能晚点回来的留言。",
+                  "proposition": "早晨杯子旁的便签上写着公交卡在外层口袋及可能晚点回来的留言。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "public-event:opening-note",
+                      "quote": "今早杯底纸条写着“公交卡在外层口袋！今天可能晚一点回来。”"
+                    }
+                  ],
+                  "reason": "准确重述了公开连续性中已确认的留条内容。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "随后文穗发来六点五十分的消息称今天不去学校，但学校门卫明确表示今天曾在校门口见过文穗。",
+                  "proposition": "文穗06:50发消息称不去学校，而学校门卫表示今天在校门见过她。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "public-event:opening-message-0650",
+                      "quote": "今早06:50文穗发来聊天消息：“我先出门了，今天不去学校。"
+                    },
+                    {
+                      "sourceId": "known-fact:F002:atmosphere",
+                      "quote": "门卫说，今天在校门口见过文穗。"
+                    }
+                  ],
+                  "reason": "转述与已获准消息事实及门卫目击事实完全一致。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "文穗房间衣柜里那处不自然的空缺、便利店店员陈慧慧有些慌乱紧张的应答，以及对面商住楼灯织学姐关于梳理去向的提醒，在思绪中相互对照。",
+                  "proposition": "衣柜有不自然空缺，此前便利店陈慧慧反应紧张，学姐曾提醒梳理去向。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "known-fact:F001:atmosphere",
+                      "quote": "衣柜里有一处不自然的空缺。"
+                    }
+                  ],
+                  "reason": "包含已知证据F001以及前文已发生对话经历的自然回顾。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你拿出手机再次确认屏幕，未读消息与未接电话依旧没有任何新的回音。",
+                  "proposition": "手机上依然没有文穗的回复或新回音。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "public-event:opening-unanswered-contact",
+                      "quote": "玩家今早看消息后问她去哪儿，尚无回复；随后拨打电话无人接听。开局只能确定暂时联系不上"
+                    }
+                  ],
+                  "reason": "符合未接通且无回复的已知状态。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "窗外雨声不绝，整个公寓安静得能听清每一道雨点击打玻璃的声音。",
+                  "proposition": "窗外下着雨，公寓十分安静。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "环境与氛围描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "反复的梳理与核对耗去了将近一个小时。单凭留在屋内空等显然无法得到文穗的下落，仍需要动身前往各处关键地点继续探查。",
+                  "proposition": "整理核对耗费了近一小时，需要动身去关键地点探查。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:resolution:action-t71es2",
+                      "quote": "本次行动从2024-09-09T12:50:00持续到2024-09-09T13:45:00，共过去55分钟。"
+                    }
+                  ],
+                  "reason": "时间推进与行动结果完全符合已结算的55分钟问询/梳理工作。"
+                },
+                {
+                  "field": "option:0",
+                  "quote": "前往文穗的中学周边进一步核实目击情况",
+                  "proposition": "玩家可选择前往文穗的中学周边核实目击。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "合规行动意图选项。"
+                },
+                {
+                  "field": "option:1",
+                  "quote": "前往社区便利店周边继续排查线索",
+                  "proposition": "玩家可选择前往社区便利店周边排查。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "合规行动意图选项。"
+                },
+                {
+                  "field": "option:2",
+                  "quote": "前往对面商住楼找灯织学姐商议",
+                  "proposition": "玩家可选择前往商住楼找灯织学姐商议。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "合规行动意图选项。"
+                },
+                {
+                  "field": "option:3",
+                  "quote": "在家中稍作休息一小时恢复体力",
+                  "proposition": "玩家可选择在家中休息一小时恢复体力。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "合规行动意图选项。"
+                },
+                {
+                  "field": "summary",
+                  "quote": "在公寓内静心整理上午掌握的各处目击与留言线索，确认仍无文穗消息后明确下一步搜寻方向。",
+                  "proposition": "玩家在公寓内整理目击与留言线索，明确搜寻方向。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "合规总结摘要。"
+                },
+                {
+                  "field": "hint",
+                  "quote": "在家中梳理已知线索后，确认仍需主动外出前往关键地点核实情况。",
+                  "proposition": "提示在家中梳理后需要外出核实。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "合规提示。"
+                }
+              ]
+            },
+            "actionAudit": {
+              "originalRequest": {
+                "status": "pass",
+                "evidenceLineIndices": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  6
+                ],
+                "reason": "正文完整演绎了玩家停下脚步在公寓内梳理上午发生的事情、对照各个线索并明确下一步的过程。",
+                "quote": "你在餐桌旁拉开椅子坐下，暂时停住脚步，把一上午奔波收集到的零碎信息逐一在脑海中铺开。\n清晨留下的便签依然压在星月夜马克杯旁，字条上写着公交卡在外层口袋、今天可能晚点回来的留言。\n随后文穗发来六点五十分的消息称今天不去学校，但学校门卫明确表示今天曾在校门口见过文穗。\n文穗房间衣柜里那处不自然的空缺、便利店店员陈慧慧有些慌乱紧张的应答，以及对面商住楼灯织学姐关于梳理去向的提醒，在思绪中相互对照。\n你拿出手机再次确认屏幕，未读消息与未接电话依旧没有任何新的回音。\n反复的梳理与核对耗去了将近一个小时。单凭留在屋内空等显然无法得到文穗的下落，仍需要动身前往各处关键地点继续探查。"
+              },
+              "followThrough": {
+                "status": "not-applicable",
+                "evidenceLineIndices": [],
+                "reason": "本次没有导演接续阶段。",
+                "quote": ""
+              },
+              "segments": [
+                {
+                  "segmentId": "segment:0",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                  ],
+                  "reason": "该阶段耗时55分钟的室内线索梳理、核对手机与得出结论的过程得到充分且克制的呈现。",
+                  "quote": "你在餐桌旁拉开椅子坐下，暂时停住脚步，把一上午奔波收集到的零碎信息逐一在脑海中铺开。\n清晨留下的便签依然压在星月夜马克杯旁，字条上写着公交卡在外层口袋、今天可能晚点回来的留言。\n随后文穗发来六点五十分的消息称今天不去学校，但学校门卫明确表示今天曾在校门口见过文穗。\n文穗房间衣柜里那处不自然的空缺、便利店店员陈慧慧有些慌乱紧张的应答，以及对面商住楼灯织学姐关于梳理去向的提醒，在思绪中相互对照。\n你拿出手机再次确认屏幕，未读消息与未接电话依旧没有任何新的回音。\n窗外雨声不绝，整个公寓安静得能听清每一道雨点击打玻璃的声音。\n反复的梳理与核对耗去了将近一个小时。单凭留在屋内空等显然无法得到文穗的下落，仍需要动身前往各处关键地点继续探查。"
+                }
+              ]
+            },
+            "continuityAudit": {
+              "reviewed": true,
+              "disclosures": [],
+              "beliefs": [],
+              "commitments": []
+            },
+            "continuityEffects": {
+              "candidateId": "candidate:0e1c9b2b:439",
+              "cognitionDeltas": [],
+              "disclosures": [],
+              "commitmentOperations": []
+            }
+          },
+          "calls": [
+            {
+              "httpAttempt": 5,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 7943,
+              "requestSha256": "cdfe4ca0f9d78981d28ba7b0df5d8204a8c03a320f4883ac63f77f6a6352c8f9",
+              "responseSha256": "efc6c5d810668f80c643d6f41a655b5bbcd0a4ff2edb0180b369dac3430de3f3",
+              "responseChars": 5112,
+              "inputTokens": 19893,
+              "outputTokens": 2029,
+              "responseText": null
+            }
+          ]
+        },
+        {
+          "attempt": 10,
+          "status": "exception",
+          "approved": null,
+          "exception": {
+            "name": "ApiCallError",
+            "message": "请求已中止"
+          },
+          "httpCalls": 3,
+          "correction": false,
+          "durationMs": 23482,
+          "narrativeSha256": "aaf9b609dba919790955dc54fe8cf72c7ff6aa2fea734932cb7d20aa03028f9c",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [
+            {
+              "factId": "F002",
+              "level": "atmosphere",
+              "speakerIds": [
+                "school-guard"
+              ]
+            }
+          ],
+          "review": null,
+          "calls": [
+            {
+              "httpAttempt": 6,
+              "responseFormat": "json_object",
+              "status": null,
+              "correction": false,
+              "finishReason": null,
+              "exception": {
+                "name": "TypeError",
+                "message": "fetch failed"
+              },
+              "durationMs": 5060,
+              "requestSha256": "23fe559ebe90e71bc57a7b49d258414ec39797072f8abc325e4de2cd2a44a20f",
+              "responseSha256": null,
+              "responseChars": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "responseText": null
+            },
+            {
+              "httpAttempt": 7,
+              "responseFormat": "json_object",
+              "status": null,
+              "correction": false,
+              "finishReason": null,
+              "exception": {
+                "name": "TypeError",
+                "message": "fetch failed"
+              },
+              "durationMs": 5048,
+              "requestSha256": "23fe559ebe90e71bc57a7b49d258414ec39797072f8abc325e4de2cd2a44a20f",
+              "responseSha256": null,
+              "responseChars": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "responseText": null
+            },
+            {
+              "httpAttempt": 8,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 12324,
+              "requestSha256": "23fe559ebe90e71bc57a7b49d258414ec39797072f8abc325e4de2cd2a44a20f",
+              "responseSha256": "e44b05e2d8d8ce0421bdd48708f5d9c826d2a1089c4b0e289a746a4100f5f4a3",
+              "responseChars": 5316,
+              "inputTokens": 20955,
+              "outputTokens": 2941,
+              "responseText": null
+            }
+          ]
+        },
+        {
+          "attempt": 13,
+          "status": "approved",
+          "approved": true,
+          "exception": null,
+          "httpCalls": 1,
+          "correction": false,
+          "durationMs": 5487,
+          "narrativeSha256": "21fa7d6edfe59ba33a8d6a12bdac1d653c00796bf12b27d7f5038e64ab2340d5",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [],
+          "review": {
+            "approved": true,
+            "violations": [],
+            "corrections": [],
+            "assertionAudit": {
+              "reviewedFields": [
+                "maintext",
+                "option:0",
+                "option:1",
+                "summary",
+                "hint"
+              ],
+              "assertions": [
+                {
+                  "field": "maintext",
+                  "quote": "你刚想向灯织开口打听文穗可能去了哪里，口袋里的手机突然急促地震动起来。",
+                  "proposition": "玩家刚想向灯织打听文穗可能去哪，手机突然震动。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "承接玩家输入的当下动作与过渡描写，无越权新增事实。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "屏幕上显示的是一串陌生的固定电话号码。你按下接听键将手机贴到耳边，听筒另一端传来严肃而正式的声音。",
+                  "proposition": "来电是陌生固定电话，玩家接听后听到严肃正式的声音。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "接听电话的当下感官与动作描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "对方自称是辖区公安分局的民警，在核对了你的身份信息后，用平静而明确的语气通报：文穗已经确认死亡。",
+                  "proposition": "对方自称民警，核对身份后正式通报文穗已经死亡。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:death-news:1",
+                      "quote": "警方明确告知玩家文穗已经死亡；消息通过正式电话送达。"
+                    }
+                  ],
+                  "reason": "与死讯事件的授权完全吻合。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "电话里没有说明死因、凶手或案发经过，通知简短而冰冷，只有文穗死亡的结论清晰地落在寂静的空气中。",
+                  "proposition": "电话没有说明死因、凶手或案发经过，只有文穗死亡的结论。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:death-news:1",
+                      "quote": "电话没有说明死因、凶手或案发经过。"
+                    }
+                  ],
+                  "reason": "严格遵守了死讯事件不透露细节的限定。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "李明？怎么了？",
+                  "proposition": "灯织询问李明发生了什么。",
+                  "status": "question",
+                  "citations": [],
+                  "reason": "NPC角色的当场日常关切发问。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你握着挂断的手机僵在原地，突如其来的死讯让整个房间瞬间陷入死一般的寂静。",
+                  "proposition": "玩家挂断手机僵在原地，房间陷入寂静。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "当下情境与情绪反应描写。"
+                },
+                {
+                  "field": "option:0",
+                  "quote": "向灯织说明刚刚接到的警方死讯",
+                  "proposition": "选项：向灯织说明刚刚接到的警方死讯。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "玩家后续行动选项。"
+                },
+                {
+                  "field": "option:1",
+                  "quote": "握着手机平复呼吸并确认接下来的行动",
+                  "proposition": "选项：握着手机平复呼吸并确认接下来的行动。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "玩家后续行动选项。"
+                },
+                {
+                  "field": "summary",
+                  "quote": "正准备向灯织打听文穗去向时接到警方正式来电，明确获知文穗已经死亡的消息。",
+                  "proposition": "摘要：正准备向灯织打听文穗去向时接到警方来电获知文穗死讯。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:death-news:1",
+                      "quote": "警方明确告知玩家文穗已经死亡；消息通过正式电话送达。"
+                    }
+                  ],
+                  "reason": "摘要准确概括了本回合事件。"
+                },
+                {
+                  "field": "hint",
+                  "quote": "警方已正式通报文穗的死讯，突如其来的冲击让局面彻底改变。",
+                  "proposition": "提示：警方通报死讯带来局面的冲击。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:death-news:1",
+                      "quote": "警方明确告知玩家文穗已经死亡"
+                    }
+                  ],
+                  "reason": "提示符合授权事件。"
+                }
+              ]
+            },
+            "actionAudit": {
+              "originalRequest": {
+                "status": "not-applicable",
+                "evidenceLineIndices": [],
+                "reason": "本次为强制世界事件中断，无适用原行动步骤。",
+                "quote": ""
+              },
+              "followThrough": {
+                "status": "not-applicable",
+                "evidenceLineIndices": [],
+                "reason": "无追加阶段需求。",
+                "quote": ""
+              },
+              "segments": [
+                {
+                  "segmentId": "segment:0",
+                  "status": "not-applicable",
+                  "evidenceLineIndices": [],
+                  "reason": "该段为事件中断，程序标记 applicable=false。",
+                  "quote": ""
+                }
+              ]
+            },
+            "continuityAudit": {
+              "reviewed": true,
+              "disclosures": [],
+              "beliefs": [],
+              "commitments": []
+            },
+            "continuityEffects": {
+              "candidateId": "candidate:f72dd66e:327",
+              "cognitionDeltas": [],
+              "disclosures": [],
+              "commitmentOperations": []
+            }
+          },
+          "calls": [
+            {
+              "httpAttempt": 9,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 5460,
+              "requestSha256": "b4ff2fcf937835be7259d8d3b3946cae90524bfb13a2ccf34837f4cc399e18e8",
+              "responseSha256": "0c739529be1ecd1d9d03e39ce2c1b15a4cded4538fbacf829de6e134e04172f9",
+              "responseChars": 3765,
+              "inputTokens": 17155,
+              "outputTokens": 1425,
+              "responseText": null
+            }
+          ]
+        },
+        {
+          "attempt": 16,
+          "status": "approved",
+          "approved": true,
+          "exception": null,
+          "httpCalls": 1,
+          "correction": false,
+          "durationMs": 9313,
+          "narrativeSha256": "73fbb8339687dd77f4f49c15b2a021fc2084a7712d8543874c550bd924746f44",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [],
+          "review": {
+            "approved": true,
+            "violations": [],
+            "corrections": [],
+            "assertionAudit": {
+              "reviewedFields": [
+                "maintext",
+                "option:0",
+                "option:1",
+                "option:2",
+                "option:3",
+                "summary",
+                "hint"
+              ],
+              "assertions": [
+                {
+                  "field": "maintext",
+                  "quote": "灯织拉开椅子坐下，示意你也在对面坐好。",
+                  "proposition": "灯织拉开椅子坐下并示意玩家就座。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "普通的当下动作描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "她的神色已经恢复了惯常的沉静。",
+                  "proposition": "灯织的神色恢复了沉静。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "当下神态与情绪描写，符合角色设定。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "李明，既然电话是从分局直接打来的，按程序接下来肯定会有正式的身份确认和询问。",
+                  "proposition": "灯织推测分局来电后将有正式身份确认与询问程序。",
+                  "status": "hypothesis",
+                  "citations": [],
+                  "reason": "角色基于已知电话通报提出的常理推断与程序分析。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "在接到具体通知前，盲目在暴雨里乱跑只会白白消耗体力。",
+                  "proposition": "灯织认为在接到通知前盲目乱跑会消耗体力。",
+                  "status": "hypothesis",
+                  "citations": [],
+                  "reason": "角色对话中的主观看法与建议。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "她拿起笔在便签上简单写下几行要点，条理分明地帮你梳理当下的处境与行动空间。",
+                  "proposition": "灯织在便签上写下要点帮助梳理处境。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "当下商议动作与互动描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "我们现在能做的其实很明确。",
+                  "proposition": "灯织认为当前可行事项明确。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "当下对话态度表述。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "要么回公寓等待警方的进一步联系；要么趁天黑前，去学校门卫或者便利店把白天的目击细节再核对一次。",
+                  "proposition": "灯织提出等待警方联系或外出核对目击细节的选择。",
+                  "status": "hypothesis",
+                  "citations": [],
+                  "reason": "角色基于已知地点的现实选项梳理。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "无论选哪一边，把力气放在能核实的事情上。",
+                  "proposition": "灯织建议将精力放在可核实的事情上。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "角色的当下建议。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "窗外的雨声越来越沉，你们在商住楼里逐一权衡着各个方向的现实可行性，不知不觉天色已近黄昏。",
+                  "proposition": "两人在商住楼权衡可行性，时间推进至黄昏。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:resolution:action-1eu07ld",
+                      "quote": "本次行动从2024-09-09T16:55:00持续到2024-09-09T17:50:00，共过去55分钟。行动结束时，玩家位于学姐商住楼（senpai-building）。"
+                    }
+                  ],
+                  "reason": "行动结算明确耗时55分钟至17:50黄昏时段，商议过程自然承接。"
+                },
+                {
+                  "field": "option:0",
+                  "quote": "在灯织学姐处或返回公寓等待警方进一步通知",
+                  "proposition": "玩家可选择等待警方进一步通知。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "获准的行动意图选项。"
+                },
+                {
+                  "field": "option:1",
+                  "quote": "冒雨前往文穗的中学周边寻找可能的目击线索",
+                  "proposition": "玩家可选择前往中学周边核实目击线索。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "获准的行动意图选项。"
+                },
+                {
+                  "field": "option:2",
+                  "quote": "前往社区便利店询问是否有人见过文穗",
+                  "proposition": "玩家可选择前往便利店核实目击线索。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "获准的行动意图选项。"
+                },
+                {
+                  "field": "option:3",
+                  "quote": "冲出门盲目寻找文穗",
+                  "proposition": "玩家可选择盲目冲出门寻找文穗。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "获准的行动意图选项。"
+                },
+                {
+                  "field": "summary",
+                  "quote": "与灯织学姐深入商议应对步骤，灯织沉稳地梳理了等待警方通知与核对白天目击线索的现实选择。",
+                  "proposition": "本回合与灯织商议了应对步骤与现实选择。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "对本回合商议过程的准确概括。"
+                },
+                {
+                  "field": "hint",
+                  "quote": "灯织学姐帮你梳理了当前的应对方向，需要决定接下来是等待通知还是外出核实线索。",
+                  "proposition": "提示玩家需要在等待与核实线索之间做决定。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "当下决策提示。"
+                }
+              ]
+            },
+            "actionAudit": {
+              "originalRequest": {
+                "status": "pass",
+                "evidenceLineIndices": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ],
+                "reason": "正文完整回应了向灯织商议配合警方与核实情况步骤的原意图，灯织条理分明地分析了程序与可行方向。",
+                "quote": "灯织拉开椅子坐下，示意你也在对面坐好。她的神色已经恢复了惯常的沉静。\n李明，既然电话是从分局直接打来的，按程序接下来肯定会有正式的身份确认和询问。\n在接到具体通知前，盲目在暴雨里乱跑只会白白消耗体力。\n她拿起笔在便签上简单写下几行要点，条理分明地帮你梳理当下的处境与行动空间。\n我们现在能做的其实很明确。\n要么回公寓等待警方的进一步联系；要么趁天黑前，去学校门卫或者便利店把白天的目击细节再核对一次。\n无论选哪一边，把力气放在能核实的事情上。\n窗外的雨声越来越沉，你们在商住楼里逐一权衡着各个方向的现实可行性，不知不觉天色已近黄昏。"
+              },
+              "followThrough": {
+                "status": "not-applicable",
+                "evidenceLineIndices": [],
+                "reason": "本次无追加接续阶段。",
+                "quote": ""
+              },
+              "segments": [
+                {
+                  "segmentId": "segment:0",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7
+                  ],
+                  "reason": "商住楼内55分钟的商议通过便签梳理、程序分析和各个方向的权衡得到了充分的过程展现。",
+                  "quote": "灯织拉开椅子坐下，示意你也在对面坐好。她的神色已经恢复了惯常的沉静。\n李明，既然电话是从分局直接打来的，按程序接下来肯定会有正式的身份确认和询问。\n在接到具体通知前，盲目在暴雨里乱跑只会白白消耗体力。\n她拿起笔在便签上简单写下几行要点，条理分明地帮你梳理当下的处境与行动空间。\n我们现在能做的其实很明确。\n要么回公寓等待警方的进一步联系；要么趁天黑前，去学校门卫或者便利店把白天的目击细节再核对一次。\n无论选哪一边，把力气放在能核实的事情上。\n窗外的雨声越来越沉，你们在商住楼里逐一权衡着各个方向的现实可行性，不知不觉天色已近黄昏。"
+                }
+              ]
+            },
+            "continuityAudit": {
+              "reviewed": true,
+              "disclosures": [],
+              "beliefs": [],
+              "commitments": []
+            },
+            "continuityEffects": {
+              "candidateId": "candidate:d07503d7:392",
+              "cognitionDeltas": [],
+              "disclosures": [],
+              "commitmentOperations": []
+            }
+          },
+          "calls": [
+            {
+              "httpAttempt": 10,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 9285,
+              "requestSha256": "8a64c184c2424b1310557a096d8c212a7535273b5559ce68f0109838d5bbb798",
+              "responseSha256": "6dda7b2372adc02ca28bcd7f4b4c5d1c4f9a5e22741781eeaccd2842703b5834",
+              "responseChars": 4650,
+              "inputTokens": 19961,
+              "outputTokens": 2944,
+              "responseText": null
+            }
+          ]
+        },
+        {
+          "attempt": 18,
+          "status": "approved",
+          "approved": true,
+          "exception": null,
+          "httpCalls": 1,
+          "correction": false,
+          "durationMs": 6898,
+          "narrativeSha256": "7d8a5dd3638907db01466e343659cb446ea6b0e9580b6512c9751e2acb197547",
+          "projection": "original-packet-preserved",
+          "projectionError": "导演计划未通过事实审查：beats 必须明确抵达目的地 home。",
+          "knownFactSpeakers": [],
+          "review": {
+            "approved": true,
+            "violations": [],
+            "corrections": [],
+            "assertionAudit": {
+              "reviewedFields": [
+                "maintext",
+                "option:0",
+                "option:1",
+                "summary",
+                "hint"
+              ],
+              "assertions": [
+                {
+                  "field": "maintext",
+                  "quote": "你向灯织告别，推开商住楼的玻璃门，顶着逐渐加剧的暴雨快步穿过昏暗的街道，返回自己的公寓。",
+                  "proposition": "玩家离开灯织处冒雨返回公寓",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:resolution:action-tjo63k",
+                      "quote": "行动结束时，玩家位于玩家公寓（home）。"
+                    }
+                  ],
+                  "reason": "符合行动结算中的地点转移"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "推开家门，玄关与客餐厅内依旧是一片死寂，只有窗外沉闷的雷雨声在空荡的房间里回荡。",
+                  "proposition": "公寓内寂静无人",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "描写抵达公寓后的当下环境与氛围"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你拉开餐桌旁的椅子坐下，将手机放在桌面上，在压抑的静默中等待警方的进一步通知。",
+                  "proposition": "玩家坐下并等待警方通知",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "属于玩家已执行的等待行动"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "窗外的天色彻底暗了下来，狂风裹挟着暴雨猛烈地拍打着玻璃窗。",
+                  "proposition": "天色变暗且暴雨猛烈",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "属于雨夜自然环境描写"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "一个小时、两个小时……时间在窒息般的寂静中缓慢流逝，桌面上的手机始终没有再次响起，屋内核对过的信息也未能拼凑出答案。",
+                  "proposition": "时间在等待中流逝数小时且未有新通知",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:partial:action-tjo63k",
+                      "quote": "这次行动在全部计划完成前暂停；尚未完成的阶段没有产生完整结果。"
+                    }
+                  ],
+                  "reason": "体现了等待持续进行但未产生新结果的过程"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "漫长而冰冷的等待持续了数个小时，精力和体能在无声的煎熬中不断耗损，墙上的挂钟指针悄然逼近了午夜零点。",
+                  "proposition": "等待持续数小时直至逼近午夜",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:cycle-boundary:action-tjo63k",
+                      "quote": "本次结算在2024-09-10T00:00:00到达当日行动终止边界，原因是午夜已到。"
+                    }
+                  ],
+                  "reason": "准确交代时间流逝至午夜"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "当指针重合在十二点的那一刻，整整一天的奔波与沉重在此刻骤然凝滞，周围的一切在黑暗中沉寂下来，当天的行动被迫中断。",
+                  "proposition": "午夜到达导致当天行动中断",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:cycle-boundary:action-tjo63k",
+                      "quote": "当天行动在此中断，未执行的计划不能继续完成。"
+                    }
+                  ],
+                  "reason": "服从循环边界行动中断的演出要求"
+                },
+                {
+                  "field": "option:0",
+                  "quote": "在无尽的沉寂中等待意识模糊",
+                  "proposition": "选项供玩家在午夜中断时选择",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "符合行动边界停滞状态的过渡选项"
+                },
+                {
+                  "field": "option:1",
+                  "quote": "任由黑暗与疲惫吞没当下",
+                  "proposition": "选项供玩家在午夜中断时选择",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "符合行动边界停滞状态的过渡选项"
+                },
+                {
+                  "field": "summary",
+                  "quote": "返回公寓等待警方的进一步通知，在漫长而压抑的守候中直至午夜来临，当天行动中断。",
+                  "proposition": "概括返回公寓等待至午夜中断的过程",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:cycle-boundary:action-tjo63k",
+                      "quote": "本次结算在2024-09-10T00:00:00到达当日行动终止边界，原因是午夜已到。当天行动在此中断"
+                    }
+                  ],
+                  "reason": "准确总结行动与中断"
+                },
+                {
+                  "field": "hint",
+                  "quote": "午夜已至，一整天的行动在沉寂中被迫中断。",
+                  "proposition": "提示午夜导致行动中断",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:cycle-boundary:action-tjo63k",
+                      "quote": "本次结算在2024-09-10T00:00:00到达当日行动终止边界，原因是午夜已到。当天行动在此中断"
+                    }
+                  ],
+                  "reason": "提示信息符合结算状态"
+                }
+              ]
+            },
+            "actionAudit": {
+              "originalRequest": {
+                "status": "pass",
+                "evidenceLineIndices": [
+                  0,
+                  1,
+                  2
+                ],
+                "reason": "第0行演绎了返回公寓的路程与抵达，第1-2行演绎了回到家中坐下等待警方的行动。",
+                "quote": "你向灯织告别，推开商住楼的玻璃门，顶着逐渐加剧的暴雨快步穿过昏暗的街道，返回自己的公寓。\n推开家门，玄关与客餐厅内依旧是一片死寂，只有窗外沉闷的雷雨声在空荡的房间里回荡。\n你拉开餐桌旁的椅子坐下，将手机放在桌面上，在压抑的静默中等待警方的进一步通知。"
+              },
+              "followThrough": {
+                "status": "not-applicable",
+                "evidenceLineIndices": [],
+                "reason": "无追加执行阶段。",
+                "quote": ""
+              },
+              "segments": [
+                {
+                  "segmentId": "segment:0",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    0,
+                    1
+                  ],
+                  "reason": "第0-1行完整演绎了从商住楼冒雨返回玩家公寓的过程与抵达。",
+                  "quote": "你向灯织告别，推开商住楼的玻璃门，顶着逐渐加剧的暴雨快步穿过昏暗的街道，返回自己的公寓。\n推开家门，玄关与客餐厅内依旧是一片死寂，只有窗外沉闷的雷雨声在空荡的房间里回荡。"
+                },
+                {
+                  "segmentId": "segment:1",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                  ],
+                  "reason": "第2-6行详细演绎了数小时的等待过程，以及在午夜零点因时间边界导致的行动中断与转场效果。",
+                  "quote": "你拉开餐桌旁的椅子坐下，将手机放在桌面上，在压抑的静默中等待警方的进一步通知。\n窗外的天色彻底暗了下来，狂风裹挟着暴雨猛烈地拍打着玻璃窗。\n一个小时、两个小时……时间在窒息般的寂静中缓慢流逝，桌面上的手机始终没有再次响起，屋内核对过的信息也未能拼凑出答案。\n漫长而冰冷的等待持续了数个小时，精力和体能在无声的煎熬中不断耗损，墙上的挂钟指针悄然逼近了午夜零点。\n当指针重合在十二点的那一刻，整整一天的奔波与沉重在此刻骤然凝滞，周围的一切在黑暗中沉寂下来，当天的行动被迫中断。"
+                }
+              ]
+            },
+            "continuityAudit": {
+              "reviewed": true,
+              "disclosures": [],
+              "beliefs": [],
+              "commitments": []
+            },
+            "continuityEffects": {
+              "candidateId": "candidate:b42aa31f:435",
+              "cognitionDeltas": [],
+              "disclosures": [],
+              "commitmentOperations": []
+            }
+          },
+          "calls": [
+            {
+              "httpAttempt": 11,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 6854,
+              "requestSha256": "02357de3b22f1f32874a9292a16f3d5ea86d0bb8c25e18a4f05c0575428c9163",
+              "responseSha256": "57b4f472390c3a5377f65540f0b06a006eccf43104bf5935be88ef7c56bdbe78",
+              "responseChars": 4710,
+              "inputTokens": 19223,
+              "outputTokens": 1827,
+              "responseText": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sourceFile": "live-2026-09-15T08-12-00-096Z.json",
+      "sourceSha256": "e5e6f8e1f2d8255bb9f9c6b09f21fca98b97bf6ae2641b0d7cc2f1c4956615f6",
+      "model": "gemini-3.7-flash【神秘】",
+      "sourceModel": "gemini-3.7-flash【果汁】",
+      "comparison": "different-model-flow-validation",
+      "testedCommit": "bf239698ae047349891c4625fea5aefe9a813c83",
+      "workingTreeDiffSha256": "d6db7a5960ebcfe33af06b4655994aa60c85ea79efe06dc1be0508fac06f1425",
+      "harnessSha256": "ed3019bfcd481d9ebcca85c7c15546a09bc59faaf45e97abb31033ae5c08c9be",
+      "samples": [
+        {
+          "attempt": 7,
+          "status": "exception",
+          "approved": null,
+          "exception": {
+            "name": "SyntaxError",
+            "message": "Expected ',' or ']' after array element in JSON at position 2533 (line 1 column 2534)"
+          },
+          "httpCalls": 3,
+          "correction": true,
+          "durationMs": 34099,
+          "narrativeSha256": "b68ef3ec3930bf0450a57a5ed68c099a15cb0c7e338fef577668a4a4767d5835",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [
+            {
+              "factId": "F002",
+              "level": "atmosphere",
+              "speakerIds": [
+                "school-guard"
+              ]
+            }
+          ],
+          "review": null,
+          "calls": [
+            {
+              "httpAttempt": 1,
+              "responseFormat": "json_schema",
+              "status": 400,
+              "correction": false,
+              "finishReason": null,
+              "exception": null,
+              "durationMs": 3216,
+              "requestSha256": "2002911547697e05557f0e1b631ba45cf25d87514acaac1b8d3067b263ca358c",
+              "responseSha256": null,
+              "responseChars": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "responseText": null
+            },
+            {
+              "httpAttempt": 2,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 10262,
+              "requestSha256": "46276fed3bce029ca8d8785cde769488b34cb1e25f700a77be2f21853dd8aa6b",
+              "responseSha256": "b0a28f8dcb788f113523d911e9a28711269c9056e65d1e2f49b97dbdb46ed39a",
+              "responseChars": 3122,
+              "inputTokens": 20803,
+              "outputTokens": 1211,
+              "responseText": "{\"approved\":true,\"violations\":[],\"corrections\":[],\"assertionAudit\":{\"reviewedFields\":[\"maintext\",\"option:0\",\"option:1\",\"option:2\",\"option:3\",\"summary\",\"hint\"],\"assertions\":[{\"field\":\"maintext\",\"quote\":\"你再次离开公寓走入暴雨之中，撑着伞沿着积水的街道快步朝文穗的中学走去。\",\"proposition\":\"玩家撑伞在暴雨中离开公寓前往文穗的中学。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"普通当下移动动作。\"},{\"field\":\"maintext\",\"quote\":\"浑浊的雨水沿着路边哗哗淌过，雨势未见减弱，整条街道在风雨中显得空旷而冷清。\",\"proposition\":\"暴雨中街道积水空旷冷清。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下环境描写。\"},{\"field\":\"maintext\",\"quote\":\"步行大约十分钟后，你赶到了中学门口。学校的大铁门紧闭着，传达室的玻璃窗上蒙着一层水汽。\",\"proposition\":\"玩家步行约十分钟到达紧闭的中学大门口。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下路程与场景描写。\"},{\"field\":\"maintext\",\"quote\":\"你走到传达室窗口前敲了敲玻璃，门卫拉开移窗，神情谨慎地看向你。\",\"proposition\":\"玩家敲门卫室窗户，门卫谨慎拉开窗。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下互动描写。\"},{\"field\":\"maintext\",\"quote\":\"“雨下得这么大，你还在找啊？我这边确实没有新的消息了。”\",\"proposition\":\"门卫表示没有文穗的新消息。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下NPC常规对话反应。\"},{\"field\":\"maintext\",\"quote\":\"你向门卫再次询问文穗的下落并核对校门情况，门卫翻了翻桌上的值班记录，无奈地摇摇头。\",\"proposition\":\"玩家向门卫询问情况，门卫翻看记录后摇头。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下调查动作。\"},{\"field\":\"maintext\",\"quote\":\"“能留意的我都看过了，实在没有别的情况可以告诉你。”\",\"proposition\":\"门卫说明能留意的都看了，没有别的情况。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下对话回应。\"},{\"field\":\"maintext\",\"quote\":\"你在传达室外继续向门卫核对周边的动静，并在校门附近仔细排查与观察。\",\"proposition\":\"玩家在校门周边继续观察排查。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下调查过程描写。\"},{\"field\":\"maintext\",\"quote\":\"风雨持续抽打着校门与围墙，大半个小时过去，校门周围始终没有任何新的收获。\",\"proposition\":\"大半个小时过去，校门周围没有新收获。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下调查时间推进与局限交代。\"},{\"field\":\"option:0\",\"quote\":\"前往社区便利店周边排查\",\"proposition\":\"玩家可选择前往社区便利店排查。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"option:1\",\"quote\":\"前往灯织住的商住楼商议\",\"proposition\":\"玩家可选择前往灯织商住楼商议。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"option:2\",\"quote\":\"返回家中查看是否有新动静\",\"proposition\":\"玩家可选择返回家中查看。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"option:3\",\"quote\":\"在校门旁稍作休息整理线索\",\"proposition\":\"玩家可选择在校门旁休息整理线索。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"summary\",\"quote\":\"前往文穗的中学向门卫进一步核对情况，门卫表示没有新的线索，校门口未有新发现。\",\"proposition\":\"前往中学向门卫核对情况，门卫无新线索，校门无新发现。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"对本回合行动的客观总结。\"},{\"field\":\"hint\",\"quote\":\"校门卫未能提供文穗的更多新动向，需要转向其他地点继续排查。\",\"proposition\":\"门卫未能提供更多新动向，需转向其他地点排查。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合理提示。\"} ]},\"continuityAudit\":{\"reviewed\":true,\"disclosures\":[],\"beliefs\":[],\"commitments\":[]},\"actionAudit\":{\"originalRequest\":{\"status\":\"pass\",\"evidenceLineIndices\":[0,1,2,3,4,5,6,7,8],\"reason\":\"完整演出了撑伞前往中学（10分钟）及在校门口向门卫反复询问、核对记录并排查周边（55分钟）的完整过程。\"},\"followThrough\":{\"status\":\"not-applicable\",\"evidenceLineIndices\":[],\"reason\":\"本次无接续扩展阶段。\"},\"segments\":[{\"segmentId\":\"segment:0\",\"status\":\"pass\",\"evidenceLineIndices\":[0,1,2],\"reason\":\"演出了从公寓出发撑伞穿过暴雨街道前往中学的路程与抵达。\"},{\"segmentId\":\"segment:1\",\"status\":\"pass\",\"evidenceLineIndices\":[3,4,5,6,7,8],\"reason\":\"演出了向门卫敲窗、问询、核对值班记录、持续在校门周围排查的55分钟调查过程及无新收获的局限。\"}]}}"
+            },
+            {
+              "httpAttempt": 3,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": true,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 20555,
+              "requestSha256": "dd063756c1c87bee57e6e0cfbd4f029eb3fbd805c5c7178635213048a2d565e4",
+              "responseSha256": "60cf8f6a6ade1b4e58a0c7a532e6c03b3ff6aa30a2adf2d38833e1a33bd41050",
+              "responseChars": 3135,
+              "inputTokens": 23163,
+              "outputTokens": 2180,
+              "responseText": "{\"approved\":true,\"violations\":[],\"corrections\":[],\"assertionAudit\":{\"reviewedFields\":[\"maintext\",\"option:0\",\"option:1\",\"option:2\",\"option:3\",\"summary\",\"hint\"],\"assertions\":[{\"field\":\"maintext\",\"quote\":\"你再次离开公寓走入暴雨之中，撑着伞沿着积水的街道快步朝文穗的中学走去。\",\"proposition\":\"玩家撑伞在暴雨中离开公寓前往文穗的中学。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下动作描写。\"},{\"field\":\"maintext\",\"quote\":\"浑浊的雨水沿着路边哗哗淌过，雨势未见减弱，整条街道在风雨中显得空旷而冷清。\",\"proposition\":\"暴雨中街道积水空旷冷清。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下环境描写。\"},{\"field\":\"maintext\",\"quote\":\"步行大约十分钟后，你赶到了中学门口。学校的大铁门紧闭着，传达室的玻璃窗上蒙着一层水汽。\",\"proposition\":\"玩家步行约十分钟到达紧闭的中学大门口。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下路程与场景描写。\"},{\"field\":\"maintext\",\"quote\":\"你走到传达室窗口前敲了敲玻璃，门卫拉开移窗，神情谨慎地看向你。\",\"proposition\":\"玩家敲门卫室窗户，门卫谨慎拉开窗户。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下互动描写。\"},{\"field\":\"maintext\",\"quote\":\"“雨下得这么大，你还在找啊？我这边确实没有新的消息了。”\",\"proposition\":\"门卫表示没有文穗的新消息。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下NPC常规对话反应。\"},{\"field\":\"maintext\",\"quote\":\"你向门卫再次询问文穗的下落并核对校门情况，门卫翻了翻桌上的值班记录，无奈地摇了摇头。\",\"proposition\":\"玩家向门卫询问情况，门卫翻看记录后无奈摇头。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下调查动作。\"},{\"field\":\"maintext\",\"quote\":\"“能留意的我都看过了，实在没有别的情况可以告诉你。”\",\"proposition\":\"门卫说明能留意的都看过了，没有别的情况可告知。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下对话回应。\"},{\"field\":\"maintext\",\"quote\":\"你在传达室外继续向门卫核对周边的动静，并在校门附近仔细排查与观察。\",\"proposition\":\"玩家在校门周边继续观察排查。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下调查过程描写。\"},{\"field\":\"maintext\",\"quote\":\"风雨持续抽打着校门与围墙，大半个小时过去，校门周围始终没有任何新的收获。\",\"proposition\":\"大半个小时过去，校门周围没有新收获。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"当下调查时间推进与局限交代。\"},{\"field\":\"option:0\",\"quote\":\"前往社区便利店周边排查\",\"proposition\":\"玩家可选择前往社区便利店排查。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"option:1\",\"quote\":\"前往灯织住的商住楼商议\",\"proposition\":\"玩家可选择前往灯织商住楼商议。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"option:2\",\"quote\":\"返回家中查看是否有新动静\",\"proposition\":\"玩家可选择返回家中查看。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"option:3\",\"quote\":\"在校门旁稍作休息整理线索\",\"proposition\":\"玩家可选择在校门旁休息整理线索。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合法选项。\"},{\"field\":\"summary\",\"quote\":\"前往文穗的中学向门卫进一步核对情况，门卫表示没有新的线索，校门口未有新发现。\",\"proposition\":\"前往中学向门卫核对情况，门卫无新线索，校门无新发现。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"对本回合行动的客观总结。\"},{\"field\":\"hint\",\"quote\":\"校门卫未能提供文穗的更多新动向，需要转向其他地点继续排查。\",\"proposition\":\"门卫未能提供更多新动向，需转向其他地点排查。\",\"status\":\"ordinary-present\",\"citations\":[],\"reason\":\"合理提示。\"}Wildcard]},\"continuityAudit\":{\"reviewed\":true,\"disclosures\":[],\"beliefs\":[],\"commitments\":[]},\"actionAudit\":{\"originalRequest\":{\"status\":\"pass\",\"evidenceLineIndices\":[0,1,2,3,4,5,6,7,8],\"reason\":\"完整演出了撑伞前往中学（10分钟）及在校门口向门卫反复询问、核对记录并排查周边（55分钟）的完整过程。\"},\"followThrough\":{\"status\":\"not-applicable\",\"evidenceLineIndices\":[],\"reason\":\"本次无接续扩展阶段。\"},\"segments\":[{\"segmentId\":\"segment:0\",\"status\":\"pass\",\"evidenceLineIndices\":[0,1,2],\"reason\":\"演出了从公寓出发撑伞穿过暴雨街道前往中学的路程与抵达。\"},{\"segmentId\":\"segment:1\",\"status\":\"pass\",\"evidenceLineIndices\":[3,4,5,6,7,8],\"reason\":\"演出了向门卫敲窗、问询、核对值班记录、持续在校门周围排查的55分钟调查过程及无新收获的局限。\"}]}}"
+            }
+          ]
+        },
+        {
+          "attempt": 10,
+          "status": "approved",
+          "approved": true,
+          "exception": null,
+          "httpCalls": 2,
+          "correction": true,
+          "durationMs": 27944,
+          "narrativeSha256": "aaf9b609dba919790955dc54fe8cf72c7ff6aa2fea734932cb7d20aa03028f9c",
+          "projection": "buildWriterPacket",
+          "projectionError": null,
+          "knownFactSpeakers": [
+            {
+              "factId": "F002",
+              "level": "atmosphere",
+              "speakerIds": [
+                "school-guard"
+              ]
+            }
+          ],
+          "review": {
+            "approved": true,
+            "violations": [],
+            "corrections": [],
+            "assertionAudit": {
+              "reviewedFields": [
+                "maintext",
+                "option:0",
+                "option:1",
+                "option:2",
+                "option:3",
+                "summary",
+                "hint"
+              ],
+              "assertions": [
+                {
+                  "field": "maintext",
+                  "quote": "你重新撑起雨伞走入雨幕，迎着密集的雨势穿过湿漉漉的巷道，快步向文穗就读的中学方向赶去。",
+                  "proposition": "玩家撑伞冒雨前往文穗就读的中学。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "普通的当下移动与环境描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "沿途路面水流湍急，冰凉的雨水不断拍打着伞面。你在连绵的大雨中步行了约十分钟，终于抵达中学校门外。",
+                  "proposition": "玩家步行约十分钟后抵达中学校门外。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:resolution:action-1p5iu6q",
+                      "quote": "本次行动从2024-09-09T13:45:00持续到2024-09-09T14:50:00，共过去65分钟。行动结束时，玩家位于中学（school）。"
+                    }
+                  ],
+                  "reason": "旅行阶段耗时10分钟并抵达中学，与结算行动一致。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "校门紧紧闭着，被暴雨冲刷得一片湿冷，隔着铁栅栏望去，操场空无一人，只有传达室亮着灯光。",
+                  "proposition": "校门紧闭，操场空无一人，传达室亮着灯光。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "目的地中学的暴雨日间常规环境描写。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你走到传达室窗口前抬手敲了敲玻璃，向值班的门卫核实情况，询问是否有关于文穗去向的其他线索。",
+                  "proposition": "玩家向值班门卫询问文穗去向线索。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "玩家发起问询尝试的当下动作。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "今天在校门口见过文穗。",
+                  "proposition": "门卫表示今天在校门口见过文穗。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "known-fact:F002:atmosphere",
+                      "quote": "门卫说，今天在校门口见过文穗。"
+                    }
+                  ],
+                  "reason": "完全符合授权门卫说出的已知事实内容。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "门卫隔着窗口给出了回答，并未提供更多离开校门后的去向。",
+                  "proposition": "门卫未提供更多文穗离开校门后的去向。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "对问询限度和结果的客观陈述。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "你离开传达室窗前，沿着校门两侧的街道路口与围墙外围冒雨展开排查。",
+                  "proposition": "玩家在校门两侧街道路口与围墙外展开排查。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "落实原请求中的周边目击者搜寻工作。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "暴雨不停地倾泻在空荡的街道上，周边店铺大多紧闭门扉，沿街寻访未能找到其他目击者。",
+                  "proposition": "周边店铺多关门，未能找到其他目击者。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "如实描写走访结果与局限，未凭空编造事实。"
+                },
+                {
+                  "field": "maintext",
+                  "quote": "在校门周边反复核对痕迹与走访排查不知不觉用去了近一个小时，雨势依然没有减弱，周边的线索暂时无法继续延伸。",
+                  "proposition": "排查走访耗费近一个小时，周边线索暂时无法继续延伸。",
+                  "status": "supported",
+                  "citations": [
+                    {
+                      "sourceId": "action-outcome:resolution:action-1p5iu6q",
+                      "quote": "本次行动从2024-09-09T13:45:00持续到2024-09-09T14:50:00，共过去65分钟。"
+                    }
+                  ],
+                  "reason": "与本阶段55分钟排查工作及时间推进吻合。"
+                },
+                {
+                  "field": "option:0",
+                  "quote": "前往灯织住的商住楼商议下一步",
+                  "proposition": "玩家可选择前往灯织住的商住楼。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "常规行动选项。"
+                },
+                {
+                  "field": "option:1",
+                  "quote": "前往社区便利店周边继续排查",
+                  "proposition": "玩家可选择前往社区便利店周边排查。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "常规行动选项。"
+                },
+                {
+                  "field": "option:2",
+                  "quote": "返回家中查看是否有最新动静",
+                  "proposition": "玩家可选择返回家中。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "常规行动选项。"
+                },
+                {
+                  "field": "option:3",
+                  "quote": "在校门传达室旁暂避暴雨并梳理思路",
+                  "proposition": "玩家可选择在校门旁暂避暴雨休整。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "常规行动选项。"
+                },
+                {
+                  "field": "summary",
+                  "quote": "前往文穗的中学周边排查并向门卫核实情况，确认校外无法取得文穗去向的新目击线索。",
+                  "proposition": "概括本回合前往中学排查及核实的过程与结果。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "回合摘要准确覆盖实际发生内容。"
+                },
+                {
+                  "field": "hint",
+                  "quote": "校门周边缺乏新的目击者与有效线索，可以考虑前往其他已知地点继续排查。",
+                  "proposition": "提示校门周边缺乏新线索并建议前往其他已知地点。",
+                  "status": "ordinary-present",
+                  "citations": [],
+                  "reason": "调查方向指引提示。"
+                }
+              ]
+            },
+            "actionAudit": {
+              "originalRequest": {
+                "status": "pass",
+                "evidenceLineIndices": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8
+                ],
+                "reason": "正文完整演绎了前往中学、向门卫核实情况以及沿校门周边街道走访寻找新目击者的全部过程与局限。",
+                "quote": "你重新撑起雨伞走入雨幕，迎着密集的雨势穿过湿漉漉的巷道，快步向文穗就读的中学方向赶去。\n沿途路面水流湍急，冰凉的雨水不断拍打着伞面。你在连绵的大雨中步行了约十分钟，终于抵达中学校门外。\n校门紧紧闭着，被暴雨冲刷得一片湿冷，隔着铁栅栏望去，操场空无一人，只有传达室亮着灯光。\n你走到传达室窗口前抬手敲了敲玻璃，向值班的门卫核实情况，询问是否有关于文穗去向的其他线索。\n今天在校门口见过文穗。\n门卫隔着窗口给出了回答，并未提供更多离开校门后的去向。\n你离开传达室窗前，沿着校门两侧的街道路口与围墙外围冒雨展开排查。\n暴雨不停地倾泻在空荡的街道上，周边店铺大多紧闭门扉，沿街寻访未能找到其他目击者。\n在校门周边反复核对痕迹与走访排查不知不觉用去了近一个小时，雨势依然没有减弱，周边的线索暂时无法继续延伸。"
+              },
+              "followThrough": {
+                "status": "not-applicable",
+                "evidenceLineIndices": [],
+                "reason": "本次没有导演接续阶段要求。",
+                "quote": ""
+              },
+              "segments": [
+                {
+                  "segmentId": "segment:0",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    0,
+                    1
+                  ],
+                  "reason": "具体交代了撑伞步行约十分钟抵达中学校门外的路程。",
+                  "quote": "你重新撑起雨伞走入雨幕，迎着密集的雨势穿过湿漉漉的巷道，快步向文穗就读的中学方向赶去。\n沿途路面水流湍急，冰凉的雨水不断拍打着伞面。你在连绵的大雨中步行了约十分钟，终于抵达中学校门外。"
+                },
+                {
+                  "segmentId": "segment:1",
+                  "status": "pass",
+                  "evidenceLineIndices": [
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
+                  ],
+                  "reason": "详细演绎了向门卫核实以及在校门两侧街道与店铺走访排查近一小时的工作过程与局限。",
+                  "quote": "校门紧紧闭着，被暴雨冲刷得一片湿冷，隔着铁栅栏望去，操场空无一人，只有传达室亮着灯光。\n你走到传达室窗口前抬手敲了敲玻璃，向值班的门卫核实情况，询问是否有关于文穗去向的其他线索。\n今天在校门口见过文穗。\n门卫隔着窗口给出了回答，并未提供更多离开校门后的去向。\n你离开传达室窗前，沿着校门两侧的街道路口与围墙外围冒雨展开排查。\n暴雨不停地倾泻在空荡的街道上，周边店铺大多紧闭门扉，沿街寻访未能找到其他目击者。\n在校门周边反复核对痕迹与走访排查不知不觉用去了近一个小时，雨势依然没有减弱，周边的线索暂时无法继续延伸。"
+                }
+              ]
+            },
+            "continuityAudit": {
+              "reviewed": true,
+              "disclosures": [],
+              "beliefs": [],
+              "commitments": []
+            },
+            "continuityEffects": {
+              "candidateId": "candidate:a23b74fd:487",
+              "cognitionDeltas": [],
+              "disclosures": [],
+              "commitmentOperations": []
+            }
+          },
+          "calls": [
+            {
+              "httpAttempt": 4,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": false,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 10558,
+              "requestSha256": "23fe559ebe90e71bc57a7b49d258414ec39797072f8abc325e4de2cd2a44a20f",
+              "responseSha256": "5c7ccbaaa4fde6861c77650b5356def92922b681ffb32db749ba2d22639a6fb6",
+              "responseChars": 5699,
+              "inputTokens": 20955,
+              "outputTokens": 2266,
+              "responseText": null
+            },
+            {
+              "httpAttempt": 5,
+              "responseFormat": "json_object",
+              "status": 200,
+              "correction": true,
+              "finishReason": "stop",
+              "exception": null,
+              "durationMs": 17350,
+              "requestSha256": "928ef866db1e456c4b08583364f9908ab0d9b27eb225874b32c545a554f45d00",
+              "responseSha256": "f3482ccc8e50948ce4ea3fdfea7ad50b941dc37ab72741ab9bda7f8a00ec2eff",
+              "responseChars": 5373,
+              "inputTokens": 24429,
+              "outputTokens": 2580,
+              "responseText": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -13,7 +13,12 @@ import { normalizeWorldMemory } from '../src/memory/world-memory';
 import { callSecondaryApi, type ChatCompletionMessage } from '../src/sillytavern/api-router';
 import { createDefaultPreset } from '../src/sillytavern/types';
 
-const attempts = [6, 7, 8, 10, 13, 16, 18];
+const frozenAttempts = [6, 7, 8, 10, 13, 16, 18];
+const attempts = process.env.REVIEW_RELIABILITY_ATTEMPTS
+  ? process.env.REVIEW_RELIABILITY_ATTEMPTS.split(',').map(Number) : frozenAttempts;
+if (!attempts.length || new Set(attempts).size !== attempts.length || attempts.some(attempt => !frozenAttempts.includes(attempt))) {
+  throw new Error('Replay attempts must be a nonempty, unique subset of the frozen seven attempts');
+}
 const dryRun = process.env.REVIEW_RELIABILITY_DRY_RUN === '1';
 const enabled = process.env.LIVE_REVIEW_RELIABILITY === '1';
 const sourcePath = '.codex-test-tmp/day-evaluation/options-standard-audit946ce32-g37juice-c1.json';
@@ -122,7 +127,10 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
     const sourceText = readFileSync(sourcePath, 'utf8');
     const recorded = JSON.parse(sourceText) as RecordedRun;
     const model = process.env.DAY_MODEL ?? recorded.model;
-    if (model !== targetModel || recorded.model !== targetModel) throw new Error(`This replay requires ${targetModel}`);
+    if (recorded.model !== targetModel) throw new Error(`The frozen source requires ${targetModel}`);
+    if (model !== targetModel && process.env.REVIEW_RELIABILITY_ALLOW_MODEL_CHANGE !== '1') {
+      throw new Error('Changing the replay model requires explicit REVIEW_RELIABILITY_ALLOW_MODEL_CHANGE=1');
+    }
     const baseUrl = process.env.DAY_API_BASE_URL ?? recorded.baseUrl;
     const endpoint = new URL(baseUrl);
     if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) throw new Error('Use a base URL without credentials or query parameters');
@@ -140,7 +148,10 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
       workingTreeDiffSha256: hash(execFileSync('git', ['diff', '--binary', 'HEAD', '--', 'src', 'scripts'], { encoding: 'utf8', stdio: 'pipe' })),
       workingTreeDiffScope: 'Tracked src/ and scripts/ changes against HEAD; the untracked replay harness is hashed separately.',
       harnessSha256: hash(readFileSync('scripts/live-review-reliability.test.ts', 'utf8')),
-      model, baseUrl, maxHttpAttempts: attempts.length * maxHttpPerSample, perSampleTimeoutMs: 120_000,
+      model, sourceModel: recorded.model,
+      comparison: model === recorded.model ? 'same-model-fixed-candidates' : 'different-model-flow-validation',
+      requestedAttempts: attempts,
+      baseUrl, maxHttpAttempts: attempts.length * maxHttpPerSample, perSampleTimeoutMs: 120_000,
       costMetricNote: 'JavaScript system+user character counts are not exact tokens or monetary cost; provider usage is retained separately.',
       samples: results };
     mkdirSync(outputRoot, { recursive: true });
@@ -162,11 +173,15 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
           persist();
           if (dryRun) { result.status = 'prepared-no-request'; continue; }
           vi.stubGlobal('fetch', async (url: RequestInfo | URL, init?: RequestInit) => {
-            if (calls.length >= maxHttpPerSample || totalHttp >= attempts.length * maxHttpPerSample) {
-              throw new DOMException('Fixed replay HTTP attempt budget exhausted', 'AbortError');
-            }
             const body = JSON.parse(String(init?.body ?? '{}'));
             const messages = body.messages as ChatCompletionMessage[];
+            if (calls.length >= maxHttpPerSample || totalHttp >= attempts.length * maxHttpPerSample) {
+              result.budgetBlockedRequest = { responseFormat: body.response_format?.type ?? 'text',
+                correction: messages.some(message => message.role === 'assistant'),
+                diagnostic: messages.at(-1)?.content.split('本次响应必须遵守的 JSON Schema：')[0] };
+              persist();
+              throw new DOMException('Fixed replay HTTP attempt budget exhausted', 'AbortError');
+            }
             const systemUserChars = messages.filter(message => message.role === 'system' || message.role === 'user')
               .reduce((sum, message) => sum + message.content.length, 0);
             const call: Record<string, unknown> = { httpAttempt: ++totalHttp, responseFormat: body.response_format?.type ?? 'text',
@@ -186,6 +201,7 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
               call.responseModel = data?.model ?? null;
               call.finishReason = data?.choices?.[0]?.finish_reason ?? null;
               const content = data?.choices?.[0]?.message?.content;
+              call.responseText = typeof content === 'string' ? content : null;
               call.responseChars = typeof content === 'string' ? content.length : null;
               call.responseSha256 = typeof content === 'string' ? hash(content) : null;
               return response;
@@ -206,6 +222,7 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
             playerIdentityName: typeof sample.packet.continuityContext?.userName === 'string' ? sample.packet.continuityContext.userName : undefined,
             factAliases: createFactAliasTable(MYSTERY_TRUTH_GRAPH) });
           result.approved = review.approved;
+          result.review = review;
           result.violations = review.violations;
           result.corrections = review.corrections;
           result.status = review.approved ? 'approved' : 'semantic-rejection';
@@ -221,7 +238,7 @@ describe.skipIf(!enabled && !dryRun)('fixed failed narrative-review reliability'
       }
     } finally { vi.unstubAllGlobals(); persist(); }
     expect(results.map(sample => sample.attempt)).toEqual(attempts);
-    expect(totalHttp).toBeLessThanOrEqual(21);
+    expect(totalHttp).toBeLessThanOrEqual(attempts.length * maxHttpPerSample);
     if (dryRun) expect(results.filter(sample => sample.exception)).toEqual([]);
     console.log(`Review reliability report: ${file}; HTTP attempts: ${totalHttp}`);
   }, 20 * 60_000);
