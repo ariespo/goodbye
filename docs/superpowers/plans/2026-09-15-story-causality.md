@@ -40,5 +40,5 @@
 
 - [x] Independent causal/compatibility review, fix demonstrated issues and rerun affected tests.
 - [x] Run npm test -- --run, npm run lint, npm run build; inspect all results.
-- [ ] Commit explicit files, fast-forward master, push and deploy with existing Vercel configuration.
-- [ ] Verify production output matches the build, report evidence and scope of testing.
+- [x] Commit explicit files, fast-forward master, push and deploy with existing Vercel configuration.
+- [x] Verify production output matches the build, report evidence and scope of testing (CSS build differences and equivalent JS references recorded in the retest report).

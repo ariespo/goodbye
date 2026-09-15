@@ -39,4 +39,10 @@
 
 ## 发布
 
-待填写提交、部署和生产资源核对结果。
+代码与复测记录已快进到master并推送。生产部署基于 `c50260807e1d9027faab10ca5728a3eb4919df55`，部署ID `dpl_AubPQRRwKX1nRrmqp9btDXFatTDo`，状态READY。
+
+生产地址：[farewell-web-woad.vercel.app](https://farewell-web-woad.vercel.app)。2026-09-15 20:20（北京时间）核验首页HTTP200，入口对应本次云端构建。剧情规则、mystery及背景资源脚本与本地SHA256一致；本次修改的12份结局原文均HTTP200且SHA256一致。资源清单排除生成时间后完全一致，版本 `b3f4e033c80b133b`，共1084项。
+
+云端CSS比Windows本地多出collapse/blur两个工具类，oklab颜色计算有小于0.000001的精度差异，导致CSS和引用它们的JS文件名不同。剔除资源文件名中的构建哈希后，其余JS内容逐字一致；除上述CSS差异外样式内容一致。因此不宣称整个dist逐字节相同。核验证据保存在 `.codex-test-tmp/story-production-verification.json`、`story-build-comparison.json` 和 `story-css-comparison.json`。
+
+发布后的最后一次提交只补充本报告与计划勾选，不修改已部署的运行时代码。
