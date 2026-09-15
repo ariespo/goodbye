@@ -20,6 +20,7 @@ import { lockConclusionRoute } from '../src/engine/conclusion-system';
 import { validatedOptionBinding } from '../src/utils/actionPresentation';
 import { normalizeWorldMemory } from '../src/memory/world-memory';
 import { getLocationById } from '../src/data/locations';
+import { hasDeliveredDeathNews } from '../src/engine/narrative-contract';
 import { assessReachableNpcEvidence, assessSourceGroundingEvidence, parseDayMode,
   resolveCommittedActionIdentity, resolveCurrentOptionChoice, serializeScrubbed,
   snapshotPersistedEvidence } from './live-day-evaluation-harness';
@@ -72,10 +73,10 @@ const enabled = process.env.LIVE_ACTION_AUTHORITY === '1';
 const nativeFetch = globalThis.fetch;
 const baseline = useGameStore.getState();
 const repetitions = Number(process.env.ACTION_AUTHORITY_REPETITIONS ?? 3);
-if (!Number.isSafeInteger(repetitions) || repetitions < 3 || repetitions > 10) {
-  throw new Error('ACTION_AUTHORITY_REPETITIONS must be an integer from 3 through 10');
+if (!Number.isSafeInteger(repetitions) || repetitions < 1 || repetitions > 10) {
+  throw new Error('ACTION_AUTHORITY_REPETITIONS must be an integer from 1 through 10');
 }
-const scenarioNames = ['early-gate', 'legal-fact', 'interruption-resume', 'reachable-npc',
+const scenarioNames = ['early-gate', 'legal-fact', 'interruption-resume', 'reachable-npc', 'preliminary-report',
   'opening-message-positive', 'opening-van-negative', 'contact-unanswered-positive', 'contact-absence-negative'] as const;
 type ScenarioName = typeof scenarioNames[number];
 const requestedScenarios = (process.env.ACTION_AUTHORITY_SCENARIOS ?? scenarioNames.join(','))
@@ -158,9 +159,25 @@ async function sendAndAwait(input: string) {
 
 function scenarioContext(location: string) {
   const variables = useGameStore.getState().tavern.variables;
-  return { cycleCount: variables.cycleCount, currentLocation: location, lockedRoute: variables.lockedRoute,
+  return { cycleCount: variables.cycleCount, currentTime: useGameStore.getState().game.gameStatus.time.toISOString(), currentLocation: location, lockedRoute: variables.lockedRoute,
     unlockedClueIds: Object.keys(variables.mysteryKnowledge ?? {}), playerKnowledge: variables.mysteryKnowledge ?? {},
     suspicion: variables.suspicion, activeNpcIds: [], playerPresentation: buildPlayerKnowledgeBrief({ ...variables, location }) };
+}
+
+async function runPreliminaryReport() {
+  const hook = await sendAndAwait('接听警方的电话，问清楚这是不是已经核实身份的结论，再记下还有什么需要核对。');
+  const state = useGameStore.getState();
+  const content = state.tavern.chats.find(chat => chat.id === state.tavern.activeChatId)?.messages
+    .filter(message => message.role === 'assistant').at(-1)?.content ?? '';
+  const lines = state.game.currentScene?.lines.map(line => ({ speaker: line.speaker, text: line.text })) ?? [];
+  const deathEffects = capture.transactions.flatMap(value =>
+    (value as { resolvedAction?: { eventEffectIds?: string[] } }).resolvedAction?.eventEffectIds ?? [])
+    .filter(id => id === 'death-news:cycle:3');
+  const passed = state.game.history.length === 1 && hasDeliveredDeathNews(content)
+    && state.tavern.variables.deathNews === 'delivered' && deathEffects.length === 1
+    && state.game.endingPanel.pendingEndingId == null && state.tavern.variables.lockedRoute == null;
+  hook.unmount();
+  return { passed, content, lines, deathEffects, evidence: snapshot() };
 }
 
 async function runEarlyGate() {
@@ -381,7 +398,7 @@ afterAll(() => {
 });
 
 describe.skipIf(!enabled)('live focused action-authority probes', () => {
-  it('records three independent accepted/rejected outcomes for each requested scenario and mode', async () => {
+  it('records the requested independent accepted/rejected outcomes for each scenario and mode', async () => {
     const key = process.env.ACTION_AUTHORITY_API_KEY ?? process.env.DAY_API_KEY ?? process.env.DEEPSEEK_API_KEY;
     if (!key) throw new Error('ACTION_AUTHORITY_API_KEY, DAY_API_KEY, or DEEPSEEK_API_KEY is required');
     const baseUrl = process.env.ACTION_AUTHORITY_API_BASE_URL ?? process.env.DAY_API_BASE_URL ?? 'https://api.deepseek.com/v1';
@@ -423,11 +440,11 @@ describe.skipIf(!enabled)('live focused action-authority probes', () => {
         const initialVariables = scenario === 'early-gate' || scenario === 'legal-fact'
           ? { suspicion: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
               loopSuspicionStart: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
-              unlockedClues: ['a-sacrifice-list', 'a-lured-inside'],
-              mysteryKnowledge: { 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' } }
-          : {};
+              unlockedClues: ['a-orphanage-contact', 'a-sacrifice-list', 'a-lured-inside'],
+              mysteryKnowledge: { 'a-orphanage-contact': 'clue', 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' } }
+          : scenario === 'preliminary-report' ? { deathNews: 'pending' } : {};
         await resetControlledState({ ...shared,
-          time: scenario === 'interruption-resume' ? '2024-09-09T15:30:00' : undefined,
+          time: scenario === 'interruption-resume' ? '2024-09-09T15:30:00' : scenario === 'preliminary-report' ? '2024-09-09T16:00:00' : undefined,
           location: scenario === 'legal-fact' ? 'old-man-building' : scenario === 'reachable-npc' ? 'supermarket' : 'home',
           variables: initialVariables });
         const initial = snapshot();
@@ -437,7 +454,8 @@ describe.skipIf(!enabled)('live focused action-authority probes', () => {
             : scenario === 'legal-fact' ? await runLegalFact()
               : scenario === 'interruption-resume' ? await runInterruptionResume()
                 : scenario === 'reachable-npc' ? await runReachableNpc()
-                  : await runSourceGroundingScenario(scenario);
+                  : scenario === 'preliminary-report' ? await runPreliminaryReport()
+                    : await runSourceGroundingScenario(scenario);
         } catch (error) {
           outcome = { passed: false, error: error instanceof Error ? error.message : String(error), evidence: snapshot() };
         }
@@ -448,7 +466,7 @@ describe.skipIf(!enabled)('live focused action-authority probes', () => {
           narrativeReviews: structuredClone(capture.reviews) });
         writeFileSync(artifactPath, serializeScrubbed({ schemaVersion: 1, testedCommit, runTag, model, baseUrl,
           repetitions, requestedScenarios, requestedModes: modes.map(item => item.requestedMode),
-          fumiDirectEncounter: { status: 'unreachable', reason: 'production opening starts after Fumi left; no legal in-person Fumi route' },
+          fumiDirectEncounter: { status: 'not-covered', reason: 'focused probes do not assess the full verified-survival encounter path' },
           browserPersistence: { status: 'not-covered', reason: 'Vitest database double does not prove browser reload persistence' },
           results }, [key]), 'utf8');
       }

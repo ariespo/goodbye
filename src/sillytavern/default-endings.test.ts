@@ -3,6 +3,7 @@ import { createDefaultEndings } from '../stores/gameStore';
 import { checkEndingConditions } from './ending-checker';
 import { variablesToEndingContext } from './vars-merger';
 import type { DynamicRecord } from './types';
+import { investigatedStoryState } from '../test-support/story-state';
 
 const endings = createDefaultEndings();
 
@@ -34,10 +35,11 @@ describe('default endings (三层体系)', () => {
   });
 
   it('锁定A线+报警 → A-1；叠加CULT后同条件不再触发A-1', () => {
-    const real = contextWith({ lockedRoute: 'A', finalChoice: 'report' });
+    const real = contextWith({ ...investigatedStoryState('A'), finalChoice: 'report' });
     expect(checkEndingConditions(real, endings)?.id).toBe('A-1');
 
     const cult = contextWith({
+      ...investigatedStoryState('A'),
       lockedRoute: 'A',
       overlay: 'CULT',
       cultClues: ['c1', 'c2', 'c3'],
@@ -48,6 +50,7 @@ describe('default endings (三层体系)', () => {
 
   it('锁定C线+PSYCH叠加+wake → P-1；无叠加+accept → C-1', () => {
     const psych = contextWith({
+      ...investigatedStoryState('C'),
       lockedRoute: 'C',
       overlay: 'PSYCH',
       worldGlitchClues: ['g1', 'g2', 'g3'],
@@ -55,20 +58,20 @@ describe('default endings (三层体系)', () => {
     });
     expect(checkEndingConditions(psych, endings)?.id).toBe('P-1');
 
-    const real = contextWith({ lockedRoute: 'C', finalChoice: 'accept' });
+    const real = contextWith({ ...investigatedStoryState('C'), finalChoice: 'accept' });
     expect(checkEndingConditions(real, endings)?.id).toBe('C-1');
   });
 
-  it('无凶手线需要集齐3片告别信', () => {
+  it('无凶手线需要信件与事故推导，不能仅凭收集数量', () => {
     const incomplete = contextWith({ lockedRoute: 'NONE', letterFragments: ['l1'], finalChoice: 'letgo' });
     expect(checkEndingConditions(incomplete, endings)).toBeNull();
 
-    const complete = contextWith({ lockedRoute: 'NONE', letterFragments: ['l1', 'l2', 'l3'], finalChoice: 'letgo' });
+    const complete = contextWith({ ...investigatedStoryState('NONE'), finalChoice: 'letgo' });
     expect(checkEndingConditions(complete, endings)?.id).toBe('N-1');
   });
 
-  it('假死线需要3条证据', () => {
-    const ctx = contextWith({ lockedRoute: 'FAKE', fakeEvidence: ['e1', 'e2', 'e3'], finalChoice: 'release' });
+  it('假死线需要误认链与本人生还验证', () => {
+    const ctx = contextWith({ ...investigatedStoryState('FAKE'), finalChoice: 'release' });
     expect(checkEndingConditions(ctx, endings)?.id).toBe('F-1');
   });
 

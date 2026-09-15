@@ -43,13 +43,10 @@ describe('rendered narrative contracts', () => {
     })).toEqual([]);
   });
   it.each([
-    '警方告知：文穗已经死亡。',
-    '经初步确认，是文穗。人已经死亡。',
-    '对面的声音说，文穗今天上午被发现死亡，需要你配合后续确认。',
-    '警方告诉你文穗已经死亡，让你通知她的父母。',
-    '对话|警员|calm|文穗已经死亡。',
-    '对话|警员|calm|文穗已经死亡，但死因尚未确认。',
-  ])('recognizes an explicit death report: %s', text => expect(hasDeliveredDeathNews(text)).toBe(true));
+    '警方来电，初步死亡通报中的死者疑似文穗，身份与死亡时间仍待核实。',
+    '对话|警员|calm|现在向你送达涉及文穗的初步死亡通报。身份、死因和死亡时间仍待核实。',
+    '对话|旁白|calm|警方的电话接通了。\n对话|旁白|calm|对方送来初步通报：发现一名疑似文穗的死者。你攥紧了手机。',
+  ])('recognizes receipt while retaining uncertain identity and timing: %s', text => expect(hasDeliveredDeathNews(text)).toBe(true));
   it.each([
     '如果文穗已经死亡，我该怎么办？',
     '我猜文穗已经死亡。',
@@ -62,6 +59,13 @@ describe('rendered narrative contracts', () => {
     '对话|灯织|sad|文穗已经死亡。',
     '对话|警员|calm|我们否认文穗死亡。',
     '警方不能确定文穗死亡。',
+    '警方告知：文穗已经死亡。',
+    '对话|警员|calm|文穗已经死亡，但死因尚未确认。',
+    '警方尚未送达涉及文穗的初步死亡通报。',
+    '如果警方送达文穗的初步死亡通报，我该怎么办？',
+    '警方初步死亡通报中的死者疑似文穗。\n对话|旁白|calm|文穗确实已经死亡，时间就是今天下午。',
+    '警方准备向你送达文穗的初步死亡通报。',
+    '警方的初步死亡通报涉及文穗。文穗已经死亡，身份尚未核实。',
   ])('does not turn guesses, denials or vague calls into delivery: %s', text => expect(hasDeliveredDeathNews(text)).toBe(false));
   it('rejects a missing event and a premature midnight before commit', () => {
     const errors = validateNarrativeContract(maintextToScene('对话|旁白|calm|午夜到了，警方叫你到所当面说文穗的事。'), {

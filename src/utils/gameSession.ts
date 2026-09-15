@@ -20,7 +20,7 @@ import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
 import { acceptedActionUiFromMessage, readPublicActionOutcome } from './actionPresentation';
 
 export const OPENING_ASSISTANT_CONTENT =
-  `<maintext>\n${OPENING_MAINTEXT}\n</maintext>\n${OPENING_PANELS}\n<sum>开局:暴雨第五天，文穗临时不去学校且暂时联系不上</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
+  `<maintext>\n${OPENING_MAINTEXT}\n</maintext>\n${OPENING_PANELS}\n<sum>开局:暴雨第五天，文穗账号的消息称今天不去学校，玩家暂时联系不上她</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
 
 export function parseOpeningAssistantContent(): ParsedContent {
   return parseChunk(createParseState(), OPENING_ASSISTANT_CONTENT, { strict: true }).parsed;

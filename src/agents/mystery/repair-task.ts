@@ -21,7 +21,7 @@ const DIRECTOR_REPAIR_HARD_RULES = `修复时必须遵守：
 - red-herring 若没有 deliveryNpcIds，必须从所有 NPC 台词、回忆和目击 beat 中彻底删除；不得以“好像”“不敢说准”等降调措辞保留。
 - dialogue revelation 只有在该事实 deliveryNpcIds 明列对应 speakerId 时才允许。若玩家已持有某事实、但在场 NPC 无讲述权，只能通过玩家出示的物证、记录或 narration/object/environment 重述；绝不能让 NPC 代替证据宣布结论。
 - speakerId 必须逐字复制 npcKnowledge[].npcId，不得使用简称、显示名或同义 ID。
-- saturationPivot 存在时不可删除或软化：先完整响应 blockedActorId 的原调查，再由 interveningNpcId 在后续独立 beat 自然介入并以 dialogue 揭示 factId。正文只写获准事实，不得直说 redirectedActorId 内部 ID 或补写因果；状态归属由程序处理，不得继续增加 blockedActorId 的嫌疑。
+- 嫌疑上限只限制数值，不能阻止获准新材料或旧事实表达。saturationPivot 仅在程序另行指定剧情转场时存在，不可删除或软化：先完整响应 blockedActorId 的原调查，再由 interveningNpcId 在后续独立 beat 自然介入并以 dialogue 揭示 factId。正文只写获准事实，不得直说 redirectedActorId 内部 ID 或补写因果；状态归属由程序处理，不得继续增加 blockedActorId 的嫌疑。
 - beat/台词中的结论层级不得高于 revelations。若玩家明确提出凶手、手法等 confirmation 结论，且 brief 允许 confirmation，就必须把对应事实登记为 confirmation；否则必须删掉或降级该结论台词，不能保留指控再只申请 hint。
 - stance=lies-about 的 confirmation 不得被修成“证据压力下被迫承认”。用 narration/object/environment 让证据链独立确认，NPC 可平静否认。若确认会解锁 insane，必须先有一个明确的外部证据确认 beat，再在后续独立 beat 安排；否则删除 insane。
 - confirmation beat 必须写出 revealOptions.confirmation 已授权的因果。对 playerKnownFacts 已有的 clue，直接写“复核该已知 clue 并与其他已知 clue 合并”即可；不得为了具体化而补造 revealOptions/playerKnownFacts 未定义的脚印、杯痕、录像、证人、检验结果或第三方痕迹。

@@ -7,6 +7,8 @@ import {
 } from './investigation-opportunities';
 
 export const DEATH_NEWS_TIME = '2024-09-09T16:00:00';
+/** Stable event ID denotes receipt, never confirmation of identity or death timing. */
+export const PRELIMINARY_DEATH_NEWS = '警方通过正式电话向玩家送达初步死亡通报：发现一名疑似文穗的死者。死者身份、死亡时刻与死因仍待核实；通报没有给出凶手或案发经过。';
 
 export interface ScheduledBoundary {
   id: string;
@@ -154,10 +156,10 @@ export function checkScheduledEvents(
 }
 
 const DEATH_NEWS_DIRECTIVE =
-  '【定时事件·必须执行】时间已过16:00：文穗的死讯必须在本回合送达玩家（警方电话、警察上门、邻居传话等形式自选，地点不合适就让消息追到玩家所在处）。以具体反应呈现消息的冲击；资源变化只服从程序结算。';
+  `【定时事件·必须执行】时间已到16:00，必须在本回合演出初步通报送达。${PRELIMINARY_DEATH_NEWS}以具体反应呈现消息的冲击；旁白不能把初步通报写成文穗死亡、当天死亡或死亡时刻的系统确认。资源变化只服从程序结算。`;
 
 const AFTERMATH_DIRECTIVE =
-  '【死讯余波】玩家已得知文穗的死讯。允许真实的哀痛、基于现有信息的有限跟进、休息或明确等待；不得承诺在本轮挽救已经发生的死亡，也不得用气氛要求资源下降或封死其他合理选择。';
+  '【初步通报余波】玩家已收到涉及文穗的初步死亡通报；死者身份、死亡时刻与死因仍待各自证据核实。允许真实的哀痛、基于现有信息的有限跟进、休息或明确等待；不能凭通报保证救援成败，也不得用气氛要求资源下降或封死其他合理选择。';
 
 export function buildScheduledDirectives(variables: DynamicRecord): string[] {
   if (variables.deathNews === 'pending') return [DEATH_NEWS_DIRECTIVE];

@@ -2,6 +2,8 @@ import { createDefaultVariables, setVariablePath } from '../sillytavern/vars-mer
 import type { DynamicRecord } from '../sillytavern/types';
 import { normalizeWorldMemory } from '../memory/world-memory';
 import { cognitionIsPublicPlayerNamePermission, resetCharacterContinuity } from '../memory/character-continuity';
+import { carryCompatibleStoryKnowledge } from './story-version';
+import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
 
 const INHERITED_KEYS = [
   'unlockedClues',
@@ -14,6 +16,7 @@ const INHERITED_KEYS = [
   'knowledgeEvents',
   'mysteryKnowledge',
   'suspicion',
+  'storyProgress',
 ] as const;
 
 export function settleCycleVariables(
@@ -25,6 +28,16 @@ export function settleCycleVariables(
     if (current[key] !== undefined) next = setVariablePath(next, key, current[key]);
   }
   next.cycleCount = Number(current.cycleCount ?? 1) + 1;
+  if (current.finalChoice) {
+    next.storyProgress = { ...next.storyProgress, presentedBeatIds: next.storyProgress?.presentedBeatIds ?? [], versionStartCycle: next.cycleCount };
+    next.mysteryKnowledge = carryCompatibleStoryKnowledge(current.mysteryKnowledge);
+    const knownFactIds = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => fact.id));
+    next.unlockedClues = (Array.isArray(next.unlockedClues) ? next.unlockedClues : []).filter(id =>
+      !knownFactIds.has(id) || Object.prototype.hasOwnProperty.call(next.mysteryKnowledge, id));
+  } else if (current.lockedRoute) {
+    next.lockedRoute = current.lockedRoute;
+    next.overlay = current.overlay ?? null;
+  }
   const resetMemory = resetCharacterContinuity(normalizeWorldMemory(current), next.cycleCount);
   next.worldMemory = resetMemory;
   next.playerNameKnownByNpcIds = resetMemory.cognition.filter(record => (

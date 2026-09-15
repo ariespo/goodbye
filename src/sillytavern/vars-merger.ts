@@ -95,6 +95,7 @@ export const DEFAULT_GAME_VARIABLES: DynamicRecord = {
   tripProgress: 0,
   unlockedClues: [],
   organizedClues: [],
+  storyProgress: { presentedBeatIds: [] },
   knowledgeEvents: ['know:home', 'know:school', 'know:supermarket'],
   /** 除固定熟人外，后续通过明确自我介绍得知玩家姓名的 NPC。由程序事件维护。 */
   playerNameKnownByNpcIds: [],

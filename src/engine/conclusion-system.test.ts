@@ -9,6 +9,7 @@ import {
   selectConclusionOverlay,
 } from './conclusion-system';
 import { settleCycleVariables } from '../utils/cycleLoop';
+import { investigatedStoryState } from '../test-support/story-state';
 
 function variables(overrides: Record<string, unknown> = {}) {
   return {
@@ -24,12 +25,21 @@ function variables(overrides: Record<string, unknown> = {}) {
     overlay: null,
     finalChoice: null,
     mysteryKnowledge: {
+      'a-orphanage-contact': 'clue',
       'a-sacrifice-list': 'clue',
       'a-lured-inside': 'clue',
       'b-water-tower-blood': 'clue',
+      'shared-detective-tail': 'clue',
+      'b-commission-message': 'clue',
       'b-detective-coverup': 'clue',
       'c-player-made-leave-call': 'clue',
+      'shared-male-leave-call': 'clue',
+      'c-night-gap-record': 'clue',
       'c-loop-is-reenactment': 'clue',
+      'fake-body-mismatch': 'clue',
+      'fake-misidentification-chain': 'clue',
+      'fake-postdeath-sighting': 'clue',
+      'fake-alias-ticket': 'clue',
     },
     ...overrides,
   };
@@ -48,6 +58,7 @@ describe('conclusion system', () => {
 
   it('requires the complete no-killer route gate', () => {
     const state = variables({
+      ...investigatedStoryState('NONE'),
       tripProgress: 100,
       letterFragments: ['a', 'b', 'c'],
       suspicion: { 'old-man': 49, 'detective-a': 20, 'detective-b': 10, self: 49 },
@@ -69,7 +80,7 @@ describe('conclusion system', () => {
   });
 
   it('keeps a deep explanation hidden until its gate is met', () => {
-    const base = variables({ lockedRoute: 'A', cycleCount: 3, cultClues: ['a', 'b', 'c'] });
+    const base = variables({ ...investigatedStoryState('A'), cycleCount: 3 });
     const deep = { ...base, cycleCount: 4 };
 
     expect(getConclusionOverlays(base).map(option => option.id)).toEqual([null]);
@@ -79,8 +90,8 @@ describe('conclusion system', () => {
   });
 
   it('maps every final choice to a deterministic ending', () => {
-    const routeA = variables({ lockedRoute: 'A', mysteryKnowledge: { 'a-murder-staged-fall': 'confirmation' } });
-    const cult = variables({ lockedRoute: 'A', overlay: 'CULT', cycleCount: 4, cultClues: ['a', 'b', 'c'], mysteryKnowledge: { 'cult-sacrifice-powers-loop': 'confirmation' } });
+    const routeA = variables(investigatedStoryState('A'));
+    const cult = variables({ ...investigatedStoryState('A'), overlay: 'CULT' });
 
     expect(getConclusionChoices(routeA).map(choice => choice.endingId)).toEqual(['A-1', 'A-2']);
     expect(chooseConclusion(routeA, 'report')).toMatchObject({ accepted: true, endingId: 'A-1' });
@@ -118,7 +129,7 @@ describe('conclusion system', () => {
   it('allows the legal cycle-4 route lock but keeps the deeper cycle-5 solution gate closed', () => {
     const routeReady = variables({
       cycleCount: 4, suspicion: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
-      mysteryKnowledge: { 'a-sacrifice-list': 'clue', 'a-lured-inside': 'confirmation' },
+      mysteryKnowledge: { 'a-orphanage-contact': 'clue', 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' },
     });
     const locked = lockConclusionRoute(routeReady, 'A');
     expect(locked.accepted).toBe(true);

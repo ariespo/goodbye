@@ -11,6 +11,7 @@ import {
 } from './types';
 import { projectCharacterPerformances } from '../../data/characterPerformance';
 import { buildNpcPlayerKnowledgeBrief } from '../../data/npcPlayerKnowledge';
+import { getVerifiedItineraryProgress } from './itinerary';
 
 /** Fixed public scene cast; this is neither an encounter list for home nor case knowledge. */
 export const FIXED_LOCATION_NPC_IDS: Readonly<Record<string, readonly string[]>> = {
@@ -22,6 +23,14 @@ export const FIXED_LOCATION_NPC_IDS: Readonly<Record<string, readonly string[]>>
 };
 
 function budgetFor(context: TruthContext): RevealBudget {
+  if (context.cycleCount < 4) {
+    return {
+      maxNewFacts: 1,
+      maxRevealLevel: 'clue',
+      allowConfirmation: false,
+      reason: '前三个重复日每回合至多取得一条非排他线索；不能确认罪行或揭示解答。',
+    };
+  }
   if (context.lockedRoute) {
     return {
       maxNewFacts: 3,
@@ -30,19 +39,11 @@ function budgetFor(context: TruthContext): RevealBudget {
       reason: `路线 ${context.lockedRoute} 已锁定，可进入确认层。`,
     };
   }
-  if (context.cycleCount >= 4) {
-    return {
-      maxNewFacts: 2,
-      maxRevealLevel: 'clue',
-      allowConfirmation: false,
-      reason: '复盘阶段允许明确线索，但完整答案必须等待锁线。',
-    };
-  }
   return {
-    maxNewFacts: 1,
-    maxRevealLevel: context.cycleCount >= 2 ? 'hint' : 'atmosphere',
+    maxNewFacts: 2,
+    maxRevealLevel: 'clue',
     allowConfirmation: false,
-    reason: '探索阶段限制单回合揭示量与深度。',
+    reason: '复盘阶段允许明确线索，但完整答案必须等待锁线。',
   };
 }
 
@@ -61,6 +62,7 @@ function project(fact: MysteryFact, maximum: RevealLevel): ProjectedFact | null 
 }
 
 function routeCap(fact: MysteryFact, context: TruthContext): RevealLevel | null {
+  if (fact.kind === 'solution' && (context.cycleCount < 4 || !context.lockedRoute)) return null;
   if (fact.route === 'shared') return 'confirmation';
   if (fact.route === 'CULT' || fact.route === 'PSYCH') {
     if (fact.availability.requiredBaseRoute && context.lockedRoute !== fact.availability.requiredBaseRoute) {
@@ -83,6 +85,7 @@ function routeCap(fact: MysteryFact, context: TruthContext): RevealLevel | null 
 
 function unavailableReason(fact: MysteryFact, context: TruthContext): string | null {
   const { availability } = fact;
+  const hasClue = (id: string) => context.playerKnowledge[id] === 'clue' || context.playerKnowledge[id] === 'confirmation';
   if (availability.requiredBaseRoute && context.lockedRoute !== availability.requiredBaseRoute) {
     return `需要先锁定路线 ${availability.requiredBaseRoute}。`;
   }
@@ -92,30 +95,27 @@ function unavailableReason(fact: MysteryFact, context: TruthContext): string | n
   if (availability.minCycle && context.cycleCount < availability.minCycle) {
     return `需要第 ${availability.minCycle} 轮或之后。`;
   }
+  if (availability.notBeforeTime) {
+    const instant = context.currentTime ? new Date(context.currentTime) : null;
+    const [hour, minute] = availability.notBeforeTime.split(':').map(Number);
+    if (!instant || !Number.isFinite(instant.getTime()) || instant.getHours() * 60 + instant.getMinutes() < hour * 60 + minute) {
+      return `本日 ${availability.notBeforeTime} 前不能新取得该通报或核验结果；已经获得的材料只能按原有层级回忆。`;
+    }
+  }
   if (availability.locations?.length && !availability.locations.includes(context.currentLocation)) {
     return '当前地点无法取得该事实。';
   }
-  if (availability.requiredClueIds?.some((id) => !context.unlockedClueIds.includes(id))) {
+  if (availability.requiredClueIds?.some((id) => !hasClue(id))) {
     return '缺少前置线索。';
   }
   if (
     availability.requiredAnyClueIds?.length
-    && !availability.requiredAnyClueIds.some((id) => context.unlockedClueIds.includes(id))
+    && !availability.requiredAnyClueIds.some(hasClue)
   ) {
     return '缺少任一可替代前置线索。';
   }
-  if (
-    availability.minSuspicion
-    && (context.suspicion[availability.minSuspicion.actorId] ?? 0) < availability.minSuspicion.minimum
-  ) {
-    return `对 ${availability.minSuspicion.actorId} 的怀疑度不足。`;
-  }
-  const anySuspicion = availability.minAnySuspicion;
-  if (
-    anySuspicion
-    && !anySuspicion.actorIds.some(actorId => (context.suspicion[actorId] ?? 0) >= anySuspicion.minimum)
-  ) {
-    return `相关角色中至少一人的怀疑度需要达到 ${anySuspicion.minimum}。`;
+  if (availability.requiredConfirmedFactIds?.some(id => context.playerKnowledge[id] !== 'confirmation')) {
+    return '必须先确认基础路线事实。';
   }
   if (
     availability.minAffinity
@@ -125,7 +125,7 @@ function unavailableReason(fact: MysteryFact, context: TruthContext): string | n
   }
   if (
     availability.minTripProgress
-    && (context.tripProgress ?? 0) < availability.minTripProgress
+    && getVerifiedItineraryProgress(context.playerKnowledge) < availability.minTripProgress
   ) {
     return `行程还原进度需要达到 ${availability.minTripProgress}。`;
   }
@@ -134,7 +134,7 @@ function unavailableReason(fact: MysteryFact, context: TruthContext): string | n
   }
   if (availability.requiredKnownFactSet) {
     const known = availability.requiredKnownFactSet.factIds
-      .filter(id => context.unlockedClueIds.includes(id))
+      .filter(hasClue)
       .length;
     if (known < availability.requiredKnownFactSet.minimum) {
       return `该证据链至少需要 ${availability.requiredKnownFactSet.minimum} 条前置事实。`;
@@ -144,6 +144,30 @@ function unavailableReason(fact: MysteryFact, context: TruthContext): string | n
     return '完整真相需要先锁定对应路线。';
   }
   return null;
+}
+
+/** A save can retain its original material while an unsupported old solution is withheld. */
+function compatibleRememberedContext(graph: MysteryTruthGraph, context: TruthContext): TruthContext {
+  const remembered = { ...context, playerKnowledge: { ...context.playerKnowledge } };
+  const solutions = graph.facts.filter(fact => fact.kind === 'solution');
+  let removed: boolean;
+  do {
+    removed = false;
+    for (const fact of solutions) {
+      if (!remembered.playerKnowledge[fact.id]) continue;
+      const availability = { ...fact.availability };
+      // These restrict acquisition, not recollection of an already supported conclusion.
+      delete availability.locations;
+      delete availability.notBeforeTime;
+      delete availability.minAffinity;
+      delete availability.maxSanity;
+      if (routeCap(fact, remembered) === null || unavailableReason({ ...fact, availability }, remembered)) {
+        delete remembered.playerKnowledge[fact.id];
+        removed = true;
+      }
+    }
+  } while (removed);
+  return remembered;
 }
 
 export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContext): MysteryBrief {
@@ -158,10 +182,19 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
     if (!factsById.has(id)) continuityWarnings.push(`线索列表引用了未知事实：${id}`);
   }
 
-  const playerKnownFacts = Object.entries(context.playerKnowledge).flatMap(([id, level]) => {
+  const rememberedContext = compatibleRememberedContext(graph, context);
+  const playerKnownFacts = Object.entries(rememberedContext.playerKnowledge).flatMap(([id, level]) => {
     const fact = factsById.get(id);
     if (!fact) return [];
-    const projected = project(fact, level);
+    // Remembered observations survive version selection. Exclusive conclusions do not.
+    const sameVersion = fact.route === 'shared' || fact.route === context.lockedRoute || fact.route === context.activeOverlay;
+    if (fact.kind === 'solution' && (!sameVersion || !context.lockedRoute || context.cycleCount < 4)) return [];
+    if (fact.availability.requiresRouteLock && context.lockedRoute !== fact.route) return [];
+    if (fact.availability.requiresOverlayLock && context.activeOverlay !== fact.route) return [];
+    if (fact.availability.requiredBaseRoute && context.lockedRoute !== fact.availability.requiredBaseRoute) return [];
+    const memoryCap = sameVersion ? routeCap(fact, context) : fact.availability.maxRevealBeforeRouteLock ?? 'hint';
+    if (memoryCap === null) return [];
+    const projected = project(fact, lowerRevealLevel(level, lowerRevealLevel(memoryCap, revealBudget.maxRevealLevel)));
     return projected ? [projected] : [];
   });
 
@@ -175,7 +208,7 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
       ? (context.lockedRoute && context.lockedRoute !== fact.route
           ? `路线 ${context.lockedRoute} 已锁定，其他路线事实不可用。`
           : '该事实需要锁定对应路线。')
-      : unavailableReason(fact, context);
+      : unavailableReason(fact, rememberedContext);
     if (reason || cap === null) {
       hiddenFacts.push({ id: fact.id, route: fact.route, kind: fact.kind, reason: reason ?? '当前不可用。' });
       forbiddenReveals.push({ factId: fact.id, forbiddenAbove: null, reason: reason ?? '当前不可用。' });
@@ -216,7 +249,7 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
   }
 
   // NPC 的本轮经历必须服从当前事实门槛；即使旧存档残留了玩家知识，
-  // 也不能绕过怀疑度、路线、地点或轮回条件把隐藏现实重新塞给角色。
+  // 也不能绕过路线、地点或轮回条件把隐藏现实重新塞给角色。
   const availableFactIds = new Set(usableFacts.map(fact => fact.id));
   const npcKnowledge = context.activeNpcIds.map((npcId) => ({
     npcId,

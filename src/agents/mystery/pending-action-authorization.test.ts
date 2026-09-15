@@ -218,7 +218,7 @@ describe('pending action authorization', () => {
     })).toThrow(/graph/i);
   });
 
-  it('rejects an original reveal whose current suspicion gate is no longer legal', () => {
+  it('keeps an authorized observation available when suspicion decreases', () => {
     const aliases = createFactAliasTable(MYSTERY_TRUTH_GRAPH);
     const alias = aliases.factIdToAlias['a-sacrifice-list'];
     const initialContext = truthContext({
@@ -252,7 +252,7 @@ describe('pending action authorization', () => {
         ...initialContext,
         suspicion: { ...initialContext.suspicion, 'old-man': 0 },
       },
-    })).toThrow(/授权|审查|可用|usable/);
+    })).not.toThrow();
   });
 
   it('preserves the original dialogue delivery and speaker without exposing canonical truth', () => {

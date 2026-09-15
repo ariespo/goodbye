@@ -485,10 +485,34 @@ export const useGameStore = create<GameStore>((set) => ({
       const variables = activeChat?.variables && Object.keys(activeChat.variables).length > 0
         ? activeChat.variables
         : state.tavern.variables;
+      const defaultTime = new Date(String(createDefaultVariables().time));
+      const restoredTime = new Date(
+        typeof variables.time === 'string' || typeof variables.time === 'number' || variables.time instanceof Date
+          ? variables.time : defaultTime,
+      );
       return {
         tavern: { ...state.tavern, activeChatId: id, variables },
         game: {
           ...state.game,
+          // 播放状态与待结算属于原会话；必须随 ID 原子清理，避免 Watcher 结算新会话。
+          ...(state.tavern.activeChatId !== id ? {
+            currentScene: null,
+            currentLineIndex: 0,
+            currentState: defaultCurrentState,
+            gameStatus: {
+              ...state.game.gameStatus,
+              time: Number.isNaN(restoredTime.getTime()) ? defaultTime : restoredTime,
+              stamina: typeof variables.stamina === 'number' && Number.isFinite(variables.stamina)
+                ? variables.stamina : INITIAL_PLAYER_RESOURCES.stamina,
+              sanity: typeof variables.sanity === 'number' && Number.isFinite(variables.sanity)
+                ? variables.sanity : INITIAL_PLAYER_RESOURCES.sanity,
+            },
+            sceneComplete: false,
+            pendingCycleReset: null,
+            isTyping: false,
+            actionPanel: { visible: false, type: null, content: '', selectedIndex: null },
+            endingPanel: { visible: false, activeEndingId: null, pendingEndingId: null, isPreview: false, isAnimating: false },
+          } : {}),
           endingCheckContext: variablesToEndingContext(variables, state.game.endingsSeen) as EndingCheckContext,
         },
       };

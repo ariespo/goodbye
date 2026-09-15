@@ -30,7 +30,7 @@ function commit(variables: DynamicRecord, turn: PreparedMysteryTurn, death = fal
     gameStatus: { time: new Date(String(variables.time)), stamina: Number(variables.stamina), sanity: Number(variables.sanity), items: [] },
     resolvedAction: turn.writerPacket.resolvedAction, pendingActionAuthorization: turn.pendingActionAuthorization,
     pendingActionSceneContext: turn.pendingActionSceneContext, deliverPendingDeathNews: death,
-    narrativeText: death ? '对话|旁白|calm|警方明确告知你：文穗已经死亡。' : undefined }).variables;
+    narrativeText: death ? '对话|旁白|calm|警方来电送达初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。' : undefined }).variables;
 }
 async function interrupted() {
   const start = { ...createDefaultVariables(), location: 'home', time: '2024-09-09T15:55:00', stamina: 100, sanity: 70 };

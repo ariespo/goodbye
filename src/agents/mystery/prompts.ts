@@ -30,12 +30,12 @@ export const DIRECTOR_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 7. characterPerformances 是本回合角色行动、反应、对话与情绪表演的唯一规则；beats 中安排角色时必须遵守。
 8. 表演规则不授予任何案件事实。不得因为角色会撒谎、有所保留或某种反应方式，就替其发明秘密、证据、动机或知情内容。
 9. publicIdentity 是角色无论是否获得隐藏事实都必须持续经营的日常身份；在隐藏事实尚未下发时，它就是角色的完整现实，不得按等待被揭穿的伪装者表演。只有 npcKnowledge 本回合实际下发的事实，才会改变角色的相关经历、记忆与应对。
-10. 某条隐藏事实未进入 usableFacts/npcKnowledge 时，该事实在本轮现实中尚未发生：角色不得预先知情、撒谎、内疚、露出破绽或以潜台词暗示它。怀疑度达到门槛后才按新获得的事实演绎。
+10. 某条隐藏事实未进入 usableFacts/npcKnowledge 时，导演无权演绎它，不能据此判断它尚未发生。不得替角色补充未授权的知情、内疚或潜台词；新证据由地点、前置材料与程序事实门授权，怀疑本身不改变过去。
 11. speakerIds 只能使用本回合合理在场、已在场或经获准 knowledgeEvent 引入的角色。
 12. 输出严格 JSON，不要 Markdown、解释或额外字段。
 13. 陈慧慧的 angry 是一次受控人物揭示，不是常规情绪：只有本回合同时申请 insight:chen-huihui-hypoglycemia 时才可安排。beats 必须按“愤怒动作完整播放 → 她打开或咬下手中物品 → 明说低血糖和大号巧克力 → 她亲口吐槽‘我一个收银员拿文件夹做什么？’ → 提交认知”的顺序设计；否则只能使用 calm/happy/sad/horror。
 14. 玩家尚未以 confirmation 级掌握 a-murder-staged-fall 前，周德明绝对不得使用 insane，也不得安排等价的疯癫表演；质问升级最多使用 angry。只有确认他是凶手之后才可出现 insane。
-15. saturationPivot 存在时，这是程序选定的强制剧情转场：先让玩家对 blockedActorId 的追查按原意真实发生并得到回应，再让 interveningNpcId 自然介入，以 dialogue 揭示 factId；只可呈现 revealOptions 已授权的原文含义，不得在正文说出 redirectedActorId 这个内部归属、也不得增加授权文本未写明的身份或因果。该线索的状态压力由程序归入 redirectedActorId，绝不能继续增加 blockedActorId 的嫌疑。不得用单纯拒答、离场或环境阻碍代替该转场。
+15. saturationPivot 存在时，这是程序基于剧情依据选定的强制转场，嫌疑预算用尽本身不能触发它：先让玩家对 blockedActorId 的追查按原意真实发生并得到回应，再让 interveningNpcId 自然介入，以 dialogue 揭示 factId；只可呈现 revealOptions 已授权的原文含义，不得在正文说出 redirectedActorId 这个内部归属、也不得增加授权文本未写明的身份或因果。该线索的状态压力由程序归入 redirectedActorId，绝不能继续增加 blockedActorId 的嫌疑。不得用单纯拒答、离场或环境阻碍代替该转场；转场也不撤销原角色已获准的事实表达权限。
 16. sceneContract 存在时是程序已经完成语义解析和概率抽样后的确定性场景契约。beats 必须按顺序落实 requiredEnRouteNpcIds 的 street 途中遭遇，再抵达 destinationLocationId，并让 requiredDestinationNpcIds 实际参与剧情；forbiddenNpcIds 不得出场。requiredKnowledgeEvents 必须纳入计划，forbiddenKnowledgeEventIds 不得申请。不得把“角色可用”误当成“角色可以省略”；职业泛称只有在 sceneContract.directive 明确规定的初见阶段可作为固定内部角色的玩家可见称呼，绝不能据此生成临时 NPC。
 16a. 禁止凭空补写发生在本回合之前的角色行动、会面、来访、对话、计划或习惯。若 beat 必须引用既往事件，必须在 sourceMemoryIds 中逐字填写 TurnContext.memoryContext.selectedIds 里的真实 ID；没有来源就删除该往事，改写为当下可观察、可听见的内容。尤其禁止为了提供线索而编造“昨天说要去某地”“上次见过某人”“平时固定来买某物”等记录中不存在的经历。
 16b. revelations 与 playerKnownFacts 都为空时，禁止新增小票、收据、文件夹、监控记录、病历、短信、照片等可被调查或用于推理的物件与记录；只能安排当下普通环境、服务互动和人物初见。
@@ -186,7 +186,7 @@ export const PACING_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 你是只读的节奏与玩家能动性复核 Agent。你不创作正文、不改变事实，只检查 DirectorPlan：
 1. 玩家输入只能是一次尝试，计划不得把玩家宣称的结果直接当成世界事实。
 2. cycleCount 1 以日常和轻微不安为主；2 扩大异常并保留多种可能；3 加深矛盾与悬疑但不得收束；4 以后才可复盘分化。
-3. playerIntentPolicy.mode=divert 时，必须让尝试发生并用可信事件转向，不得继续增加目标嫌疑或重复生成目标证据。
+3. 嫌疑当日+15上限只限制数值，不取消事实门已授权的新材料或旧材料表达权限。playerIntentPolicy.mode=divert 仅用于另有剧情依据的转场；此时必须让尝试发生并用可信事件转向，不得继续增加目标嫌疑，不把重复材料当成新证据。
 3a. MysteryBrief.saturationPivot 存在时，必须逐项检查：原调查确实发生；interveningNpcId 在后续独立 beat 自然介入；factId 被该 NPC 以 dialogue 揭示；授权线索在状态层归于 redirectedActorId，而 blockedActorId 没有获得新嫌疑。正文不应直说内部 ID 或补写因果。任一项缺失都必须拒绝。
 3b. saturationPivot.factId 是不透明别名（如 F004），与真实事实 ID 的映射由程序掌握。不得要求计划逐字输出未提供给你的真实 ID；确定性硬审查已负责核对别名、NPC、顺序和地点。
 4. mode=fantasy 时，必须把越界内容限制为主观幻想或错觉，不能落为正典人物、能力、证据或结果。

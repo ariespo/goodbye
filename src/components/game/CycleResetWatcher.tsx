@@ -9,14 +9,17 @@ export function CycleResetWatcher() {
   const endingVisible = useGameStore(state => state.game.endingPanel.visible);
   const pendingEndingId = useGameStore(state => state.game.endingPanel.pendingEndingId);
   const isStreaming = useGameStore(state => state.api.isStreaming);
+  const activeChatId = useGameStore(state => state.tavern.activeChatId);
 
   useEffect(() => {
     if (!pendingReset || !sceneComplete || isStreaming || endingVisible || pendingEndingId) return;
     const state = useGameStore.getState();
-    state.actions.setPendingCycleReset(null);
     const settled = settleCycleVariables(state.tavern.variables, { stayed: false });
-    void startNextCycle({ variables: settled, reason: pendingReset as CycleResetReason });
-  }, [pendingReset, sceneComplete, isStreaming, endingVisible, pendingEndingId]);
+    void startNextCycle({ variables: settled, reason: pendingReset as CycleResetReason }).catch(error => {
+      if (useGameStore.getState().tavern.activeChatId !== activeChatId || error?.name === 'AbortError') return;
+      state.actions.setApiError('轮回场景保存失败，待重置状态已保留。请重试或重新打开此存档。');
+    });
+  }, [pendingReset, sceneComplete, isStreaming, endingVisible, pendingEndingId, activeChatId]);
 
   return null;
 }

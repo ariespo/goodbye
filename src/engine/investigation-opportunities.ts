@@ -46,6 +46,20 @@ interface InvestigationAffordance {
 }
 
 const INVESTIGATION_AFFORDANCES: readonly InvestigationAffordance[] = [
+  { factId: 'shared-supermarket-receipt', locationId: 'supermarket', publicGoal: '核对事前签收底单和背面的路线标记', scope: 'short', topicKey: 'supermarket:itinerary-receipt' },
+  { factId: 'shared-senpai-camera', locationId: 'senpai-building', publicGoal: '核对楼门口影像日期与寄存卡', scope: 'normal', topicKey: 'senpai-building:dated-records' },
+  { factId: 'shared-observation-deck-plan', locationId: 'observation-deck', publicGoal: '对照路线页终点与救援位置登记', scope: 'normal', topicKey: 'observation-deck:location-record' },
+  { factId: 'shared-itinerary-crosscheck', locationId: 'home', publicGoal: '把六处行程材料按日期、身份和来源逐项核对', scope: 'deep', topicKey: 'home:itinerary-crosscheck' },
+  { factId: 'a-orphanage-contact', locationId: 'old-man-building', publicGoal: '核对孤儿院查询便笺与档案借阅回条', scope: 'normal', topicKey: 'old-man-building:contact-record' },
+  { factId: 'a-window-transfer-match', locationId: 'old-man-building', publicGoal: '对照伤情、窗槽取样与楼后转运原始记录', scope: 'deep', topicKey: 'old-man-building:forensic-match' },
+  { factId: 'b-commission-message', locationId: 'community-hospital', publicGoal: '核对寻找文穗的委托讯息与联络账号', scope: 'normal', topicKey: 'community-hospital:commission-record' },
+  { factId: 'b-contact-injury-match', locationId: 'water-tower', publicGoal: '逐项核对接触痕迹、撞击伤情和车辆记录', scope: 'deep', topicKey: 'water-tower:injury-timeline' },
+  { factId: 'c-night-gap-record', locationId: 'home', publicGoal: '对照前夜设备日志与个人记事中的缺口', scope: 'normal', topicKey: 'home:night-gap-record' },
+  { factId: 'c-domestic-injury-match', locationId: 'home', publicGoal: '核验封存录音、出入影像和伤情对应的时间', scope: 'deep', topicKey: 'home:external-case-records' },
+  { factId: 'none-railing-maintenance', locationId: 'observation-deck', publicGoal: '按现场编号查验栏杆与排水维修工单', scope: 'normal', topicKey: 'observation-deck:maintenance' },
+  { factId: 'none-unassisted-fall-record', locationId: 'observation-deck', publicGoal: '核验连续现场影像与断口、足迹、伤情', scope: 'deep', topicKey: 'observation-deck:independent-fall-record' },
+  { factId: 'fake-misidentification-chain', locationId: 'community-hospital', publicGoal: '追查初报姓名从何处录入以及谁完成核验', scope: 'normal', topicKey: 'community-hospital:identity-chain' },
+  { factId: 'fake-verified-survival', locationId: 'observation-deck', publicGoal: '核验受托身份回执、交接记录及联络保密要求', scope: 'deep', topicKey: 'observation-deck:protected-verification' },
   {
     factId: 'shared-apron-missing',
     locationId: 'home',

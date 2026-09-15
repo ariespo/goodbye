@@ -64,12 +64,32 @@ describe('shared foreground and speculative preparation', () => {
         : `<maintext>\n${OPENING_MAINTEXT}\n\n${OPENING_PANELS}\n</maintext>` }];
     const prepared = buildTurnPreparation(input);
     expect(prepared.request.presentationContext.publicContinuity).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'opening-message-0650', text: expect.stringContaining('今早06:50') }),
+      expect.objectContaining({ id: 'opening-message-0650', text: expect.stringMatching(/显示.*06:50/) }),
       expect.objectContaining({ id: 'opening-note', text: expect.stringContaining('可能晚一点回来') }),
     ]));
     expect(prepared.request.turnContext.publicContinuity).toEqual(prepared.request.presentationContext.publicContinuity);
     expect(prepared.request.truthContext.playerKnowledge).toEqual({});
     expect(input.variables.openingPublicContinuity).toBeUndefined();
+  });
+
+  it('rebuilds legacy opening source IDs as observations for both first-turn consumers', () => {
+    const input = inputs();
+    input.variables.openingPublicContinuity = [
+      { id: 'opening-breakfast', text: '今早文穗留下了早餐。' },
+      { id: 'opening-note', text: '文穗今早写了纸条。' },
+      { id: 'opening-message-0650', text: '今早06:50文穗发来消息。' },
+    ];
+    const prepared = buildTurnPreparation(input);
+
+    for (const context of [prepared.request.turnContext, prepared.request.presentationContext]) {
+      const sources = JSON.stringify(context.publicContinuity);
+      expect(sources).toMatch(/玩家.*(?:看到|看见).*三明治/);
+      expect(sources).toMatch(/何时.*(?:尚未核实|不清楚)/);
+      expect(sources).toMatch(/文穗.*账号/);
+      expect(sources).toMatch(/显示.*06:50/);
+      expect(sources).not.toMatch(/今早文穗留下|文穗今早写|今早06:50文穗发来/);
+      expect(sources).not.toMatch(/扼住|施暴|凶手|致死/);
+    }
   });
 
   it.each(['user-quote', 'changed-body', 'observe-quote', 'spoofed-parsed'] as const)('does not confer opening facts from %s', variant => {

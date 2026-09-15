@@ -1,4 +1,6 @@
 import { getVariablePath } from '../sillytavern/vars-merger';
+import { ROUTE_SUPPORT_FACTS, ROUTE_CAUSAL_FACTS, SOLUTION_FACTS, FAKE_PREPARATION_FACTS, OVERLAY_BASE_ROUTES, OVERLAY_EVIDENCE_FACTS } from './story-rules';
+import { getVerifiedItineraryProgress } from '../agents/mystery/itinerary';
 
 export type ConclusionRouteId = 'A' | 'B' | 'C' | 'NONE' | 'FAKE';
 export type ConclusionOverlayId = 'CULT' | 'PSYCH';
@@ -92,14 +94,14 @@ const ROUTE_COPY: Record<ConclusionRouteId, Omit<ConclusionRouteOption, 'availab
     id: 'NONE',
     index: '04',
     title: '无人是凶手',
-    thesis: '这场死亡无法被简单归咎于任何一个人。',
+    thesis: '独行经过、栏杆故障与伤情，需要一起解释这场意外。',
     accent: 'silver',
   },
   FAKE: {
     id: 'FAKE',
     index: '05',
     title: '她仍然活着',
-    thesis: '也许连“死亡”本身，都是被精心布置的假象。',
+    thesis: '初报中的身份疑点，需要与她本人的生还证据核对。',
     accent: 'violet',
   },
 };
@@ -122,7 +124,7 @@ const BASE_OVERLAY_COPY: Partial<Record<ConclusionRouteId, ConclusionOverlayOpti
 const CHOICES: Record<ConclusionRouteId | ConclusionOverlayId, ConclusionChoiceOption[]> = {
   A: [
     { id: 'report', endingId: 'A-1', title: '公开指认', description: '把全部证据交出去，让他的名字进入公共记录。', tone: 'resolve' },
-    { id: 'private', endingId: 'A-2', title: '私下对质', description: '独自走进那扇门，要求他亲口承认一切。', tone: 'rupture' },
+    { id: 'private', endingId: 'A-2', title: '私下报复', description: '带着报复的打算独自上楼，让暴力替你作最后的回答。', tone: 'rupture' },
   ],
   B: [
     { id: 'report', endingId: 'B-1', title: '揭发掩盖', description: '撕开两人的同盟，把那晚的失控公之于众。', tone: 'resolve' },
@@ -133,19 +135,19 @@ const CHOICES: Record<ConclusionRouteId | ConclusionOverlayId, ConclusionChoiceO
     { id: 'deny', endingId: 'C-2', title: '否认一切', description: '拒绝相信记忆中的自己，让裂缝重新合拢。', tone: 'rupture' },
   ],
   NONE: [
-    { id: 'letgo', endingId: 'N-1', title: '让她离开', description: '停止寻找一个凶手，接受告别本身没有答案。', tone: 'resolve' },
+    { id: 'letgo', endingId: 'N-1', title: '接受告别', description: '接受已经查明的事故经过，留下她曾想怎样生活的那封信。', tone: 'resolve' },
     { id: 'refuse', endingId: 'N-2', title: '拒绝告别', description: '只要还没有答案，就拒绝让这段旅程结束。', tone: 'rupture' },
   ],
   FAKE: [
     { id: 'release', endingId: 'F-1', title: '放下追寻', description: '相信她选择了自己的去处，不再继续追逐踪迹。', tone: 'resolve' },
-    { id: 'pursue', endingId: 'F-2', title: '继续追她', description: '沿着最后的痕迹追下去，无论前方是否仍是真实。', tone: 'rupture' },
+    { id: 'pursue', endingId: 'F-2', title: '继续追她', description: '继续寻找她；你已经知道，跟踪你的人也可能因此找到她。', tone: 'rupture' },
   ],
   CULT: [
     { id: 'destroy', endingId: 'X-1', title: '摧毁仪式', description: '切断仪式留下的回路，不让它再索取任何名字。', tone: 'resolve' },
-    { id: 'sacrifice', endingId: 'X-2', title: '代替献祭', description: '走进原本属于她的位置，以自己换取循环的终止。', tone: 'rupture' },
+    { id: 'sacrifice', endingId: 'X-2', title: '封存清晨', description: '用自己的余生维持同一个清晨，让循环永远继续。', tone: 'rupture' },
   ],
   PSYCH: [
-    { id: 'wake', endingId: 'P-1', title: '选择醒来', description: '承认眼前世界的裂缝，尝试回到真实的病房。', tone: 'resolve' },
+    { id: 'wake', endingId: 'P-1', title: '接受帮助', description: '回到治疗与调查中，承担已经确认的伤害和责任。', tone: 'resolve' },
     { id: 'sink', endingId: 'P-2', title: '留在梦里', description: '拒绝门外的现实，让这段记忆永远继续播放。', tone: 'rupture' },
   ],
 };
@@ -155,31 +157,9 @@ function numberAt(variables: ConclusionVariables, path: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function arrayLength(value: unknown): number {
-  return Array.isArray(value) ? value.length : 0;
-}
-
 function clampProgress(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
-
-const ROUTE_SUPPORT_FACTS: Record<ConclusionRouteId, string[]> = {
-  A: ['a-sacrifice-list', 'a-lured-inside'],
-  B: ['b-water-tower-blood', 'b-detective-coverup'],
-  C: ['c-player-made-leave-call', 'c-loop-is-reenactment'],
-  NONE: [],
-  FAKE: [],
-};
-
-const SOLUTION_FACTS: Record<ConclusionRouteId | ConclusionOverlayId, string> = {
-  A: 'a-murder-staged-fall',
-  B: 'b-accidental-killing',
-  C: 'c-player-killed-fumi',
-  NONE: 'none-accidental-goodbye',
-  FAKE: 'fake-staged-death-escape',
-  CULT: 'cult-sacrifice-powers-loop',
-  PSYCH: 'psych-investigation-is-episode',
-};
 
 function knowledgeLevel(variables: ConclusionVariables, factId: string): unknown {
   return getVariablePath(variables, `mysteryKnowledge.${factId}`);
@@ -211,23 +191,14 @@ function routeCriteria(route: ConclusionRouteId, variables: ConclusionVariables)
     case 'C':
       return [numericCriterion('self', '对自身记忆的怀疑', self, 50)];
     case 'NONE': {
-      const letters = arrayLength(variables.letterFragments);
-      const progress = numberAt(variables, 'tripProgress');
-      const suspectsBelowThreshold = [oldMan, detectiveA, detectiveB, self].every(value => value < 50);
+      const progress = getVerifiedItineraryProgress((variables.mysteryKnowledge ?? {}) as Record<string, unknown>);
       return [
-        numericCriterion('letters', '拼合信件碎片', letters, 3),
-        numericCriterion('journey', '完成整段旅程', progress, 100),
-        {
-          id: 'no-lock',
-          label: '主要嫌疑均未锁死',
-          valueLabel: suspectsBelowThreshold ? '成立' : '不成立',
-          progress: suspectsBelowThreshold ? 1 : 0,
-          met: suspectsBelowThreshold,
-        },
+        numericCriterion('journey', '核对六处行程材料', progress, 100),
       ];
     }
     case 'FAKE':
-      return [numericCriterion('fake-evidence', '收集生还迹象', arrayLength(variables.fakeEvidence), 3)];
+      return [numericCriterion('departure-preparation', '核实一项离城准备',
+        FAKE_PREPARATION_FACTS.filter(id => hasClue(variables, id)).length, 1)];
   }
 }
 
@@ -293,7 +264,8 @@ function eligibleDeepOverlay(variables: ConclusionVariables): ConclusionOverlayO
   if (
     variables.lockedRoute === 'A'
     && numberAt(variables, 'cycleCount') >= 4
-    && arrayLength(variables.cultClues) >= 3
+    && OVERLAY_EVIDENCE_FACTS.CULT.filter(id => hasClue(variables, id)).length >= 3
+    && knowledgeLevel(variables, SOLUTION_FACTS.A) === 'confirmation'
   ) {
     return {
       id: 'CULT',
@@ -304,8 +276,10 @@ function eligibleDeepOverlay(variables: ConclusionVariables): ConclusionOverlayO
   }
   if (
     variables.lockedRoute === 'C'
+    && numberAt(variables, 'cycleCount') >= 4
     && numberAt(variables, 'sanity') < 20
-    && arrayLength(variables.worldGlitchClues) >= 3
+    && OVERLAY_EVIDENCE_FACTS.PSYCH.filter(id => hasClue(variables, id)).length >= 3
+    && knowledgeLevel(variables, SOLUTION_FACTS.C) === 'confirmation'
   ) {
     return {
       id: 'PSYCH',
@@ -351,18 +325,38 @@ export function getConclusionChoices(variables: ConclusionVariables): Conclusion
 }
 
 export function getConclusionFinalReadiness(variables: ConclusionVariables): ConclusionCriterion {
+  const baseRoute = isConclusionRouteId(variables.lockedRoute) ? variables.lockedRoute : null;
   const effectiveRoute = isConclusionOverlayId(variables.overlay)
     ? variables.overlay
-    : (isConclusionRouteId(variables.lockedRoute) ? variables.lockedRoute : null);
+    : baseRoute;
   const factId = effectiveRoute ? SOLUTION_FACTS[effectiveRoute] : null;
-  const met = Boolean(factId && knowledgeLevel(variables, factId) === 'confirmation');
+  const overlayCompatible = !variables.overlay || (isConclusionOverlayId(variables.overlay)
+    && OVERLAY_BASE_ROUTES[variables.overlay] === baseRoute
+    && OVERLAY_EVIDENCE_FACTS[variables.overlay].filter(id => hasClue(variables, id)).length >= 3);
+  const routeReady = baseRoute && getConclusionRoutes(variables).find(route => route.id === baseRoute)?.available;
+  const causalReady = baseRoute && ROUTE_CAUSAL_FACTS[baseRoute].every(id => hasClue(variables, id));
+  const baseConfirmed = baseRoute && knowledgeLevel(variables, SOLUTION_FACTS[baseRoute]) === 'confirmation';
+  const met = Boolean(numberAt(variables, 'cycleCount') >= 5 && overlayCompatible && routeReady && causalReady
+    && baseConfirmed && factId && knowledgeLevel(variables, factId) === 'confirmation');
   return {
     id: 'solution-confirmed',
-    label: '最终事实已被剧情确认',
+    label: '证据推导完整且最终事实已确认',
     valueLabel: met ? '成立' : '尚未成立',
     progress: met ? 1 : 0,
     met,
   };
+}
+
+function hasClue(variables: ConclusionVariables, factId: string): boolean {
+  return ['clue', 'confirmation'].includes(String(knowledgeLevel(variables, factId)));
+}
+
+/** Built-in endings use this same gate in transaction and legacy dispatch. */
+export function canDispatchStoryEnding(variables: ConclusionVariables, endingId: string): boolean {
+  const builtIn = Object.values(CHOICES).flat().find(choice => choice.endingId === endingId);
+  if (!builtIn) return true;
+  return getConclusionFinalReadiness(variables).met
+    && getConclusionChoices(variables).some(choice => choice.endingId === endingId && choice.id === variables.finalChoice);
 }
 
 export function chooseConclusion(

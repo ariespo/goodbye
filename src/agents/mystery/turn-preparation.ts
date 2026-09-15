@@ -185,6 +185,7 @@ function validateSelectedOpportunityBeforeScene(
   const playerIdentity = readConfirmedPlayerIdentity(input.settings);
   const truthContext: TruthContext = {
     cycleCount,
+    currentTime: input.gameStatus.time.toISOString(),
     currentLocation: currentLocationId,
     lockedRoute: readLockedRoute(input.variables),
     unlockedClueIds: knownClueIds,
@@ -398,6 +399,7 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
   const playerPresentation = buildPlayerKnowledgeBrief({ ...narrativeVariables, location: mysteryLocation });
   const truthContext: TruthContext = {
     cycleCount: Number(narrativeVariables.cycleCount ?? game.endingCheckContext.cycleCount ?? 1),
+    currentTime: resolution?.endTime ?? game.gameStatus.time.toISOString(),
     currentLocation: mysteryLocation,
     lockedRoute: readLockedRoute(narrativeVariables),
     unlockedClueIds: knownClueIds,

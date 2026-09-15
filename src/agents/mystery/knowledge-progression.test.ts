@@ -20,7 +20,7 @@ describe('deriveAuthorizedFactProgress', () => {
     expect(result.worldGlitchClues).toEqual(['psych-doctor-badge']);
   });
 
-  it('derives itinerary progress from authorized milestones and preserves saves', () => {
+  it('preserves old materials while deriving itinerary progress from verified locations', () => {
     const result = deriveAuthorizedFactProgress({
       tripProgress: 75,
       letterFragments: ['legacy-description'],
@@ -32,7 +32,7 @@ describe('deriveAuthorizedFactProgress', () => {
       'none-letter-door-gap': 'clue',
     });
 
-    expect(result.tripProgress).toBe(100);
+    expect(result.tripProgress).toBe(30);
     expect(result.letterFragments).toEqual([
       'legacy-description',
       'none-letter-bedroom',
@@ -41,13 +41,25 @@ describe('deriveAuthorizedFactProgress', () => {
     ]);
   });
 
-  it('does not decrease route progress', () => {
+  it('does not preserve unsupported legacy itinerary completion', () => {
     const result = deriveAuthorizedFactProgress({
       tripProgress: 100,
       fakeEvidence: ['legacy-evidence'],
     }, {});
 
-    expect(result.tripProgress).toBe(100);
+    expect(result.tripProgress).toBe(0);
     expect(result.fakeEvidence).toEqual(['legacy-evidence']);
+  });
+
+  it('requires six location records and an explicit crosscheck before itinerary completion', () => {
+    const sixPlaces = {
+      'shared-school-absence': 'clue', 'shared-water-tower-secret': 'clue',
+      'shared-supermarket-receipt': 'clue', 'shared-detective-tail': 'clue',
+      'shared-senpai-camera': 'clue', 'shared-observation-deck-plan': 'clue',
+    } as const;
+    expect(deriveAuthorizedFactProgress({}, sixPlaces).tripProgress).toBe(90);
+    expect(deriveAuthorizedFactProgress({}, { ...sixPlaces, 'shared-itinerary-crosscheck': 'clue' }).tripProgress).toBe(100);
+    expect(deriveAuthorizedFactProgress({}, { ...sixPlaces, 'shared-water-tower-secret': 'hint',
+      'shared-itinerary-crosscheck': 'confirmation' }).tripProgress).toBe(75);
   });
 });

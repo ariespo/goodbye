@@ -65,8 +65,8 @@ async function configureCycle(mode: 'standard' | 'legacy', cycleCount: number, t
     ...createDefaultVariables(), cycleCount, time: `2024-09-09T${time}`,
     suspicion: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
     loopSuspicionStart: { 'old-man': 50, 'detective-a': 0, 'detective-b': 0, self: 0 },
-    unlockedClues: ['a-sacrifice-list', 'a-lured-inside'],
-    mysteryKnowledge: { 'a-sacrifice-list': 'clue' as const, 'a-lured-inside': 'clue' as const },
+    unlockedClues: ['a-orphanage-contact', 'a-sacrifice-list', 'a-lured-inside'],
+    mysteryKnowledge: { 'a-orphanage-contact': 'clue' as const, 'a-sacrifice-list': 'clue' as const, 'a-lured-inside': 'clue' as const },
   };
   const chat: ChatSession = { id: `day-contract-${mode}-${cycleCount}`, name: 'test', messages: [], variables,
     characterName: '文穗', userName: '玩家', presetId: preset.id, lorebookIds: [], createdAt: 0, updatedAt: 0 };
@@ -208,7 +208,7 @@ describe('narrative day contract at the playable commit boundary', () => {
     expect(state.game.endingPanel.pendingEndingId).toBeNull();
 
     const continuationId = resolved!.continuation!.actionId;
-    draft = '<maintext>场景|home-day\n对话|旁白|calm|你接起电话，警方明确告知文穗已经死亡。</maintext><option>处理眼前的事情\n停下来</option><sum>死讯已经送达。</sum><vars>{}</vars>';
+    draft = '<maintext>场景|home-day\n对话|旁白|calm|你接起电话，警方送来初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。</maintext><option>处理眼前的事情\n停下来</option><sum>初步通报已经送达。</sum><vars>{}</vars>';
     await act(async () => { await result.current.sendMessage('接听电话，处理眼前的固定事件。'); });
     expect(useGameStore.getState().game.history).toHaveLength(2);
     const optionState = useGameStore.getState();
@@ -378,7 +378,7 @@ describe('narrative day contract at the playable commit boundary', () => {
   });
 
   it('delivers pending death news when the accepted playable dialogue explicitly announces Fumi died', async () => {
-    draft = '<maintext>场景|home-day\n对话|旁白|calm|电话里的警员明确告诉你：文穗已经死亡。你握着手机，坐回椅子上。</maintext><option>询问情况\n留在原地</option><sum>收到文穗死亡的消息。</sum><vars>{}</vars>';
+    draft = '<maintext>场景|home-day\n对话|旁白|calm|电话里的警员送来初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。你握着手机，坐回椅子上。</maintext><option>询问情况\n留在原地</option><sum>收到涉及文穗的初步死亡通报。</sum><vars>{}</vars>';
     useGameStore.setState(state => ({
       tavern: { ...state.tavern, variables: { ...state.tavern.variables, deathNews: 'pending', time: '2024-09-09T16:10:00' } },
       game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date(2024, 8, 9, 16, 10) } },
@@ -387,7 +387,7 @@ describe('narrative day contract at the playable commit boundary', () => {
     await act(async () => { await result.current.sendMessage('接听电话'); });
     const state = useGameStore.getState();
     expect(state.game.history).toHaveLength(1);
-    expect(state.game.currentScene?.lines.some(line => line.text.includes('文穗已经死亡'))).toBe(true);
+    expect(state.game.currentScene?.lines.some(line => line.text.includes('初步死亡通报'))).toBe(true);
     expect(state.tavern.variables.deathNews).toBe('delivered');
     unmount();
   });

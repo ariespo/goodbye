@@ -2,6 +2,7 @@ import { ContextBudgetError, estimateTokens, DEFAULT_CONTEXT_TOKENS, DEFAULT_OUT
 import type { ChatMessage, ChatSession, Scene, TurnSnapshot } from '../sillytavern/types';
 import { characterIdFromSpeaker } from '../data/npcPlayerKnowledge';
 import { getLocationById } from '../data/locations';
+import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
 import {
   candidateFingerprint,
   cognitionIsPublicPlayerNamePermission,
@@ -21,6 +22,7 @@ import {
 } from '../data/backgroundHistory';
 
 export const WORLD_MEMORY_VERSION = 2;
+const MYSTERY_FACT_PROPOSITIONS = new Set(MYSTERY_TRUTH_GRAPH.facts.map(fact => `fact:${fact.id}`));
 
 export type CognitionStatus =
   | 'observed'
@@ -473,10 +475,29 @@ export function compileTurnContext(options: {
   reservedOutput?: number;
   fixedPromptText?: string;
 }): TurnContextBundle {
-  const memory = normalizeWorldMemory(options.variables, legacyEpisodesFromMessages(options.history));
+  const normalizedMemory = normalizeWorldMemory(options.variables, legacyEpisodesFromMessages(options.history));
   const currentCycle = Number.isSafeInteger(Number(options.variables.cycleCount))
     ? Math.max(1, Number(options.variables.cycleCount)) : 1;
-  const recentMessageCandidates = options.history.filter(message => message.role !== 'system').slice(-4);
+  const storyProgress = options.variables.storyProgress as { versionStartCycle?: unknown } | undefined;
+  const requestedStart = Number(storyProgress?.versionStartCycle);
+  const versionStart = Number.isSafeInteger(requestedStart) && requestedStart > 1 && requestedStart <= currentCycle ? requestedStart : 1;
+  const inVersion = (cycle: unknown) => versionStart === 1 || (Number.isSafeInteger(Number(cycle)) && Number(cycle) >= versionStart);
+  const eventCycles = new Map(normalizedMemory.events.map(event => [event.eventId, event.cycleCount]));
+  // Archival records remain in the save. Only the current version may supply historical authority.
+  const memory = {
+    ...normalizedMemory,
+    episodes: normalizedMemory.episodes.filter(item => inVersion(item.cycleCount)),
+    disclosures: normalizedMemory.disclosures.filter(item => inVersion(item.cycleCount)),
+    cognition: normalizedMemory.cognition.filter(item => {
+      if (item.observerId === 'player' && MYSTERY_FACT_PROPOSITIONS.has(item.propositionId)) return false; // Canonical case facts come from the version-aware brief; personal beliefs and NPC disclosures retain their own status.
+      if (item.provenance === 'authored-baseline') return true;
+      if (versionStart === 1) return true;
+      if (item.acquiredCycle !== undefined) return inVersion(item.acquiredCycle);
+      return item.sourceEventIds.length > 0 && item.sourceEventIds.every(id => inVersion(eventCycles.get(id)));
+    }),
+  };
+  const recentMessageCandidates = options.history.filter(message => message.role !== 'system'
+    && inVersion(message.variables?.cycleCount)).slice(-4);
   const terms = [...new Set([options.locationId, ...options.activeNpcIds, ...options.userInput.split(/[\s，。！？、]+/u)])]
     .filter(term => term.length > 1);
   const recentEpisodeIds = new Set(memory.episodes.slice(-2).map(item => item.episodeId));

@@ -77,7 +77,8 @@ describe('new-game resource initialization', () => {
     expect(parsedOpening.maintext).toContain('雨声一直响着。');
     expect(parsedOpening.maintext).toContain('先想该从哪里问起。');
     expect(parsedOpening.actionItems).toHaveLength(5);
-    expect(parsedOpening.summary).toBe('开局:暴雨第五天，文穗临时不去学校且暂时联系不上');
+    expect(parsedOpening.summary).toMatch(/文穗账号.*消息.*(?:称|说).*不去学校/);
+    expect(parsedOpening.summary).toContain('暂时联系不上');
     expect(parsedOpening.vars).toMatchObject({ location: 'home', stamina: 100, sanity: 70 });
   });
 
@@ -120,6 +121,22 @@ describe('new-game resource initialization', () => {
       expect.objectContaining({ id: 'opening-unanswered-contact', text: expect.stringContaining('暂时联系不上') }),
     ]));
     expect(JSON.stringify(facts)).not.toMatch(/昨晚失踪|昨夜失踪|从昨晚|从昨夜/);
+  });
+
+  it('stores observed objects and account statements without certifying that Fumi acted that morning', async () => {
+    await startNewGame();
+    const state = useGameStore.getState();
+    const facts = state.tavern.variables.openingPublicContinuity as Array<{ id: string; text: string }>;
+    const factText = (id: string) => facts.find(fact => fact.id === id)?.text ?? '';
+
+    expect(factText('opening-breakfast')).toMatch(/玩家.*(?:看到|看见).*三明治/);
+    expect(factText('opening-breakfast')).not.toMatch(/今早文穗留下|文穗今早/);
+    expect(factText('opening-note')).toMatch(/何时.*(?:尚未核实|不清楚)/);
+    expect(factText('opening-message-0650')).toMatch(/文穗.*账号/);
+    expect(factText('opening-message-0650')).toMatch(/显示.*06:50/);
+    expect(factText('opening-message-0650')).toMatch(/(?:本人.*发送|发送者身份).*尚未核实/);
+    expect(factText('opening-message-0650')).not.toMatch(/今早06:50文穗发来/);
+    expect(factText('opening-touko-visit')).toContain('灯织今早来归还洗好的饭盒');
   });
 
   it('replaces stale parsed options when starting a new game', async () => {

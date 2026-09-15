@@ -109,7 +109,7 @@ const rules: Record<string, LocationKnowledgeRule> = {
   home: {
     stage: () => 'located',
     located: { name: '玩家公寓', shortName: '公寓', signal: 'HOME', description: '你与文穗居住的公寓，也是今天调查开始的地方。' },
-    visited: { name: '玩家公寓', shortName: '公寓', signal: 'HOME', description: '你与文穗居住的公寓。她留下的早餐、房间与药瓶仍有许多疑点。' },
+    visited: { name: '玩家公寓', shortName: '公寓', signal: 'HOME', description: '你与文穗居住的公寓。桌上的早餐、房间与药瓶仍有许多疑点。' },
   },
   school: {
     stage: () => 'located',

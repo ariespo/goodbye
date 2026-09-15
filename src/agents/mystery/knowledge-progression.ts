@@ -1,14 +1,8 @@
 import type { RevealLevel } from './types';
 import type { DynamicRecord } from '../../sillytavern/types';
+import { getVerifiedItineraryProgress } from './itinerary';
 
 const COLLECTED_REVEAL_LEVELS = new Set<RevealLevel>(['clue', 'confirmation']);
-
-const TRIP_MILESTONE_FACT_IDS = [
-  'shared-school-absence',
-  'shared-water-tower-secret',
-  'none-letter-bedroom',
-  'none-letter-water-tower',
-] as const;
 
 function stringSet(value: unknown): Set<string> {
   return new Set(
@@ -53,13 +47,7 @@ export function deriveAuthorizedFactProgress(
     }
   }
 
-  const completedMilestones = TRIP_MILESTONE_FACT_IDS
-    .filter(factId => isCollected(knowledge[factId]))
-    .length;
-  const tripProgress = Math.max(
-    Number.isFinite(Number(variables.tripProgress)) ? Number(variables.tripProgress) : 0,
-    completedMilestones * 25,
-  );
+  const tripProgress = getVerifiedItineraryProgress(knowledge);
 
   return {
     letterFragments: [...letterFragments],

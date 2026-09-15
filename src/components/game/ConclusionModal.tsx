@@ -247,7 +247,7 @@ export function ConclusionModal() {
                 <section className="conclusion-choice-section">
                   <div className="conclusion-section-heading compact">
                     <div><span>03</span><h3>你要怎样结束这次调查</h3></div>
-                    <p>选择会立即进入对应结局。它不是推测，而是你决定采取的行动。</p>
+                    <p>证据确认后，选择你接下来要采取的行动。</p>
                   </div>
                   <div className="conclusion-choice-grid">
                     {choices.map((choice, index) => (
@@ -260,11 +260,11 @@ export function ConclusionModal() {
                       >
                         <span className="conclusion-choice-card__number">0{index + 1}</span>
                         <span className="conclusion-choice-card__copy">
-                          <small>{choice.tone === 'resolve' ? 'FACE THE TRUTH' : 'CROSS THE LINE'}</small>
+                          <small>你的决定</small>
                           <strong>{choice.title}</strong>
                           <p>{choice.description}</p>
                         </span>
-                        <GameIcon name={choice.tone === 'resolve' ? 'success' : 'warning'} size={20} />
+                        <GameIcon name="play" size={20} />
                       </button>
                     ))}
                   </div>

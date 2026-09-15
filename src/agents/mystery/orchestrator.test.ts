@@ -5,6 +5,8 @@ import { clearOrchestrationLog, getOrchestrationLog } from './orchestration-log'
 import type { DirectorPlan, TruthContext } from './types';
 import { createFactAliasTable } from './fact-aliases';
 import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
+import { evaluatePlayerIntent } from '../../engine/player-intent-policy';
+import { createDefaultVariables } from '../../sillytavern/vars-merger';
 
 const truthContext: TruthContext = {
   cycleCount: 2,
@@ -38,6 +40,35 @@ function completeApproved(plan: DirectorPlan = validPlan) {
 }
 
 describe('mystery orchestrator', () => {
+  it.each(['standard', 'strict'] as const)('%s still authorizes new causal evidence after the target reaches the daily suspicion cap', async mode => {
+    const variables = { ...createDefaultVariables(), cycleCount: 5, lockedRoute: 'A',
+      suspicion: { 'old-man': 65 }, loopSuspicionStart: { 'old-man': 50 } };
+    const input = '调查老人内室与窗沿';
+    const causalAlias = factAliases.factIdToAlias['a-window-transfer-match'];
+    const result = await prepareMysteryTurn({ mode,
+      api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null,
+      truthContext: { ...truthContext, cycleCount: 5, currentTime: '2024-09-09T17:00:00',
+        currentLocation: 'old-man-building', lockedRoute: 'A', activeNpcIds: ['old-man'],
+        suspicion: variables.suspicion, playerKnowledge: {
+          'a-orphanage-contact': 'clue', 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue',
+        } },
+      turnContext: { playerInput: input, playerIntentPolicy: evaluatePlayerIntent(input, variables) },
+      presentationContext: { playerInput: input, currentLocation: 'old-man-building' },
+      complete: completeApproved({ ...validPlan, turnGoal: '核对窗沿与衣物比对材料',
+        beats: [
+          { id: 'response', purpose: '回应原调查', description: '老人对玩家的问询作普通回应。',
+            locationId: 'old-man-building', speakerIds: ['old-man'] },
+          { id: 'causal-record', purpose: '核对物证', description: '玩家核对获准的比对材料。',
+            locationId: 'old-man-building', speakerIds: [] },
+        ],
+        revelations: [{ factId: causalAlias, level: 'clue', delivery: 'object' }], assetRequests: [] }),
+    });
+    expect(result.hardReview.approved).toBe(true);
+    expect(result.writerPacket.authorizedFacts).toContainEqual(expect.objectContaining({ id: causalAlias, level: 'clue' }));
+    expect(result.writerPacket.authorizedFacts.find(fact => fact.id === causalAlias)?.text).toContain('窗槽');
+    expect(result.brief.saturationPivot).toBeUndefined();
+  });
+
   it('reviews undeclared narrative facts and preserves public continuity for every repair packet', async () => {
     const plan = { ...validPlan, revelations: [] };
     const continuity = { clock: { localDate: '2024-09-09', localTime: '12:00', cycleCount: 1 },

@@ -94,6 +94,26 @@ describe('opening storyline parse', () => {
     expect(departureMessage).not.toMatch(/请假|老师|学校.{0,8}(?:知道|说过)|电话/);
   });
 
+  it('presents breakfast as an observation and a familiar habit without witnessing morning preparation', () => {
+    const scene = parseOpeningStoryline();
+    const breakfast = scene.lines.find(line => line.text.includes('面包皮'))?.text ?? '';
+
+    expect(breakfast).toMatch(/面包皮.*切掉/);
+    expect(breakfast).toMatch(/想起|记得|习惯/);
+    expect(breakfast).not.toMatch(/她又把面包皮切掉了|今早.*(?:她|文穗).*(?:做|准备|留下)/);
+    expect(scene.investigateItems?.some(item => /文穗留的早餐/.test(item.desc))).toBe(false);
+  });
+
+  it('keeps the displayed message time and reported departure distinct from a witnessed event', () => {
+    const lines = parseOpeningStoryline().lines;
+    const timestamp = lines.find(line => line.text.includes('六点五十'))?.text ?? '';
+    const departureReply = lines.find(line => line.text.includes('你今天跟她联系过吗'))?.text ?? '';
+
+    expect(timestamp).toMatch(/显示.*六点五十/);
+    expect(timestamp).not.toContain('六点五十发的');
+    expect(departureReply).toMatch(/消息.*说.*出门了/);
+  });
+
   it('keeps the returned lunchbox as characterization rather than a case lead', () => {
     const scene = parseOpeningStoryline();
 

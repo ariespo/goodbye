@@ -9,7 +9,7 @@ This file is mandatory project context for development agents working in this re
 - `cycleCount` is the ordinal of the current repeated day, starting at `1`. The number of completed loops is therefore `max(0, cycleCount - 1)`.
 - Never describe one LLM response, one player choice, one scene, or one state transaction as a 轮回.
 
-The detailed, authoritative story contract is [docs/agent-story-contract.md](docs/agent-story-contract.md). If older brainstorming or design documents conflict with it, this contract wins.
+The detailed, authoritative story contract is [docs/agent-story-contract.md](docs/agent-story-contract.md). The current route facts and causal requirements are documented in [docs/story-world-rules.md](docs/story-world-rules.md). If older brainstorming or design documents conflict with them, these contracts win.
 
 ## Confirmed pacing requirements
 
@@ -19,7 +19,8 @@ The detailed, authoritative story contract is [docs/agent-story-contract.md](doc
 - Suspicion persists across loops, but one actor may gain at most 15 points during one complete repeated day. `loopSuspicionStart` is the program-owned 08:00 baseline.
 - Player input is an attempted action, never a world fact or guaranteed outcome. Over-cap repeated investigations must be honored and plausibly diverted; impossible, rule-breaking, invented-character, or deus-ex-machina input is rendered as a non-canonical fantasy and costs 8 sanity.
 - Final accusation and ending eligibility must ultimately be enforced by deterministic program rules, not prompt wording alone.
-- The target repeated-morning reset time is **08:00**. The current engine still contains 07:30 assumptions; treat this as an explicit implementation mismatch, not a new source of truth. Until migrated, runtime agents must obey the actual `gameStatus.time` shown to the player and must not invent a conflicting clock time.
+- The repeated-morning reset time is **08:00**. Runtime agents must obey the actual `gameStatus.time` shown to the player and must not invent a conflicting clock time.
+- Route versions are mutually exclusive; observations disclosed before route selection must be compatible with each version. Suspicion never changes the past. The 16:00 event is a preliminary report, not verified identity, death time, or cause. Overlays must preserve the base route's confirmed acts and responsibility.
 
 ## Agent architecture invariants
 

@@ -62,16 +62,16 @@ describe('priced investigation menu acceptance', () => {
       context: { cycleCount: 1, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [], playerKnowledge: {}, suspicion: {}, activeNpcIds: [], playerPresentation: buildPlayerKnowledgeBrief({ location: 'home' }) },
       progress: { cycleCount: 1, completedIds: [], noProgressByTopic: {} } }).find(item => item.locationId === 'home');
     expect(opportunity).toBeDefined();
-    const text = '衣柜里有一处不自然的空缺。';
+    const text = MYSTERY_TRUTH_GRAPH.facts.find(fact => fact.id === 'shared-apron-missing')!.revelations.clue!;
     vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, complete: async messages =>
       messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性') ? JSON.stringify(approved)
         : JSON.stringify({ turnGoal: '查看衣柜', tone: '克制', beats: [{ id: 'b', purpose: '调查', description: text, locationId: 'home' }],
-          revelations: [{ factId: 'F001', level: 'atmosphere', delivery: 'object' }], assetRequests: [],
+          revelations: [{ factId: 'F001', level: 'clue', delivery: 'object' }], assetRequests: [],
           actionSteps: [{ id: 'q', kind: 'investigation', scope: opportunity!.scope, locationId: 'home' }],
           optionIntents: [{ id: 'rest', intent: '休息', tone: '克制', expectedPressure: 'low' }] }) }));
     vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ ...approved, assertionAudit: {
       reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: text, proposition: text, status: 'supported',
-        citations: [{ sourceId: 'fact:F001:atmosphere', quote: text }], reason: 'authorized scene finding' }],
+        citations: [{ sourceId: 'fact:F001:clue', quote: text }], reason: 'authorized scene finding' }],
     } });
     vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
       callbacks.onToken(`<maintext>场景|home-day\n对话|旁白|calm|${text}</maintext><option>休息\n继续查看</option><sum>检查衣柜。</sum><vars>{}</vars>`);
@@ -102,17 +102,17 @@ describe('priced investigation menu acceptance', () => {
       context: { cycleCount: 1, currentLocation: 'home', lockedRoute: null, unlockedClueIds: [], playerKnowledge: {}, suspicion: {}, activeNpcIds: [], playerPresentation: buildPlayerKnowledgeBrief({ location: 'home' }) },
       progress: { cycleCount: 1, completedIds: [], noProgressByTopic: {} } }).find(item => item.locationId === 'school');
     expect(opportunity).toBeDefined();
-    const finding = '门卫说，今天在校门口见过文穗。';
+    const finding = MYSTERY_TRUTH_GRAPH.facts.find(fact => fact.id === 'shared-school-absence')!.revelations.clue!;
     vi.mocked(prepareMysteryTurn).mockImplementation(options => prepareActual({ ...options, complete: async messages =>
       messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性') ? JSON.stringify(approved)
         : JSON.stringify({ turnGoal: '向门卫核对到校情况', tone: '克制',
           beats: [{ id: 'b', purpose: '调查', description: finding, locationId: 'school', speakerIds: ['school-guard'] }],
-          revelations: [{ factId: 'F002', level: 'atmosphere', delivery: 'dialogue', speakerId: 'school-guard' }], assetRequests: [],
+          revelations: [{ factId: 'F002', level: 'clue', delivery: 'dialogue', speakerId: 'school-guard' }], assetRequests: [],
           actionSteps: [{ id: 'school-check', kind: 'investigation', scope: opportunity!.scope, locationId: 'school' }],
           optionIntents: [{ id: 'rest', intent: '稍作休息', tone: '克制', expectedPressure: 'low' }] }) }));
     vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ ...approved, assertionAudit: {
       reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: finding, proposition: finding, status: 'supported',
-        citations: [{ sourceId: 'fact:F002:atmosphere', quote: finding }], reason: 'authorized school inquiry' }],
+        citations: [{ sourceId: 'fact:F002:clue', quote: finding }], reason: 'authorized school inquiry' }],
     } });
     vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
       callbacks.onToken(`<maintext>场景|school-day\n对话|门卫|calm|${finding}</maintext><option>继续调查\n返回公寓</option><sum>询问门卫。</sum><vars>{}</vars>`);
@@ -132,12 +132,12 @@ describe('priced investigation menu acceptance', () => {
     expect(state.tavern.variables).toMatchObject({
       time: '2024-09-09T09:05:00',
       location: 'school',
-      mysteryKnowledge: { 'shared-school-absence': 'atmosphere' },
+      mysteryKnowledge: { 'shared-school-absence': 'clue' },
     });
     const resolved = vi.mocked(runStateAgent).mock.calls[0][0].resolvedAction!;
     expect(resolved.segments.map(segment => ({ kind: segment.step.kind, planned: segment.plannedMinutes })))
       .toEqual([{ kind: 'travel', planned: 10 }, { kind: 'investigation', planned: 55 }]);
-    expect(resolved.completedSourceIds).toEqual(['fact:F002:atmosphere']);
+    expect(resolved.completedSourceIds).toEqual(['fact:F002:clue']);
     expect(state.tavern.variables.opportunityProgress?.completedIds).toContain(opportunity!.id);
     const assistant = [...state.tavern.chats[0].messages].reverse().find(message => message.role === 'assistant');
     expect(assistant?.acceptedActionOutcome).toMatchObject({
@@ -153,6 +153,7 @@ describe('priced investigation menu acceptance', () => {
   });
 
   it('restores the selected school opportunity identity after interruption and reload', async () => {
+    const finding = MYSTERY_TRUTH_GRAPH.facts.find(fact => fact.id === 'shared-school-absence')!.revelations.clue!;
     useGameStore.setState(state => ({
       tavern: { ...state.tavern, variables: { ...state.tavern.variables, time: '2024-09-09T15:30:00' } },
       game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T15:30:00') } },
@@ -165,19 +166,19 @@ describe('priced investigation menu acceptance', () => {
       if (messages[0].content.includes('事实复核') || messages[0].content.includes('节奏与玩家能动性')) return JSON.stringify(approved);
       plans += 1;
       return JSON.stringify({ turnGoal: '向门卫核对到校情况', tone: '克制',
-        beats: [{ id: 'b', purpose: '调查', description: '门卫说，今天在校门口见过文穗。', locationId: 'school', speakerIds: ['school-guard'] }],
-        revelations: plans === 1 ? [{ factId: 'F002', level: 'atmosphere', delivery: 'dialogue', speakerId: 'school-guard' }] : [], assetRequests: [],
+        beats: [{ id: 'b', purpose: '调查', description: finding, locationId: 'school', speakerIds: ['school-guard'] }],
+        revelations: plans === 1 ? [{ factId: 'F002', level: 'clue', delivery: 'dialogue', speakerId: 'school-guard' }] : [], assetRequests: [],
         ...(plans === 1 ? { actionSteps: [{ id: 'school-check', kind: 'investigation', scope: opportunity.scope, locationId: 'school' }] } : {}),
         optionIntents: [{ id: 'rest', intent: '稍作休息', tone: '克制', expectedPressure: 'low' }] });
     } }));
     vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ ...approved, assertionAudit: {
       reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: '门卫', proposition: '门卫核对到校记录', status: 'supported',
-        citations: [{ sourceId: 'fact:F002:atmosphere', quote: '门卫' }], reason: 'authorized resumed inquiry' }],
+        citations: [{ sourceId: 'fact:F002:clue', quote: '门卫' }], reason: 'authorized resumed inquiry' }],
     } });
     const scenes = [
       '对话|旁白|calm|你赶到学校，并开始向门卫核对记录。\n对话|门卫|calm|我得翻一下今天的记录，你等会儿。',
-      '对话|旁白|calm|警方通过电话明确告知你：文穗已经死亡。',
-      '对话|门卫|calm|门卫说，今天在校门口见过文穗。',
+      '对话|旁白|calm|警方通过电话送来初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。',
+      `对话|门卫|calm|${finding}`,
     ];
     let sceneIndex = 0;
     vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
@@ -226,7 +227,7 @@ describe('priced investigation menu acceptance', () => {
     expect(final).toMatchObject({
       time: '2024-09-09T16:35:00',
       location: 'school',
-      mysteryKnowledge: { 'shared-school-absence': 'atmosphere' },
+      mysteryKnowledge: { 'shared-school-absence': 'clue' },
     });
     expect(final.opportunityProgress?.completedIds).toContain(opportunity.id);
     resumedHook.unmount();
@@ -481,7 +482,7 @@ describe('resolved action at the real hook boundary', () => {
       game: { ...state.game, currentScene: partialScene, sceneComplete: true },
     }));
     vi.mocked(streamChatCompletion).mockImplementationOnce(async (_api, _messages, _preset, callbacks) => {
-      callbacks.onToken('<maintext>场景|street\n对话|旁白|calm|警方通过电话明确告知你：文穗已经死亡。</maintext><option>稍作整理\n继续行动</option><sum>接到警方通知。</sum><vars>{}</vars>');
+      callbacks.onToken('<maintext>场景|street\n对话|旁白|calm|警方通过电话送来初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。</maintext><option>稍作整理\n继续行动</option><sum>接到警方初步通报。</sum><vars>{}</vars>');
       await callbacks.onComplete();
     });
     const { result, unmount } = renderHook(() => useGameLoop());
@@ -1075,7 +1076,7 @@ describe('resolved action at the real hook boundary', () => {
     vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
       scenes += 1;
       callbacks.onToken(prose.replace('你在房间里查看四周。', scenes === 2
-        ? '警方通过电话明确告知你：文穗已经死亡。' : `你检查衣柜的第${scenes}处地方。`));
+        ? '警方通过电话送来初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。' : `你检查衣柜的第${scenes}处地方。`));
       await callbacks.onComplete();
     });
     const { result, unmount } = renderHook(() => useGameLoop());
@@ -1140,7 +1141,7 @@ describe('resolved action at the real hook boundary', () => {
   it.each([false, true])('resumes remaining75minutes after death news (failed save/retry: %s)', async retry => {
     useGameStore.setState(state => ({ tavern: { ...state.tavern, variables: { ...state.tavern.variables, time: '2024-09-09T15:30:00' } },
       game: { ...state.game, gameStatus: { ...state.game.gameStatus, time: new Date('2024-09-09T15:30:00') } } }));
-    const scenes = ['你开始逐一检查房间的角落。', '警方通过电话明确告知你：文穗已经死亡。', '你继续查看房间中剩下的地方。'];
+    const scenes = ['你开始逐一检查房间的角落。', '警方通过电话送来初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。', '你继续查看房间中剩下的地方。'];
     let index = 0;
     vi.mocked(streamChatCompletion).mockImplementation(async (_api, _messages, _preset, callbacks) => {
       callbacks.onToken(prose.replace('你在房间里查看四周。', scenes[index++])); await callbacks.onComplete();

@@ -12,13 +12,18 @@ import { selectSaturationPivot } from './saturation-pivot';
 function context(overrides: Partial<TruthContext> = {}): TruthContext {
   return {
     cycleCount: 1,
+    currentTime: '2024-09-09T16:10:00',
     currentLocation: 'home',
     lockedRoute: null,
     unlockedClueIds: [],
-    playerKnowledge: {},
     suspicion: { self: 10, 'old-man': 0, 'detective-a': 0 },
     activeNpcIds: [],
     ...overrides,
+    playerKnowledge: {
+      ...Object.fromEntries((overrides.unlockedClueIds ?? [])
+        .filter(id => MYSTERY_TRUTH_GRAPH.facts.some(fact => fact.id === id)).map(id => [id, 'clue' as const])),
+      ...overrides.playerKnowledge,
+    },
   };
 }
 
@@ -34,16 +39,17 @@ function plan(revelations: DirectorPlan['revelations']): DirectorPlan {
 }
 
 describe('mystery brief', () => {
-  it('offers one narrow first-day school disclosure without raising the global cap', () => {
+  it('offers a bounded first-day school record while later inquiries wait for day two', () => {
     const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({ currentLocation: 'school', activeNpcIds: ['school-guard'] }));
     const school = brief.usableFacts.find(fact => fact.id === 'shared-school-absence');
-    expect(brief.revealBudget.maxRevealLevel).toBe('atmosphere');
-    expect(school?.revealOptions).toEqual([{ id: 'shared-school-absence', route: 'shared', kind: 'evidence', level: 'atmosphere', text: '门卫说，今天在校门口见过文穗。' }]);
+    expect(brief.revealBudget.maxRevealLevel).toBe('clue');
+    expect(brief.revealBudget.maxNewFacts).toBe(1);
+    expect(school?.revealOptions.find(option => option.level === 'clue')?.text).toContain('不能确认');
     expect(school?.deliveryNpcIds).toContain('school-guard');
     expect(brief.usableFacts.map(fact => fact.id)).not.toContain('shared-male-leave-call');
     expect(brief.usableFacts.map(fact => fact.id)).not.toContain('shared-nurse-school-inquiry');
     const dayTwo = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({ cycleCount: 2, currentLocation: 'school', activeNpcIds: ['school-guard'], playerKnowledge: { 'shared-school-absence': 'atmosphere' } }));
-    expect(dayTwo.usableFacts.find(fact => fact.id === 'shared-school-absence')?.maxRevealLevel).toBe('hint');
+    expect(dayTwo.usableFacts.find(fact => fact.id === 'shared-school-absence')?.maxRevealLevel).toBe('clue');
   });
 
   it('selects an authorized other-character clue for a saturated investigation', () => {
@@ -77,10 +83,10 @@ describe('mystery brief', () => {
     expect(validateTruthGraph(MYSTERY_TRUTH_GRAPH)).toEqual({ valid: true, errors: [] });
   });
 
-  it('only exposes atmospheric information in the first cycle', () => {
+  it('offers a nonexclusive clue while hiding solutions in the first cycle', () => {
     const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context());
-    expect(brief.revealBudget.maxRevealLevel).toBe('atmosphere');
-    expect(brief.usableFacts.find((fact) => fact.id === 'shared-apron-missing')?.maxRevealLevel).toBe('atmosphere');
+    expect(brief.revealBudget.maxRevealLevel).toBe('clue');
+    expect(brief.usableFacts.find((fact) => fact.id === 'shared-apron-missing')?.maxRevealLevel).toBe('clue');
     expect(brief.hiddenFacts.some((fact) => fact.id === 'c-player-killed-fumi')).toBe(true);
   });
 
@@ -101,7 +107,7 @@ describe('mystery brief', () => {
     expect(JSON.stringify(packet.characterPerformances)).not.toContain('轮回知识');
   });
 
-  it('does not give conditional suspects murder knowledge before suspicion locks their reality', () => {
+  it('can supply communication materials while withholding unlocked-version murder knowledge', () => {
     const oldMan = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 5,
       currentLocation: 'old-man-building',
@@ -117,12 +123,12 @@ describe('mystery brief', () => {
       unlockedClueIds: ['b-water-tower-blood'],
       suspicion: { 'detective-a': 49, 'detective-b': 49 },
     }));
-    expect(detectives.usableFacts.some(fact => fact.id === 'b-detective-coverup')).toBe(false);
-    expect(detectives.npcKnowledge.flatMap(npc => npc.facts).some(fact => fact.factId === 'b-detective-coverup')).toBe(false);
+    expect(detectives.usableFacts.some(fact => fact.id === 'b-detective-coverup')).toBe(true);
+    expect(detectives.npcKnowledge.flatMap(npc => npc.facts).some(fact => fact.factId === 'b-detective-coverup')).toBe(true);
     expect(detectives.npcKnowledge.flatMap(npc => npc.facts).some(fact => fact.factId === 'b-accidental-killing')).toBe(false);
   });
 
-  it('adds only the suspicion-stage hidden prompts at their matching 26 threshold', () => {
+  it('offers the same obtainable material on either side of a suspicion threshold', () => {
     const oldManBefore = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 3,
       currentLocation: 'old-man-building',
@@ -135,7 +141,7 @@ describe('mystery brief', () => {
       activeNpcIds: ['old-man'],
       suspicion: { 'old-man': 26 },
     }));
-    expect(oldManBefore.npcKnowledge[0].facts.some(fact => fact.factId === 'a-sacrifice-list')).toBe(false);
+    expect(oldManBefore.npcKnowledge[0].facts.some(fact => fact.factId === 'a-sacrifice-list')).toBe(true);
     expect(oldManAfter.npcKnowledge[0].facts.some(fact => fact.factId === 'a-sacrifice-list')).toBe(true);
 
     const zhaoBefore = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
@@ -150,27 +156,27 @@ describe('mystery brief', () => {
       activeNpcIds: ['detective-a'],
       suspicion: { 'detective-a': 26 },
     }));
-    expect(zhaoBefore.npcKnowledge[0].facts.some(fact => fact.factId === 'b-water-tower-blood')).toBe(false);
+    expect(zhaoBefore.npcKnowledge[0].facts.some(fact => fact.factId === 'b-water-tower-blood')).toBe(true);
     expect(zhaoAfter.npcKnowledge[0].facts.some(fact => fact.factId === 'b-water-tower-blood')).toBe(true);
   });
 
-  it('adds detective hidden reality at suspicion 50 and reserves confirmation for route B lock', () => {
+  it('reserves detective solution facts for a locked version with a complete evidence chain', () => {
     const beforeLock = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 5,
       currentLocation: 'detective-inn',
       activeNpcIds: ['detective-a', 'detective-b'],
-      unlockedClueIds: ['b-water-tower-blood', 'b-detective-coverup'],
+      unlockedClueIds: ['shared-detective-tail', 'b-commission-message', 'b-water-tower-blood', 'b-detective-coverup', 'b-contact-injury-match'],
       suspicion: { 'detective-a': 49, 'detective-b': 50 },
     }));
     expect(beforeLock.usableFacts.find(fact => fact.id === 'b-detective-coverup')?.maxRevealLevel).toBe('clue');
-    expect(beforeLock.usableFacts.find(fact => fact.id === 'b-accidental-killing')?.maxRevealLevel).toBe('clue');
+    expect(beforeLock.usableFacts.some(fact => fact.id === 'b-accidental-killing')).toBe(false);
 
     const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 5,
       currentLocation: 'detective-inn',
       lockedRoute: 'B',
       activeNpcIds: ['detective-a', 'detective-b'],
-      unlockedClueIds: ['b-water-tower-blood', 'b-detective-coverup'],
+      unlockedClueIds: ['shared-detective-tail', 'b-commission-message', 'b-water-tower-blood', 'b-detective-coverup', 'b-contact-injury-match'],
       suspicion: { 'detective-a': 49, 'detective-b': 50 },
     }));
     expect(brief.usableFacts.some(fact => fact.id === 'b-detective-coverup')).toBe(true);
@@ -184,25 +190,23 @@ describe('mystery brief', () => {
     }
   });
 
-  it('gives the old man hidden reality at suspicion 50 and full confirmation only after route A lock', () => {
+  it('withholds the old man solution until a version is selected and its chain complete', () => {
     const beforeLock = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 5,
       currentLocation: 'old-man-building',
       activeNpcIds: ['old-man'],
-      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside'],
+      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside', 'a-orphanage-contact', 'a-window-transfer-match'],
       suspicion: { 'old-man': 50 },
     }));
-    expect(beforeLock.usableFacts.find(fact => fact.id === 'a-murder-staged-fall')?.maxRevealLevel).toBe('clue');
-    expect(beforeLock.npcKnowledge[0].facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ factId: 'a-murder-staged-fall' }),
-    ]));
+    expect(beforeLock.usableFacts.some(fact => fact.id === 'a-murder-staged-fall')).toBe(false);
+    expect(beforeLock.npcKnowledge[0].facts.some(fact => fact.factId === 'a-murder-staged-fall')).toBe(false);
 
     const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 5,
       currentLocation: 'old-man-building',
       lockedRoute: 'A',
       activeNpcIds: ['old-man'],
-      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside'],
+      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside', 'a-orphanage-contact', 'a-window-transfer-match'],
       suspicion: { 'old-man': 50 },
     }));
     expect(brief.npcKnowledge[0].facts).toEqual(expect.arrayContaining([
@@ -216,7 +220,7 @@ describe('mystery brief', () => {
       cycleCount: 5,
       currentLocation: 'old-man-building',
       lockedRoute: 'A',
-      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside'],
+      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside', 'a-orphanage-contact', 'a-window-transfer-match'],
       suspicion: { 'old-man': 60 },
     }));
     expect(brief.usableFacts.some((fact) => fact.id === 'a-murder-staged-fall')).toBe(true);
@@ -224,7 +228,10 @@ describe('mystery brief', () => {
   });
 
   it('treats NONE as a controlled route with a gated solution', () => {
-    const fragments = ['none-letter-bedroom', 'none-letter-water-tower', 'none-letter-door-gap'];
+    const fragments = ['none-letter-bedroom', 'none-letter-water-tower', 'none-letter-door-gap',
+      'none-railing-maintenance', 'none-unassisted-fall-record', 'shared-itinerary-crosscheck',
+      'shared-school-absence', 'shared-water-tower-secret', 'shared-supermarket-receipt',
+      'shared-detective-tail', 'shared-senpai-camera', 'shared-observation-deck-plan'];
     const beforeLock = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 5,
       currentLocation: 'water-tower',
@@ -246,8 +253,9 @@ describe('mystery brief', () => {
       .toBe(false);
   });
 
-  it('treats FAKE as a controlled route after three independent evidence facts', () => {
-    const evidence = ['fake-body-mismatch', 'fake-alias-ticket', 'fake-postdeath-sighting'];
+  it('treats FAKE as a controlled route after misidentification and survival are independently verified', () => {
+    const evidence = ['fake-body-mismatch', 'fake-alias-ticket', 'fake-postdeath-sighting',
+      'fake-misidentification-chain', 'fake-verified-survival'];
     const brief = buildMysteryBrief(MYSTERY_TRUTH_GRAPH, context({
       cycleCount: 5,
       currentLocation: 'observation-deck',
@@ -276,7 +284,8 @@ describe('mystery brief', () => {
       currentLocation: 'old-man-building',
       lockedRoute: 'A',
       activeOverlay: 'CULT',
-      unlockedClueIds: cultClues,
+      unlockedClueIds: [...cultClues, 'a-orphanage-contact', 'a-sacrifice-list', 'a-lured-inside', 'a-window-transfer-match'],
+      playerKnowledge: { 'a-murder-staged-fall': 'confirmation' },
       suspicion: { 'old-man': 50 },
     }));
     expect(afterOverlay.usableFacts.find(fact => fact.id === 'cult-sacrifice-powers-loop')?.maxRevealLevel)
@@ -292,7 +301,8 @@ describe('mystery brief', () => {
       lockedRoute: 'C',
       activeOverlay: 'PSYCH',
       sanity: 15,
-      unlockedClueIds: glitchClues,
+      unlockedClueIds: [...glitchClues, 'shared-male-leave-call', 'c-player-made-leave-call', 'c-night-gap-record', 'c-domestic-injury-match'],
+      playerKnowledge: { 'c-player-killed-fumi': 'confirmation' },
       suspicion: { self: 50 },
     }));
     expect(brief.usableFacts.find(fact => fact.id === 'psych-investigation-is-episode')?.maxRevealLevel)
@@ -428,7 +438,7 @@ describe('director fact review', () => {
       currentLocation: 'old-man-building',
       lockedRoute: 'A',
       activeNpcIds: ['old-man'],
-      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside'],
+      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside', 'a-orphanage-contact', 'a-window-transfer-match'],
       suspicion: { 'old-man': 50 },
       playerKnowledge: { 'a-murder-staged-fall': 'confirmation' },
     }));
@@ -446,11 +456,11 @@ describe('director fact review', () => {
       currentLocation: 'old-man-building',
       lockedRoute: 'A',
       activeNpcIds: ['old-man'],
-      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside'],
+      unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside', 'a-orphanage-contact', 'a-window-transfer-match'],
       suspicion: { 'old-man': 50 },
       playerKnowledge: { 'a-murder-staged-fall': 'clue' },
     }));
-    expect(reviewDirectorPlan(sameTurnReveal, eligibleSameTurn).approved).toBe(true);
+    expect(reviewDirectorPlan(sameTurnReveal, eligibleSameTurn).violations).toEqual([]);
   });
 
   it('distinguishes an explicit denial from a confession-by-silence for lies-about characters', () => {
@@ -460,7 +470,7 @@ describe('director fact review', () => {
       lockedRoute: 'B',
       activeNpcIds: ['detective-a'],
       suspicion: { 'old-man': 0, 'detective-a': 50, 'detective-b': 42, self: 0 },
-      unlockedClueIds: ['b-water-tower-blood', 'b-detective-coverup'],
+      unlockedClueIds: ['shared-detective-tail', 'b-commission-message', 'b-water-tower-blood', 'b-detective-coverup', 'b-contact-injury-match'],
       playerKnowledge: {
         'b-water-tower-blood': 'clue',
         'b-detective-coverup': 'clue',

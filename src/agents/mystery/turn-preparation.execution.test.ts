@@ -113,9 +113,9 @@ describe('execution context projection', () => {
 
   it('keeps the legal source map private while projecting only public opportunity fields', () => {
     const prepared = buildTurnPreparation(fixture());
-    const id = 'investigation:c1:F001:atmosphere:home';
+    const id = 'investigation:c1:F001:clue:home';
 
-    expect(prepared.request.legalOpportunityMap?.[id]?.sourceIds).toEqual(['fact:F001:atmosphere']);
+    expect(prepared.request.legalOpportunityMap?.[id]?.sourceIds).toEqual(['fact:F001:clue']);
     expect(prepared.request.turnContext.publicOpportunities).toEqual(expect.arrayContaining([
       expect.objectContaining({ id, locationId: 'home', publicGoal: '检查文穗留下的衣物和随身物品' }),
     ]));
@@ -126,7 +126,7 @@ describe('execution context projection', () => {
 
   it('revalidates an exhausted same-cycle opportunity by exact id but rejects an unknown id', () => {
     const input = fixture();
-    const id = 'investigation:c1:F001:atmosphere:home';
+    const id = 'investigation:c1:F001:clue:home';
     input.variables.opportunityProgress = {
       cycleCount: 1,
       completedIds: [id],
@@ -148,7 +148,7 @@ describe('execution context projection', () => {
     input.originalActionInput = '向门卫确认文穗今天是否到校';
     input.hasPendingAction = true;
     input.actionSelection = {
-      opportunityId: 'investigation:c1:F002:atmosphere:school',
+      opportunityId: 'investigation:c1:F002:clue:school',
       kind: 'investigation',
       scope: 'normal',
       locationId: 'school',
@@ -157,7 +157,7 @@ describe('execution context projection', () => {
     const prepared = buildTurnPreparation(input);
 
     expect(prepared.request.actionAuthority?.selectedOpportunity?.sourceIds)
-      .toEqual(['fact:F002:atmosphere']);
+      .toEqual(['fact:F002:clue']);
     expect(prepared.request.truthContext).toMatchObject({
       currentLocation: 'school',
       sceneContract: {
@@ -174,11 +174,15 @@ describe('execution context projection', () => {
     input.originalActionInput = '前往玩家公寓';
     input.hasPendingAction = true;
     input.variables.location = 'school';
+    input.variables.mysteryKnowledge = {
+      'shared-apron-missing': 'clue', 'shared-school-absence': 'clue', 'red-herring-part-time-job': 'hint',
+    };
     input.variables.opportunityProgress = {
       cycleCount: 1,
       completedIds: [
-        'investigation:c1:F001:atmosphere:home',
-        'investigation:c1:F002:atmosphere:school',
+        'investigation:c1:F001:clue:home',
+        'investigation:c1:F002:clue:school',
+        'investigation:c1:F007:hint:supermarket',
       ],
       noProgressByTopic: {},
       settledResolutionIds: ['prior-school-inquiry'],
@@ -261,7 +265,7 @@ describe('execution context projection', () => {
         steps: [
           { id: '__travel__:0:home:school:work%3A0', kind: 'travel', scope: 'normal', locationId: 'school', completionSourceIds: [] },
           { id: 'work:0', kind: 'investigation', scope: 'normal', locationId: 'school',
-            opportunityId: 'investigation:c1:F002:atmosphere:school', completionSourceIds: [] },
+            opportunityId: 'investigation:c1:F002:clue:school', completionSourceIds: [] },
         ],
         previousResolutionId: 'first', stepsDigest: 'steps-original', resumableFromTime: '2024-09-09T16:00:00',
         expectedLocationId: 'home', activeStepId: '__travel__:0:home:school:work%3A0',
@@ -270,9 +274,9 @@ describe('execution context projection', () => {
       },
       sceneContext: { ...pending, actionId: 'school-investigation' },
       selectedOpportunity: {
-        id: 'investigation:c1:F002:atmosphere:school', locationId: 'school',
+        id: 'investigation:c1:F002:clue:school', locationId: 'school',
         publicGoal: '向门卫确认文穗今天是否到校', scope: 'normal',
-        sourceIds: ['fact:F002:atmosphere'], topicKey: 'school:attendance',
+        sourceIds: ['fact:F002:clue'], topicKey: 'school:attendance',
       },
     };
 
@@ -284,7 +288,7 @@ describe('execution context projection', () => {
     expect(prepared.request.pendingActionSceneContext?.contextsByLocation.school.forbiddenNpcIds)
       .toEqual(['liu-renguang']);
     expect(prepared.request.actionAuthority?.selectedOpportunity?.id)
-      .toBe('investigation:c1:F002:atmosphere:school');
+      .toBe('investigation:c1:F002:clue:school');
   });
 
   it('keeps the street presentation for an intervening zero-time event during partial travel', () => {

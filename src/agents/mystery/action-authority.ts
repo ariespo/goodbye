@@ -5,7 +5,7 @@ import { splitPlayerActionClauses, type ActionNarrativeContext } from '../../eng
 import type { ActionContinuation, ActionScope, ActionStep, ResolveActionInput, ResolvedActionOutcome } from '../../engine/action-resolution';
 import type { DirectorActionStepProposal, DirectorPlan, FactReview, WriterPacket } from './types';
 import type { InvestigationOpportunity } from '../../engine/investigation-opportunities';
-import type { QuietWaitDecision } from '../../engine/scheduled-events';
+import { PRELIMINARY_DEATH_NEWS, type QuietWaitDecision } from '../../engine/scheduled-events';
 import type { ProgramChecklistAction } from './scene-list';
 
 /** Constructed by the game, never by a model response. Kept out of model prompts. */
@@ -388,7 +388,7 @@ function cloneScenePlan(scenePlan: DirectorPlan['scenePlan']): DirectorPlan['sce
 
 function executedSegmentDescription(segment: ResolvedActionOutcome['segments'][number]): string {
   if (segment.step.eventId === 'death-news') {
-    return '警方明确告知玩家文穗已经死亡；消息通过正式电话送达。电话没有说明死因、凶手或案发经过。';
+    return PRELIMINARY_DEATH_NEWS;
   }
   if (segment.step.kind === 'travel') {
     return segment.completed
@@ -492,7 +492,7 @@ export function buildActionOutcomeSources(resolution: ResolvedActionOutcome, ret
       ? `在${resolution.interruption.at}，玩家限定的时间已经用完，因此暂停行动；这不表示发生了新的世界事件。`
       : `在${resolution.interruption.at}，到达了程序确定的时间边界，行动在此暂停。` });
   if (resolution.segments.some(segment => segment.completed && segment.step.eventId === 'death-news')) {
-    sources.push({ id: `death-news:${resolution.cycleCount}`, text: '警方明确告知玩家文穗已经死亡；消息通过正式电话送达。电话没有说明死因、凶手或案发经过。' });
+    sources.push({ id: `death-news:${resolution.cycleCount}`, text: PRELIMINARY_DEATH_NEWS });
   }
   return sources;
 }

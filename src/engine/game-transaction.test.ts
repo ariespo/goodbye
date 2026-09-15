@@ -69,7 +69,7 @@ describe('settleGameTransaction', () => {
       gameStatus: status({ time: new Date('2024-09-09T16:10:00') }),
       costs: { timeMinutes: 10 },
       deliverPendingDeathNews: true,
-      narrativeText: '警方告知：文穗已经死亡。请保持电话畅通。',
+      narrativeText: '警方来电送达初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。请保持电话畅通。',
     });
 
     expect(result.variables.deathNews).toBe('delivered');

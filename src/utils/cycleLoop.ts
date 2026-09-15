@@ -2,11 +2,13 @@ import { maintextToScene } from '../engine/scene-parser';
 import { invalidatePreplans } from '../agents/mystery';
 import type { ChatMessage, DynamicRecord } from '../sillytavern/types';
 import { persistActiveChat } from './chatPersistence';
-import { variablesToEndingContext } from '../sillytavern/vars-merger';
+import { isRecord, variablesToEndingContext } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
 import { createDefaultGameStatus } from './gameSession';
 import { resolveSceneEnvironment } from './sceneEnvironment';
 import { settleCycleVariables } from '../engine/cycle-settlement';
+import { acceptedCycleConsequence, buildCycleKeyScene, cycleProse, presentedCycleBeatIds } from '../engine/cycle-key-scenes';
+import { buildTurnCommit } from '../memory/world-memory';
 
 export { settleCycleVariables } from '../engine/cycle-settlement';
 
@@ -54,67 +56,106 @@ export function buildCycleOpeningMaintext(
   reason: CycleResetReason,
   context: CycleTransitionContext = {},
 ): string {
-  const choice = context.lastPlayerChoice?.trim().slice(0, 100);
-  const summary = context.lastTurnSummary?.trim().slice(0, 120);
-  const consequenceBridge = choice
-    ? `对话|旁白|tense|你确实尝试了“${choice}”。这次行动的后果留在了这一天里，却没能阻止时间走到尽头。\n`
-    : '';
+  const summary = context.lastTurnSummary ? cycleProse(context.lastTurnSummary) : undefined;
   const memoryBridge = summary
     ? `\n对话|旁白|calm|重置前最后发生的事仍留在你的记忆里：${summary}`
     : '';
-  return `${consequenceBridge}场景|black
+  return `场景|black
 效果|loop-transition
 音乐|silence
 对话|旁白|calm|${REASON_LINES[reason]}
 场景|bedroom1-day
 对话|旁白|calm|9月9日，早上8:00。闹钟响了。暴雨的第五天——和之前的每一次一模一样。
-对话|旁白|calm|被子的另一半叠得整整齐齐。桌上会有还温着的早餐，和一张纸条。你已经知道上面写着什么。
-对话|旁白|calm|这是第 ${cycleCount} 次。你记得的一切都还在。但这个世界不记得。${memoryBridge}
+对话|旁白|calm|被子的另一半叠得整整齐齐。你看着熟悉的桌沿，试着把记得的事与眼前的事分开。
+对话|旁白|calm|这是第 ${cycleCount} 次。你记得之前经历的一天，窗外的雨声又落在同一个早晨。${memoryBridge}
 对话|旁白|calm|昨天约好的人、等候的位置和正在执行的计划都已被重置作废。你必须依据保留下来的记忆，重新决定今天怎么做。`;
 }
 
-function transitionContextFromMessages(messages: ChatMessage[]): CycleTransitionContext {
-  const user = [...messages].reverse().find(message => message.role === 'user');
-  const assistant = [...messages].reverse().find(message => message.role === 'assistant');
-  const summary = assistant?.content.match(/<sum>([\s\S]*?)<\/sum>/i)?.[1];
-  return { lastPlayerChoice: user?.content, lastTurnSummary: summary };
-}
+const pendingCycleStarts = new Map<string, Promise<void>>();
 
 /**
  * 进入下一轮: 注入轮回过场与开局消息，重置运行时状态。
  * variables 必须是已结算(settleCycleVariables)后的变量。
  */
-export async function startNextCycle(opts: {
+export function startNextCycle(opts: {
   variables: DynamicRecord;
   reason: CycleResetReason;
 }): Promise<void> {
+  const chatId = useGameStore.getState().tavern.activeChatId;
+  const key = `${chatId ?? 'no-chat'}:cycle:${Number(opts.variables.cycleCount ?? 1)}`;
+  const pending = pendingCycleStarts.get(key);
+  if (pending) return pending;
+  const task = commitNextCycle(opts).finally(() => { pendingCycleStarts.delete(key); });
+  pendingCycleStarts.set(key, task);
+  return task;
+}
+
+async function commitNextCycle(opts: { variables: DynamicRecord; reason: CycleResetReason }): Promise<void> {
   const state = useGameStore.getState();
   const { actions } = state;
-  const variables = opts.variables;
-  const cycleCount = Number(variables.cycleCount ?? 1);
+  let variables = opts.variables;
+  const cycleCount = Number(opts.variables.cycleCount ?? 1);
+  const activeChat = state.tavern.chats.find(c => c.id === state.tavern.activeChatId);
+  const messageId = `cycle-opening:${activeChat?.id ?? 'no-chat'}:${cycleCount}`;
+  const existing = activeChat?.messages.find(message => message.id === messageId);
+  if (existing && Number(state.tavern.variables.cycleCount) >= cycleCount) return;
+  if (Number(state.tavern.variables.cycleCount) > cycleCount) return;
 
   // 轮回重置后世界状态归零，作废阅读期预跑的编排结果
   invalidatePreplans();
 
-  const activeChat = state.tavern.chats.find(c => c.id === state.tavern.activeChatId);
-  const maintext = buildCycleOpeningMaintext(
+  const keyScene = buildCycleKeyScene({ nextVariables: variables, previousVariables: state.tavern.variables, messages: activeChat?.messages ?? [] });
+  const startsNewVersion = variables.storyProgress?.versionStartCycle === cycleCount;
+  const opening = buildCycleOpeningMaintext(
     cycleCount,
     opts.reason,
-    activeChat ? transitionContextFromMessages(activeChat.messages) : {},
+    cycleCount === 4 || startsNewVersion ? {} : { lastTurnSummary: acceptedCycleConsequence(state.tavern.variables, activeChat?.messages ?? []) },
   );
+  const maintext = existing?.content.match(/<maintext>([\s\S]*?)<\/maintext>/i)?.[1]?.trim()
+    ?? `${opening}${keyScene.maintext ? `\n${keyScene.maintext}` : ''}`;
+  const scene = maintextToScene(maintext);
+  if (existing) variables = existing.variables;
+  else {
+    const mysteryKnowledge = { ...(isRecord(variables.mysteryKnowledge) ? variables.mysteryKnowledge : {}) };
+    for (const id of keyScene.grantedFactIds) {
+      if (mysteryKnowledge[id] !== 'confirmation') mysteryKnowledge[id] = 'clue';
+    }
+    variables = { ...variables, mysteryKnowledge,
+      unlockedClues: [...new Set([...(Array.isArray(variables.unlockedClues) ? variables.unlockedClues : []), ...keyScene.grantedFactIds])],
+      storyProgress: { ...variables.storyProgress, presentedBeatIds: [
+        ...presentedCycleBeatIds(variables), ...(keyScene.beatId ? [keyScene.beatId] : []),
+      ], ...(keyScene.beatId ? { recalledSourcesByBeat: {
+        ...variables.storyProgress?.recalledSourcesByBeat, [keyScene.beatId]: keyScene.recalledSources,
+      } } : {}) },
+    };
+    if (keyScene.grantedFactIds.length) {
+      const commit = buildTurnCommit({ turnId: messageId, turnIndex: activeChat?.messages.length ?? 0,
+        createdAt: Date.now(), occurredAt: '2024-09-09T08:00:00', locationId: 'home', cycleCount,
+        summary: '玩家读到文穗事前留下的自主边界便条；便条不能核实当前身份、存活或实际行程。',
+        scene, beforeVariables: opts.variables, settledVariables: variables });
+      commit.worldMemory.events = commit.worldMemory.events.map(event => event.turnId === messageId ? { ...event, kind: 'fact' } : event);
+      variables = { ...variables, worldMemory: commit.worldMemory };
+    }
+  }
   const assistantMsg: ChatMessage = {
-    id: crypto.randomUUID(),
+    id: messageId,
     role: 'assistant',
     content: `<maintext>\n${maintext}\n</maintext>\n<sum>第${cycleCount}轮开始:回到9月9日早上8:00，线索与记忆保留，当日状态重置，旧计划失效</sum>\n<vars>{}</vars>`,
     timestamp: Date.now(),
     variables,
   };
 
-  if (activeChat) {
-    await persistActiveChat({ messages: [...activeChat.messages, assistantMsg], variables });
-  }
-
-  const scene = maintextToScene(maintext);
+  const controller = new AbortController();
+  const stillCurrent = () => useGameStore.getState().tavern.activeChatId === state.tavern.activeChatId
+    && useGameStore.getState().tavern.variables === state.tavern.variables;
+  const unsubscribe = useGameStore.subscribe(() => { if (!stillCurrent()) controller.abort(); });
+  const guard = { signal: controller.signal, assertCurrent: () => {
+    if (controller.signal.aborted || !stillCurrent()) throw new DOMException('轮回保存期间已切换会话或状态', 'AbortError');
+  } };
+  try {
+    if (activeChat && !existing) await persistActiveChat({ messages: [...activeChat.messages, assistantMsg], variables }, guard);
+    guard.assertCurrent();
+  } finally { unsubscribe(); }
   const first = scene.lines[0];
 
   useGameStore.setState(s => ({

@@ -83,8 +83,8 @@ export function ensureSaturationPivotOrder(plan: DirectorPlan, brief: MysteryBri
       id: 'saturation-original-action',
       purpose: `先完整响应玩家对 ${pivot.blockedActorId} 的原调查`,
       description: pivot.blockedActorId === 'self'
-        ? '玩家先按原意复核自己的记忆与行动；本段只落实调查行为，不获得新事实，也不增加原目标嫌疑。'
-        : `玩家先按原意联系并调查 ${pivot.blockedActorId}；该角色只按公开身份和本回合获准知识作普通回应，不提供新事实，也不增加原目标嫌疑。`,
+        ? '玩家先按原意复核自己的记忆与行动；材料与结果服从本回合事实授权，不增加原目标嫌疑。'
+        : `玩家先按原意联系并调查 ${pivot.blockedActorId}；该角色按公开身份和本回合获准知识回应，材料与结果服从事实授权，不增加原目标嫌疑。`,
       locationId: pivot.currentLocationId,
       speakerIds: pivot.blockedActorId === 'self' ? [] : [pivot.blockedActorId],
     }, ...plan.beats],
@@ -431,9 +431,9 @@ export function reviewDirectorPlan(
     const pivot = brief.saturationPivot;
     const revelation = plan.revelations.find(item => item.factId === pivot.factId);
     if (!revelation) {
-      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `目标嫌疑已达当日上限；必须让 ${pivot.interveningNpcId} 介入并揭示 ${pivot.factId}，把新压力转向 ${pivot.redirectedActorId}。` });
+      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `指定剧情转场必须让 ${pivot.interveningNpcId} 介入并揭示 ${pivot.factId}，把新压力转向 ${pivot.redirectedActorId}。` });
     } else if (revelation.delivery !== 'dialogue' || revelation.speakerId !== pivot.interveningNpcId) {
-      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `调查饱和转场的 ${pivot.factId} 必须由 ${pivot.interveningNpcId} 以 dialogue 揭示。` });
+      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `指定剧情转场的 ${pivot.factId} 必须由 ${pivot.interveningNpcId} 以 dialogue 揭示。` });
     }
     const interventionIndex = (plan.beats ?? []).findIndex(beat => beat.speakerIds?.includes(pivot.interveningNpcId));
     const originalInvestigationIndex = (plan.beats ?? []).findIndex(beat => {
@@ -447,7 +447,7 @@ export function reviewDirectorPlan(
     }
     const misplacedBeat = (plan.beats ?? []).find(beat => beat.locationId && beat.locationId !== pivot.currentLocationId);
     if (misplacedBeat) {
-      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `调查饱和转场必须发生在当前场景 ${pivot.currentLocationId}，不得擅自切换到 ${misplacedBeat.locationId}。` });
+      violations.push({ code: 'saturation-pivot-violation', factId: pivot.factId, message: `指定剧情转场必须发生在当前场景 ${pivot.currentLocationId}，不得擅自切换到 ${misplacedBeat.locationId}。` });
     }
   }
 
@@ -582,7 +582,7 @@ export function reviewDirectorPlan(
   );
   const oldManKillerPreviouslyConfirmed = brief.playerKnownFacts.some(fact =>
     fact.level === 'confirmation'
-      && (fact.id === 'a-murder-staged-fall' || /周德明.*推下.*文穗|周德明.*伪装成.*坠亡/.test(fact.text)),
+      && fact.route === 'A' && fact.kind === 'solution',
   );
   const oldManInsaneIndex = beatText.findIndex(text =>
     /old-man|周德明|周大爷|老头/.test(text) && /insane|疯狂|疯癫|癫狂|狂笑/.test(text),
@@ -590,9 +590,8 @@ export function reviewDirectorPlan(
   const schedulesOldManConfirmation = plan.revelations.some(revelation => {
     if (revelation.level !== 'confirmation') return false;
     const fact = brief.usableFacts.find(candidate => candidate.id === revelation.factId);
-    return fact?.revealOptions.some(option =>
-      option.level === 'confirmation' && /周德明.*推下.*文穗|周德明.*伪装成.*坠亡/.test(option.text),
-    );
+    return fact?.route === 'A' && fact.kind === 'solution'
+      && fact.revealOptions.some(option => option.level === 'confirmation');
   });
   const confirmationBeatBeforeInsane = beatText
     .slice(0, Math.max(0, oldManInsaneIndex))
@@ -672,11 +671,6 @@ export function buildWriterPacket(
     speakerIds: [...speakerIds],
   }));
   const forbiddenKnownSpeakers = new Set(sceneContracts(brief).flatMap(contract => contract.forbiddenNpcIds));
-  if (brief.saturationPivot) forbiddenKnownSpeakers.add(brief.saturationPivot.blockedActorId);
-  const intentPolicy = turnContext?.playerIntentPolicy as { mode?: string; targetedActorId?: string | null } | undefined;
-  if (intentPolicy?.mode === 'divert' && intentPolicy.targetedActorId) {
-    forbiddenKnownSpeakers.add(intentPolicy.targetedActorId);
-  }
   const knownFactSpeakers = brief.playerKnownFacts.flatMap(known => {
     const usable = brief.usableFacts.find(fact => fact.id === known.id);
     // Old player memory is not a new NPC permission: require the exact currently gated projection.

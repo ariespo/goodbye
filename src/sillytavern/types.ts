@@ -21,6 +21,11 @@ export interface DynamicRecord extends Record<string, unknown> {
   routesLockedEver?: string[];
   organizedClues?: OrganizedClue[];
   knowledgeEvents?: string[];
+  storyProgress?: {
+    versionStartCycle?: number;
+    presentedBeatIds: string[];
+    recalledSourcesByBeat?: Record<string, Array<{ factId: string; level: import('../agents/mystery/types').RevealLevel }>>;
+  };
   loopSuspicionStart?: Record<string, number>;
   actionContinuity?: {
     cycleCount: number;

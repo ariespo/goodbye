@@ -413,6 +413,7 @@ async function runMysteryPipeline(
     mode?: string;
     targetedActorId?: string | null;
   } | undefined;
+  // Explicit story obstacles may request this legacy pivot; suspicion caps never do.
   if (intentPolicy?.mode === 'divert' && intentPolicy.targetedActorId) {
     internalBrief.saturationPivot = selectSaturationPivot(
       MYSTERY_TRUTH_GRAPH,
@@ -421,7 +422,7 @@ async function runMysteryPipeline(
       intentPolicy.targetedActorId,
     );
     if (!internalBrief.saturationPivot) {
-      throw new MysteryPipelineBlockedError('当前地点没有经过事实门授权的异角色线索，无法安全完成调查饱和转场。');
+      throw new MysteryPipelineBlockedError('当前地点没有经过事实门授权的异角色线索，无法完成指定的剧情转场。');
     }
   }
   const factAliases = createFactAliasTable(MYSTERY_TRUTH_GRAPH);

@@ -97,7 +97,7 @@ describe('action resolution before Writer construction', () => {
     expect(prepared.writerPacket.resolvedAction).toMatchObject({ executedMinutes: 0, endTime: '2024-09-09T16:00:00',
       resources: { after: { stamina: 100, sanity: 58 } } });
     expect(prepared.writerPacket.authorizedFacts).toEqual([]);
-    expect(JSON.stringify(prepared.writerPacket.authorizedActionOutcomes)).toContain('警方明确告知玩家文穗已经死亡');
+    expect(JSON.stringify(prepared.writerPacket.authorizedActionOutcomes)).toContain('初步死亡通报');
     expect(prepared.writerPacket.resolvedAction?.eventEffectIds).toHaveLength(1);
   });
   it('does not expose the school reception when travel is interrupted before arrival', async () => {

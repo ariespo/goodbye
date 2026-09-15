@@ -1,6 +1,7 @@
 import { getVariablePath } from '../sillytavern/vars-merger';
 import type { DynamicRecord } from '../sillytavern/types';
 
+/** `divert` is reserved for an explicitly authorized story obstacle, never a numeric cap. */
 export type PlayerIntentMode = 'normal' | 'divert' | 'fantasy';
 
 export interface PlayerIntentPolicy {
@@ -50,16 +51,9 @@ export function evaluatePlayerIntent(input: string, variables: DynamicRecord): P
     const rawStart = Number(getVariablePath(variables, `loopSuspicionStart.${targetedActorId}`));
     const start = Number.isFinite(rawStart) ? rawStart : current;
     const remaining = Math.max(0, 15 - Math.max(0, current - start));
-    if (remaining <= 0) {
-      return {
-        mode: 'divert', targetedActorId, suspicionRemaining: 0, sanityPenalty: 0,
-        reason: '该角色在本次完整一天中的嫌疑增长预算已用尽。',
-        directorDirective: `玩家确实尝试继续调查 ${targetedActorId}，不可取消、跳过或假装没有行动；先按玩家意图让该角色作出符合身份的真实回应，但本轮不得再增加该角色嫌疑，也不得重复制造指向该角色的新证据。随后必须执行 MysteryBrief.saturationPivot：由指定的其他角色自然介入并带来归属于另一调查对象的新线索，提高该对象的揭露度/嫌疑度。单纯拒答、离场、受阻或无结果不算完成。`,
-      };
-    }
     return {
       mode: 'normal', targetedActorId, suspicionRemaining: remaining, sanityPenalty: 0, reason: null,
-      directorDirective: `玩家输入只代表尝试，不代表世界事实或必然结果。允许 ${targetedActorId} 本次最多再增加 ${remaining} 点嫌疑；由场景条件、NPC意志和已授权事实决定实际回应。`,
+      directorDirective: `玩家输入只代表尝试，不代表世界事实或必然结果。允许 ${targetedActorId} 本次最多再增加 ${remaining} 点嫌疑；此上限仅限制数值，不能据此取消调查、强制转向、隐藏获准新材料或剥夺已知事实的表达权限。由场景条件、NPC意志和已授权事实决定实际回应，同一材料的重复叙述不算新证据。`,
     };
   }
 

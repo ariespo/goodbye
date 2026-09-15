@@ -90,8 +90,8 @@ afterEach(() => {
 describe('asynchronous checklist authority', () => {
   it('keeps an authoritative empty investigation menu through Writer rows, enrichment, reload, and panel opening', async () => {
     const known = {
-      'shared-apron-missing': 'atmosphere' as const,
-      'shared-school-absence': 'atmosphere' as const,
+      'shared-apron-missing': 'clue' as const,
+      'shared-school-absence': 'clue' as const,
       'red-herring-part-time-job': 'hint' as const,
     };
     useGameStore.setState(state => {

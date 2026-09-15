@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createDefaultVariables } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
 import { commitProgramConclusion, lockProgramConclusion } from './conclusionFlow';
+import { investigatedStoryState } from '../test-support/story-state';
 
 const initialState = useGameStore.getState();
 
@@ -38,7 +39,7 @@ describe('program conclusion flow', () => {
     setTestState({
       cycleCount: 4,
       suspicion: { ...createDefaultVariables().suspicion, 'old-man': 50 },
-      mysteryKnowledge: { 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' },
+      mysteryKnowledge: { 'a-orphanage-contact': 'clue', 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' },
     });
 
     const result = await lockProgramConclusion('A');
@@ -49,7 +50,7 @@ describe('program conclusion flow', () => {
   });
 
   it('commits a deterministic ending and closes the conclusion panel', async () => {
-    setTestState({ lockedRoute: 'A', mysteryKnowledge: { 'a-murder-staged-fall': 'confirmation' } });
+    setTestState(investigatedStoryState('A'));
 
     const result = await commitProgramConclusion('private');
     const state = useGameStore.getState();
@@ -58,7 +59,7 @@ describe('program conclusion flow', () => {
     expect(state.tavern.variables.finalChoice).toBe('private');
     expect(state.game.endingPanel.pendingEndingId).toBe('A-2');
     expect(state.game.sceneComplete).toBe(false);
-    expect(state.game.currentScene?.lines.some(line => line.text.includes('最后一次对质'))).toBe(true);
+    expect(state.game.currentScene?.lines.some(line => line.text.includes('私下报复周德明'))).toBe(true);
     expect(state.ui.showConclusion).toBe(false);
   });
 

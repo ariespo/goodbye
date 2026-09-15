@@ -14,6 +14,7 @@ import {
 import type { ResolvedActionOutcome } from './action-resolution';
 
 const aliases = createFactAliasTable(MYSTERY_TRUTH_GRAPH);
+const clueKnowledge = (...ids: string[]): TruthContext['playerKnowledge'] => Object.fromEntries(ids.map(id => [id, 'clue']));
 
 function progress(cycleCount: number, overrides: Partial<OpportunityProgress> = {}): OpportunityProgress {
   return {
@@ -27,6 +28,7 @@ function progress(cycleCount: number, overrides: Partial<OpportunityProgress> = 
 function context(overrides: Partial<TruthContext> = {}): TruthContext {
   return {
     cycleCount: 1,
+    currentTime: '2024-09-09T16:10:00',
     currentLocation: 'home',
     lockedRoute: null,
     unlockedClueIds: [],
@@ -57,6 +59,27 @@ function hasFactOpportunity(overrides: Partial<TruthContext>, factId: string): b
 }
 
 describe('buildInvestigationOpportunities', () => {
+  it.each([
+    ['shared-supermarket-receipt', 'supermarket', null],
+    ['shared-senpai-camera', 'senpai-building', null],
+    ['shared-observation-deck-plan', 'observation-deck', null],
+    ['shared-itinerary-crosscheck', 'home', null],
+    ['a-orphanage-contact', 'old-man-building', null],
+    ['a-window-transfer-match', 'old-man-building', 'A'],
+    ['b-commission-message', 'community-hospital', null],
+    ['b-contact-injury-match', 'water-tower', 'B'],
+    ['c-night-gap-record', 'home', null],
+    ['c-domestic-injury-match', 'home', 'C'],
+    ['none-railing-maintenance', 'observation-deck', null],
+    ['none-unassisted-fall-record', 'observation-deck', 'NONE'],
+    ['fake-misidentification-chain', 'community-hospital', null],
+    ['fake-verified-survival', 'observation-deck', 'FAKE'],
+  ] as const)('offers a playable investigation for causal record %s', (factId, currentLocation, lockedRoute) => {
+    const knowledge = Object.fromEntries(MYSTERY_TRUTH_GRAPH.facts
+      .filter(fact => fact.id !== factId).map(fact => [fact.id, 'clue' as const]));
+    expect(hasFactOpportunity({ cycleCount: 5, currentLocation, lockedRoute, playerKnowledge: knowledge,
+      playerPresentation: withTravel(currentLocation), affinity: { touko: 80 } }, factId)).toBe(true);
+  });
   it('offers a public home search from the legal day-one brief', () => {
     const opportunities = buildInvestigationOpportunities({
       graph: MYSTERY_TRUTH_GRAPH,
@@ -69,7 +92,7 @@ describe('buildInvestigationOpportunities', () => {
         locationId: 'home',
         publicGoal: '检查文穗留下的衣物和随身物品',
         scope: 'short',
-        sourceIds: ['fact:F001:atmosphere'],
+        sourceIds: ['fact:F001:clue'],
       }),
     ]));
   });
@@ -85,7 +108,7 @@ describe('buildInvestigationOpportunities', () => {
     expect(school).toMatchObject({
       publicGoal: '向门卫确认文穗今天是否到校',
       scope: 'normal',
-      sourceIds: [`fact:${aliases.factIdToAlias['shared-school-absence']}:atmosphere`],
+      sourceIds: [`fact:${aliases.factIdToAlias['shared-school-absence']}:clue`],
     });
     expect(opportunities.flatMap(opportunity => opportunity.sourceIds)).not.toContain(
       `fact:${aliases.factIdToAlias['shared-male-leave-call']}:atmosphere`,
@@ -101,7 +124,7 @@ describe('buildInvestigationOpportunities', () => {
       graph: MYSTERY_TRUTH_GRAPH,
       context: dayTwo,
       progress: progress(2),
-    }).find(opportunity => opportunity.sourceIds.includes('fact:F002:hint'))!;
+    }).find(opportunity => opportunity.sourceIds.includes('fact:F002:clue'))!;
     const knownHint = context({
       cycleCount: 2,
       currentLocation: 'school',
@@ -123,7 +146,7 @@ describe('buildInvestigationOpportunities', () => {
       progress: progress(4),
     });
 
-    expect(repeated.some(opportunity => opportunity.sourceIds.includes('fact:F002:hint'))).toBe(false);
+    expect(repeated.some(opportunity => opportunity.sourceIds.includes('fact:F002:clue'))).toBe(false);
     expect(laterUpgrade).toEqual(expect.arrayContaining([
       expect.objectContaining({ sourceIds: ['fact:F002:clue'] }),
     ]));
@@ -140,12 +163,12 @@ describe('buildInvestigationOpportunities', () => {
       expect.objectContaining({
         publicGoal: '核对文穗的请假记录',
         scope: 'short',
-        sourceIds: ['fact:F003:hint'],
+        sourceIds: ['fact:F003:clue'],
       }),
       expect.objectContaining({
         publicGoal: '询问是否还有其他人来找过文穗',
         scope: 'normal',
-        sourceIds: ['fact:F004:hint'],
+        sourceIds: ['fact:F004:clue'],
       }),
     ]));
     const published = JSON.stringify(projectPublicInvestigationOpportunities(opportunities));
@@ -160,7 +183,7 @@ describe('buildInvestigationOpportunities', () => {
       progress: progress(2),
     };
     const initial = buildInvestigationOpportunities(baseInput);
-    const attendance = initial.find(opportunity => opportunity.sourceIds.includes('fact:F002:hint'))!;
+    const attendance = initial.find(opportunity => opportunity.sourceIds.includes('fact:F002:clue'))!;
     const ranked = buildInvestigationOpportunities({
       ...baseInput,
       progress: progress(2, { noProgressByTopic: { [attendance.topicKey]: 2 } }),
@@ -182,7 +205,7 @@ describe('buildInvestigationOpportunities', () => {
 
     expect(opportunities[0]).toMatchObject({
       scope: 'short',
-      sourceIds: ['fact:F003:hint'],
+      sourceIds: ['fact:F003:clue'],
     });
   });
 
@@ -212,7 +235,7 @@ describe('buildInvestigationOpportunities', () => {
       expect.objectContaining({
         locationId: 'water-tower',
         publicGoal: '检查水塔内可见的生活痕迹和遗留物',
-        sourceIds: ['fact:F005:hint'],
+        sourceIds: ['fact:F005:clue'],
       }),
     ]));
   });
@@ -240,7 +263,7 @@ describe('buildInvestigationOpportunities', () => {
       expect.objectContaining({
         locationId: 'mountain-trail',
         publicGoal: '沿山路询问当天见过文穗的人',
-        sourceIds: ['fact:F006:hint'],
+        sourceIds: ['fact:F006:clue'],
       }),
       expect.objectContaining({
         locationId: 'supermarket',
@@ -267,7 +290,7 @@ describe('buildInvestigationOpportunities', () => {
       expect.objectContaining({
         locationId: 'home',
         publicGoal: '仔细检查卧室抽屉和夹层',
-        sourceIds: [expect.stringMatching(/^fact:F\d+:hint$/)],
+        sourceIds: [expect.stringMatching(/^fact:F\d+:clue$/)],
       }),
     ]));
   });
@@ -275,22 +298,22 @@ describe('buildInvestigationOpportunities', () => {
   it.each([
     ['A first', 'a-sacrifice-list', { cycleCount: 3, suspicion: { 'old-man': 26 }, playerPresentation: withTravel('old-man-building') }],
     ['A middle', 'a-lured-inside', { cycleCount: 4, suspicion: { 'old-man': 26 }, unlockedClueIds: ['a-sacrifice-list'], playerKnowledge: { 'a-sacrifice-list': 'clue' }, playerPresentation: withTravel('old-man-building') }],
-    ['A final', 'a-murder-staged-fall', { cycleCount: 5, lockedRoute: 'A', suspicion: { 'old-man': 50 }, unlockedClueIds: ['a-sacrifice-list', 'a-lured-inside'], playerKnowledge: { 'a-sacrifice-list': 'clue', 'a-lured-inside': 'clue' }, playerPresentation: withTravel('old-man-building') }],
+    ['A final', 'a-murder-staged-fall', { cycleCount: 5, lockedRoute: 'A', playerKnowledge: clueKnowledge('a-orphanage-contact', 'a-sacrifice-list', 'a-lured-inside', 'a-window-transfer-match'), playerPresentation: withTravel('old-man-building') }],
     ['B first', 'b-water-tower-blood', { cycleCount: 3, suspicion: { 'detective-a': 26 }, playerPresentation: withTravel('water-tower') }],
     ['B middle', 'b-detective-coverup', { cycleCount: 4, suspicion: { 'detective-a': 50 }, unlockedClueIds: ['b-water-tower-blood'], playerKnowledge: { 'b-water-tower-blood': 'clue' }, playerPresentation: withTravel('water-tower') }],
-    ['B final', 'b-accidental-killing', { cycleCount: 5, lockedRoute: 'B', suspicion: { 'detective-a': 50 }, unlockedClueIds: ['b-water-tower-blood', 'b-detective-coverup'], playerKnowledge: { 'b-water-tower-blood': 'clue', 'b-detective-coverup': 'clue' }, playerPresentation: withTravel('water-tower') }],
+    ['B final', 'b-accidental-killing', { cycleCount: 5, lockedRoute: 'B', playerKnowledge: clueKnowledge('shared-detective-tail', 'b-commission-message', 'b-water-tower-blood', 'b-detective-coverup', 'b-contact-injury-match'), playerPresentation: withTravel('water-tower') }],
     ['C first', 'c-player-made-leave-call', { cycleCount: 4, suspicion: { self: 30 }, unlockedClueIds: ['shared-male-leave-call'], playerKnowledge: { 'shared-male-leave-call': 'clue' } }],
-    ['C middle', 'c-loop-is-reenactment', { cycleCount: 4, suspicion: { self: 40 } }],
-    ['C final', 'c-player-killed-fumi', { cycleCount: 5, lockedRoute: 'C', suspicion: { self: 50 }, unlockedClueIds: ['c-player-made-leave-call', 'c-loop-is-reenactment'], playerKnowledge: { 'c-player-made-leave-call': 'clue', 'c-loop-is-reenactment': 'clue' } }],
+    ['C middle', 'c-loop-is-reenactment', { cycleCount: 4, lockedRoute: 'C', playerKnowledge: clueKnowledge('c-night-gap-record') }],
+    ['C final', 'c-player-killed-fumi', { cycleCount: 5, lockedRoute: 'C', playerKnowledge: clueKnowledge('shared-male-leave-call', 'c-player-made-leave-call', 'c-night-gap-record', 'c-domestic-injury-match') }],
     ['NONE second', 'none-letter-water-tower', { cycleCount: 3, unlockedClueIds: ['none-letter-bedroom'], playerKnowledge: { 'none-letter-bedroom': 'clue' }, playerPresentation: withTravel('water-tower') }],
     ['NONE third', 'none-letter-door-gap', { cycleCount: 4, unlockedClueIds: ['none-letter-bedroom', 'none-letter-water-tower'], playerKnowledge: { 'none-letter-bedroom': 'clue', 'none-letter-water-tower': 'clue' } }],
-    ['NONE final', 'none-accidental-goodbye', { cycleCount: 5, lockedRoute: 'NONE', tripProgress: 100, unlockedClueIds: ['none-letter-bedroom', 'none-letter-water-tower', 'none-letter-door-gap'], playerKnowledge: { 'none-letter-bedroom': 'clue', 'none-letter-water-tower': 'clue', 'none-letter-door-gap': 'clue' }, playerPresentation: withTravel('observation-deck') }],
+    ['NONE final', 'none-accidental-goodbye', { cycleCount: 5, lockedRoute: 'NONE', playerKnowledge: clueKnowledge('none-letter-bedroom', 'none-letter-water-tower', 'none-letter-door-gap', 'none-railing-maintenance', 'none-unassisted-fall-record', 'shared-itinerary-crosscheck', 'shared-school-absence', 'shared-water-tower-secret', 'shared-supermarket-receipt', 'shared-detective-tail', 'shared-senpai-camera', 'shared-observation-deck-plan'), playerPresentation: withTravel('observation-deck') }],
     ['FAKE body', 'fake-body-mismatch', { cycleCount: 3, playerPresentation: withTravel('community-hospital') }],
     ['FAKE ticket', 'fake-alias-ticket', { cycleCount: 3 }],
     ['FAKE savings', 'fake-empty-savings', { cycleCount: 3, playerPresentation: withTravel('supermarket') }],
     ['FAKE sighting', 'fake-postdeath-sighting', { cycleCount: 4, playerPresentation: withTravel('mountain-trail') }],
     ['FAKE request', 'fake-touko-request', { cycleCount: 4, affinity: { touko: 80 }, playerPresentation: withTravel('senpai-building') }],
-    ['FAKE final', 'fake-staged-death-escape', { cycleCount: 5, lockedRoute: 'FAKE', unlockedClueIds: ['fake-body-mismatch', 'fake-alias-ticket', 'fake-empty-savings'], playerKnowledge: { 'fake-body-mismatch': 'clue', 'fake-alias-ticket': 'clue', 'fake-empty-savings': 'clue' }, playerPresentation: withTravel('observation-deck') }],
+    ['FAKE final', 'fake-staged-death-escape', { cycleCount: 5, lockedRoute: 'FAKE', playerKnowledge: clueKnowledge('fake-body-mismatch', 'fake-alias-ticket', 'fake-misidentification-chain', 'fake-postdeath-sighting', 'fake-verified-survival'), playerPresentation: withTravel('observation-deck') }],
   ] as Array<[string, string, Partial<TruthContext>]>)('catalogs the legal %s milestone through the real brief gate', (_name, factId, overrides) => {
     expect(hasFactOpportunity(overrides, factId)).toBe(true);
   });
@@ -303,7 +326,7 @@ describe('buildInvestigationOpportunities', () => {
       progress: progress(2),
     };
     const initial = buildInvestigationOpportunities(input)
-      .find(opportunity => opportunity.sourceIds.includes('fact:F002:hint'))!;
+      .find(opportunity => opportunity.sourceIds.includes('fact:F002:clue'))!;
     const knownInput = {
       ...input,
       context: context({
@@ -322,11 +345,11 @@ describe('buildInvestigationOpportunities', () => {
 
   it('publishes only the public opportunity projection', () => {
     const internal: InvestigationOpportunity = {
-      id: 'investigation:c1:F002:atmosphere:school',
+      id: 'investigation:c1:F002:clue:school',
       locationId: 'school',
       publicGoal: '向门卫确认文穗今天是否到校',
       scope: 'normal',
-      sourceIds: ['fact:F002:atmosphere'],
+      sourceIds: ['fact:F002:clue'],
       topicKey: 'school:attendance',
       availableUntil: '2024-09-09T12:00:00',
     };
@@ -384,11 +407,11 @@ function resolution(
 
 describe('settleOpportunityProgress', () => {
   const selected: InvestigationOpportunity = {
-    id: 'investigation:c1:F002:atmosphere:school',
+    id: 'investigation:c1:F002:clue:school',
     locationId: 'school',
     publicGoal: '向门卫确认文穗今天是否到校',
     scope: 'normal',
-    sourceIds: ['fact:F002:atmosphere'],
+    sourceIds: ['fact:F002:clue'],
     topicKey: 'school:attendance',
   };
 

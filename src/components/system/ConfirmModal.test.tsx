@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useGameStore } from '../../stores/gameStore';
 import { ConclusionModal } from '../game/ConclusionModal';
 import { ConfirmModal } from './ConfirmModal';
+import { investigatedStoryState } from '../../test-support/story-state';
 
 const conclusionFlowMocks = vi.hoisted(() => ({
   commitProgramConclusion: vi.fn(),
@@ -25,10 +26,10 @@ function renderPendingConclusion() {
       ...state.tavern,
       variables: {
         ...state.tavern.variables,
+        ...investigatedStoryState('A'),
         lockedRoute: 'A',
         overlay: null,
         finalChoice: null,
-        mysteryKnowledge: { 'a-murder-staged-fall': 'confirmation' },
       },
     },
   }));

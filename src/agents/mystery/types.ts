@@ -25,8 +25,11 @@ export interface SuspicionRequirement {
 
 export interface MysteryFactAvailability {
   minCycle?: number;
+  /** Local story-clock threshold for obtaining a new fact; memories are retained separately. */
+  notBeforeTime?: string;
   locations?: string[];
   requiredClueIds?: string[];
+  requiredConfirmedFactIds?: string[];
   requiredAnyClueIds?: string[];
   minSuspicion?: SuspicionRequirement;
   minAnySuspicion?: {
@@ -87,6 +90,7 @@ export interface NarrativeSceneContract {
 
 export interface TruthContext {
   cycleCount: number;
+  currentTime?: string;
   currentLocation: string;
   lockedRoute: MysteryRouteId | null;
   unlockedClueIds: string[];

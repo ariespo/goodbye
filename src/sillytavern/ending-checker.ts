@@ -1,5 +1,6 @@
 import type { DynamicRecord, Ending, EndingConditionItem } from './types';
 import { getVariablePath } from './vars-merger';
+import { canDispatchStoryEnding } from '../engine/conclusion-system';
 
 const TAG_PRIORITY: Record<Ending['tag'], number> = {
   hidden: 500,
@@ -15,6 +16,7 @@ export function checkEndingConditions(
   endingsSeen: string[] = []
 ): Ending | null {
   const matched = endings
+    .filter(ending => canDispatchStoryEnding(variables, ending.id))
     .filter(ending => !endingsSeen.includes(ending.id))
     .filter(ending => ending.conditionGroups.length > 0)
     .filter(ending => ending.conditionGroups.every(group => {

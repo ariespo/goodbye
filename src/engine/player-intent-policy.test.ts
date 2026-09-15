@@ -10,14 +10,12 @@ describe('player intent policy', () => {
     expect(result.sanityPenalty).toBe(0);
   });
 
-  it('diverts repeated suspect investigation after the daily budget is exhausted', () => {
+  it('keeps investigation available after the daily suspicion budget is exhausted', () => {
     const variables = createDefaultVariables();
     variables.suspicion['old-man'] = 25;
     variables.loopSuspicionStart['old-man'] = 10;
     const result = evaluatePlayerIntent('继续调查周大爷', variables);
-    expect(result).toMatchObject({ mode: 'divert', targetedActorId: 'old-man', suspicionRemaining: 0 });
-    expect(result.directorDirective).toContain('saturationPivot');
-    expect(result.directorDirective).toContain('其他角色自然介入');
+    expect(result).toMatchObject({ mode: 'normal', targetedActorId: 'old-man', suspicionRemaining: 0 });
   });
 
   it('turns impossible or rule-breaking input into a sanity-costing fantasy', () => {

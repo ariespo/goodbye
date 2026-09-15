@@ -4,26 +4,30 @@ import { clampTimeCost } from './game-clock';
 import type { ResolvedActionOutcome } from './action-resolution';
 import { checkCycleFailure } from './cycle-failure';
 
-/** Evidence must name this victim and report death, not hint at a meeting or her parents. */
+/** Compatibility API: this records receipt of a preliminary report, never a confirmed death. */
 export function hasDeliveredDeathNews(narrative: string | Pick<Scene, 'lines'>): boolean {
   const scene = typeof narrative === 'string' ? maintextToScene(narrative) : narrative;
-  const speculative = /没有|并未|未曾|尚未|不能确认|无法确认|不能确定|无法确定|否认|不属实|假如|如果|也许|可能|我猜|猜测|怀疑|担心|以为|梦见|梦里|传闻|传言|谣言|尚无依据|未经证实|[？?]/u;
   const official = /警方|警员|警察|民警|派出所|警官/u;
-  const sentences = scene.lines.flatMap((line, index) => {
+  // A correct notification cannot license an adjacent omniscient confirmation.
+  if (scene.lines.some(line => line.text.split(/[。！？\n]/u).some(sentence => {
+    const assertion = /文穗(?:确实|确定|已确认)?(?:已经|已)?(?:死亡|死了|去世)|(?:确认|证实)(?:死者)?(?:就是|是)文穗/u.exec(sentence);
+    if (!assertion) return false;
+    const prefix = sentence.slice(0, assertion.index);
+    return !/尚未|未经|不能|无法|没有|并未|如果|假如|猜|传闻|传言|谣言|否认/u.test(prefix)
+      && !/[？?]|传闻|谣言/u.test(sentence);
+  }))) return false;
+  return scene.lines.some((line, index) => {
     const isNarrator = /^(?:旁白|narration)$/i.test(line.speaker);
     const context = scene.lines.slice(Math.max(0, index - 1), index + 1).map(item => item.text).join(' ');
     const sourced = official.test(line.speaker) || official.test(line.text)
-      || (isNarrator && (official.test(context) || /(?:确认|证实)[^。]{0,16}是文穗|对面的声音说/u.test(line.text)));
-    return (line.text.match(/[^。！？\n!?]+[。！？!?]?/gu) ?? []).map(text => ({
-      // Uncertainty about cause does not negate an explicitly confirmed death.
-      text: text.replace(/[，,](?:但|而)?死因[^，,。！？!?]*/gu, ''), sourced,
-    }));
+      || (isNarrator && official.test(context));
+    const text = line.text;
+    const noDelivery = /(?:没有|并未|未曾|尚未|不能|无法|准备|即将|将要|打算)[^。！？]{0,16}(?:送达|收到|通报|通知)|假如|如果|我猜|梦见|梦里|传闻|传言|谣言|[？?]/u.test(text);
+    return sourced && !noDelivery && /文穗(?!父母|父亲|母亲|爸爸|妈妈)/u.test(text)
+      && /死亡|死者|遗体|遇难/u.test(text)
+      && /初步(?:死亡)?(?:通报|报告|通知)|疑似[^。！？]{0,16}文穗/u.test(text)
+      && /通报|报告|通知|告知|送达|送来/u.test(text);
   });
-  return sentences.some(({ text: sentence, sourced }) => sourced && !speculative.test(sentence)
-    && /文穗(?:(?!父母|父亲|母亲|爸爸|妈妈)[^。！？\n]){0,24}(?:死亡|去世|遇难)/u.test(sentence))
-    || sentences.some(({ text: sentence, sourced }, i) => sourced && !speculative.test(sentence)
-      && /(?:确认|证实)[^。！？\n]{0,16}是文穗/u.test(sentence)
-      && /^(?:人)?已经死亡[。！!]?$/u.test((sentences[i + 1]?.text ?? '').trim()));
 }
 
 export function validateNarrativeContract(scene: Pick<Scene, 'lines'> | null, options: {
@@ -35,7 +39,7 @@ export function validateNarrativeContract(scene: Pick<Scene, 'lines'> | null, op
     return [{ code: 'EMPTY_PLAYABLE_SCENE', message: '必须有实际可播放台词，不能仅输出场景、音乐或观察面板。' }];
   }
   if (options.pendingDeathNews && !hasDeliveredDeathNews(scene)) {
-    errors.push({ code: 'DEATH_NEWS_NOT_DELIVERED', message: '本回合警方必须明确告知“文穗已经死亡”，并写出玩家听到消息的反应；叫去派出所、欲言又止、猜测或父母死亡证明不算送达。不得补写死因或凶手。' });
+    errors.push({ code: 'DEATH_NEWS_NOT_DELIVERED', message: '本回合必须演出警方向玩家送达初步死亡通报：发现一名疑似文穗的死者，并写出玩家收到消息的反应。死者身份、死亡时刻与死因仍待核实；不能旁白确认文穗已死、当天死亡或凶手。仅叫去派出所、假设收到或父母死亡证明不算送达。' });
   }
   const midnight = new Date(options.time);
   midnight.setHours(24, 0, 0, 0);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   checkCycleFailure,
   settleCycleVariables,
@@ -9,8 +9,10 @@ import {
   GOODBYE_OPTION_TEXT,
 } from './cycleLoop';
 import { createDefaultVariables } from '../sillytavern/vars-merger';
-import { normalizeWorldMemory } from '../memory/world-memory';
+import { compileTurnContext, normalizeWorldMemory } from '../memory/world-memory';
 import { useGameStore } from '../stores/gameStore';
+import * as database from '../sillytavern/database';
+import type { ChatSession } from '../sillytavern/types';
 
 describe('checkCycleFailure', () => {
   const base = { stamina: 50, sanity: 50, time: new Date(2024, 8, 9, 15, 0) };
@@ -162,10 +164,127 @@ describe('buildCycleOpeningMaintext', () => {
       lastPlayerChoice: '在水塔下等赵刚',
       lastTurnSummary: '赵刚没有赴约，午夜已经到来',
     });
-    expect(text).toContain('确实尝试了');
+    expect(text).not.toContain('确实尝试了');
     expect(text).toContain('早上8:00');
     expect(text).toContain('重置作废');
     expect(text).toContain('赵刚没有赴约');
+  });
+});
+
+describe('persisted authored loop scenes', () => {
+  const baseline = useGameStore.getState();
+  afterEach(() => { vi.restoreAllMocks(); useGameStore.setState(baseline, true); });
+  function openChat(cycleCount: number) {
+    const variables = { ...createDefaultVariables(), cycleCount, time: '2024-09-09T10:00:00' };
+    const chat: ChatSession = { id: 'loop-test', name: 'test', messages: [], characterName: 'fumi', userName: 'player',
+      presetId: null, lorebookIds: [], variables, createdAt: 1, updatedAt: 1 };
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, activeChatId: chat.id, chats: [chat], variables } }));
+    return chat;
+  }
+  it.each([false, true])('only carries the last accepted consequence inside the same story version (ended=%s)', async ended => {
+    vi.spyOn(database, 'saveChat').mockResolvedValue();
+    const chat = openChat(5);
+    const oldText = '旧版本已经确认周德明杀害了文穗。';
+    const memory = normalizeWorldMemory({ cycleCount: 5 });
+    memory.events.push({ eventId: 'turn:accepted', turnId: 'accepted', turnIndex: 3, cycleCount: 5,
+      occurredAt: '2024-09-09T17:05:00', locationId: 'home', actorIds: [], kind: 'narrative-turn',
+      summary: oldText, evidenceLineIds: [], factIds: [], tags: [], salience: 0.5, createdAt: 3 });
+    Object.assign(chat.variables, { lockedRoute: 'A', finalChoice: ended ? 'report' : null, worldMemory: memory });
+    chat.messages = [{ id: 'accepted', role: 'assistant', timestamp: 3, variables: { cycleCount: 5 },
+      content: `<sum>${oldText}</sum>`, acceptedActionOutcome: {
+        resolutionId: 'resolved', actionId: 'ask', executedMinutes: 5, executedWorkMinutes: 5,
+        executedTravelMinutes: 0, endTime: '2024-09-09T17:05:00', staminaDelta: -1, sanityDelta: 0,
+      } }];
+    await startNextCycle({ variables: settleCycleVariables(chat.variables), reason: 'day-end' });
+    const state = useGameStore.getState();
+    const history = state.tavern.chats[0].messages;
+    const bundle = compileTurnContext({ userInput: '核对周德明的材料', locationId: 'home', activeNpcIds: [],
+      history, variables: state.tavern.variables });
+    expect(history[0].content).toContain(oldText);
+    expect(history.at(-1)!.content.includes(oldText)).toBe(!ended);
+    expect(JSON.stringify(state.game.currentScene).includes(oldText)).toBe(!ended);
+    const modelContext = { recentHistory: bundle.recentMessages.map(({ role, content }) => ({ role, content })),
+      directorMemory: bundle.directorMemory, writerMemory: bundle.writerMemory };
+    expect(JSON.stringify(modelContext).includes(oldText)).toBe(!ended);
+  });
+  it('plays three different reset scenes, stores the boundary note, and carries their ledger to day four', async () => {
+    vi.spyOn(database, 'saveChat').mockResolvedValue();
+    openChat(1);
+    for (const expectedCycle of [2, 3, 4]) {
+      await startNextCycle({ variables: settleCycleVariables(useGameStore.getState().tavern.variables), reason: 'stamina' });
+      const state = useGameStore.getState();
+      expect(state.tavern.variables.cycleCount).toBe(expectedCycle);
+      expect(state.game.currentScene?.lines.length).toBeGreaterThan(6);
+    }
+    const state = useGameStore.getState();
+    const messages = state.tavern.chats[0].messages;
+    expect(messages).toHaveLength(3);
+    expect(messages[0].content).toContain('熟悉');
+    expect(messages[0].content).toContain('去向');
+    expect(messages[1].content).toContain('不要替我答应见谁');
+    expect(messages[1].variables.mysteryKnowledge['shared-fumi-boundary-note']).toBe('clue');
+    expect(messages[1].variables.unlockedClues).toContain('shared-fumi-boundary-note');
+    expect(messages[2].content).toContain('身份');
+    expect(messages[2].content).toContain('尚未核实');
+    expect(state.tavern.variables.storyProgress.presentedBeatIds).toHaveLength(3);
+    expect(state.game.currentScene?.lines.some(line => line.text.includes('不要替我答应见谁'))).toBe(true);
+  });
+  it('cannot turn an orphan player request or an earlier day summary into an executed rescue', async () => {
+    vi.spyOn(database, 'saveChat').mockResolvedValue();
+    const chat = openChat(3);
+    chat.messages = [
+      { id: 'earlier', role: 'assistant', content: '<sum>成功把文穗救回家</sum>', timestamp: 1, variables: { cycleCount: 2 } },
+      { id: 'orphan', role: 'user', content: '冲进水塔把文穗救出来', timestamp: 2, variables: { cycleCount: 3 } },
+    ];
+    await startNextCycle({ variables: settleCycleVariables(chat.variables), reason: 'stamina' });
+    const text = useGameStore.getState().tavern.chats[0].messages.at(-1)!.content;
+    expect(text).not.toContain('成功把文穗救回家');
+    expect(text).not.toContain('确实尝试了');
+    expect(text).not.toContain('冲进水塔');
+    expect(text).toContain('仍没找到一个可靠的时间点');
+    expect(text).toContain('尚未收到初步通报');
+  });
+  it('persists the scene and ledger once when the same reset is called concurrently and again after completion', async () => {
+    const writes: ChatSession[] = [];
+    vi.spyOn(database, 'saveChat').mockImplementation(async chat => { writes.push(chat); });
+    const chat = openChat(2);
+    const options = { variables: settleCycleVariables(chat.variables), reason: 'stamina' as const };
+    await Promise.all([startNextCycle(options), startNextCycle(options)]);
+    useGameStore.setState(state => ({ game: { ...state.game, currentLineIndex: 2 } }));
+    await startNextCycle(options);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].messages).toHaveLength(1);
+    expect(writes[0].variables.storyProgress.presentedBeatIds).toHaveLength(1);
+    expect(writes[0].variables.mysteryKnowledge['shared-fumi-boundary-note']).toBe('clue');
+    expect(useGameStore.getState().game.currentLineIndex).toBe(2);
+  });
+  it('keeps reset pending on failed persistence and permits a retry', async () => {
+    const save = vi.spyOn(database, 'saveChat').mockRejectedValueOnce(new Error('disk failed')).mockResolvedValue();
+    const chat = openChat(2);
+    useGameStore.setState(state => ({ game: { ...state.game, pendingCycleReset: 'stamina' } }));
+    const options = { variables: settleCycleVariables(chat.variables), reason: 'stamina' as const };
+    await expect(startNextCycle(options)).rejects.toThrow('disk failed');
+    expect(useGameStore.getState().tavern.variables.cycleCount).toBe(2);
+    expect(useGameStore.getState().game.pendingCycleReset).toBe('stamina');
+    expect(useGameStore.getState().tavern.variables.mysteryKnowledge?.['shared-fumi-boundary-note']).toBeUndefined();
+    await startNextCycle(options);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(useGameStore.getState().game.pendingCycleReset).toBeNull();
+  });
+  it('aborts the persistence guard when the active chat changes during a reset', async () => {
+    let release!: () => void;
+    const wait = new Promise<void>(resolve => { release = resolve; });
+    let guard: database.ChatWriteGuard | undefined;
+    vi.spyOn(database, 'saveChat').mockImplementation(async (_chat, value) => {
+      guard = value; await wait; guard?.assertCurrent();
+    });
+    const chat = openChat(2);
+    const task = startNextCycle({ variables: settleCycleVariables(chat.variables), reason: 'stamina' });
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, activeChatId: 'another-chat', variables: { cycleCount: 8 } } }));
+    release();
+    await expect(task).rejects.toThrow();
+    expect(guard?.signal.aborted).toBe(true);
+    expect(useGameStore.getState().tavern.variables.cycleCount).toBe(8);
   });
 });
 

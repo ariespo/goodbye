@@ -483,7 +483,10 @@ describe('executed plan projection', () => {
     const death = { ...partial, executedMinutes: 0, plannedMinutes: 0,
       segments: [{ ...partial.segments[0], step: { id: 'death-news', kind: 'event' as const, eventId: 'death-news' as const,
         scope: 'normal' as const, locationId: 'home', completionSourceIds: [] }, completed: true, executedMinutes: 0 }] };
-    expect(JSON.stringify(buildActionOutcomeSources(death))).toContain('警方明确告知玩家文穗已经死亡');
+    expect(JSON.stringify(buildActionOutcomeSources(death))).toContain('初步死亡通报');
+    expect(JSON.stringify(buildActionOutcomeSources(death))).toContain('身份');
+    expect(JSON.stringify(buildActionOutcomeSources(death))).not.toContain('文穗已经死亡');
+    expect(projectExecutedPlan(plan, death).beats.map(beat => beat.description).join('\n')).toContain('初步死亡通报');
     expect(JSON.stringify(buildActionOutcomeSources(death))).not.toContain('凶手是');
   });
   it('describes resolved outcomes as public Chinese facts instead of writer commands', () => {

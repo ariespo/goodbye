@@ -8,8 +8,8 @@ import type { DirectorPlan, MysteryBrief, TruthContext, WriterPacket } from './t
 
 const factId = 'F002';
 const sourceId = 'known-fact:F002:atmosphere';
-const knownText = '门卫说，今天在校门口见过文穗。';
-const repeatedText = '今天在校门口见过文穗。';
+const knownText = '门卫翻到一条校服女孩在门口询问请假的记载。';
+const repeatedText = '校服女孩在门口询问请假的记载。';
 
 function schoolBrief(overrides: Partial<TruthContext> = {}): MysteryBrief {
   return buildAliasedMysteryBrief(buildMysteryBrief(MYSTERY_TRUTH_GRAPH, {
@@ -32,7 +32,7 @@ function repeatAudit(citationSourceId = sourceId, citationQuote = repeatedText):
   return {
     reviewedFields: ['maintext'],
     assertions: [{
-      field: 'maintext', quote: repeatedText, proposition: '文穗今天到过校门口', status: 'supported',
+      field: 'maintext', quote: repeatedText, proposition: '值班簿记有校服女孩询问请假的材料', status: 'supported',
       citations: [{ sourceId: citationSourceId, quote: citationQuote }], reason: '逐字引用已经获准的见闻。',
     }],
   };
@@ -67,7 +67,7 @@ describe('known fact speaker projection', () => {
   it.each([
     ['inactive witness', { activeNpcIds: ['touko'] }],
     ['fact gated by current location', { currentLocation: 'home' }],
-    ['stale higher revelation on day one', { playerKnowledge: { 'shared-school-absence': 'clue' as const } }],
+    ['another version solution', { lockedRoute: 'C', playerKnowledge: { 'a-murder-staged-fall': 'confirmation' as const } }],
     ['no player-known fact', { playerKnowledge: {} }],
   ] satisfies Array<[string, Partial<TruthContext>]>)('does not grant a speaker for %s', (_name, overrides) => {
     const packet = buildWriterPacket(plan(), schoolBrief(overrides));
@@ -133,7 +133,7 @@ describe('known fact speaker projection', () => {
     expect(reviewRepeat(packet).approved).toBe(false);
   });
 
-  it('does not add a speaker grant for the saturated actor while another NPC intervenes', () => {
+  it('preserves an authorized witness while another NPC intervenes', () => {
     const brief = schoolBrief();
     brief.npcKnowledge[1].facts = [{ factId, maxRevealLevel: 'atmosphere', stance: 'knows' }];
     brief.saturationPivot = {
@@ -148,18 +148,18 @@ describe('known fact speaker projection', () => {
     approvedPlan.revelations = [{ factId, level: 'atmosphere', delivery: 'dialogue', speakerId: 'touko' }];
     const packet = buildWriterPacket(approvedPlan, brief);
 
-    expect(packet.knownFactSpeakers).toEqual([{ factId, level: 'atmosphere', speakerIds: ['touko'] }]);
-    expect(reviewRepeat(packet).approved).toBe(false);
+    expect(packet.knownFactSpeakers).toEqual([{ factId, level: 'atmosphere', speakerIds: ['school-guard', 'touko'] }]);
+    expect(reviewRepeat(packet).approved).toBe(true);
     expect(reviewRepeat(packet, 'touko').approved).toBe(true);
   });
 
-  it('keeps the divert policy effective if the executed brief no longer carries its pivot', () => {
+  it('does not revoke known-fact speech permissions merely because a policy requests diversion', () => {
     const packet = buildWriterPacket(plan(), schoolBrief(), {
       playerIntentPolicy: { mode: 'divert', targetedActorId: 'school-guard' },
     });
 
-    expect(packet.knownFactSpeakers).toEqual([]);
-    expect(reviewRepeat(packet).approved).toBe(false);
+    expect(packet.knownFactSpeakers).toEqual([{ factId, level: 'atmosphere', speakerIds: ['school-guard'] }]);
+    expect(reviewRepeat(packet).approved).toBe(true);
   });
 
   it.each([

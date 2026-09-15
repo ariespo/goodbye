@@ -33,7 +33,9 @@ describe('buildScheduledDirectives', () => {
   it('pending返回死讯指令', () => {
     const lines = buildScheduledDirectives({ deathNews: 'pending' });
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('死讯');
+    expect(lines[0]).toContain('初步');
+    expect(lines[0]).toContain('身份');
+    expect(lines[0]).toContain('死亡时刻');
     expect(lines[0]).toContain('必须');
     expect(lines[0]).not.toContain('理智应明显下降');
   });
@@ -46,6 +48,7 @@ describe('buildScheduledDirectives', () => {
     expect(lines[0]).toContain('明确等待');
     expect(lines[0]).not.toContain('理智持续下滑');
     expect(lines[0]).not.toContain('行动项收窄');
+    expect(lines[0]).not.toContain('挽救已经发生的死亡');
   });
   it('未置位返回空数组', () => {
     expect(buildScheduledDirectives({})).toEqual([]);
