@@ -36,7 +36,7 @@ const headers = {
   permissions: home.headers.get('permissions-policy'),
 };
 const passed = home.ok && homeText.includes(entry) && deep.ok && deepText.includes(entry)
-  && checks.every(check => check.match) && video.ok
+  && checks.every(check => check.match) && video.ok && video.headers.get('content-type')?.startsWith('video/mp4')
   && headers.csp?.includes("script-src 'self'") && headers.csp?.includes("frame-ancestors 'none'")
   && headers.referrer === 'strict-origin-when-cross-origin' && headers.nosniff === 'nosniff'
   && headers.permissions === 'camera=(), microphone=(), geolocation=()'

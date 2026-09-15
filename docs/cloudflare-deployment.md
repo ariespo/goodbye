@@ -37,6 +37,14 @@ node scripts/verify-cloudflare-deployment.mjs https://farewell-web.pages.dev
 
 Direct Upload项目以后仍可通过此命令或自建CI发布；不能直接切换成Cloudflare内建Git集成项目。需要内建Git自动部署时应创建新的Git集成项目。
 
-部署状态：本地生产构建通过，Wrangler本地预览的28文件核验通过，首页、深链接和视频可访问，CSP与缓存规则正确。账号已授权，`farewell-web` Pages项目已创建，生产分支为master，等待首次上传与线上核验。
+## 本次生产发布
+
+- 正式地址：[farewell-web.pages.dev](https://farewell-web.pages.dev)。
+- 部署ID：`b0e47511-e69b-4678-b3bf-83c68e78c33c`，环境Production，分支master，构建来源`14b5f98`。
+- 2026-09-15 20:39（北京时间）线上核验通过：28个文件SHA256与本地一致，首页、深链接与开场视频HTTP200，CSP等安全响应头以及缓存策略正确。浏览器已显示游戏标题菜单与API配置入口。
+- 上传1275个静态文件及单独的`_headers`规则；本地dist总计1276个文件、247668390字节，没有超出单文件限制的素材。
+- 本地生产构建和Wrangler预览验证均通过；发布后的提交只补记录与验证工具，不改变已上线的游戏资源。
+
+后续更新使用上述Cloudflare命令，本流程不调用Vercel发布。原Vercel项目保留，未删除旧站点。
 
 依据：[Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)、[Headers](https://developers.cloudflare.com/pages/configuration/headers/)、[SPA回退](https://developers.cloudflare.com/pages/configuration/serving-pages/)。
