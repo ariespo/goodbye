@@ -35,3 +35,4 @@ docs/approved-art/
 .worktrees/
 .codex-test-tmp/
 .vercel/
+.wrangler/
