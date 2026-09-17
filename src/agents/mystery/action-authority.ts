@@ -463,6 +463,7 @@ export function projectExecutedPlan(
     backgroundFactProposals: plan.backgroundFactProposals?.map(proposal => ({ ...proposal,
       characterIds: [...proposal.characterIds], locationIds: [...proposal.locationIds], knowerIds: [...proposal.knowerIds] })),
     scenePlan: cloneScenePlan(plan.scenePlan),
+    sceneCraft: !rewriteBeats && plan.sceneCraft ? { ...plan.sceneCraft, beatIds: [...plan.sceneCraft.beatIds] } : undefined,
     timeCostMinutes: resolution.executedMinutes,
     ...(rewriteBeats ? { backgroundFactProposals: [], scenePlan: undefined,
       assetRequests: [], optionIntents: [

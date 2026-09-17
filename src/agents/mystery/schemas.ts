@@ -1,5 +1,6 @@
 import type { ResponseFormat } from '../../sillytavern/api-router';
 import { REVEAL_LEVELS } from './types';
+import { SCENE_CRAFT_FOCUSES, SCENE_READER_EFFECTS } from './scene-craft';
 
 const revealLevelSchema = { type: 'string', enum: [...REVEAL_LEVELS] };
 
@@ -58,6 +59,14 @@ export const DIRECTOR_PLAN_JSON_SCHEMA: Record<string, unknown> = {
       },
     },
     assetRequests: { type: 'array', items: { type: 'string' } },
+    sceneCraft: {
+      type: 'object', additionalProperties: false, required: ['focus', 'beatIds'],
+      properties: {
+        focus: { type: 'string', enum: [...SCENE_CRAFT_FOCUSES] },
+        readerEffect: { type: 'string', enum: [...SCENE_READER_EFFECTS] },
+        beatIds: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'string', minLength: 1, maxLength: 80 } },
+      },
+    },
     actionSteps: {
       type: 'array',
       minItems: 1,

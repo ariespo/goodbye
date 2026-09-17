@@ -18,6 +18,7 @@ import type {
   WriterPacket,
 } from './types';
 import { resolveRegisteredLocation } from '../../data/locations';
+import { buildSceneCraftGuidance, parseSceneCraftIntent } from './scene-craft';
 
 function sceneContracts(brief: MysteryBrief): NarrativeSceneContract[] {
   return brief.sceneContracts ?? (brief.sceneContract ? [brief.sceneContract] : []);
@@ -273,6 +274,10 @@ export function reviewDirectorPlan(
   turnContext?: Record<string, unknown>,
 ): FactReview {
   const violations: FactReviewViolation[] = [];
+  try { parseSceneCraftIntent(plan.sceneCraft, plan.beats); }
+  catch (cause) {
+    violations.push({ code: 'scene-contract-violation', message: cause instanceof Error ? cause.message : 'sceneCraft 无效。' });
+  }
   const currentLocation = typeof turnContext?.currentLocation === 'string'
     ? turnContext.currentLocation
     : 'home';
@@ -637,9 +642,11 @@ export function buildWriterPacket(
     revelations: _revelations,
     knowledgeEvents: authorizedKnowledgeEvents = [],
     backgroundFactProposals = [],
+    sceneCraft: _sceneCraft,
     ...safePlan
   } = plan;
   void _revelations;
+  void _sceneCraft;
   const writerPlan = {
     ...safePlan,
     beats: safePlan.beats.map(beat => {
@@ -682,8 +689,13 @@ export function buildWriterPacket(
         && isRevealAtMost(known.level, fact.maxRevealLevel))).map(npc => npc.npcId))];
     return speakerIds.length > 0 ? [{ factId: known.id, level: known.level, speakerIds }] : [];
   });
+  const characterPerformances = projectCharacterPerformances(brief.playerPresentation, [
+    ...brief.characterPerformances.map(profile => profile.id),
+    ...plan.beats.flatMap(beat => beat.speakerIds ?? []),
+  ]);
   return {
     plan: writerPlan,
+    sceneCraft: buildSceneCraftGuidance(plan, characterPerformances, turnContext?.resolvedAction as WriterPacket['resolvedAction']),
     playerKnownFacts: brief.playerKnownFacts,
     knownFactSpeakers,
     authorizedFacts: plan.revelations.map((revelation) => {
@@ -714,10 +726,7 @@ export function buildWriterPacket(
       'authorizedKnowledgeEvents 中的新人或新地点只能在 evidence 所描述的玩家可见事件发生后，才可使用新称呼或地址。',
     ],
     playerPresentation: brief.playerPresentation,
-    characterPerformances: projectCharacterPerformances(brief.playerPresentation, [
-      ...brief.characterPerformances.map(profile => profile.id),
-      ...plan.beats.flatMap(beat => beat.speakerIds ?? []),
-    ]),
+    characterPerformances,
     npcPlayerKnowledge: brief.npcPlayerKnowledge?.map(item => ({
       ...item,
       actualKnowledgeScope: item.expressibleKnowledgeScope,

@@ -149,6 +149,22 @@ describe('grounded style decisions', () => {
 
 
 describe('substantive wording evidence for semantic style rejection', () => {
+  it('skips the model in adaptive mode when earlier prose has no repetition risk', async () => {
+    let calls = 0;
+    const result = await reviewNarrativeStyle({
+      api: { baseUrl: 'test', apiKey: 'test', model: 'test' }, preset: null, semanticMode: 'adaptive',
+      narrative: '对话|旁白|calm|你把湿透的鞋放在门槛外，袜子贴着脚背。',
+      recentNarratives: ['对话|旁白|calm|收银员已经数好了零钱，耐心等你把钱包收起来。'],
+      complete: async () => { calls += 1; return '{"approved":true,"violations":[],"corrections":[]}'; },
+    });
+    expect(result.approved).toBe(true);
+    expect(calls).toBe(0);
+  });
+  it('attaches the exact candidate quote to deterministic duplicate violations for bounded repair', () => {
+    const text = '冷白色的灯光在她头顶轻轻闪了一下，照得脸色更加苍白。';
+    expect(reviewProseDeterministically(`对话|旁白|calm|${text}`, [`对话|旁白|calm|${text}`])[0])
+      .toMatchObject({ candidateQuote: text, oldQuote: text });
+  });
   it.each([
     ['学校那边应该能查到她有没有请假。去学校的路上会经过那家二十四小时便利店，文穗常在那里买东西，店员也认识她。', '两个小时，只排除了一个可能——她没有去学校。'],
     ['“回了我就告诉你。我早上还有事，先走了。”', '“这样，我这边先替你去问问。有结果我打给你。”'],
@@ -165,7 +181,7 @@ describe('substantive wording evidence for semantic style rejection', () => {
     expect(result).toEqual({ approved: true, violations: [], corrections: [] });
   });
 
-  it('still blocks a long rewrite with substantial shared wording below the deterministic threshold', async () => {
+  it.each(['full', 'adaptive'] as const)('still blocks a long rewrite with substantial shared wording below the deterministic threshold in %s mode', async semanticMode => {
     const oldQuote = '冷白色的灯光在她头顶轻轻闪了一下，照得脸色更加苍白。';
     const candidateQuote = '冷白色的灯光在她头顶闪烁不定，她的脸色更加苍白。';
     const narrative = `对话|旁白|calm|${candidateQuote}`;
@@ -173,7 +189,7 @@ describe('substantive wording evidence for semantic style rejection', () => {
     expect(reviewProseDeterministically(narrative, recentNarratives)).toEqual([]);
     const result = await reviewNarrativeStyle({
       api: { baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'critic' }, preset: null,
-      recentNarratives, narrative,
+      recentNarratives, narrative, semanticMode,
       complete: async () => JSON.stringify({ approved: false, violations: [{
         code: 'repeated-prose', message: '同一长句只改动闪烁措辞', oldQuote, candidateQuote,
       }], corrections: ['重写重复的长句'] }),

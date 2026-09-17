@@ -210,7 +210,7 @@ describe('narrative day contract at the playable commit boundary', () => {
     const continuationId = resolved!.continuation!.actionId;
     draft = '<maintext>场景|home-day\n对话|旁白|calm|你接起电话，警方送来初步死亡通报：死者疑似文穗，身份与死亡时刻仍待核实。</maintext><option>处理眼前的事情\n停下来</option><sum>初步通报已经送达。</sum><vars>{}</vars>';
     await act(async () => { await result.current.sendMessage('接听电话，处理眼前的固定事件。'); });
-    expect(useGameStore.getState().game.history).toHaveLength(2);
+    expect(useGameStore.getState().game.history, JSON.stringify(useGameStore.getState().api.turnRecovery)).toHaveLength(2);
     const optionState = useGameStore.getState();
     const resumeOption = optionState.api.parsedContent.options[0];
     const resumeBinding = optionState.api.parsedContent.optionBindings?.[0];

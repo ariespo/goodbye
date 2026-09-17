@@ -81,9 +81,11 @@ function diceSimilarity(left: string, right: string): number {
   return (2 * overlap) / (leftPairs.size + rightPairs.size);
 }
 
-function duplicateViolation(current: string, previous: string, exact: boolean): FactReviewViolation {
+function duplicateViolation(current: string, previous: string, exact: boolean): FactReviewViolation & { candidateQuote: string; oldQuote: string } {
   return {
     code: 'repeated-prose',
+    candidateQuote: current,
+    oldQuote: previous,
     message: exact
       ? `候选正文重复了近期完整语句：“${current}”。`
       : `候选正文与近期语句高度近似：“${current}” / “${previous}”。`,
@@ -153,6 +155,21 @@ export function recentAcceptedNarratives(messages: ChatMessage[], limit = 3): st
     .slice(-limit);
 }
 
+/** Cheap triage only: overlapping long wording still requires the grounded critic. */
+export function hasSemanticStyleRisk(narrative: string, recentNarratives: string[], exemptTexts: string[] = []): boolean {
+  const windows = (text: string) => {
+    const sentences = sentenceList(text);
+    return sentences.flatMap((_, index) => [1, 2, 3].filter(size => index + size <= sentences.length)
+      .map(size => sentences.slice(index, index + size).map(item => item.normalized).join('')))
+      .filter(sentence => sentence.length >= MIN_NEAR_LENGTH);
+  };
+  const previous = recentNarratives.flatMap(windows);
+  return windows(narrative).filter(sentence => !isAuthorizedEvidenceSentence(sentence, exemptTexts)).some(sentence => (
+    previous.some(old => Math.min(sentence.length, old.length) / Math.max(sentence.length, old.length) >= 0.72
+      && diceSimilarity(sentence, old) >= MIN_SEMANTIC_WORDING_OVERLAP)
+  ));
+}
+
 export async function reviewNarrativeStyle(options: {
   api: ApiConfig;
   preset: ChatPreset | null;
@@ -161,6 +178,8 @@ export async function reviewNarrativeStyle(options: {
   exemptTexts?: string[];
   abortSignal?: AbortSignal;
   complete?: AgentCompletion;
+  /** Older callers remain full; deterministic checks always run in either mode. */
+  semanticMode?: 'adaptive' | 'full' | 'deterministic';
 }): Promise<FactReview> {
   const deterministic = reviewProseDeterministically(
     options.narrative,
@@ -178,6 +197,10 @@ export async function reviewNarrativeStyle(options: {
   // With no accepted prose to compare against, a semantic continuity call cannot
   // find cross-turn repetition and would only add latency and cost.
   if (options.recentNarratives.length === 0) {
+    return { approved: true, violations: [], corrections: [] };
+  }
+  if (options.semanticMode === 'deterministic') return { approved: true, violations: [], corrections: [] };
+  if (options.semanticMode === 'adaptive' && !hasSemanticStyleRisk(options.narrative, options.recentNarratives, options.exemptTexts)) {
     return { approved: true, violations: [], corrections: [] };
   }
 

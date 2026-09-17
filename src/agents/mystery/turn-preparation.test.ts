@@ -45,7 +45,7 @@ describe('shared foreground and speculative preparation', () => {
       localDate: '2024-09-09', localTime: '12:00', cycleCount: 1, period: 'day',
     });
     expect(prepared.request.turnContext.clock).toEqual(prepared.request.presentationContext.clock);
-    expect(prepared.request.turnContext.requiresStateAgent).toBe(true);
+    expect(prepared.request.turnContext.requiresStateAgent).toBe(false);
   });
 
   it('passes only trusted opening continuity texts, never arbitrary variable text, to Writer and Director', () => {

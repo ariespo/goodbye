@@ -243,6 +243,8 @@ export interface DirectorPlan {
   scenePlan?: DirectorScenePlan;
   /** Intent-only stages; the program validates them and owns costs and outcomes. */
   actionSteps?: DirectorActionStepProposal[];
+  /** Optional bounded writing focus; never grants facts, motives, or knowledge. */
+  sceneCraft?: import('./scene-craft').SceneCraftIntent;
   /** 旧格式兼容的建议值；程序结算会忽略它。 */
   timeCostMinutes?: number;
 }
@@ -279,6 +281,9 @@ export interface FactReviewViolation {
   code: FactReviewViolationCode;
   factId?: string;
   message: string;
+  /** Program-localized candidate metadata; never a factual source. */
+  field?: string;
+  candidateQuote?: string;
 }
 
 export interface FactReview {
@@ -320,7 +325,8 @@ export interface WriterPacket {
   };
   /** Public clock, accepted history and memory survive both semantic and format repairs. */
   continuityContext?: Record<string, unknown>;
-  plan: Omit<DirectorPlan, 'revelations' | 'knowledgeEvents' | 'backgroundFactProposals'>;
+  plan: Omit<DirectorPlan, 'revelations' | 'knowledgeEvents' | 'backgroundFactProposals' | 'sceneCraft'>;
+  sceneCraft?: import('./scene-craft').SceneCraftGuidance;
   playerKnownFacts: ProjectedFact[];
   /** Program-owned, current-turn permission to repeat an exact known fact level. Legacy packets grant no NPC speakers. */
   knownFactSpeakers?: Array<{ factId: string; level: RevealLevel; speakerIds: string[] }>;

@@ -1,0 +1,119 @@
+{
+  "scope": "Synthetic isolated calls; no player save mutation; not a full playthrough or literary A/B evaluation",
+  "first": {
+    "testedAt": "2026-09-17T17:59:56.945Z",
+    "model": "gemini-3.7-flash【果汁】",
+    "outcomes": [
+      {
+        "stage": "writer",
+        "passed": true,
+        "elapsedMs": 12559
+      },
+      {
+        "stage": "patch",
+        "passed": false,
+        "elapsedMs": 14189,
+        "errorKind": "rate_limit"
+      }
+    ],
+    "requests": [
+      {
+        "durationMs": 4766,
+        "status": 200,
+        "outcome": "failed",
+        "kind": "request",
+        "usage": {
+          "inputTokens": 5006,
+          "outputTokens": 394,
+          "cachedInputTokens": 0
+        },
+        "cost": null
+      },
+      {
+        "durationMs": 6369,
+        "status": 200,
+        "outcome": "success",
+        "kind": "retry",
+        "usage": {
+          "inputTokens": 5267,
+          "outputTokens": 417,
+          "cachedInputTokens": 0
+        },
+        "cost": null
+      },
+      {
+        "durationMs": 3688,
+        "status": 200,
+        "outcome": "failed",
+        "kind": "request",
+        "usage": {
+          "inputTokens": 4825,
+          "outputTokens": 394,
+          "cachedInputTokens": 0
+        },
+        "cost": null
+      },
+      {
+        "durationMs": 4109,
+        "status": 200,
+        "outcome": "failed",
+        "kind": "retry",
+        "usage": {
+          "inputTokens": 4825,
+          "outputTokens": 396,
+          "cachedInputTokens": 0
+        },
+        "cost": null
+      },
+      {
+        "durationMs": 3354,
+        "status": 200,
+        "outcome": "failed",
+        "kind": "retry",
+        "usage": {
+          "inputTokens": 4825,
+          "outputTokens": 388,
+          "cachedInputTokens": 0
+        },
+        "cost": null
+      }
+    ]
+  },
+  "patchRetest": {
+    "testedAt": "2026-09-17T18:04:29.113Z",
+    "model": "gemini-3.7-flash【果汁】",
+    "outcomes": [
+      {
+        "stage": "patch",
+        "passed": true,
+        "elapsedMs": 11194
+      }
+    ],
+    "requests": [
+      {
+        "durationMs": 4127,
+        "status": 200,
+        "outcome": "failed",
+        "kind": "request",
+        "usage": {
+          "inputTokens": 4867,
+          "outputTokens": 396,
+          "cachedInputTokens": 0
+        },
+        "cost": null
+      },
+      {
+        "durationMs": 6030,
+        "status": 200,
+        "outcome": "success",
+        "kind": "retry",
+        "usage": {
+          "inputTokens": 5125,
+          "outputTokens": 416,
+          "cachedInputTokens": 0
+        },
+        "cost": null
+      }
+    ]
+  }
+}

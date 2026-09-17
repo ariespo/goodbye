@@ -3,6 +3,7 @@ import type { AgentNarrativeModeSetting, ChatPreset } from '../../sillytavern/ty
 import type { ApiConfig, ChatCompletionMessage, ResponseFormat } from '../../sillytavern/api-router';
 import { callSecondaryApi } from '../../sillytavern/api-router';
 import { DIRECTOR_PLAN_RESPONSE_FORMAT, FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
+import { parseSceneCraftIntent } from './scene-craft';
 import { recordOrchestrationEntry } from './orchestration-log';
 import type { OrchestrationOutcome, OrchestrationStageTiming } from './orchestration-log';
 import { buildMysteryBrief } from './brief';
@@ -139,6 +140,7 @@ function parseDirectorPlan(text: string): DirectorPlan {
       ids.add(step.id);
     }
   }
+  if (plan.sceneCraft !== undefined) plan.sceneCraft = parseSceneCraftIntent(plan.sceneCraft, plan.beats);
   return plan as DirectorPlan;
 }
 

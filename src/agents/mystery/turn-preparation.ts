@@ -480,7 +480,7 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
       recentHistory,
       memoryContext: contextBundle.directorMemory,
       contextSelectionIds: contextBundle.selectedIds,
-      requiresStateAgent: true,
+      requiresStateAgent: agentMode === 'strict' || intentPolicy.mode === 'fantasy' || hadPendingDeathNews,
       clock,
       publicContinuity,
       gameStatus: {

@@ -1,7 +1,7 @@
 import { getMaxOutputTokens } from '../../sillytavern/token-budget';
 import { callSecondaryApi, type ApiConfig } from '../../sillytavern/api-router';
 import type { ChatPreset } from '../../sillytavern/types';
-import { completeParsedStructured, extractJson, type AgentCompletion } from './structured';
+import { AdaptedSchemaResponseError, completeParsedStructured, completeStructured, extractJson, type AgentCompletion } from './structured';
 import {
   buildNarrativeFactCriticUserPrompt,
   buildNarrativeFormatRepairPrompt,
@@ -34,6 +34,7 @@ import type { FactAliasTable } from './fact-aliases';
 import { AssertionReferenceError, buildAssertionReferenceTable, resolveAssertionAuditReferences, type AssertionReferenceTable } from './assertion-references';
 import { buildNarrativeReportRepairStrategy, NarrativeReportRepairError, type NarrativeReportRepairTarget } from './narrative-report-repair';
 import { validateAdaptedSchemaValue } from './schema-compatibility';
+import { applyNarrativePatch, buildNarrativePatchPrompt, buildNarrativePatchTask, InvalidNarrativePatchError, narrativePatchResponseFormat } from './narrative-patch';
 
 const ASSERTION_STATUSES = new Set([
   'supported', 'unsupported', 'contradicted', 'question', 'hypothesis', 'ordinary-present',
@@ -695,11 +696,29 @@ export async function repairNarrativeAgainstWriterPacket(options: {
   formatPrompt?: string;
   abortSignal?: AbortSignal;
   priorResiduals?: FactReviewViolation[];
+  /** The caller allows at most one local attempt inside its existing repair budget. */
+  allowLocalizedRepair?: boolean;
   complete?: AgentCompletion;
 }): Promise<string> {
   const systemPrompt = buildWriterSystemPrompt(options.formatPrompt);
   const complete = options.complete
     ?? ((messages, callOptions) => callSecondaryApi(options.api, messages, options.preset, callOptions));
+  const task = options.allowLocalizedRepair !== false
+    ? buildNarrativePatchTask(options.rejectedNarrative, options.review) : undefined;
+  if (task) {
+    try {
+      const response = await completeStructured(complete, `${options.api.baseUrl}|${options.api.model}`, [
+        { role: 'system', content: `${systemPrompt}\n\n[本次局部修复输出约定]\n本次调用只输出局部修复 JSON，不输出场景标签全文。保留所有事实与角色权限；程序负责把替换文本合入原场景并重新审查。` },
+        { role: 'user', content: buildNarrativePatchPrompt(task, options.packet, options.review, options.priorResiduals ?? []) },
+      ], { temperature: 0, maxTokens: getMaxOutputTokens(options.preset), abortSignal: options.abortSignal }, narrativePatchResponseFormat(task));
+      return applyNarrativePatch(task, response, options.rejectedNarrative);
+    } catch (error) {
+      // Schema dialect validation is a malformed patch, not a network failure.
+      // No hidden correction call here: the outer loop owns the entire repair budget.
+      if (error instanceof AdaptedSchemaResponseError) throw new InvalidNarrativePatchError(error.message);
+      throw error;
+    }
+  }
   return complete([
     { role: 'system', content: systemPrompt },
     {

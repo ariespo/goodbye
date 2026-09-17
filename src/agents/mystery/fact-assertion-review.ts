@@ -381,13 +381,16 @@ export function validateAssertionAudit(
       violations.push({
         code: badCitation ? 'invalid-assertion-citation' : 'unsupported-assertion',
         message: `断言“${quote}”没有有效的逐项来源引文或违反来源的讲述权限。`,
+        field: assertion.field, candidateQuote: quote,
       });
     }
     if (assertion.status === 'unsupported') {
-      violations.push({ code: 'unsupported-assertion', message: `正文含无来源支持的断言“${quote}”：${reason}` });
+      violations.push({ code: 'unsupported-assertion', message: `正文含无来源支持的断言“${quote}”：${reason}`,
+        field: assertion.field, candidateQuote: quote });
     }
     if (assertion.status === 'contradicted') {
-      violations.push({ code: 'contradicted-assertion', message: `正文含与来源冲突的断言“${quote}”：${reason}` });
+      violations.push({ code: 'contradicted-assertion', message: `正文含与来源冲突的断言“${quote}”：${reason}`,
+        field: assertion.field, candidateQuote: quote });
     }
   }
 

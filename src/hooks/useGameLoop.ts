@@ -3,6 +3,8 @@ import { assertTurnActive, runStateWithFallback } from '../utils/turn-lifecycle'
 import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
 import { isBoundedRetrievalEligible } from '../agents/mystery/bounded-retrieval';
 import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
+import { decideStateReview, styleSemanticModeForTurn } from '../agents/mystery/adaptive-review-policy';
+import { InvalidNarrativePatchError } from '../agents/mystery/narrative-patch';
 import { validateNarrativeContract } from '../engine/narrative-contract';
 import { resolvePlayerActionIntent, type ActionIntentSnapshot } from '../engine/player-action-intent';
 import { actionSequenceNarrativeError } from '../engine/action-sequence-narrative';
@@ -427,6 +429,7 @@ export function useGameLoop() {
       }
 
       let fullText = '';
+      let candidateWasRepaired = !!resumedNarrativeFailure;
       let acceptedNarrativeReview: FactReview | undefined;
       const earnedPresentedTurn = (): PreparedMysteryTurn | null => {
         const turn = preparedTurn;
@@ -925,6 +928,7 @@ export function useGameLoop() {
                   ? candidate.validationErrors
                   : [{ code: 'MISSING_SCENE', message: '正文没有生成可播放场景。' }];
                 metrics.recordRepair('protocol');
+                candidateWasRepaired = true;
                 const repaired = await metrics.stage('repair', () => repairNarrativeFormatAgainstWriterPacket({
                   api: analysisApi,
                   preset: activePreset,
@@ -997,7 +1001,7 @@ export function useGameLoop() {
             }
 
             if (preparedTurn) {
-              if (preparedTurn.reviewPolicy.narrative || preparedTurn.reviewPolicy.style) {
+              {
                 let narrativeReview: FactReview | undefined;
                 let narrativeResiduals: FactReviewViolation[] = factResidualsForRetry(resumedNarrativeFailure);
                 try {
@@ -1040,7 +1044,7 @@ export function useGameLoop() {
                       ...Object.values(preparedTurn.executedContext?.segmentNpcIdsByLocation ?? {}).flat(),
                     ])];
                     const [candidateFactReview, candidateStyleReview] = await Promise.all([
-                      preparedTurn.reviewPolicy.narrative
+                      preparedTurn.reviewPolicy.narrative || candidateWasRepaired
                         ? metrics.stage('fact-review', () => reviewNarrativeAgainstWriterPacket({
                             api: analysisApi,
                             preset: activePreset,
@@ -1064,6 +1068,8 @@ export function useGameLoop() {
                         narrative: candidateNarrative,
                         recentNarratives,
                         exemptTexts: styleExemptTexts,
+                        semanticMode: preparedTurn.reviewPolicy.style === false ? 'deterministic'
+                          : styleSemanticModeForTurn(settings.agentNarrativeMode, preparedTurn.writerPacket),
                         abortSignal: abortController.signal,
                       })),
                     ]);
@@ -1076,16 +1082,26 @@ export function useGameLoop() {
                   for (let attempt = 0; attempt < 3 && narrativeReview && !narrativeReview.approved; attempt += 1) {
                     const rejectedReview = narrativeReview;
                     metrics.recordRepair('narrative');
-                    const repairedNarrative = await metrics.stage('repair', () => repairNarrativeAgainstWriterPacket({
-                      api: analysisApi,
-                      preset: activePreset,
-                      packet: preparedTurn.writerPacket,
-                      rejectedNarrative: fullText,
-                      review: rejectedReview,
-                      priorResiduals: narrativeResiduals,
-                      formatPrompt: settings.formatPromptTemplate,
-                      abortSignal: abortController.signal,
-                    }));
+                    let repairedNarrative: string;
+                    try {
+                      candidateWasRepaired = true;
+                      repairedNarrative = await metrics.stage('repair', () => repairNarrativeAgainstWriterPacket({
+                        api: analysisApi,
+                        preset: activePreset,
+                        packet: preparedTurn.writerPacket,
+                        rejectedNarrative: fullText,
+                        review: rejectedReview,
+                        priorResiduals: narrativeResiduals,
+                        formatPrompt: settings.formatPromptTemplate,
+                        abortSignal: abortController.signal,
+                        allowLocalizedRepair: attempt === 0,
+                      }));
+                    } catch (error) {
+                      assertCurrent();
+                      if (!(error instanceof InvalidNarrativePatchError)) throw error;
+                      narrativeResiduals = mergeRepairResiduals(narrativeResiduals, rejectedReview.violations);
+                      continue;
+                    }
                     assertCurrent();
                     narrativeResiduals = mergeRepairResiduals(narrativeResiduals, rejectedReview.violations);
                     let repairCandidate;
@@ -1220,7 +1236,12 @@ export function useGameLoop() {
               const evidenceAuthority = buildStateEvidenceAuthority(earnedPresentedTurn()!.writerPacket, MYSTERY_TRUTH_GRAPH,
                 preparation.request.truthContext.playerKnowledge ?? {},
                 preparation.request.truthContext.unlockedClueIds, preparedTurn.factAliases.aliasToFactId);
-              if (preparedTurn.reviewPolicy.state || evidenceAuthority.newEvidence.length > 0) {
+              const stateDecision = decideStateReview({ forceFull: settings.agentNarrativeMode !== 'standard'
+                || preparedTurn.reviewPolicy.state !== false, packet: preparedTurn.writerPacket,
+                narrative: parseStateRef.current.parsed.maintext || fullText, scene: completedScene,
+                acceptedReview: acceptedNarrativeReview, newEvidenceCount: evidenceAuthority.newEvidence.length,
+                saturationPivot: preparedTurn.brief.saturationPivot });
+              if (stateDecision.run) {
                 const acceptedTurn = preparedTurn;
                 const stateResult = await metrics.stage('state', () => runStateWithFallback(() => runStateAgent({
                   api: analysisApi,

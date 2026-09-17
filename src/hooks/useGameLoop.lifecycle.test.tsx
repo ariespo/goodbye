@@ -6,7 +6,12 @@ import { useGameStore } from '../stores/gameStore';
 import { prepareMysteryTurn as prepareActual } from '../agents/mystery/orchestrator';
 import type { PreparedMysteryTurn } from '../agents/mystery/orchestrator';
 import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
-import { prepareMysteryTurn, invalidatePreplans, startPreplan, consumePreplan } from '../agents/mystery';
+import { prepareMysteryTurn, invalidatePreplans, startPreplan, consumePreplan, reviewNarrativeAgainstWriterPacket,
+  reviewNarrativeStyle, repairNarrativeAgainstWriterPacket } from '../agents/mystery';
+import { reviewNarrativeStyle as actualStyleReview } from '../agents/mystery/style-review';
+import { resolveAction } from '../engine/action-resolution';
+import { candidateFingerprint } from '../memory/character-continuity';
+import { applyNarrativePatch, buildNarrativePatchTask, InvalidNarrativePatchError } from '../agents/mystery/narrative-patch';
 import { generateSceneChecklist } from '../agents/mystery/scene-list';
 import { isBoundedRetrievalEligible } from '../agents/mystery/bounded-retrieval';
 import { streamChatCompletion } from '../sillytavern/api-router';
@@ -20,6 +25,7 @@ vi.mock('../agents/mystery', async importOriginal => ({
   ...await importOriginal<typeof import('../agents/mystery')>(), prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(), consumePreplan: vi.fn(),
   reviewNarrativeAgainstWriterPacket: vi.fn().mockResolvedValue({ approved: true, violations: [], corrections: [] }),
   reviewNarrativeStyle: vi.fn().mockResolvedValue({ approved: true, violations: [], corrections: [] }),
+  repairNarrativeAgainstWriterPacket: vi.fn(),
 }));
 vi.mock('../agents/mystery/bounded-retrieval', async importOriginal => ({
   ...await importOriginal<typeof import('../agents/mystery/bounded-retrieval')>(), isBoundedRetrievalEligible: vi.fn(),
@@ -44,6 +50,8 @@ let preparedFixture: PreparedMysteryTurn;
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.mocked(reviewNarrativeStyle).mockResolvedValue({ approved: true, violations: [], corrections: [] });
+  vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ approved: true, violations: [], corrections: [] });
   vi.stubGlobal('fetch', () => { throw new Error('Unexpected live HTTP in lifecycle fixture'); });
   invalidatePreplans();
   clearTurnMetrics();
@@ -83,6 +91,92 @@ beforeEach(async () => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('foreground State cancellation', () => {
+  it.each(['standard', 'strict'] as const)('%s applies its optional-call policy while preserving the same fixed settlement and persistence', async mode => {
+    useGameStore.setState(state => ({ game: { ...state.game, gameStatus: { ...state.game.gameStatus, stamina: 60 } },
+      tavern: { ...state.tavern, variables: { ...state.tavern.variables, stamina: 60 }, settings: { ...state.tavern.settings!, agentNarrativeMode: mode },
+      chats: state.tavern.chats.map(chat => ({ ...chat, variables: { ...chat.variables, stamina: 60 }, messages: [{ id: 'old', role: 'assistant',
+        content: '<maintext>对话|旁白|calm|冷白色的灯光在收银台上轻轻闪了一下，照得她的脸色更加苍白。</maintext>', timestamp: 1, variables: {} }] })) } }));
+    preparedFixture.reviewPolicy.state = false;
+    preparedFixture.reviewPolicy.narrative = true;
+    preparedFixture.writerPacket.resolvedAction = resolveAction({ id: 'fixed-rest', cycleCount: 1, startTime: '2024-09-09T08:00:00',
+      currentLocationId: 'home', stamina: 60, sanity: 70, steps: [{ id: 'rest', kind: 'rest', scope: 'short', locationId: 'home', requestedMinutes: 10, completionSourceIds: [] }] });
+    const semanticStyle = vi.fn(async () => '{"approved":true,"violations":[],"corrections":[]}');
+    vi.mocked(reviewNarrativeStyle).mockImplementation(options => actualStyleReview({ ...options, complete: semanticStyle }));
+    vi.mocked(runStateAgent).mockResolvedValue({ vars: {}, summary: null, rejected: [], clamped: [] });
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockResolvedValue({ approved: true, violations: [], corrections: [],
+      assertionAudit: { reviewedFields: ['maintext'], assertions: [{ field: 'maintext', quote: '你在房间里停下脚步。', proposition: '休息', status: 'ordinary-present', citations: [], reason: '当下动作' }] },
+      continuityEffects: { candidateId: candidateFingerprint(prose), cognitionDeltas: [], disclosures: [], commitmentOperations: [] } });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('休息十分钟'); });
+    expect(runStateAgent).toHaveBeenCalledTimes(mode === 'strict' ? 1 : 0);
+    expect(semanticStyle).toHaveBeenCalledTimes(mode === 'strict' ? 1 : 0);
+    expect(useGameStore.getState().game.history, JSON.stringify(useGameStore.getState().api.turnRecovery)).toHaveLength(1);
+    expect(useGameStore.getState().game.gameStatus.time.getMinutes()).toBe(10);
+    expect(useGameStore.getState().game.gameStatus.stamina).toBe(preparedFixture.writerPacket.resolvedAction.resources.after.stamina);
+    // Background observation may update this same message, but never append/settle it twice.
+    expect(new Set(vi.mocked(saveChat).mock.calls.flatMap(([chat]) => chat.messages
+      .filter(message => message.role === 'assistant' && message.id !== 'old').map(message => message.id))).size).toBe(1);
+    unmount();
+  });
+  it('runs fresh fact review after a model repair even when the old policy disabled fact review', async () => {
+    preparedFixture.reviewPolicy.narrative = false;
+    preparedFixture.reviewPolicy.style = false;
+    vi.mocked(reviewNarrativeStyle).mockResolvedValueOnce({ approved: false, violations: [{ code: 'repeated-prose', message: '重复' }], corrections: ['改写'] })
+      .mockResolvedValue({ approved: true, violations: [], corrections: [] });
+    vi.mocked(repairNarrativeAgainstWriterPacket).mockResolvedValue(prose.replace('停下脚步', '扶着桌沿坐下来'));
+    vi.mocked(runStateAgent).mockResolvedValue({ vars: {}, summary: null, rejected: [], clamped: [] });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('观察房间'); });
+    expect(repairNarrativeAgainstWriterPacket).toHaveBeenCalledTimes(1);
+    const calls = vi.mocked(reviewNarrativeAgainstWriterPacket).mock.calls.filter(([options]) => options.continuityMode !== 'auxiliary');
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].narrative).toContain('扶着桌沿坐下来');
+    expect(useGameStore.getState().game.history).toHaveLength(1);
+    unmount();
+  });
+  it('consumes an invalid local patch attempt and retries the unchanged draft with full repair', async () => {
+    preparedFixture.reviewPolicy.narrative = false;
+    const rejection = { approved: false, violations: [{ code: 'repeated-prose' as const, message: '重复' }], corrections: ['改写'] };
+    vi.mocked(reviewNarrativeStyle).mockResolvedValueOnce(rejection).mockResolvedValue({ approved: true, violations: [], corrections: [] });
+    vi.mocked(repairNarrativeAgainstWriterPacket).mockRejectedValueOnce(new InvalidNarrativePatchError('unknown target'))
+      .mockResolvedValueOnce(prose.replace('停下脚步', '扶着桌沿坐下来'));
+    vi.mocked(runStateAgent).mockResolvedValue({ vars: {}, summary: null, rejected: [], clamped: [] });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('观察房间'); });
+    const calls = vi.mocked(repairNarrativeAgainstWriterPacket).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][0].allowLocalizedRepair).toBe(true);
+    expect(calls[1][0].allowLocalizedRepair).toBe(false);
+    expect(calls[1][0].rejectedNarrative).toBe(calls[0][0].rejectedNarrative);
+    expect(vi.mocked(reviewNarrativeAgainstWriterPacket).mock.calls.filter(([options]) => options.continuityMode !== 'auxiliary')).toHaveLength(1);
+    expect(useGameStore.getState().game.history).toHaveLength(1);
+    unmount();
+  });
+  it('rejects unauthorized content introduced by an actual local patch before any State or commit', async () => {
+    preparedFixture.reviewPolicy.narrative = false;
+    const rejection = { approved: false, violations: [{ code: 'repeated-prose' as const, message: '重复', candidateQuote: '你在房间里停下脚步。' }], corrections: ['改写这句'] };
+    vi.mocked(reviewNarrativeStyle).mockResolvedValueOnce(rejection).mockResolvedValue({ approved: true, violations: [], corrections: [] });
+    const forbidden = '监控证实她昨晚到过学校。';
+    vi.mocked(repairNarrativeAgainstWriterPacket).mockImplementation(async options => {
+      if (!options.allowLocalizedRepair) return options.rejectedNarrative;
+      const task = buildNarrativePatchTask(options.rejectedNarrative, options.review)!;
+      expect(task).toBeDefined();
+      return applyNarrativePatch(task, JSON.stringify({ edits: task.targets.map(target => ({ targetId: target.id,
+        replacement: target.required ? forbidden : target.originalText })) }));
+    });
+    vi.mocked(reviewNarrativeAgainstWriterPacket).mockImplementation(async options => {
+      expect(options.narrative).toContain(forbidden);
+      return { approved: false, violations: [{ code: 'unsupported-assertion', message: '没有获准的监控来源', candidateQuote: forbidden }], corrections: ['撤销监控断言'] };
+    });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('观察房间'); });
+    expect(reviewNarrativeAgainstWriterPacket).toHaveBeenCalledTimes(3);
+    expect(runStateAgent).not.toHaveBeenCalled();
+    expect(useGameStore.getState().game.history).toHaveLength(0);
+    expect(vi.mocked(saveChat).mock.calls.flatMap(([chat]) => chat.messages).some(message => message.role === 'assistant')).toBe(false);
+    expect(useGameStore.getState().api.turnRecovery.repairable).toBe(true);
+    unmount();
+  });
   it('does not adopt a speculative plan that skipped a complex input\'s retrieval', async () => {
     vi.mocked(isBoundedRetrievalEligible).mockImplementation(input => input.includes('核对'));
     vi.mocked(consumePreplan).mockResolvedValue(preparedFixture);
