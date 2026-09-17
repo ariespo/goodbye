@@ -31,6 +31,7 @@ import {
 import type { ActionAuthorityContext } from './action-authority';
 import { isNonWorkResolution } from './action-authority';
 import { compileTurnContext, type TurnContextBundle } from '../../memory/world-memory';
+import { buildAuthorizedRetrievalCorpus, MAX_RETRIEVAL_TOKENS } from '../../memory/authorized-retrieval';
 import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
 import { buildMysteryBrief } from './brief';
 import { REVEAL_LEVELS, type RevealLevel, type MysteryRouteId, type MysteryOverlayId, type TruthContext } from './types';
@@ -95,8 +96,8 @@ export function resolveAnalysisApi(settings: AppSettings) {
   // 导演/审查是结构化 JSON 任务,优先走次 API(便宜模型),未配置时回退主 API
   const sec = settings.api.secondary;
   return sec?.enabled && sec.apiKey && sec.baseUrl
-    ? { baseUrl: sec.baseUrl, apiKey: sec.apiKey, model: sec.model }
-    : { baseUrl: settings.api.baseUrl, apiKey: settings.api.apiKey, model: settings.api.model };
+    ? { baseUrl: sec.baseUrl, apiKey: sec.apiKey, model: sec.model, pricing: sec.pricing }
+    : { baseUrl: settings.api.baseUrl, apiKey: settings.api.apiKey, model: settings.api.model, pricing: settings.api.pricing };
 }
 
 function readConfirmedPlayerIdentity(settings: AppSettings): PlayerIdentity | undefined {
@@ -516,6 +517,11 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     pendingActionSceneContext: structuredClone(sceneState.pendingActionSceneContext),
     legalOpportunityMap,
     legalProgramActionMap,
+    retrievalCorpus: buildAuthorizedRetrievalCorpus({ history: historyMessages, variables: narrativeVariables,
+      knownFacts: buildMysteryBrief(MYSTERY_TRUTH_GRAPH, truthContext).playerKnownFacts }),
+    retrievalTokenBudget: Math.max(0, Math.min(MAX_RETRIEVAL_TOKENS, contextBundle.tokenBudget.maxContext
+      - contextBundle.tokenBudget.reservedOutput - contextBundle.tokenBudget.reservedRepair
+      - contextBundle.tokenBudget.estimatedFixed - contextBundle.tokenBudget.estimatedSelected)),
 
   };
   return { request, actionNarrativeContext, narrativeVariables, narrativeBackground, intentPolicy,
@@ -697,5 +703,7 @@ export function preparationContextKey(chatId: string | null, request: Omit<Prepa
       .map(([key, item]) => [key, canonical(item)]));
     return value;
   }
-  return JSON.stringify(canonical({ chatId, writerApi, ...request }));
+  const withoutObserver = (api: ApiConfig | undefined) => api && Object.fromEntries(
+    Object.entries(api).filter(([key]) => key !== 'telemetry'));
+  return JSON.stringify(canonical({ chatId, ...request, api: withoutObserver(request.api), writerApi: withoutObserver(writerApi) }));
 }

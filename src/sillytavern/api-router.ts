@@ -1,5 +1,7 @@
 import type { ChatPreset, DynamicRecord } from './types';
 import { assertRequestTokenBudget, ContextBudgetError, getMaxContextTokens, getMaxOutputTokens } from './token-budget';
+import { beginApiRequest, notifyApiRepair, parseApiUsage,
+  type ApiPricing, type ApiTelemetryContext, type ApiRepairKind, type ApiRequestEvent, type ApiTokenUsage } from './api-telemetry';
 
 export type ApiErrorKind =
   | 'context_budget'
@@ -145,6 +147,9 @@ export interface ApiConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  pricing?: ApiPricing;
+  /** Runtime only; never persist the observer in settings or preparation cache keys. */
+  telemetry?: ApiTelemetryContext;
 }
 
 function isDeepSeekV4(config: ApiConfig): boolean {
@@ -277,8 +282,10 @@ function buildHeaders(apiKey: string): Record<string, string>[] {
 async function fetchWithAuthFallback(
   url: string,
   apiKey: string,
-  init: RequestInit
-): Promise<Response> {
+  init: RequestInit,
+  config: ApiConfig,
+  kind: ApiRequestEvent['kind'] = 'request',
+): Promise<{ response: Response; finish: ReturnType<typeof beginApiRequest> }> {
   if (!apiKey) {
     throw new Error('API Key 未设置，请先在设置中填写');
   }
@@ -287,7 +294,9 @@ async function fetchWithAuthFallback(
   let lastStatus: number | null = null;
   let lastError = '';
 
-  for (const headers of headersList) {
+  for (const [index, headers] of headersList.entries()) {
+    const finish = beginApiRequest(config, index ? 'auth-fallback' : kind);
+    let attemptStatus: number | null = null;
     try {
       const response = await fetch(url, {
         ...init,
@@ -296,14 +305,17 @@ async function fetchWithAuthFallback(
           ...(init.headers as Record<string, string> || {}),
         },
       });
-      if (response.ok) return response;
+      attemptStatus = response.status;
+      if (response.ok) return { response, finish };
       lastStatus = response.status;
       lastError = await response.text();
+      finish(response.status, 'failed');
       // 仅认证失败才换 api-key header 重试；400 等业务错误换 header 只会
       // 产生误导性的 401（如 DeepSeek 对未知 header 返回 Authentication Fails），掩盖真实错误
       if (response.status !== 401 && response.status !== 403) break;
     } catch (e) {
       const classified = toApiCallError(e);
+      finish(attemptStatus, classified.kind === 'abort' ? 'cancelled' : 'failed');
       // 中止/超时不应再换 header 重试
       if (classified.kind === 'abort' || classified.kind === 'timeout') throw classified;
       lastError = classified.message;
@@ -351,6 +363,7 @@ export async function streamChatCompletion(
     max_tokens: getMaxOutputTokens(preset),
   };
   applyProviderCompatibility(body, config);
+  if (config.telemetry) body.stream_options = { include_usage: true };
 
   if (preset) {
     if (preset.settings.temp_openai !== undefined) body.temperature = preset.settings.temp_openai;
@@ -360,25 +373,33 @@ export async function streamChatCompletion(
     if (preset.settings.pres_pen_openai !== undefined) body.presence_penalty = preset.settings.pres_pen_openai;
   }
 
-  const serializedBody = serializeBudgetedRequest(body, preset);
+  let serializedBody = serializeBudgetedRequest(body, preset);
 
   const firstByteTimeoutMs = retryOptions?.firstByteTimeoutMs ?? 30_000;
   const idleTimeoutMs = retryOptions?.idleTimeoutMs ?? 60_000;
   const retries = retryOptions?.retries ?? 2;
   const baseDelayMs = retryOptions?.baseDelayMs ?? 1000;
 
-  const runStreamOnce = async (onFirstToken: () => void): Promise<void> => {
+  const runStreamOnce = async (onFirstToken: () => void, kind: ApiRequestEvent['kind']): Promise<void> => {
     const timeout = createTimeoutSignal(abortSignal, firstByteTimeoutMs);
+    let finish: ReturnType<typeof beginApiRequest> | undefined;
+    let status: number | null = null;
+    let usage: ApiTokenUsage | null = null;
     try {
-      const response = await fetchWithAuthFallback(
+      const result = await fetchWithAuthFallback(
         `${config.baseUrl}/chat/completions`,
         config.apiKey,
-        { method: 'POST', body: serializedBody, signal: timeout.signal }
+        { method: 'POST', body: serializedBody, signal: timeout.signal },
+        { ...config, model: String(body.model ?? '') }, kind,
       );
+      const response = result.response;
+      finish = result.finish;
+      status = response.status;
 
       // Gateways may ignore stream:true when serializing their error response.
       if (/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')) {
         const data = await response.json();
+        usage = parseApiUsage(data.usage);
         const content = data.choices?.[0]?.message?.content;
         if (typeof content === 'string') assertNoProxyErrorEnvelope(content);
         throw new ApiCallError('模型未返回流式正文', 'http4xx');
@@ -417,7 +438,24 @@ export async function streamChatCompletion(
         if (!contentEmitted) {
           throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
         }
+        // The callback performs review/state/persistence, beyond Writer transport latency.
+        finish?.(status, 'success', usage);
+        timeout.dispose();
         await callbacks.onComplete();
+      };
+      const consumeLine = (line: string): boolean => {
+        const trimmed = line.trim();
+        if (trimmed === 'data: [DONE]') return true;
+        if (!trimmed.startsWith('data:')) return false;
+        let data;
+        try { data = JSON.parse(trimmed.slice(5).trimStart()); } catch { return false; }
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+        // Usage frames are cumulative snapshots, not deltas.
+        const frameUsage = parseApiUsage(data.usage);
+        if (frameUsage) usage = frameUsage;
+        const token = data.choices?.[0]?.delta?.content;
+        if (typeof token === 'string' && token) receiveContent(token);
+        return false;
       };
 
       try {
@@ -431,45 +469,51 @@ export async function streamChatCompletion(
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            if (line.trim() === '') continue;
-            if (line.trim() === 'data: [DONE]') {
+            if (consumeLine(line)) {
               await complete();
               return;
             }
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                const delta = data.choices?.[0]?.delta;
-                const token = typeof delta?.content === 'string' ? delta.content : '';
-                if (token) receiveContent(token);
-                // reasoning_content is private analysis, never playable prose.
-              } catch {
-                // Ignore malformed JSON
-              }
-            }
           }
         }
+        buffer += decoder.decode();
+        if (buffer.trim()) consumeLine(buffer);
       } finally {
         reader.releaseLock();
       }
 
       await complete();
+    } catch (cause) {
+      // An interrupted stream snapshot may exclude charged tokens.
+      finish?.(status, toApiCallError(cause).kind === 'abort' ? 'cancelled' : 'failed', null);
+      throw cause;
     } finally {
       timeout.dispose();
     }
   };
 
   // 首字节前的失败对玩家无感，可自动重试；已输出内容后中断则交由调用方做回合级恢复
+  let streamOptionsFallback = false;
   for (let attempt = 0; ; attempt++) {
     let tokenEmitted = false;
     try {
-      await runStreamOnce(() => { tokenEmitted = true; });
+      const kind = streamOptionsFallback ? 'stream-options-fallback' : attempt ? 'retry' : 'request';
+      streamOptionsFallback = false;
+      await runStreamOnce(() => { tokenEmitted = true; }, kind);
       return;
     } catch (cause) {
       const error = toApiCallError(cause);
       if (tokenEmitted) {
         if (error.kind === 'abort') throw error;
         throw new ApiCallError(`剧情生成中断: ${error.message}`, 'stream_interrupted', error.status);
+      }
+      if (body.stream_options && [400, 404, 422].includes(error.status ?? 0)
+        && /stream_options|include_usage/i.test(error.message)
+        && /unsupported|not supported|unknown (?:field|parameter)|unrecognized|not allowed/i.test(error.message)) {
+        delete body.stream_options;
+        serializedBody = serializeBudgetedRequest(body, preset);
+        streamOptionsFallback = true;
+        attempt--;
+        continue;
       }
       if (!error.retryable || attempt >= retries) throw error;
       retryOptions?.onRetry?.(attempt + 1, error);
@@ -494,6 +538,8 @@ export interface SecondaryApiOptions {
   maxTokens?: number;
   abortSignal?: AbortSignal;
   responseFormat?: ResponseFormat;
+  repairKind?: ApiRepairKind;
+  requestKind?: 'format-fallback';
 }
 
 export async function callSecondaryApi(
@@ -521,20 +567,32 @@ export async function callSecondaryApi(
 
   const serializedBody = serializeBudgetedRequest(body, preset);
 
-  return withRetry(async () => {
+  if (options?.repairKind) notifyApiRepair(config.telemetry, options.repairKind);
+  return withRetry(async attempt => {
     const timeout = createTimeoutSignal(options?.abortSignal, 30_000);
+    let finish: ReturnType<typeof beginApiRequest> | undefined;
+    let status: number | null = null;
+    let usage: ApiTokenUsage | null = null;
     try {
-      const response = await fetchWithAuthFallback(
+      const result = await fetchWithAuthFallback(
         `${config.baseUrl}/chat/completions`,
         config.apiKey,
-        { method: 'POST', body: serializedBody, signal: timeout.signal }
+        { method: 'POST', body: serializedBody, signal: timeout.signal },
+        { ...config, model: String(body.model ?? '') }, attempt ? 'retry' : options?.requestKind ?? 'request',
       );
+      const response = result.response;
+      finish = result.finish;
+      status = response.status;
       const data = await response.json();
+      usage = parseApiUsage(data.usage);
       const message = data.choices?.[0]?.message;
       const content = typeof message?.content === 'string' ? message.content : '';
       assertNoProxyErrorEnvelope(content);
-      if (content.trim()) return content;
+      if (content.trim()) { finish(status, 'success', usage); return content; }
       throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
+    } catch (cause) {
+      finish?.(status, toApiCallError(cause).kind === 'abort' ? 'cancelled' : 'failed', usage);
+      throw cause;
     } finally {
       timeout.dispose();
     }

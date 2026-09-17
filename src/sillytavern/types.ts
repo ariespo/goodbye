@@ -1,4 +1,5 @@
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from './token-budget';
+import type { ApiPricing } from './api-telemetry';
 /**
  * SillyTavern Web - Core Types (v3 内核 + farewell-web 游戏专属)
  */
@@ -216,6 +217,7 @@ export interface ApiSettings {
   apiKey: string;
   model: string;
   timeout?: number;
+  pricing?: ApiPricing;
   secondary?: {
     enabled: boolean;
     baseUrl: string;
@@ -223,6 +225,7 @@ export interface ApiSettings {
     model: string;
     temperature?: number;
     maxTokens?: number;
+    pricing?: ApiPricing;
   };
 }
 

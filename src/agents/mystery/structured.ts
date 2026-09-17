@@ -126,6 +126,12 @@ export async function completeStructured(
   options: SecondaryApiOptions,
   responseFormat: ResponseFormat,
 ): Promise<string> {
+  let dispatched = false;
+  const invoke = (callOptions: SecondaryApiOptions) => {
+    const next = dispatched ? { ...callOptions, requestKind: 'format-fallback' as const } : callOptions;
+    dispatched = true;
+    return complete(messages, next);
+  };
   // Measured on the official V4 Flash endpoint: json_schema returns HTTP 400
   // "This response_format type is unavailable now"; json_object succeeds.
   // Keep capability probing for proxies and other models.
@@ -142,7 +148,7 @@ export async function completeStructured(
     if (!needsAdaptation) {
       let incompatibility: string;
       try {
-        const result = await complete(messages, { ...options, responseFormat });
+        const result = await invoke({ ...options, responseFormat });
         if (!isResponseFormatUnsupportedText(result)) {
           jsonSchemaSupportCache.set(schemaKey, 'native');
           responseFormatSupportCache.set(supportKey, 'json_schema');
@@ -172,7 +178,7 @@ export async function completeStructured(
           let result: string | undefined;
           let learnedAnotherKeyword = false;
           try {
-            result = await complete(messages, { ...options, responseFormat: adaptedFormat });
+            result = await invoke({ ...options, responseFormat: adaptedFormat });
             if (isResponseFormatUnsupportedText(result)) {
               learnedAnotherKeyword = rememberUnsupportedSchemaKeywords(supportKey, result);
               result = undefined;
@@ -206,7 +212,7 @@ export async function completeStructured(
 
   if (jsonObjectSupportCache.get(supportKey) !== false) {
     try {
-      const result = await complete(messages, { ...options, responseFormat: { type: 'json_object' } });
+      const result = await invoke({ ...options, responseFormat: { type: 'json_object' } });
       if (!isResponseFormatUnsupportedText(result)) {
         jsonObjectSupportCache.set(supportKey, true);
         if (responseFormatSupportCache.get(supportKey) !== 'json_schema') {
@@ -224,7 +230,7 @@ export async function completeStructured(
   if (responseFormatSupportCache.get(supportKey) !== 'json_schema') {
     responseFormatSupportCache.set(supportKey, 'text');
   }
-  return complete(messages, options);
+  return invoke(options);
 }
 
 export type StructuredCorrection<T> = {
@@ -258,9 +264,19 @@ export async function completeParsedStructured<T>(
     if (adaptedError) throw adaptedError.validationError;
     return parse(first);
   } catch (error) {
+    // A correction may need schema-capability fallbacks. It is still one
+    // logical repair, so only its first transport call carries this marker.
+    let correctionStarted = false;
+    const correctionComplete: AgentCompletion = (correctionMessages, callOptions) => {
+      const nextOptions = { ...callOptions };
+      if (!correctionStarted) nextOptions.repairKind = 'structured';
+      else delete nextOptions.repairKind;
+      correctionStarted = true;
+      return complete(correctionMessages, nextOptions);
+    };
     const correction = correctionStrategy?.(first, error);
     if (correction) {
-      const retry = await completeStructured(complete, supportKey, correction.messages,
+      const retry = await completeStructured(correctionComplete, supportKey, correction.messages,
         { ...options, temperature: 0 }, correction.responseFormat);
       return correction.parse(retry);
     }
@@ -292,7 +308,7 @@ export async function completeParsedStructured<T>(
       },
     ];
     const retry = await completeStructured(
-      complete,
+      correctionComplete,
       supportKey,
       retryMessages,
       { ...options, temperature: 0 },

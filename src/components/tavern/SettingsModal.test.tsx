@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
 import { SettingsModal } from './SettingsModal';
+import { saveSettings } from '../../sillytavern/database';
 
 vi.mock('../../sillytavern/database', () => ({ saveSettings: vi.fn() }));
 vi.mock('../../sillytavern/api-router', () => ({ fetchModels: vi.fn(), testConnectivity: vi.fn() }));
@@ -49,5 +50,20 @@ describe('SettingsModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '音频' }));
     expect(screen.getByRole('button', { name: '音频' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('音乐音量')).toBeInTheDocument();
+  });
+
+  it('saves optional prices against the exact model and endpoint without price guesses', async () => {
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, settings }, ui: { ...state.ui, showSettings: true } }));
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByRole('button', { name: 'AI 接口' }));
+    const input = screen.getByLabelText('主模型输入价格 / 百万 token');
+    expect(input).toHaveValue(null);
+    fireEvent.change(input, { target: { value: '2.5' } });
+    fireEvent.change(screen.getByLabelText('主模型输出价格 / 百万 token'), { target: { value: '9' } });
+    fireEvent.change(screen.getByLabelText('主模型计价币种'), { target: { value: 'CNY' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(saveSettings).toHaveBeenCalledWith(expect.objectContaining({ api: expect.objectContaining({ pricing: {
+      baseUrl: settings.api.baseUrl, model: settings.api.model, currency: 'CNY', inputPerMillion: 2.5, outputPerMillion: 9,
+    } }) }));
   });
 });

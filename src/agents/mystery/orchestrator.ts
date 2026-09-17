@@ -1,6 +1,6 @@
-import { getMaxOutputTokens } from '../../sillytavern/token-budget';
+import { estimateTokens, getMaxContextTokens, getMaxOutputTokens } from '../../sillytavern/token-budget';
 import type { AgentNarrativeModeSetting, ChatPreset } from '../../sillytavern/types';
-import type { ApiConfig, ChatCompletionMessage } from '../../sillytavern/api-router';
+import type { ApiConfig, ChatCompletionMessage, ResponseFormat } from '../../sillytavern/api-router';
 import { callSecondaryApi } from '../../sillytavern/api-router';
 import { DIRECTOR_PLAN_RESPONSE_FORMAT, FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 import { recordOrchestrationEntry } from './orchestration-log';
@@ -41,6 +41,8 @@ import { resolveAction } from '../../engine/action-resolution';
 import type { ResolvedActionOutcome } from '../../engine/action-resolution';
 import type { ExecutedTurnProjection } from './turn-preparation';
 import { capturePendingActionAuthorization, restorePendingActionAuthorization, type PendingActionAuthorization } from './pending-action-authorization';
+import { planBoundedRetrieval } from './bounded-retrieval';
+import { retrievalContext, type AuthorizedRetrievalCorpus, type RetrievedRecord } from '../../memory/authorized-retrieval';
 
 export type AgentNarrativeMode = AgentNarrativeModeSetting;
 
@@ -59,6 +61,9 @@ export interface PrepareMysteryTurnOptions {
   abortSignal?: AbortSignal;
   /** 后台预规划调用时标记为 true，仅影响编排日志展示。 */
   speculative?: boolean;
+  /** Immutable program-only corpus; never serialize the whole corpus into model requests. */
+  retrievalCorpus?: AuthorizedRetrievalCorpus;
+  retrievalTokenBudget?: number;
   actionAuthority?: ActionAuthorityContext;
   pendingActionSceneContext?: import('../../engine/action-scene-continuity').PendingActionSceneContext;
   executionFingerprint?: string;
@@ -466,6 +471,22 @@ async function runMysteryPipeline(
     options.preset,
     { ...callOptions, abortSignal: options.abortSignal },
   ));
+  const lookup = await planBoundedRetrieval({ input: String(options.turnContext.playerInput ?? ''),
+    corpus: options.retrievalCorpus, api: options.api, preset: options.preset, complete,
+    abortSignal: options.abortSignal, speculative: options.speculative, tokenLimit: options.retrievalTokenBudget });
+  let recalled: readonly RetrievedRecord[] = lookup.records;
+  const withRecollection = (context: Record<string, unknown>, records = recalled) => records.length
+    ? { ...context, retrievedContext: retrievalContext(records) } : context;
+  const requestFits = (messages: ChatCompletionMessage[], responseFormat?: ResponseFormat) => estimateTokens(JSON.stringify({
+    model: options.api.model, messages, max_tokens: getMaxOutputTokens(options.preset), response_format: responseFormat,
+  })) + getMaxOutputTokens(options.preset) + 256 <= getMaxContextTokens(options.preset);
+  while (recalled.length && !requestFits([
+    { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
+    { role: 'user', content: buildDirectorUserPrompt(brief, withRecollection(options.turnContext)) },
+  ], DIRECTOR_PLAN_RESPONSE_FORMAT)) recalled = recalled.slice(0, -1);
+  options = { ...options, turnContext: withRecollection(options.turnContext),
+    presentationContext: withRecollection(options.presentationContext) };
+  const paidDirectorRepair = () => { try { options.api.telemetry?.onRepair?.('director'); } catch { /* Optional observers cannot change gameplay. */ } };
   const directorMessages: ChatCompletionMessage[] = [
     { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
     { role: 'user', content: buildDirectorUserPrompt(brief, options.turnContext) },
@@ -518,6 +539,7 @@ async function runMysteryPipeline(
       if (!/导演行动阶段与玩家原始意图|行动地点未注册或与玩家请求/.test(reason)) throw error;
       directorAttempts += 1;
       observe.setDirectorAttempts(directorAttempts);
+      paidDirectorRepair();
       directorPlan = await timeStage('director-repair', () => completeParsed(complete, supportKey, [
         ...directorMessages,
         { role: 'user', content: `只修复下列已生成计划中的行动不一致，保留原获准事实范围；不得改写玩家原始意图或发明目的地。原始输入：${options.actionAuthority!.originalInput}\n原计划：${JSON.stringify(directorPlan)}\n错误：${reason}\n仅输出完整修复计划 JSON。` },
@@ -536,6 +558,7 @@ async function runMysteryPipeline(
     observe.setDirectorAttempts(directorAttempts);
     const rejectedPlan = directorPlan;
     const rejectedReview = hardReview;
+    paidDirectorRepair();
     directorPlan = await timeStage('director-repair', () => completeParsed(
       complete,
       supportKey,
@@ -660,6 +683,7 @@ async function runMysteryPipeline(
           ? 'hard-review'
           : criticStageFor({ semantic: semanticReview!, pacing: pacingReview! });
         const rejectedPlan = directorPlan;
+        paidDirectorRepair();
         directorPlan = await timeStage(stageName, () => completeParsed(
           complete,
           supportKey,
@@ -764,8 +788,8 @@ async function runMysteryPipeline(
     if (resolvedAction.continuation && !sceneCandidate) throw new MysteryPipelineBlockedError('未完成行动缺少原场景约束。');
     pendingActionSceneContext = resolvedAction.continuation && sceneCandidate
       ? { ...structuredClone(sceneCandidate), actionId: resolvedAction.continuation.actionId } : null;
-    writerTurnContext = { ...executedContext.turnContext, resolvedAction };
-    writerPresentation = executedContext.presentationContext;
+    writerTurnContext = withRecollection({ ...executedContext.turnContext, resolvedAction });
+    writerPresentation = withRecollection(executedContext.presentationContext);
     const currentBrief = buildAliasedMysteryBrief(buildMysteryBrief(MYSTERY_TRUTH_GRAPH, executedContext.truthContext), factAliases);
     const completed = new Set(resolvedAction.completedSourceIds);
     const earnedFacts = brief.usableFacts.filter(fact => fact.revealOptions.some(option => completed.has(`fact:${fact.id}:${option.level}`)));
@@ -818,10 +842,20 @@ async function runMysteryPipeline(
   }
   writerPacket.continuityContext = { ...writerPresentation };
   const writerSystem = buildWriterSystemPrompt(options.formatPrompt);
-  const writerMessages: ChatCompletionMessage[] = [
+  let writerMessages: ChatCompletionMessage[] = [
     { role: 'system', content: writerSystem },
     { role: 'user', content: buildWriterUserPrompt(writerPacket, writerPresentation) },
   ];
+  // Optional recollection is dropped whole before it can displace required authority.
+  while (recalled.length && !requestFits(writerMessages)) {
+    recalled = recalled.slice(0, -1);
+    const { retrievedContext: _oldRecollection, ...basePresentation } = writerPresentation;
+    void _oldRecollection;
+    writerPresentation = withRecollection(basePresentation);
+    writerPacket.continuityContext = { ...writerPresentation };
+    writerMessages = [{ role: 'system', content: writerSystem },
+      { role: 'user', content: buildWriterUserPrompt(writerPacket, writerPresentation) }];
+  }
 
   return {
     brief: writerBrief,

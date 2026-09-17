@@ -1,6 +1,7 @@
 import { buildTurnPreparation, normalizeOpportunityProgress, preparationContextKey, resolveAnalysisApi, resolveMysteryLocation, readPlayerKnowledge } from '../agents/mystery/turn-preparation';
 import { assertTurnActive, runStateWithFallback } from '../utils/turn-lifecycle';
 import { beginTurnMetrics } from '../agents/mystery/turn-metrics';
+import { isBoundedRetrievalEligible } from '../agents/mystery/bounded-retrieval';
 import { buildStateEvidenceAuthority } from '../agents/state/state-evidence';
 import { validateNarrativeContract } from '../engine/narrative-contract';
 import { resolvePlayerActionIntent, type ActionIntentSnapshot } from '../engine/player-action-intent';
@@ -264,6 +265,13 @@ export function useGameLoop() {
         return;
       }
 
+      // Each observer belongs to this invocation even if optional work finishes
+      // after another turn starts. Never store runtime callbacks in settings.
+      const foregroundTelemetry = metrics.telemetry('foreground');
+      const analysisApi = { ...resolveAnalysisApi(settings), telemetry: foregroundTelemetry };
+      const writerApi = { ...settings.api, telemetry: foregroundTelemetry };
+      const checklistApi = { ...resolveAnalysisApi(settings), telemetry: metrics.telemetry('checklist') };
+
       const activeChat = tavern.chats.find(c => c.id === tavern.activeChatId);
       let baseMessages = activeChat ? [...activeChat.messages] : [];
       const selectedAction = pendingActionCost?.chatId === tavern.activeChatId && pendingActionCost.input === userInput
@@ -357,11 +365,21 @@ export function useGameLoop() {
         try {
           if (isRetry && cachedPreparedTurn?.contextKey === preplanKey) {
             preparedTurn = cachedPreparedTurn.turn;
+            metrics.markPreparationReused();
           } else {
             cachedNarrativeFailure = null;
           }
-          preparedTurn ??= await consumePreplan(userInput, preplanKey, abortController.signal);
-          preparedTurn ??= await prepareMysteryTurn({ ...preparation.request, abortSignal: abortController.signal });
+          if (!preparedTurn) {
+            // Speculation deliberately skips optional retrieval. A complex
+            // actual input must go through its own authorized query phase.
+            if (isBoundedRetrievalEligible(userInput, preparation.request.retrievalCorpus)) {
+              invalidatePreplans();
+            } else {
+              preparedTurn = await consumePreplan(userInput, preplanKey, abortController.signal);
+              if (preparedTurn) metrics.markPreparationReused();
+            }
+          }
+          preparedTurn ??= await prepareMysteryTurn({ ...preparation.request, api: analysisApi, abortSignal: abortController.signal });
           assertCurrent();
           if (preparedTurn.executedContext) {
             ({ actionNarrativeContext, narrativeVariables, mysteryLocation, npcPlayerKnowledge } = preparedTurn.executedContext);
@@ -743,14 +761,15 @@ export function useGameLoop() {
             publicOpportunities: finalPublicOpportunities,
             programActions: finalProgramActions,
           }, {
-            api: resolveAnalysisApi(settings),
+            api: checklistApi,
             preset: activePreset,
+            abortSignal: abortController.signal,
           }).then(async checklist => {
             const tags = serializeChecklistToTags(checklist, existing);
             if (!tags.trim() || checklistTokenRef.current !== token || abortController.signal.aborted
               || useGameStore.getState().api.abortController !== abortController) return;
             const checklistReview = await reviewNarrativeAgainstWriterPacket({
-              api: resolveAnalysisApi(settings),
+              api: checklistApi,
               preset: activePreset,
               packet: preparedTurn.writerPacket,
               narrative: tags,
@@ -792,6 +811,7 @@ export function useGameLoop() {
               });
             }
           }).catch(error => {
+            if (abortController.signal.aborted || checklistTokenRef.current !== token) return;
             console.warn('[scene-list] 场景清单补全失败:', error);
           });
         }
@@ -811,8 +831,12 @@ export function useGameLoop() {
               gameStatus: nextStatus, currentState: { ...committed.game.currentState, background: terminalBackground },
               endingCheckContext: committed.game.endingCheckContext, history: finalMessages,
             });
-            startPreplan({ input: firstOption,
-              contextKey: preparationContextKey(tavern.activeChatId, speculative.request, settings.api), options: speculative.request });
+            if (!isBoundedRetrievalEligible(firstOption, speculative.request.retrievalCorpus)) {
+              startPreplan({ input: firstOption,
+                contextKey: preparationContextKey(tavern.activeChatId, speculative.request, settings.api),
+                options: { ...speculative.request,
+                  api: { ...speculative.request.api, telemetry: metrics.telemetry('preplan') } } });
+            }
           } catch {
             // An optional preplan budget failure must not undo a committed turn.
             invalidatePreplans();
@@ -900,8 +924,9 @@ export function useGameLoop() {
                 const errors = candidate.validationErrors.length > 0
                   ? candidate.validationErrors
                   : [{ code: 'MISSING_SCENE', message: '正文没有生成可播放场景。' }];
+                metrics.recordRepair('protocol');
                 const repaired = await metrics.stage('repair', () => repairNarrativeFormatAgainstWriterPacket({
-                  api: resolveAnalysisApi(settings),
+                  api: analysisApi,
                   preset: activePreset,
                   packet: preparedTurn.writerPacket,
                   rejectedNarrative: candidate.text,
@@ -1017,7 +1042,7 @@ export function useGameLoop() {
                     const [candidateFactReview, candidateStyleReview] = await Promise.all([
                       preparedTurn.reviewPolicy.narrative
                         ? metrics.stage('fact-review', () => reviewNarrativeAgainstWriterPacket({
-                            api: resolveAnalysisApi(settings),
+                            api: analysisApi,
                             preset: activePreset,
                             packet: preparedTurn.writerPacket,
                             narrative: candidateOutput,
@@ -1034,7 +1059,7 @@ export function useGameLoop() {
                           }))
                         : Promise.resolve(approvedReview),
                       metrics.stage('style-review', () => reviewNarrativeStyle({
-                        api: resolveAnalysisApi(settings),
+                        api: analysisApi,
                         preset: activePreset,
                         narrative: candidateNarrative,
                         recentNarratives,
@@ -1050,8 +1075,9 @@ export function useGameLoop() {
                   assertCurrent();
                   for (let attempt = 0; attempt < 3 && narrativeReview && !narrativeReview.approved; attempt += 1) {
                     const rejectedReview = narrativeReview;
+                    metrics.recordRepair('narrative');
                     const repairedNarrative = await metrics.stage('repair', () => repairNarrativeAgainstWriterPacket({
-                      api: resolveAnalysisApi(settings),
+                      api: analysisApi,
                       preset: activePreset,
                       packet: preparedTurn.writerPacket,
                       rejectedNarrative: fullText,
@@ -1197,7 +1223,7 @@ export function useGameLoop() {
               if (preparedTurn.reviewPolicy.state || evidenceAuthority.newEvidence.length > 0) {
                 const acceptedTurn = preparedTurn;
                 const stateResult = await metrics.stage('state', () => runStateWithFallback(() => runStateAgent({
-                  api: resolveAnalysisApi(settings),
+                  api: analysisApi,
                   preset: activePreset,
                   currentVariables: tavern.variables,
                   gameStatus: game.gameStatus,
@@ -1249,8 +1275,11 @@ export function useGameLoop() {
         await completeNarrative();
       } else {
         endWriter = metrics.startStage('writer');
+        if (resumedNarrativeFailure) {
+          metrics.recordRepair(resumedNarrativeFailure.formatErrors?.length ? 'protocol' : 'narrative');
+        }
         await streamChatCompletion(
-          settings.api,
+          writerApi,
           requestMessages,
           activePreset,
           {

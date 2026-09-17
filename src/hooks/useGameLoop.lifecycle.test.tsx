@@ -6,7 +6,9 @@ import { useGameStore } from '../stores/gameStore';
 import { prepareMysteryTurn as prepareActual } from '../agents/mystery/orchestrator';
 import type { PreparedMysteryTurn } from '../agents/mystery/orchestrator';
 import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
-import { prepareMysteryTurn, invalidatePreplans } from '../agents/mystery';
+import { prepareMysteryTurn, invalidatePreplans, startPreplan, consumePreplan } from '../agents/mystery';
+import { generateSceneChecklist } from '../agents/mystery/scene-list';
+import { isBoundedRetrievalEligible } from '../agents/mystery/bounded-retrieval';
 import { streamChatCompletion } from '../sillytavern/api-router';
 import { runStateAgent } from '../agents/state/state-agent';
 import { saveChat } from '../sillytavern/database';
@@ -15,7 +17,12 @@ import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatSessio
 import { clearTurnMetrics, getTurnMetrics } from '../agents/mystery/turn-metrics';
 
 vi.mock('../agents/mystery', async importOriginal => ({
-  ...await importOriginal<typeof import('../agents/mystery')>(), prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(),
+  ...await importOriginal<typeof import('../agents/mystery')>(), prepareMysteryTurn: vi.fn(), startPreplan: vi.fn(), consumePreplan: vi.fn(),
+  reviewNarrativeAgainstWriterPacket: vi.fn().mockResolvedValue({ approved: true, violations: [], corrections: [] }),
+  reviewNarrativeStyle: vi.fn().mockResolvedValue({ approved: true, violations: [], corrections: [] }),
+}));
+vi.mock('../agents/mystery/bounded-retrieval', async importOriginal => ({
+  ...await importOriginal<typeof import('../agents/mystery/bounded-retrieval')>(), isBoundedRetrievalEligible: vi.fn(),
 }));
 vi.mock('../agents/mystery/scene-list', async importOriginal => ({
   ...await importOriginal<typeof import('../agents/mystery/scene-list')>(),
@@ -40,6 +47,8 @@ beforeEach(async () => {
   vi.stubGlobal('fetch', () => { throw new Error('Unexpected live HTTP in lifecycle fixture'); });
   invalidatePreplans();
   clearTurnMetrics();
+  vi.mocked(consumePreplan).mockResolvedValue(null);
+  vi.mocked(isBoundedRetrievalEligible).mockReturnValue(false);
   const variables = createDefaultVariables();
   variables.time = '2024-09-09T08:00:00';
   const preset = { ...createDefaultPreset(), id: 'preset', createdAt: 0, updatedAt: 0 } as ChatPreset;
@@ -74,6 +83,58 @@ beforeEach(async () => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('foreground State cancellation', () => {
+  it('does not adopt a speculative plan that skipped a complex input\'s retrieval', async () => {
+    vi.mocked(isBoundedRetrievalEligible).mockImplementation(input => input.includes('核对'));
+    vi.mocked(consumePreplan).mockResolvedValue(preparedFixture);
+    vi.mocked(runStateAgent).mockResolvedValue({ vars: {}, summary: null, rejected: [], clamped: [] });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('核对之前两次的证词'); });
+    expect(consumePreplan).not.toHaveBeenCalled();
+    expect(prepareMysteryTurn).toHaveBeenCalledTimes(1);
+    expect(getTurnMetrics().at(-1)?.outcome).toBe('success');
+    unmount();
+  });
+
+  it('adopts ordinary preplanning without calling or charging preparation again', async () => {
+    vi.mocked(consumePreplan).mockResolvedValue(preparedFixture);
+    vi.mocked(runStateAgent).mockResolvedValue({ vars: {}, summary: null, rejected: [], clamped: [] });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('观察房间'); });
+    expect(consumePreplan).toHaveBeenCalledTimes(1);
+    expect(prepareMysteryTurn).not.toHaveBeenCalled();
+    expect(getTurnMetrics().at(-1)?.outcome).toBe('success');
+    expect(getTurnMetrics().at(-1)?.accounting?.preparationReused).toBe(true);
+    unmount();
+  });
+
+  it('captures one foreground observer and separate originating scopes for optional work', async () => {
+    vi.mocked(runStateAgent).mockResolvedValue({ vars: {}, summary: null, rejected: [], clamped: [] });
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('观察房间'); });
+    const foreground = vi.mocked(prepareMysteryTurn).mock.calls[0][0].api.telemetry;
+    expect(foreground?.onRequest).toBeTypeOf('function');
+    expect(vi.mocked(streamChatCompletion).mock.calls[0][0].telemetry).toBe(foreground);
+    expect(vi.mocked(runStateAgent).mock.calls[0][0].api.telemetry).toBe(foreground);
+    const checklist = vi.mocked(generateSceneChecklist).mock.calls[0][1];
+    expect(checklist.api.telemetry?.onRequest).toBeTypeOf('function');
+    expect(checklist.api.telemetry).not.toBe(foreground);
+    expect(checklist.abortSignal).toBe(useGameStore.getState().api.abortController?.signal);
+    expect(vi.mocked(startPreplan).mock.calls[0][0].options.api.telemetry?.onRequest).toBeTypeOf('function');
+    expect(vi.mocked(startPreplan).mock.calls[0][0].options.api.telemetry).not.toBe(foreground);
+    expect(useGameStore.getState().tavern.settings?.api).not.toHaveProperty('telemetry');
+    const initial = getTurnMetrics().at(-1)!;
+    const oldObserver = checklist.api.telemetry!;
+    await act(async () => { await result.current.sendMessage('继续观察'); });
+    oldObserver.onRequest({ durationMs: 15, status: 200, outcome: 'success', kind: 'request',
+      usage: { inputTokens: 23, outputTokens: 7, cachedInputTokens: 0 }, cost: null });
+    const [first, second] = getTurnMetrics();
+    expect(first.accounting?.purposes.checklist.requests).toBe(1);
+    expect(second.accounting?.purposes.checklist.requests).toBe(0);
+    expect(first.playableMs).toBe(initial.playableMs);
+    expect(first.totalMs).toBe(initial.totalMs);
+    unmount();
+  });
+
   it('runs State for new authorized evidence even when the standard plan skipped State review', async () => {
     preparedFixture.reviewPolicy.state = false;
     const fact = MYSTERY_TRUTH_GRAPH.facts.find(item => item.suspicionTargets?.length && item.revelations.hint)!;

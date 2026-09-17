@@ -4,6 +4,21 @@ import { ApiCallError } from '../../sillytavern/api-router';
 import { ACTION_AUDITED_NARRATIVE_FACT_REVIEW_RESPONSE_FORMAT } from './schemas';
 
 describe('completeParsedStructured', () => {
+  it('counts a correction once even when its new schema needs a capability fallback', async () => {
+    resetResponseFormatSupportCache();
+    const schema = { type: 'object', properties: { corrected: { type: 'boolean' } }, required: ['corrected'] };
+    const complete = vi.fn()
+      .mockResolvedValueOnce('{"approved":true}')
+      .mockRejectedValueOnce(new ApiCallError('response_format json_schema unsupported', 'http4xx', 400))
+      .mockResolvedValueOnce('{"corrected":true}');
+    await expect(completeParsedStructured(complete, 'one-correction-event', [], {}, { type: 'json_object' },
+      () => { throw new Error('missing audited evidence'); }, () => ({ messages: [],
+        responseFormat: { type: 'json_schema', json_schema: { name: 'correction', schema } }, parse: extractJson,
+      }))).resolves.toEqual({ corrected: true });
+    expect(complete.mock.calls.map(call => call[1]?.repairKind)).toEqual([undefined, 'structured', undefined]);
+    expect(complete.mock.calls.map(call => call[1]?.requestKind)).toEqual([undefined, undefined, 'format-fallback']);
+  });
+
   it('includes the current schema and root fields when metadata validation fails in JSON Object mode', async () => {
     resetResponseFormatSupportCache();
     const schema = {
@@ -37,7 +52,7 @@ describe('completeParsedStructured', () => {
 
     expect(complete).toHaveBeenCalledTimes(2);
     const [retryMessages, retryOptions] = complete.mock.calls[1];
-    expect(retryOptions).toEqual({ temperature: 0, abortSignal: controller.signal, responseFormat: { type: 'json_object' } });
+    expect(retryOptions).toEqual({ temperature: 0, abortSignal: controller.signal, responseFormat: { type: 'json_object' }, repairKind: 'structured' });
     expect(retryMessages.slice(0, -1)).toEqual([...messages, { role: 'assistant', content: misplaced }]);
     const instruction = retryMessages.at(-1).content;
     expect(instruction).toContain('校验失败');

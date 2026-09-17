@@ -10,7 +10,7 @@ import {
 import { GameIcon } from '../ui/GameIcon';
 import {
   clearTurnMetrics, getTurnMetrics, subscribeTurnMetrics, TURN_METRICS_CAPACITY,
-  type TurnMetricsEntry, type TurnMetricStage,
+  summarizeTurnCosts, type TurnMetricsEntry, type TurnMetricStage, type TurnUsageSummary,
 } from '../../agents/mystery/turn-metrics';
 
 const OUTCOME_STYLES: Record<OrchestrationLogEntry['outcome'], { label: string; className: string }> = {
@@ -59,7 +59,7 @@ export function OrchestrationLogPanel() {
       onClick={() => setShow(false)}
     >
       <div
-        className="w-[900px] max-h-[90vh] bg-bg-primary border border-border-subtle flex flex-col overflow-hidden"
+        className="w-[900px] max-w-[calc(100vw-16px)] max-h-[90vh] bg-bg-primary border border-border-subtle flex flex-col overflow-hidden"
         style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.03), 0 16px 48px rgba(0,0,0,0.7)' }}
         onClick={e => e.stopPropagation()}
       >
@@ -79,7 +79,8 @@ export function OrchestrationLogPanel() {
             </button>
             <button
               onClick={() => setShow(false)}
-              className="pixel-close-button flex h-9 w-9 items-center justify-center"
+              aria-label="关闭编排日志"
+              className="pixel-close-button flex h-11 w-11 items-center justify-center"
             >
               <GameIcon name="close" size={18} />
             </button>
@@ -89,6 +90,7 @@ export function OrchestrationLogPanel() {
         <div className="flex-1 pixel-scroll-blue overflow-y-auto p-4 space-y-2">
           <h3 className="text-xs text-text-primary">完整回合耗时</h3>
           <p className="text-[10px] text-text-muted">总耗时按实际经过时间计量；并行阶段不相加。首 token 是模型开始返回正文，可游玩是审查与结算后呈现场景。</p>
+          <WindowCosts turns={turns} />
           {turns.length === 0 && <div className="text-xs text-text-muted py-3">尚无完整回合记录</div>}
           {[...turns].reverse().map(entry => <TurnTimingRow key={entry.id} entry={entry} />)}
           <h3 className="text-xs text-text-primary pt-4">准备阶段日志（{entries.length} / {getOrchestrationLogCapacity()}）</h3>
@@ -117,6 +119,12 @@ function TurnTimingRow({ entry }: { entry: TurnMetricsEntry }) {
         <span>{`首 token: ${duration(entry.firstTokenMs)}`}</span>
         <span>{`可游玩: ${duration(entry.playableMs)}`}</span>
       </div>
+      {!entry.accounting?.measured ? <p className="text-[10px] text-text-muted">用量与费用：未计量</p> : <div className="space-y-2 text-[10px] text-text-muted">
+        {entry.accounting.preparationReused && <p>已复用准备结果；原调用计入其发起回合，未重复收费。</p>}
+        <UsageRow label="前台" summary={entry.accounting.purposes.foreground} />
+        <UsageRow label="后台清单" summary={entry.accounting.purposes.checklist} />
+        <UsageRow label="预规划" summary={entry.accounting.purposes.preplan} />
+      </div>}
       <div className="flex flex-wrap gap-1 text-[10px] text-text-muted">
         {entry.stages.map((stage, index) => (
           <span key={index} className="px-1.5 py-0.5 bg-bg-secondary border border-border-subtle">
@@ -126,6 +134,39 @@ function TurnTimingRow({ entry }: { entry: TurnMetricsEntry }) {
       </div>
     </div>
   );
+}
+
+const money = (currency: string, amount: number) => `${currency} ${amount.toLocaleString(undefined, { maximumSignificantDigits: 5 })}`;
+
+function WindowCosts({ turns }: { turns: readonly TurnMetricsEntry[] }) {
+  const summary = summarizeTurnCosts(turns);
+  return <div className="border border-border-subtle p-3 space-y-1 text-[11px] text-text-primary">
+    <p>窗口费用估算 · 成功 {summary.successes} / {turns.length} 回合 · {summary.complete ? '用量与价格齐全' : '统计不完整'}</p>
+    <p className="text-[10px] text-text-muted">包含失败、取消和后台开销，币种分别统计。未结算请求和缺失用量或价格会使估算不完整；每成功回合费用不是服务商账单。</p>
+    {summary.costs.length === 0 ? <p>窗口总费用 / 每成功回合：{summary.complete ? '无请求' : '未知'}</p> : summary.costs.map(cost => <p key={cost.currency}>
+      {summary.complete ? '估算总费用' : '已知部分费用'}：{money(cost.currency, cost.amount)} · 每成功回合：{cost.perSuccess === null ? '暂无成功回合' : money(cost.currency, cost.perSuccess)}
+    </p>)}
+  </div>;
+}
+
+function UsageRow({ label, summary }: { label: string; summary: TurnUsageSummary }) {
+  const repairs = Object.values(summary.repairs).reduce((total, count) => total + count, 0);
+  if (label !== '前台' && !summary.requests && !summary.pendingRequests && !repairs) return null;
+  const completeUsage = summary.requests === summary.usageCompleteRequests && summary.pendingRequests === 0;
+  const completeCost = summary.requests === summary.costCompleteRequests && summary.pendingRequests === 0;
+  const tokens = (value: number, measuredRequests: number) => {
+    const requests = summary.requests + summary.pendingRequests;
+    if (!measuredRequests && requests) return '未知';
+    return measuredRequests === requests ? value : `${value}（部分）`;
+  };
+  return <div className="space-y-1">
+    <p>{label}：{summary.requests} 次请求 · 失败 {summary.failedRequests} · 传输重试 {summary.retries} · 格式兼容重试 {summary.formatFallbacks}
+      {summary.pendingRequests > 0 && ` · 未结算 ${summary.pendingRequests} 次`}</p>
+    <p>{completeUsage ? 'token' : '已知 token（用量不完整）'}：输入 {tokens(summary.inputTokens, summary.inputUsageRequests)} / 输出 {tokens(summary.outputTokens, summary.outputUsageRequests)} / 缓存输入 {tokens(summary.cachedInputTokens, summary.cachedUsageRequests)}
+      {` · 用量覆盖 ${summary.usageCompleteRequests}/${summary.requests + summary.pendingRequests}`}</p>
+    <p>修复 {repairs} 次：结构化 {summary.repairs.structured} / 导演 {summary.repairs.director} / 正文 {summary.repairs.narrative} / 协议 {summary.repairs.protocol}</p>
+    <p>{completeCost ? '估算费用' : '费用估算（不完整）'}：{summary.costs.length ? summary.costs.map(cost => money(cost.currency, cost.amount)).join(' + ') : summary.requests || summary.pendingRequests ? '未知' : '无请求'}</p>
+  </div>;
 }
 
 function EntryRow({ entry, expanded, toggle }: {

@@ -8,6 +8,7 @@ import type { CSSProperties } from 'react';
 import { applyFontFamily, FONT_OPTIONS, getFontStack } from '../../utils/fonts';
 import { setSfxVolume } from '../../utils/sfx';
 import { PixelModalFooter, PixelModalHeader, PixelModalShell } from '../ui/PixelModal';
+import { ApiPricingFields } from './ApiPricingFields';
 
 const PRESET_PROVIDERS = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -394,6 +395,7 @@ export function SettingsModal() {
                 </div>
                 <ProviderPresets selected={draft.api.baseUrl} onPick={applyMainProvider} />
                 <ApiConfigSection baseUrl={draft.api.baseUrl} apiKey={draft.api.apiKey} model={draft.api.model} models={mainModels} onChange={patchApi} onFetchModels={() => handleFetchModels(false)} onTest={() => handleTestConnectivity(false)} fetching={fetchingMain} testing={testingMain} />
+                <ApiPricingFields label="主模型" baseUrl={draft.api.baseUrl} model={draft.api.model} pricing={draft.api.pricing} onChange={pricing => patchApi({ pricing })} />
               </section>
               {independentAnalysisEnabled && (
                 <section className="settings-section">
@@ -404,6 +406,7 @@ export function SettingsModal() {
                   <p className="settings-help mb-3">建议选择价格较低、严格 JSON 输出稳定的模型。分析模型越弱，剧情规划与审查质量越可能下降。</p>
                   <ProviderPresets selected={draft.api.secondary?.baseUrl ?? ''} onPick={applySecondaryProvider} />
                   <ApiConfigSection baseUrl={draft.api.secondary?.baseUrl ?? ''} apiKey={draft.api.secondary?.apiKey ?? ''} model={draft.api.secondary?.model ?? ''} models={secModels} onChange={p => patchSecondary({ baseUrl: p.baseUrl ?? draft.api.secondary?.baseUrl ?? '', apiKey: p.apiKey ?? draft.api.secondary?.apiKey ?? '', model: p.model ?? draft.api.secondary?.model ?? '' })} onFetchModels={() => handleFetchModels(true)} onTest={() => handleTestConnectivity(true)} fetching={fetchingSec} testing={testingSec} />
+                  <ApiPricingFields label="分析模型" baseUrl={draft.api.secondary?.baseUrl ?? ''} model={draft.api.secondary?.model ?? ''} pricing={draft.api.secondary?.pricing} onChange={pricing => patchSecondary({ pricing })} />
                 </section>
               )}
             </div>
