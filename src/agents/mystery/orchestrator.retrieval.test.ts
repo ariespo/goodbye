@@ -6,8 +6,10 @@ import { maintextToScene } from '../../engine/scene-parser';
 import { createDefaultVariables } from '../../sillytavern/vars-merger';
 import { createDefaultPreset, type AppSettings, type ChatMessage } from '../../sillytavern/types';
 import { useGameStore } from '../../stores/gameStore';
+import { estimateTokens } from '../../sillytavern/token-budget';
+import { DIRECTOR_PLAN_RESPONSE_FORMAT } from './schemas';
 
-function request() {
+function request(longHistory = false) {
   const game = useGameStore.getState().game;
   const narrative = '对话|旁白|calm|慧慧把零钱撒在柜台边。';
   const history: ChatMessage[] = [{ id: 'old', role: 'assistant', content: `<maintext>${narrative}\n${Array.from({ length: 18 }, () => `对话|旁白|calm|${'雨'.repeat(100)}`).join('\n')}</maintext><sum>玩家在便利店结账。</sum>`,
@@ -17,9 +19,18 @@ function request() {
   }))];
   const memory = buildTurnCommit({ turnId: 'old', turnIndex: 1, createdAt: 1, occurredAt: '2024-09-09T08:10:00',
     locationId: 'supermarket', cycleCount: 1, summary: '普通结账', scene: maintextToScene(narrative), beforeVariables: {}, settledVariables: {} }).worldMemory;
+  const preset = { ...createDefaultPreset(), id: 'p', createdAt: 0, updatedAt: 0 };
+  if (longHistory) {
+    preset.settings.openai_max_context = 24000;
+    preset.settings.openai_max_tokens = 1024;
+    history.splice(0, history.length, ...Array.from({ length: 45 }, (_, index): ChatMessage => ({
+      id: `long-${index}`, role: 'assistant', timestamp: index + 1, variables: { cycleCount: 1 },
+      content: `<maintext>对话|旁白|calm|${'雨'.repeat(850)}</maintext><sum>${'玩家在公寓核对纸条。'.repeat(20)}</sum>`,
+    })));
+  }
   return buildTurnPreparation({ userInput: '回忆之前慧慧的零钱，对比今天所见',
-    settings: { api: { baseUrl: 'test', model: 'test', apiKey: 'test' }, userName: '玩家', characterName: '文穗', agentNarrativeMode: 'standard', contextCompressionThresholdTokens: 2000 } as AppSettings,
-    activePreset: { ...createDefaultPreset(), id: 'p', createdAt: 0, updatedAt: 0 },
+    settings: { api: { baseUrl: 'test', model: 'test', apiKey: 'test' }, userName: '玩家', characterName: '文穗', agentNarrativeMode: 'standard', contextCompressionThresholdTokens: longHistory ? 60000 : 2000 } as AppSettings,
+    activePreset: preset,
     variables: { ...createDefaultVariables(), worldMemory: memory, cycleCount: 2, location: 'home' },
     gameStatus: { ...game.gameStatus, time: new Date('2024-09-09T08:20:00') }, currentState: { ...game.currentState, background: 'home-day' },
     endingCheckContext: game.endingCheckContext, history }).request;
@@ -29,6 +40,55 @@ const plan = { turnGoal: '留在房间核对记忆', tone: '克制', timeCostMin
   revelations: [], assetRequests: [], optionIntents: [{ id: 'o1', intent: '继续查看房间', tone: '克制', expectedPressure: 'low' }] };
 
 describe('retrieval survives actual execution projection', () => {
+  it('fits long summarized history after actual execution, pruning both lists of optional message IDs', async () => {
+    const initial = request(true);
+    const original = JSON.stringify(initial.presentationContext);
+    const complete = vi.fn(async (messages: Array<{ role: string; content: string }>) => {
+      const body = { model: initial.api.model, messages, max_tokens: 1024, response_format: DIRECTOR_PLAN_RESPONSE_FORMAT };
+      expect(estimateTokens(JSON.stringify(body)) + 1024 + 1920).toBeLessThanOrEqual(24000);
+      return JSON.stringify(plan);
+    });
+    const result = await prepareMysteryTurn({ ...initial, speculative: true, complete });
+    const writerBody = { model: initial.api.model, messages: result.writerMessages, max_tokens: 1024 };
+    expect(estimateTokens(JSON.stringify(writerBody)) + 1024 + 1920).toBeLessThanOrEqual(24000);
+    expect(result.writerPacket.resolvedAction).toBeDefined();
+    const context = result.writerPacket.continuityContext!;
+    const history = context.recentHistory as unknown[];
+    const ids = (context.contextSelectionIds as string[]).filter(id => id.startsWith('message:'));
+    const memoryIds = ((context.memoryContext as { selectedIds: string[] }).selectedIds).filter(id => id.startsWith('message:'));
+    expect(history.length).toBeGreaterThan(0);
+    expect(history.length).toBeLessThan(45);
+    expect(ids).toHaveLength(history.length);
+    expect(memoryIds).toEqual(ids);
+    expect(JSON.stringify(initial.presentationContext)).toBe(original);
+  });
+
+  it('compresses against the complete Director and duplicated Writer payload before a paid call', async () => {
+    const initial = request();
+    initial.preset!.settings.openai_max_context = 24000;
+    initial.preset!.settings.openai_max_tokens = 1024;
+    const recentHistory = Array.from({ length: 6 }, (_, index) => ({ role: 'assistant',
+      content: `<maintext>对话|旁白|calm|旧细节${index}${'雨'.repeat(2700)}</maintext><sum>玩家第${index}次在公寓核对纸条，尚无新发现。</sum>` }));
+    initial.turnContext = { ...initial.turnContext, recentHistory };
+    initial.presentationContext = { ...initial.presentationContext, recentHistory };
+    // This regression isolates the final model payload from action re-projection.
+    initial.actionAuthority = undefined;
+    initial.projectExecution = undefined;
+    const original = JSON.stringify(recentHistory);
+    const complete = vi.fn(async (messages: Array<{ role: string; content: string }>) => {
+      const body = { model: initial.api.model, messages, max_tokens: 1024,
+        response_format: DIRECTOR_PLAN_RESPONSE_FORMAT };
+      expect(estimateTokens(JSON.stringify(body)) + 1024 + 256).toBeLessThanOrEqual(24000);
+      return JSON.stringify(plan);
+    });
+    const result = await prepareMysteryTurn({ ...initial, speculative: true, complete });
+    const writerBody = { model: initial.api.model, messages: result.writerMessages, max_tokens: 1024 };
+    expect(estimateTokens(JSON.stringify(writerBody)) + 1024 + 256).toBeLessThanOrEqual(24000);
+    expect(JSON.stringify(result.writerMessages)).toContain('历史剧情摘要');
+    expect((result.writerPacket.continuityContext?.recentHistory as unknown[]).length).toBe(6);
+    expect(JSON.stringify(recentHistory)).toBe(original);
+  });
+
   it('carries genuinely older retrieved text through Director, Writer and repair context without authorizing it as canon', async () => {
     const initial = request();
     const complete = vi.fn(async (messages: Array<{ content: string }>) => {

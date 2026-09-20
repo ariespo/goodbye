@@ -31,7 +31,8 @@ const PREFETCH_LOOKAHEAD = 2;
 function hasOpenDialogueOverlay() {
   const { ui, game } = useGameStore.getState();
   if (Object.entries(ui).some(([key, value]) => key.startsWith('show') && value === true)
-    || game.actionPanel.visible || game.endingPanel.visible) return true;
+    || game.actionPanel.visible || game.endingPanel.isAnimating
+    || (game.endingPanel.visible && game.sceneComplete)) return true;
   return Boolean(document.querySelector('[role="dialog"]:not([aria-hidden="true"]), .save-modal-shell, .player-identity-prompt'));
 }
 
@@ -73,7 +74,7 @@ export function DialogueBox() {
   const dialogueProgress = useGameStore(state => state.game.dialogueProgress);
   const ui = useGameStore(state => state.ui);
   const actionPanelVisible = useGameStore(state => state.game.actionPanel.visible);
-  const endingPanelVisible = useGameStore(state => state.game.endingPanel.visible);
+  const endingPanel = useGameStore(state => state.game.endingPanel);
   const currentScene = useMemo(
     () => storedScene ? applyCharacterEmotionPolicies(storedScene, variables) : null,
     [storedScene, variables],
@@ -102,7 +103,7 @@ export function DialogueBox() {
     const observer = new MutationObserver(update);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-hidden'] });
     return () => observer.disconnect();
-  }, [ui, actionPanelVisible, endingPanelVisible]);
+  }, [ui, actionPanelVisible, endingPanel, sceneComplete]);
 
   const autoIntervalMs = settings?.autoIntervalMs ?? 1500;
   const typingSpeed = settings?.typingSpeed || 35;
@@ -371,7 +372,7 @@ export function DialogueBox() {
 
   /* ── 重头回看：回到第一句，恢复首帧状态 ── */
   const handleRestart = useCallback(() => {
-    if (!currentScene || currentScene.lines.length === 0) return;
+    if (!currentScene || currentScene.lines.length === 0 || hasOpenDialogueOverlay()) return;
     requestedPageRef.current = 0;
     setAutoMode(false);
     setDialoguePageIndex(0);
@@ -379,6 +380,7 @@ export function DialogueBox() {
   }, [currentScene, setAutoMode, activeChatId]);
 
   const handleToggleAuto = useCallback(() => {
+    if (hasOpenDialogueOverlay()) return;
     if (isReviewing) handleReturnToCurrent();
     setAutoMode(!autoMode);
   }, [autoMode, setAutoMode, isReviewing, handleReturnToCurrent]);

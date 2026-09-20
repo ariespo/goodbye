@@ -14,8 +14,9 @@ import { useGameStore } from '../stores/gameStore';
 import { persistActiveChat } from './chatPersistence';
 import { maintextToScene } from '../engine/scene-parser';
 import { buildConclusionTransitionMaintext } from '../engine/conclusion-transition';
+import type { Scene } from '../sillytavern/types';
 
-function commitVariables(variables: ConclusionVariables, endingId?: string): void {
+function commitVariables(variables: ConclusionVariables, endingId?: string, bridge?: Scene): void {
   useGameStore.setState(state => ({
     tavern: {
       ...state.tavern,
@@ -36,6 +37,7 @@ function commitVariables(variables: ConclusionVariables, endingId?: string): voi
           }
         : state.game.endingPanel,
       pendingCycleReset: endingId ? null : state.game.pendingCycleReset,
+      ...(bridge ? { currentScene: bridge, currentLineIndex: 0, sceneComplete: false, dialogueProgress: null } : {}),
     },
     ui: endingId
       ? { ...state.ui, showConclusion: false }
@@ -43,9 +45,9 @@ function commitVariables(variables: ConclusionVariables, endingId?: string): voi
   }));
 }
 
-async function persistDecision<T extends ConclusionDecision>(decision: T, endingId?: string): Promise<T> {
+async function persistDecision<T extends ConclusionDecision>(decision: T, endingId?: string, bridge?: Scene): Promise<T> {
   if (!decision.accepted) return decision;
-  commitVariables(decision.value, endingId);
+  commitVariables(decision.value, endingId, bridge);
   await persistActiveChat({ variables: decision.value });
   return decision;
 }
@@ -74,10 +76,9 @@ export async function commitProgramConclusion(
     };
   }
   const decision = chooseConclusion(state.tavern.variables, choiceId);
-  const persisted = await persistDecision(decision, decision.endingId);
-  if (persisted.accepted && persisted.endingId) {
-    const bridge = maintextToScene(buildConclusionTransitionMaintext(persisted.endingId, choiceId));
-    useGameStore.getState().actions.setCurrentScene(bridge);
-  }
-  return persisted;
+  const bridge = decision.accepted && decision.endingId
+    ? maintextToScene(buildConclusionTransitionMaintext(decision.endingId, choiceId)) : undefined;
+  // Publish the unread bridge and pending ending in one store update. Disk latency
+  // must never leave a pending ending paired with the preceding completed scene.
+  return persistDecision(decision, decision.endingId, bridge);
 }

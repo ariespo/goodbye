@@ -1,12 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultVariables } from '../sillytavern/vars-merger';
 import { useGameStore } from '../stores/gameStore';
 import { commitProgramConclusion, lockProgramConclusion } from './conclusionFlow';
 import { investigatedStoryState } from '../test-support/story-state';
+import * as database from '../sillytavern/database';
 
 const initialState = useGameStore.getState();
 
 afterEach(() => {
+  vi.restoreAllMocks();
   useGameStore.setState(initialState, true);
 });
 
@@ -70,5 +72,31 @@ describe('program conclusion flow', () => {
 
     expect(result.accepted).toBe(false);
     expect(useGameStore.getState().game.endingPanel.pendingEndingId).toBeNull();
+  });
+
+  it('publishes the pending ending with its unread bridge before a slow save can release playback', async () => {
+    setTestState(investigatedStoryState('A'));
+    let release!: () => void;
+    vi.spyOn(database, 'saveChat').mockImplementation(() => new Promise<void>(resolve => { release = resolve; }));
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, activeChatId: 'ending-save', chats: [{
+      id: 'ending-save', name: 'test', messages: [], characterName: 'fumi', userName: 'player',
+      presetId: null, lorebookIds: [], variables: state.tavern.variables, createdAt: 1, updatedAt: 1,
+    }] } }));
+    const exposedStates: Array<{ pending: string | null; complete: boolean; text: string }> = [];
+    const stop = useGameStore.subscribe(state => exposedStates.push({
+      pending: state.game.endingPanel.pendingEndingId,
+      complete: state.game.sceneComplete,
+      text: state.game.currentScene?.lines.map(line => line.text).join('') ?? '',
+    }));
+    const task = commitProgramConclusion('private');
+    try {
+      expect(useGameStore.getState().game.sceneComplete).toBe(false);
+      expect(exposedStates.filter(state => state.pending === 'A-2')).not.toHaveLength(0);
+      expect(exposedStates.filter(state => state.pending === 'A-2').every(state => !state.complete && state.text.includes('私下报复周德明'))).toBe(true);
+    } finally {
+      stop();
+      release();
+      await task;
+    }
   });
 });

@@ -3,6 +3,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { inspectPrompt } from '../../sillytavern/prompt-assembler';
 import type { PromptInspectionResult, PromptOrderInspectItem } from '../../sillytavern/prompt-assembler';
 import { GameIcon } from '../ui/GameIcon';
+import { PixelModalContent, PixelModalHeader, PixelModalShell } from '../ui/PixelModal';
 
 type TabKey = 'order' | 'lorebook' | 'history' | 'final';
 
@@ -24,7 +25,7 @@ export function PromptInspector() {
     const lastUserMsg = activeChat?.messages.slice().reverse().find(m => m.role === 'user');
     const userInput = lastUserMsg?.content || '';
 
-    return inspectPrompt({
+    try { return inspectPrompt({
       userInput,
       history: activeChat?.messages || [],
       preset: tavern.presets.find(p => p.id === settings.activePresetId) || null,
@@ -35,10 +36,18 @@ export function PromptInspector() {
       variables: tavern.variables,
       formatPrompt: settings.formatPromptTemplate,
       contextCompressionThresholdTokens: settings.contextCompressionThresholdTokens,
-    });
+    }); } catch (error) {
+      return { error: error instanceof Error ? error.message : '提示词预览失败，请检查上下文设置。' };
+    }
   }, [show, store]);
 
   if (!show || !data) return null;
+  if ('error' in data) return (
+    <PixelModalShell open onClose={() => setShow(false)} labelledBy="prompt-budget-error-title">
+      <PixelModalHeader titleId="prompt-budget-error-title" title="提示词预览" onClose={() => setShow(false)} closeLabel="关闭提示词预览" />
+      <PixelModalContent><p role="alert">{data.error}</p><p>请提高上下文容量，或减少输出预留与固定提示词。</p></PixelModalContent>
+    </PixelModalShell>
+  );
 
   const toggleItem = (idx: number) => {
     const next = new Set(expandedItems);
@@ -292,6 +301,7 @@ function HistoryTab({ data }: { data: PromptInspectionResult }) {
       <p className="text-[11px] text-text-muted">
         已用摘要替换 {history.compressedMessages} 段剧情；压缩阈值 {history.compressionThresholdTokens.toLocaleString()} tokens。
         历史估算 {history.originalTokens.toLocaleString()} → {history.projectedTokens.toLocaleString()} tokens，存档正文完整保留。
+        {history.budgetTriggered && ' 本次因实际可用容量不足，已提前尝试压缩。'}
       </p>
 
       <div className="space-y-1">

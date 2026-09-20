@@ -397,7 +397,7 @@ export function SettingsModal() {
                   className="settings-input w-full font-mono"
                 />
               </label>
-              <p id="context-compression-help" className="settings-help mt-2">默认 {DEFAULT_CONTEXT_COMPRESSION_TOKENS.toLocaleString('en-US')}，可设为 2,000–100,000。数值越小，压缩越早、发送内容越少；数值越大，近期细节保留越多。这里是长度估算，实际用量由模型决定。空值恢复默认值，超出范围会在保存时调整。</p>
+              <p id="context-compression-help" className="settings-help mt-2">默认 {DEFAULT_CONTEXT_COMPRESSION_TOKENS.toLocaleString('en-US')}，可设为 2,000–100,000。数值越小，压缩越早；数值越大，近期细节保留越多。实际可用容量不足时会提前压缩，必要时也会使用最近两段的摘要；不会修改这里的设置或存档正文。这里是长度估算，实际用量由模型决定。空值恢复默认值，超出范围会在保存时调整。</p>
             </section>
             </div>
           )}

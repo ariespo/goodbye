@@ -1,0 +1,27 @@
+.save-modal .save-transfer-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.save-modal .save-transfer-import {
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+
+.save-modal .save-transfer-toolbar p { margin: 0; }
+.save-modal .save-slot-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.save-modal .save-action-btn { min-width: 44px; min-height: 44px; justify-content: center; }
+.save-modal button:disabled { opacity: .5; cursor: wait; }
+.save-modal button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.save-modal .save-modal-form input { min-width: 0; }
+
+@media (max-width: 520px) {
+  .save-modal .save-modal-content { gap: 12px; padding: 16px 12px; }
+  .save-modal .save-transfer-toolbar { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .save-modal .save-slot { flex-wrap: wrap; gap: 10px; }
+  .save-modal .save-slot-description { flex-basis: calc(100% - 90px); }
+  .save-modal .save-slot-actions { width: 100%; justify-content: flex-end; }
+  .save-modal .save-slot-name { font-size: 16px; }
+}

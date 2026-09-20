@@ -10,11 +10,14 @@ import { settleCycleVariables } from '../engine/cycle-settlement';
 import { acceptedCycleConsequence, buildCycleKeyScene, cycleProse, presentedCycleBeatIds } from '../engine/cycle-key-scenes';
 import { buildTurnCommit } from '../memory/world-memory';
 import { buildNarrativeSummary } from '../memory/narrative-summary';
+import { buildMetaEndingTransitionMaintext } from '../engine/conclusion-transition';
 
 export { settleCycleVariables } from '../engine/cycle-settlement';
 
-export const STAY_OPTION_TEXT = '不出门，陪文穗过完今天';
-export const GOODBYE_OPTION_TEXT = '对文穗说再见';
+export const STAY_OPTION_TEXT = '留在家里，回忆与文穗相处的日子';
+export const GOODBYE_OPTION_TEXT = '在记忆中对文穗说再见';
+const LEGACY_STAY_OPTION_TEXT = '不出门，陪文穗过完今天';
+const LEGACY_GOODBYE_OPTION_TEXT = '对文穗说再见';
 
 import type { CycleResetReason } from '../engine/cycle-failure';
 export { checkCycleFailure, type CycleResetReason } from '../engine/cycle-failure';
@@ -49,7 +52,7 @@ const REASON_LINES: Record<CycleResetReason, string> = {
   stamina: '身体先撑不住了。视野暗下去的最后一刻，你听见的还是雨声。',
   sanity: '思绪在某个瞬间断了线。你分不清是自己闭上了眼，还是世界闭上了眼。',
   'day-end': '午夜零点。雨没有停，但这一天到头了。',
-  stay: '你留了下来。这一天像糖一样慢慢化完。然后，闹钟又响了。',
+  stay: '你留在家里，反复回忆与文穗相处的旧日。回忆没有把她带回眼前。这一天过去以后，闹钟又响了。',
 };
 
 export function buildCycleOpeningMaintext(
@@ -217,22 +220,22 @@ export async function handleCycleMetaOption(option: string): Promise<boolean> {
   const state = useGameStore.getState();
   const { actions } = state;
 
-  if (option === GOODBYE_OPTION_TEXT) {
+  if (option === GOODBYE_OPTION_TEXT || option === LEGACY_GOODBYE_OPTION_TEXT) {
     const variables = { ...state.tavern.variables, finalChoice: 'goodbye' };
     actions.setVariables(variables);
     actions.setEndingPanel({ isPreview: false });
     actions.setPendingEnding('TRUE');
-    actions.setSceneComplete(true);
+    actions.setCurrentScene(maintextToScene(buildMetaEndingTransitionMaintext('TRUE')));
     return true;
   }
 
-  if (option === STAY_OPTION_TEXT) {
+  if (option === STAY_OPTION_TEXT || option === LEGACY_STAY_OPTION_TEXT) {
     const settled = settleCycleVariables(state.tavern.variables, { stayed: true });
     if (Number(settled.stayStreak) >= 3 && !state.game.endingsSeen.includes('STAY')) {
       actions.setVariables(settled);
       actions.setEndingPanel({ isPreview: false });
       actions.setPendingEnding('STAY');
-      actions.setSceneComplete(true);
+      actions.setCurrentScene(maintextToScene(buildMetaEndingTransitionMaintext('STAY')));
     } else {
       await startNextCycle({ variables: settled, reason: 'stay' });
     }

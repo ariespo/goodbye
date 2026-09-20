@@ -5,9 +5,22 @@ import { afterEach, expect, it } from 'vitest';
 import { PromptInspector } from './PromptInspector';
 import { useGameStore } from '../../stores/gameStore';
 import type { AppSettings, ChatMessage } from '../../sillytavern/types';
+import { createDefaultPreset } from '../../sillytavern/types';
 
 const initialState = useGameStore.getState();
 afterEach(() => { cleanup(); useGameStore.setState(initialState, true); });
+
+it('shows a closable explanation when fixed instructions cannot fit the configured budget', () => {
+  const preset = { ...createDefaultPreset(), id: 'tiny', createdAt: 1, updatedAt: 1 };
+  preset.settings.openai_max_context = 1024;
+  useGameStore.setState(state => ({ ui: { ...state.ui, showPromptInspector: true }, tavern: { ...state.tavern,
+    presets: [preset], settings: { ...state.tavern.settings, activePresetId: preset.id,
+      activeLorebookIds: [], userName: '玩家', characterName: '文穗' } as AppSettings } }));
+  render(<PromptInspector />);
+  expect(screen.getByRole('alert')).toHaveTextContent('上下文预算不足');
+  fireEvent.click(screen.getByRole('button', { name: '关闭提示词预览' }));
+  expect(useGameStore.getState().ui.showPromptInspector).toBe(false);
+});
 
 it('shows the configured summary projection while keeping the complete archive unchanged', () => {
   const settings: AppSettings = {

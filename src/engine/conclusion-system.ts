@@ -127,8 +127,8 @@ const CHOICES: Record<ConclusionRouteId | ConclusionOverlayId, ConclusionChoiceO
     { id: 'private', endingId: 'A-2', title: '私下报复', description: '带着报复的打算独自上楼，让暴力替你作最后的回答。', tone: 'rupture' },
   ],
   B: [
-    { id: 'report', endingId: 'B-1', title: '揭发掩盖', description: '撕开两人的同盟，把那晚的失控公之于众。', tone: 'resolve' },
-    { id: 'accept', endingId: 'B-2', title: '接受封口', description: '接受他们给出的解释，让秘密继续沉下去。', tone: 'rupture' },
+    { id: 'report', endingId: 'B-1', title: '揭发掩盖', description: '提交赵刚强行带人致死、林静参与掩盖的证据。', tone: 'resolve' },
+    { id: 'accept', endingId: 'B-2', title: '接受封口', description: '接受封口条件，停止追究已经查明的暴力与掩盖。', tone: 'rupture' },
   ],
   C: [
     { id: 'accept', endingId: 'C-1', title: '承认记忆', description: '接住那段最痛苦的记忆，并承担它留下的一切。', tone: 'resolve' },
@@ -136,7 +136,7 @@ const CHOICES: Record<ConclusionRouteId | ConclusionOverlayId, ConclusionChoiceO
   ],
   NONE: [
     { id: 'letgo', endingId: 'N-1', title: '接受告别', description: '接受已经查明的事故经过，留下她曾想怎样生活的那封信。', tone: 'resolve' },
-    { id: 'refuse', endingId: 'N-2', title: '拒绝告别', description: '只要还没有答案，就拒绝让这段旅程结束。', tone: 'rupture' },
+    { id: 'refuse', endingId: 'N-2', title: '拒绝告别', description: '事故已经有了答案，你仍拒绝接受她无法回来的事实。', tone: 'rupture' },
   ],
   FAKE: [
     { id: 'release', endingId: 'F-1', title: '放下追寻', description: '相信她选择了自己的去处，不再继续追逐踪迹。', tone: 'resolve' },
@@ -144,7 +144,7 @@ const CHOICES: Record<ConclusionRouteId | ConclusionOverlayId, ConclusionChoiceO
   ],
   CULT: [
     { id: 'destroy', endingId: 'X-1', title: '摧毁仪式', description: '切断仪式留下的回路，不让它再索取任何名字。', tone: 'resolve' },
-    { id: 'sacrifice', endingId: 'X-2', title: '封存清晨', description: '用自己的余生维持同一个清晨，让循环永远继续。', tone: 'rupture' },
+    { id: 'sacrifice', endingId: 'X-2', title: '封存清晨', description: '耗用自己的余生，让清晨的画面继续循环；文穗不会因此复活。', tone: 'rupture' },
   ],
   PSYCH: [
     { id: 'wake', endingId: 'P-1', title: '接受帮助', description: '回到治疗与调查中，承担已经确认的伤害和责任。', tone: 'resolve' },

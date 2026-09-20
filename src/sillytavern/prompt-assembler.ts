@@ -1,4 +1,4 @@
-import { DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from './token-budget';
+import { ContextBudgetError, DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from './token-budget';
 /**
  * Prompt Assembler — 酒馆兼容
  *
@@ -67,6 +67,7 @@ export interface PromptInspectionResult {
     compressionThresholdTokens: number;
     originalTokens: number;
     projectedTokens: number;
+    budgetTriggered: boolean;
     messages: { role: string; content: string; tokens: number; included: boolean; compressed: boolean }[];
   };
   orderItems: PromptOrderInspectItem[];
@@ -102,23 +103,31 @@ const MARKER_IDENTIFIERS = new Set([
   'personaDescription', 'dialogueExamples',
 ]);
 
-function promptHistory(options: AssembleOptions) {
-  const projection = projectContextHistory({ history: options.history, variables: options.variables,
-    thresholdTokens: options.contextCompressionThresholdTokens });
-  return options.contextBundle
-    ? { ...projection, ...options.contextBundle.compression, messages: options.contextBundle.recentMessages }
-    : projection;
+function promptHistory(options: AssembleOptions, fitsBudget?: (messages: readonly ChatMessage[]) => boolean) {
+  const prior = options.contextBundle?.compression;
+  const projection = projectContextHistory({ history: options.contextBundle?.recentMessages ?? options.history,
+    variables: options.variables, thresholdTokens: prior?.thresholdTokens ?? options.contextCompressionThresholdTokens,
+    fitsBudget });
+  return prior ? { ...projection, originalTokens: prior.originalTokens,
+    projectedTokens: prior.projectedTokens - (projection.originalTokens - projection.projectedTokens),
+    compressedMessageIds: [...new Set([...prior.compressedMessageIds, ...projection.compressedMessageIds])],
+    budgetTriggered: prior.budgetTriggered || projection.budgetTriggered } : projection;
 }
 
 export function assemblePrompt(options: AssembleOptions): AssembleResult {
+  return preparePrompt(options).result;
+}
+
+/** Assembly and inspection share the exact same budget, projection and selection. */
+function preparePrompt(options: AssembleOptions) {
   const { userInput, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt, contextBundle } = options;
 
   // 1) 扫描世界书
   const activeBooks = lorebooks.filter(b => activeLorebookIds.includes(b.id));
   const matchedAll: MatchedEntry[] = [];
-  const historyForPrompt = promptHistory(options).messages;
+  const scanHistory = promptHistory(options).messages;
   const scanText = contextBundle?.lorebookScanText
-    ?? `${userInput} ${historyForPrompt.map(m => m.content).join(' ')}`;
+    ?? `${userInput} ${scanHistory.map(m => m.content).join(' ')}`;
   for (const book of activeBooks) {
     const engine = createLorebookEngine(book);
     const matches = engine.recursiveScan(scanText, 3);
@@ -131,29 +140,11 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
   const beforeEntries = uniqueEntries.filter(e => BEFORE_POSITIONS.has(e.entry.position));
   const afterEntries = uniqueEntries.filter(e => AFTER_POSITIONS.has(e.entry.position));
 
-  // 2) token 预算裁剪历史
+  // 2) Fixed capacity; complete resolved messages are measured below.
   const maxContext = preset?.settings?.openai_max_context ?? DEFAULT_CONTEXT_TOKENS;
   const maxOutput = preset?.settings?.openai_max_tokens ?? DEFAULT_OUTPUT_TOKENS;
   const memoryBlock = contextBundle ? formatMemoryContext(contextBundle) : '';
-  const fixedText = [
-    userInput,
-    formatPrompt ?? '',
-    memoryBlock,
-    ...uniqueEntries.map(entry => entry.entry.content),
-    formatVariablesForPrompt(variables || {}),
-  ].join('\n');
   const repairReserve = contextBundle?.tokenBudget.reservedRepair ?? Math.max(512, Math.ceil(maxContext * 0.08));
-  const availableContext = Math.max(512, maxContext - maxOutput - repairReserve - estimateTokens(fixedText));
-  const recentHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
-  let currentTokens = 0;
-  for (let i = historyForPrompt.length - 1; i >= 0; i--) {
-    const msg = historyForPrompt[i];
-    if (msg.role === 'system') continue;
-    const msgTokens = estimateTokens(msg.content);
-    if (currentTokens + msgTokens > availableContext) break;
-    recentHistory.unshift({ role: msg.role, content: msg.content });
-    currentTokens += msgTokens;
-  }
 
   // 3) prompt_order 编排
   const rawOrder = preset?.settings?.prompt_order;
@@ -208,66 +199,91 @@ export function assemblePrompt(options: AssembleOptions): AssembleResult {
     return null;
   }
 
-  const assembledMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
-  let systemAcc = '';
-  let hasChatHistory = false;
-
-  function flushSystem() {
-    if (systemAcc) {
-      assembledMessages.push({ role: 'system', content: systemAcc });
-      systemAcc = '';
-    }
-  }
-
-  for (const item of promptOrder) {
-    if (item.enabled === false) continue;
-
-    if (item.identifier === 'chatHistory') {
-      hasChatHistory = true;
-      flushSystem();
-      assembledMessages.push(...recentHistory);
-      continue;
-    }
-
+  // Resolve random/macros once: fitting must measure the same text that is sent.
+  const resolvedContents = promptOrder.map(item => {
+    if (item.enabled === false || item.identifier === 'chatHistory') return null;
     const raw = resolveContent(item);
-    if (!raw) continue;
+    return raw ? replaceMacros(raw, macroCtx) : null;
+  });
+  const resolvedUserInput = replaceMacros(userInput, macroCtx);
 
-    const content = replaceMacros(raw, macroCtx);
-    if (!content.trim()) continue;
+  function buildMessages(history: readonly ChatMessage[]) {
+    const recentHistory = history.map(({ role, content }) => ({ role, content }));
+    const assembledMessages: AssembleResult['messages'] = [];
+    let systemAcc = '';
+    let hasChatHistory = false;
 
-    const role = item.role || 'system';
-    if (role === 'system') {
-      systemAcc += (systemAcc ? '\n\n' : '') + content;
-    } else {
-      flushSystem();
-      assembledMessages.push({ role, content });
+    function flushSystem() {
+      if (systemAcc) {
+        assembledMessages.push({ role: 'system', content: systemAcc });
+        systemAcc = '';
+      }
     }
+
+    for (const [index, item] of promptOrder.entries()) {
+      if (item.enabled === false) continue;
+
+      if (item.identifier === 'chatHistory') {
+        hasChatHistory = true;
+        flushSystem();
+        assembledMessages.push(...recentHistory);
+        continue;
+      }
+
+      const content = resolvedContents[index];
+      if (!content?.trim()) continue;
+
+      const role = item.role || 'system';
+      if (role === 'system') {
+        systemAcc += (systemAcc ? '\n\n' : '') + content;
+      } else {
+        flushSystem();
+        assembledMessages.push({ role, content });
+      }
+    }
+
+    // 4) 附加变量/状态块
+    const varBlock = formatVariablesForPrompt(variables || {});
+    if (varBlock) systemAcc += (systemAcc ? '\n\n' : '') + varBlock;
+    if (memoryBlock) systemAcc += (systemAcc ? '\n\n' : '') + memoryBlock;
+    systemAcc += (systemAcc ? '\n\n' : '') + translateForWriter(variables || {});
+    systemAcc += (systemAcc ? '\n\n' : '') + buildLoopPacingContract(variables?.cycleCount);
+
+    // 5) 附加格式提示词(XML 标签约束)
+    if (formatPrompt) systemAcc += (systemAcc ? '\n\n' : '') + formatPrompt;
+
+    if (systemAcc) assembledMessages.unshift({ role: 'system', content: systemAcc });
+
+    // 6) prompt_order 没声明 chatHistory 时,自动追加历史
+    if (!hasChatHistory) assembledMessages.push(...recentHistory);
+
+    // 7) 当前用户输入
+    assembledMessages.push({ role: 'user', content: resolvedUserInput });
+
+    const systemPrompt = assembledMessages
+      .filter(m => m.role === 'system')
+      .map(m => m.content)
+      .join('\n\n');
+
+    return { messages: assembledMessages, matchedEntries: uniqueEntries, systemPrompt };
   }
 
-  // 4) 附加变量/状态块
-  const varBlock = formatVariablesForPrompt(variables || {});
-  if (varBlock) systemAcc += (systemAcc ? '\n\n' : '') + varBlock;
-  if (memoryBlock) systemAcc += (systemAcc ? '\n\n' : '') + memoryBlock;
-  systemAcc += (systemAcc ? '\n\n' : '') + translateForWriter(variables || {});
-  systemAcc += (systemAcc ? '\n\n' : '') + buildLoopPacingContract(variables?.cycleCount);
-
-  // 5) 附加格式提示词(XML 标签约束)
-  if (formatPrompt) systemAcc += (systemAcc ? '\n\n' : '') + formatPrompt;
-
-  if (systemAcc) assembledMessages.unshift({ role: 'system', content: systemAcc });
-
-  // 6) prompt_order 没声明 chatHistory 时,自动追加历史
-  if (!hasChatHistory) assembledMessages.push(...recentHistory);
-
-  // 7) 当前用户输入
-  assembledMessages.push({ role: 'user', content: replaceMacros(userInput, macroCtx) });
-
-  const systemPrompt = assembledMessages
-    .filter(m => m.role === 'system')
-    .map(m => m.content)
-    .join('\n\n');
-
-  return { messages: assembledMessages, matchedEntries: uniqueEntries, systemPrompt };
+  const inputCapacity = maxContext - maxOutput - repairReserve;
+  const fixedTokens = estimateTokens(JSON.stringify(buildMessages([]).messages));
+  if (!Number.isFinite(inputCapacity) || maxContext <= 0 || maxOutput < 0 || fixedTokens > inputCapacity) {
+    throw new ContextBudgetError(`上下文预算不足：固定指令、输出和修复预留无法容纳于 ${maxContext}。必要权威内容未被截断。`);
+  }
+  const fitsBudget = (history: readonly ChatMessage[]) => estimateTokens(JSON.stringify(buildMessages(history).messages)) <= inputCapacity;
+  const compression = promptHistory(options, fitsBudget);
+  const selected: ChatMessage[] = [];
+  for (let index = compression.messages.length - 1; index >= 0; index--) {
+    const candidate = [compression.messages[index], ...selected];
+    if (!fitsBudget(candidate)) break;
+    selected.unshift(compression.messages[index]);
+  }
+  return { result: buildMessages(selected), compression, includedIds: new Set(selected.map(message => message.id)),
+    availableContext: inputCapacity - fixedTokens, maxContext, scanText, uniqueEntries, beforeEntries, afterEntries,
+    resolvedContents };
 }
 
 // ========== Macros ==========
@@ -335,55 +351,14 @@ function formatMemoryContext(bundle: TurnContextBundle): string {
 
 /** 提示词组装可视化检查 — 返回完整的中间状态 */
 export function inspectPrompt(options: AssembleOptions): PromptInspectionResult {
-  const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt, contextBundle } = options;
-
-  // 1) 世界书扫描
-  const activeBooks = lorebooks.filter(b => activeLorebookIds.includes(b.id));
-  const matchedAll: MatchedEntry[] = [];
-  const compression = promptHistory(options);
+  const { userInput, history, preset, variables, formatPrompt, contextBundle } = options;
+  const { result, compression, includedIds, availableContext, maxContext,
+    scanText, uniqueEntries, beforeEntries, afterEntries, resolvedContents } = preparePrompt(options);
   const historyForPrompt = compression.messages;
   const compressedIds = new Set(compression.compressedMessageIds);
-  const scanText = contextBundle?.lorebookScanText
-    ?? `${userInput} ${historyForPrompt.map(m => m.content).join(' ')}`;
-  for (const book of activeBooks) {
-    const engine = createLorebookEngine(book);
-    const matches = engine.recursiveScan(scanText, 3);
-    matchedAll.push(...matches);
-  }
-  const uniqueEntries = Array.from(
-    new Map(matchedAll.map(e => [e.entry.id, e])).values()
-  ).sort((a, b) => a.score - b.score);
-
-  const beforeEntries = uniqueEntries.filter(e => BEFORE_POSITIONS.has(e.entry.position));
-  const afterEntries = uniqueEntries.filter(e => AFTER_POSITIONS.has(e.entry.position));
-
-  // 2) token 预算裁剪历史
-  const maxContext = preset?.settings?.openai_max_context ?? DEFAULT_CONTEXT_TOKENS;
-  const maxOutput = preset?.settings?.openai_max_tokens ?? DEFAULT_OUTPUT_TOKENS;
   const memoryBlock = contextBundle ? formatMemoryContext(contextBundle) : '';
-  const repairReserve = contextBundle?.tokenBudget.reservedRepair ?? Math.max(512, Math.ceil(maxContext * 0.08));
-  const fixedText = [
-    userInput,
-    formatPrompt ?? '',
-    memoryBlock,
-    ...uniqueEntries.map(entry => entry.entry.content),
-    formatVariablesForPrompt(variables || {}),
-  ].join('\n');
-  const availableContext = Math.max(512, maxContext - maxOutput - repairReserve - estimateTokens(fixedText));
-
-  const historyInspect: PromptInspectionResult['history']['messages'] = [];
-  let currentTokens = 0;
-  let overBudget = false;
-  for (let i = historyForPrompt.length - 1; i >= 0; i--) {
-    const msg = historyForPrompt[i];
-    const msgTokens = estimateTokens(msg.content);
-    if (msg.role !== 'system' && currentTokens + msgTokens > availableContext) overBudget = true;
-    const included = msg.role !== 'system' && !overBudget;
-    if (included) {
-      currentTokens += msgTokens;
-    }
-    historyInspect.unshift({ role: msg.role, content: msg.content, tokens: msgTokens, included, compressed: compressedIds.has(msg.id) });
-  }
+  const historyInspect = historyForPrompt.map(msg => ({ role: msg.role, content: msg.content,
+    tokens: estimateTokens(msg.content), included: includedIds.has(msg.id), compressed: compressedIds.has(msg.id) }));
   const includedHistory = historyInspect.filter(m => m.included);
 
   // 3) prompt_order 编排 + 详细记录
@@ -392,8 +367,6 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
     ? rawOrder
     : defaultPromptOrder();
   const customPrompts: RuntimePromptItem[] = preset?.settings?.prompts || [];
-
-  const macroCtx = { userName, characterName, userInput, variables };
 
   function resolveContentInspect(item: RuntimePromptItem): { raw: string | null; resolved: string | null } {
     const id = item.identifier;
@@ -437,7 +410,7 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   const orderItems: PromptOrderInspectItem[] = [];
   let systemAcc = '';
 
-  for (const item of promptOrder) {
+  for (const [index, item] of promptOrder.entries()) {
     const inspectItem: PromptOrderInspectItem = {
       identifier: item.identifier,
       name: item.name || item.identifier,
@@ -477,7 +450,7 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
       continue;
     }
 
-    const final = replaceMacros(resolved, macroCtx);
+    const final = resolvedContents[index] ?? '';
     inspectItem.finalContent = final;
 
     if (!final.trim()) {
@@ -502,7 +475,7 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   const varBlock = formatVariablesForPrompt(variables || {});
 
   // 5) 组装最终消息（模拟）
-  const finalMessages = assemblePrompt(options).messages.map((message, index) => ({ ...message, index }));
+  const finalMessages = result.messages.map((message, index) => ({ ...message, index }));
 
   // 6) 统计
   const injectedWriterDirective = translateForWriter(variables || {});
@@ -529,6 +502,7 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
       compressionThresholdTokens: compression.thresholdTokens,
       originalTokens: compression.originalTokens,
       projectedTokens: compression.projectedTokens,
+      budgetTriggered: compression.budgetTriggered,
       messages: historyInspect,
     },
     orderItems,

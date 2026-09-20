@@ -499,11 +499,6 @@ export function compileTurnContext(options: {
       return item.sourceEventIds.length > 0 && item.sourceEventIds.every(id => inVersion(eventCycles.get(id)));
     }),
   };
-  const { messages: recentMessageCandidates, ...compression } = projectContextHistory({
-    history: options.history,
-    variables: options.variables,
-    thresholdTokens: options.contextCompressionThresholdTokens,
-  });
   const terms = [...new Set([options.locationId, ...options.activeNpcIds, ...options.userInput.split(/[\s，。！？、]+/u)])]
     .filter(term => term.length > 1);
   const recentEpisodeIds = new Set(memory.episodes.slice(-2).map(item => item.episodeId));
@@ -570,9 +565,9 @@ export function compileTurnContext(options: {
     .filter(item => !item.expressibleUnderCover)
     .map(item => `${item.npcId}|background:${item.factId}`));
 
-  function projectSelected() {
+  function projectSelected(history: readonly ChatMessage[] = recentMessages) {
     const selectedIds = [
-      ...recentMessages.map(item => `message:${item.id}`),
+      ...history.map(item => `message:${item.id}`),
       ...relevantEpisodes.map(item => item.episodeId),
       ...relevantCognition.map(item => item.cognitionId),
       ...relevantBackgroundFacts.map(item => item.factId),
@@ -622,7 +617,7 @@ export function compileTurnContext(options: {
       id: `active-commitment:${index + 1}`, actorId, recipientId, action, locationId, dueAt, evidenceQuote,
     }));
     const writerSelectedIds = [
-      ...recentMessages.map(item => `message:${item.id}`),
+      ...history.map(item => `message:${item.id}`),
       ...relevantEpisodes.map(item => item.episodeId),
       ...writerCognitionProjection.map(item => item.id),
       ...writerBackgroundFacts.map(item => item.factId),
@@ -640,7 +635,7 @@ export function compileTurnContext(options: {
       backgroundFacts: writerBackgroundFacts,
       rule: '只可表现 backgroundFacts 中的开局前生活史；侦探调查档案等不可表达认知已被裁掉。',
     };
-    const recentHistory = recentMessages.map(({ role, content }) => ({ role, content }));
+    const recentHistory = history.map(({ role, content }) => ({ role, content }));
     const estimatedSelected = Math.max(
       estimateTokens(JSON.stringify({ recentHistory, memoryContext: directorMemory, contextSelectionIds: selectedIds })),
       estimateTokens(JSON.stringify({ recentHistory, memoryContext: writerMemory, contextSelectionIds: writerSelectedIds })),
@@ -665,6 +660,12 @@ export function compileTurnContext(options: {
   // Required active commitments are already present. Optional public records are
   // selected whole, with current/relevant disclosures ahead of general history.
   disclosureCandidates.forEach(item => selectWhole(relevantDisclosures, item));
+  const { messages: recentMessageCandidates, ...compression } = projectContextHistory({
+    history: options.history,
+    variables: options.variables,
+    thresholdTokens: options.contextCompressionThresholdTokens,
+    fitsBudget: history => projectSelected(history).estimatedSelected <= available,
+  });
   [...recentMessageCandidates].reverse().forEach(item => selectWhole(recentMessages, item, 'start'));
   [...cognitionCandidates].reverse().forEach(item => selectWhole(relevantCognition, item, 'start'));
   const representedTurnIds = new Set(recentMessages.map(item => item.id));

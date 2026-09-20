@@ -3,8 +3,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { assetUrl } from '../../utils/assetUrl';
 import { GameIcon } from '../ui/GameIcon';
 import { PixelButton } from '../ui/PixelButton';
-import { maintextToScene } from '../../engine/scene-parser';
-import type { Ending, Scene } from '../../sillytavern/types';
+import { endingTextToScene, getEndingPresentation } from '../../engine/ending-presentation';
 import { playSfx } from '../../utils/sfx';
 import { settleCycleVariables, startNextCycle } from '../../utils/cycleLoop';
 
@@ -176,13 +175,13 @@ export function EndingPlayer() {
             className="font-serif-cn text-[clamp(22px,4vw,42px)] tracking-[0.24em]"
             style={{ color: TEXT_MAIN, textShadow: '0 0 18px rgba(134,168,242,0.38)' }}
           >
-            {phase === 'outro' ? '故事已抵达它的终点。' : '这一次，时间没有继续倒退。'}
+            {phase === 'outro' ? '这一段故事，暂且合上。' : '这个选择之后，故事仍有回声。'}
           </div>
           <div
             className="mt-4 font-mono text-[11px] tracking-[0.34em]"
             style={{ color: GOLD }}
           >
-            {phase === 'outro' ? 'END OF REEL / MEMORY ARCHIVED' : 'FILM REEL BREAK / ENDING SIGNAL CONFIRMED'}
+            {getEndingPresentation((phase === 'transition' ? pendingEnding : activeEnding)?.id ?? '')?.label ?? '结局'}
           </div>
         </div>
       </div>
@@ -207,6 +206,9 @@ export function EndingPlayer() {
           <h2 className="mt-4 font-serif-cn text-[clamp(24px,5vw,40px)] tracking-[0.16em]" style={{ color: TEXT_MAIN }}>
             {activeEnding.name}
           </h2>
+          <p className="mt-3 text-sm" style={{ color: TEXT_MAIN }}>
+            {getEndingPresentation(activeEnding.id)?.label}
+          </p>
           <div className="my-8 h-px w-full bg-gradient-to-r from-transparent via-[#86a8f2]/60 to-transparent" />
           <div className="flex w-full flex-col gap-3 sm:flex-row">
             {SOFT_LOOP_ENDING_IDS.has(activeEnding.id) && (
@@ -229,33 +231,4 @@ export function EndingPlayer() {
   return (
     null
   );
-}
-
-function endingTextToScene(text: string, ending: Ending): Scene {
-  const trimmed = text.trim();
-  if (/\b(scene|bgm|music|dialog|dialogue)\s*[|]/i.test(trimmed)) {
-    return maintextToScene(trimmed);
-  }
-
-  const background = ending.backgroundImage || 'black';
-  const bgm = ending.bgm || defaultEndingBgm(ending);
-  const lines = [
-    `scene|${background}`,
-    `bgm|${bgm}`,
-    `dialog|旁白|calm|${ending.name}`,
-    ...trimmed
-      .split(/\n\s*\n/)
-      .map(paragraph => paragraph.replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
-      .map(paragraph => `dialog|旁白|calm|${paragraph}`),
-  ];
-
-  return maintextToScene(lines.join('\n'));
-}
-
-function defaultEndingBgm(ending: Ending): string {
-  if (ending.tag === 'bad') return 'horror';
-  if (ending.tag === 'good' || ending.tag === 'true') return 'peace';
-  if (ending.tag === 'hidden') return 'silence';
-  return 'suspense';
 }

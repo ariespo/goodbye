@@ -1,9 +1,27 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { compileTurnContext } from '../memory/world-memory';
+import { compileTurnContext, estimateTokens } from '../memory/world-memory';
 import { callSecondaryApi, streamChatCompletion } from './api-router';
 import { createDefaultPreset } from './types';
 const config = { baseUrl: 'https://test.invalid', apiKey: 'test', model: 'test' };
 afterEach(() => vi.unstubAllGlobals());
+it('compresses older prose against real memory capacity before discarding below-threshold history', () => {
+  const history = Array.from({ length: 6 }, (_, index) => ({ id: `turn-${index}`, role: 'assistant' as const,
+    content: `<maintext>对话|旁白|calm|旧正文${index}${'雨'.repeat(700)}</maintext><sum>第${index}段在公寓查看纸条。</sum>`,
+    timestamp: index, variables: { cycleCount: 1 } }));
+  const saved = structuredClone(history);
+  const result = compileTurnContext({ userInput: '继续', locationId: 'home', activeNpcIds: [], variables: {},
+    maxContext: 4096, reservedOutput: 512, fixedPromptText: '重要规则'.repeat(120),
+    contextCompressionThresholdTokens: 60000, history });
+  expect(result.recentMessages.map(item => item.id)).toEqual(history.map(item => item.id));
+  expect(result.compression?.budgetTriggered).toBe(true);
+  expect(result.recentMessages[0].content).toContain('历史剧情摘要');
+  expect(result.recentMessages.slice(-2)).toEqual(history.slice(-2));
+  const serialized = JSON.stringify({ recentHistory: result.recentMessages.map(({ role, content }) => ({ role, content })),
+    memoryContext: result.directorMemory, contextSelectionIds: result.selectedIds });
+  const b = result.tokenBudget;
+  expect(estimateTokens(serialized) + b.estimatedFixed + b.reservedOutput + b.reservedRepair).toBeLessThanOrEqual(b.maxContext);
+  expect(history).toEqual(saved);
+});
 it('drops oversized optional history while preserving a short recent message', () => {
   const result = compileTurnContext({ userInput: 'look', locationId: 'home', activeNpcIds: [], variables: {}, maxContext: 8192, reservedOutput: 2048,
     history: [{ id: 'large', role: 'assistant', content: '史'.repeat(20000), timestamp: 1, variables: {} }, { id: 'short', role: 'user', content: 'look', timestamp: 2, variables: {} }] });

@@ -179,7 +179,7 @@ export function createDefaultEndings(): Ending[] {
       name: '报警·审判',
       truthType: 'A',
       tag: 'normal',
-      description: '玩家带着祭坛证据报警。老头被逮捕，文穗的死被重新定性为他杀。法律正义无法让她回来。',
+      description: '在这条路线中，玩家提交周德明施暴、推落文穗及转移伪装现场的证据。调查与审理继续，正义无法让她回来。',
       conditionGroups: [cg('A-1-cg', '锁定A线且选择报警', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
         { variablePath: 'overlay', operator: '!=', targetValue: 'CULT' },
@@ -207,7 +207,7 @@ export function createDefaultEndings(): Ending[] {
       name: '报警·揭露',
       truthType: 'B',
       tag: 'normal',
-      description: '玩家将证据提交警方。侦探A/B被逮捕，生父的雇佣关系曝光。文穗用沉默交换了玩家的安心。',
+      description: '玩家把赵刚强行带人造成致命撞击、林静随后参与掩盖的证据交给警方。两人的行为与责任分别进入记录。',
       conditionGroups: [cg('B-1-cg', '锁定B线且选择报警', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'B' },
         { variablePath: 'finalChoice', operator: '=', targetValue: 'report' },
@@ -233,8 +233,8 @@ export function createDefaultEndings(): Ending[] {
       name: '接受·清醒',
       truthType: 'C',
       tag: 'normal',
-      description: '玩家承认自己杀了文穗。轮回停止——不是被打破，是不再被需要。灰暗但真实。',
-      backgroundImage: 'ending-c-1',
+      description: '玩家承认前夜在家中杀害文穗，配合记录并承担责任。旧日的问候留在记忆里，不能替她给予原谅。',
+      backgroundImage: 'black',
       conditionGroups: [cg('C-1-cg', '锁定C线且接受真相', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
         { variablePath: 'overlay', operator: '!=', targetValue: 'PSYCH' },
@@ -248,7 +248,7 @@ export function createDefaultEndings(): Ending[] {
       name: '否认·囚禁',
       truthType: 'C',
       tag: 'bad',
-      description: '玩家拒绝接受，继续寻找不存在的凶手。永恒的自我囚禁——玩家选择了幻觉。',
+      description: '玩家拒绝已核实的责任，反复躲入旧日问候。回忆结束，封存的证据仍在，文穗没有回来。',
       conditionGroups: [cg('C-2-cg', '锁定C线且否认真相', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
         { variablePath: 'overlay', operator: '!=', targetValue: 'PSYCH' },
@@ -262,7 +262,7 @@ export function createDefaultEndings(): Ending[] {
       name: '读信·放手',
       truthType: 'NONE',
       tag: 'good',
-      description: '没有凶手。玩家拼合告别信，接受文穗早已写好的告别。雨停了，"再见"第一次被完整说出。',
+      description: '独行失足、栏杆失效与伤情已经核实。玩家接受事故，也读完文穗生前写下的离开意愿，不再把两者混为一谈。',
       conditionGroups: [cg('N-1-cg', '无凶手真相且接受告别', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'NONE' },
         { variablePath: 'letterFragmentCount', operator: '>=', targetValue: 3 },
@@ -276,7 +276,7 @@ export function createDefaultEndings(): Ending[] {
       name: '拒信·回环',
       truthType: 'NONE',
       tag: 'bad',
-      description: '玩家撕掉信，回到轮回。从此每轮清晨，口袋里都会多出一片湿透的碎纸。',
+      description: '玩家撕信却无法改写已核实的事故。旧日问候只在回忆中响起；跟随重置留下的是记忆，碎纸不会跨日累积。',
       conditionGroups: [cg('N-2-cg', '无凶手真相且拒绝接受', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'NONE' },
         { variablePath: 'letterFragmentCount', operator: '>=', targetValue: 3 },
@@ -290,8 +290,8 @@ export function createDefaultEndings(): Ending[] {
       name: '放她走',
       truthType: 'FAKE',
       tag: 'good',
-      description: '文穗还活着。玩家在人群中与她对视，然后转身离开。唯一一个她活着的世界——代价是永远失去她。',
-      backgroundImage: 'ending-f-1',
+      description: '本人生还与初报误认已经分别核实。玩家停止追问去向，收到她安全到达的讯息，把是否再见留给以后的生活。',
+      backgroundImage: 'black',
       conditionGroups: [cg('F-1-cg', '识破假死且放手', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'FAKE' },
         { variablePath: 'fakeEvidenceCount', operator: '>=', targetValue: 3 },
@@ -305,7 +305,7 @@ export function createDefaultEndings(): Ending[] {
       name: '追到底',
       truthType: 'FAKE',
       tag: 'bad',
-      description: '玩家抓住了她的手腕，也抓碎了她的计划。生父的人循着玩家找到了她。这一次是真的再见不到了。',
+      description: '玩家追到离城后的中转站，也把跟踪者带到文穗身边。她被带走后失联；失联不能当成死讯。',
       conditionGroups: [cg('F-2-cg', '识破假死且追寻', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'FAKE' },
         { variablePath: 'fakeEvidenceCount', operator: '>=', targetValue: 3 },
@@ -319,7 +319,7 @@ export function createDefaultEndings(): Ending[] {
       name: '毁坛·渎神',
       truthType: 'CULT',
       tag: 'normal',
-      description: '献祭是真的。玩家砸毁祭坛，轮回的支点断了。世界正常了，也空了。',
+      description: '在仪式确实生效的这条路线中，玩家摧毁支点、终止循环。周德明的罪行与文穗的死亡没有被改写。',
       conditionGroups: [cg('X-1-cg', '邪神真相且毁坛', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
         { variablePath: 'overlay', operator: '=', targetValue: 'CULT' },
@@ -331,10 +331,10 @@ export function createDefaultEndings(): Ending[] {
     },
     {
       id: 'X-2',
-      name: '献祭·续命',
+      name: '封存·余生',
       truthType: 'CULT',
       tag: 'bad',
-      description: '玩家读懂了仪式的另一种用法，让那个清晨永远凝固。文穗永远十四岁，而只有玩家在老去。',
+      description: '玩家耗用自己的余生维持仪式中的清晨画面。画面里的文穗不能走入现实；她的死亡与周德明的罪行仍然成立。',
       conditionGroups: [cg('X-2-cg', '邪神真相且献祭', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'A' },
         { variablePath: 'overlay', operator: '=', targetValue: 'CULT' },
@@ -349,7 +349,7 @@ export function createDefaultEndings(): Ending[] {
       name: '醒来',
       truthType: 'PSYCH',
       tag: 'normal',
-      description: '白墙。消毒水味盖过了草莓味。窗外在下雨——只是普通的、会停的雨。',
+      description: '玩家回到治疗环境，继续核对材料与配合调查。重构的雨城得到解释，前夜施暴致死的责任没有撤销。',
       conditionGroups: [cg('P-1-cg', '内室真相且醒来', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
         { variablePath: 'overlay', operator: '=', targetValue: 'PSYCH' },
@@ -364,7 +364,7 @@ export function createDefaultEndings(): Ending[] {
       name: '沉入',
       truthType: 'PSYCH',
       tag: 'bad',
-      description: '玩家选择永远住在内室里。病床上的人嘴唇动了动，像是在说"早安"。',
+      description: '玩家沉入记忆重构的清晨。叙述回到病房时，治疗、调查与责任都仍在；现实里没有复活的文穗。',
       conditionGroups: [cg('P-2-cg', '内室真相且沉入', [
         { variablePath: 'lockedRoute', operator: '=', targetValue: 'C' },
         { variablePath: 'overlay', operator: '=', targetValue: 'PSYCH' },
@@ -379,8 +379,8 @@ export function createDefaultEndings(): Ending[] {
       name: '早安·永远',
       truthType: 'META',
       tag: 'hidden',
-      description: '知晓一切之后，玩家选择不出门，陪文穗过完今天。然后明天再来一次。最清醒的沉沦——软结局，可以反悔。',
-      backgroundImage: 'ending-stay',
+      description: '连续三次留下，玩家反复回忆与文穗相处的旧日。她没有回到眼前，已知与未知都未被改变。仍可回到八点，重新出门。',
+      backgroundImage: 'home',
       conditionGroups: [cg('STAY-cg', '连续三轮选择留下', [
         { variablePath: 'stayStreak', operator: '>=', targetValue: 3 },
       ])],
@@ -389,11 +389,11 @@ export function createDefaultEndings(): Ending[] {
     },
     {
       id: 'TRUE',
-      name: '九点零一分',
+      name: '八点零一分',
       truthType: 'META',
       tag: 'true',
-      description: '最后一个清晨，玩家说出完整的告别。雨停，闹钟走到9:01——第一次，时间前进了。',
-      backgroundImage: 'ending-true',
+      description: '在故事之外，玩家分别合上互不相容的篇章，向记忆中的文穗告别。想象里的钟走到8:01；各篇事实与责任依然保留。',
+      backgroundImage: 'home',
       conditionGroups: [cg('TRUE-cg', '走完一切并选择告别', [
         { variablePath: 'routesLockedCount', operator: '>=', targetValue: 3 },
         { variablePath: 'stayedEver', operator: '=', targetValue: true },
@@ -407,8 +407,8 @@ export function createDefaultEndings(): Ending[] {
       name: '困局',
       truthType: 'LOOP',
       tag: 'bad',
-      description: '第七轮之后仍无法锁定任何真相。文穗不断死去，玩家不断重来，直到不记得她的样子。',
-      backgroundImage: 'ending-loop',
+      description: '第七个重复日起，仍未形成足以锁线的证据链。记忆开始模糊，材料与缺口却仍在；未解的身份和死因不能被擅自填上。',
+      backgroundImage: 'black',
       conditionGroups: [cg('LOOP-cg', '高轮回且一无所获', [
         { variablePath: 'cycleCount', operator: '>=', targetValue: 7 },
         { variablePath: 'routesLockedCount', operator: '=', targetValue: 0 },

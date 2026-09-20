@@ -44,6 +44,7 @@ import type { ExecutedTurnProjection } from './turn-preparation';
 import { capturePendingActionAuthorization, restorePendingActionAuthorization, type PendingActionAuthorization } from './pending-action-authorization';
 import { planBoundedRetrieval } from './bounded-retrieval';
 import { retrievalContext, type AuthorizedRetrievalCorpus, type RetrievedRecord } from '../../memory/authorized-retrieval';
+import { alignRequestHistory, compressRequestHistory } from '../../memory/context-compression';
 
 export type AgentNarrativeMode = AgentNarrativeModeSetting;
 
@@ -482,12 +483,24 @@ async function runMysteryPipeline(
   const requestFits = (messages: ChatCompletionMessage[], responseFormat?: ResponseFormat) => estimateTokens(JSON.stringify({
     model: options.api.model, messages, max_tokens: getMaxOutputTokens(options.preset), response_format: responseFormat,
   })) + getMaxOutputTokens(options.preset) + 256 <= getMaxContextTokens(options.preset);
+  const historyFits = (messages: ChatCompletionMessage[], responseFormat?: ResponseFormat) => estimateTokens(JSON.stringify({
+    model: options.api.model, messages, max_tokens: getMaxOutputTokens(options.preset), response_format: responseFormat,
+  })) + getMaxOutputTokens(options.preset) + Math.max(512, Math.ceil(getMaxContextTokens(options.preset) * .08))
+    <= getMaxContextTokens(options.preset);
   while (recalled.length && !requestFits([
     { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
     { role: 'user', content: buildDirectorUserPrompt(brief, withRecollection(options.turnContext)) },
   ], DIRECTOR_PLAN_RESPONSE_FORMAT)) recalled = recalled.slice(0, -1);
   options = { ...options, turnContext: withRecollection(options.turnContext),
     presentationContext: withRecollection(options.presentationContext) };
+  const fittedTurnContext = compressRequestHistory(options.turnContext, context => historyFits([
+    { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
+    { role: 'user', content: buildDirectorUserPrompt(brief, context) },
+  ], DIRECTOR_PLAN_RESPONSE_FORMAT));
+  if (fittedTurnContext !== options.turnContext) options = { ...options,
+    turnContext: fittedTurnContext,
+    presentationContext: alignRequestHistory(options.presentationContext, fittedTurnContext),
+  };
   const paidDirectorRepair = () => { try { options.api.telemetry?.onRepair?.('director'); } catch { /* Optional observers cannot change gameplay. */ } };
   const directorMessages: ChatCompletionMessage[] = [
     { role: 'system', content: DIRECTOR_SYSTEM_PROMPT },
@@ -858,6 +871,13 @@ async function runMysteryPipeline(
     writerMessages = [{ role: 'system', content: writerSystem },
       { role: 'user', content: buildWriterUserPrompt(writerPacket, writerPresentation) }];
   }
+  writerPresentation = compressRequestHistory(writerPresentation, context => historyFits([
+    { role: 'system', content: writerSystem },
+    { role: 'user', content: buildWriterUserPrompt({ ...writerPacket, continuityContext: context }, context) },
+  ]), directorPlan.beats.flatMap(beat => beat.sourceMemoryIds ?? []));
+  writerPacket.continuityContext = { ...writerPresentation };
+  writerMessages = [{ role: 'system', content: writerSystem },
+    { role: 'user', content: buildWriterUserPrompt(writerPacket, writerPresentation) }];
 
   return {
     brief: writerBrief,
