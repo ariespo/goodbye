@@ -74,7 +74,7 @@ describe('SettingsModal', () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByRole('button', { name: '剧情模式' }));
     const input = screen.getByLabelText('剧情压缩阈值（估算 token）');
-    expect(input).toHaveValue(12000);
+    expect(input).toHaveValue(60000);
     fireEvent.change(input, { target: { value: '18000' } });
     expect(useGameStore.getState().tavern.settings?.contextCompressionThresholdTokens).toBeUndefined();
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
@@ -95,7 +95,7 @@ describe('SettingsModal', () => {
   });
 
   it.each([
-    ['', 12000], ['-20', 2000], ['999999', 100000], ['8600.7', 8600],
+    ['', 60000], ['-20', 2000], ['999999', 100000], ['8600.7', 8600],
   ])('normalizes the compression budget %s when saving', async (inputValue, expected) => {
     useGameStore.setState(state => ({ tavern: { ...state.tavern, settings }, ui: { ...state.ui, showSettings: true } }));
     render(<SettingsModal />);

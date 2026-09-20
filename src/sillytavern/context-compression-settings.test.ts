@@ -12,8 +12,8 @@ describe('context compression settings', () => {
   beforeEach(async () => { await db.settings.clear(); });
 
   it.each([
-    [undefined, 12000], [null, 12000], [NaN, 12000], [Infinity, 12000],
-    ['8000', 12000], [1500, 2000], [2000, 2000], [12345.9, 12345], [100000, 100000], [100001, 100000],
+    [undefined, 60000], [null, 60000], [NaN, 60000], [Infinity, 60000],
+    ['8000', 60000], [1500, 2000], [2000, 2000], [12345.9, 12345], [100000, 100000], [100001, 100000],
   ])('normalizes imported or runtime value %s to %s', (value, expected) => {
     expect(normalizeContextCompressionThreshold(value)).toBe(expected);
   });
@@ -23,13 +23,13 @@ describe('context compression settings', () => {
     const legacy = { ...defaults, id: 1, userName: '旧存档玩家' };
     delete legacy.contextCompressionThresholdTokens;
     await db.settings.put(legacy);
-    expect(await getSettings()).toMatchObject({ userName: '旧存档玩家', contextCompressionThresholdTokens: 12000 });
+    expect(await getSettings()).toMatchObject({ userName: '旧存档玩家', contextCompressionThresholdTokens: 60000 });
   });
 
   it('normalizes an invalid persisted budget on read and clamps saves before persistence', async () => {
     const defaults = (await getSettings())!;
     await db.settings.put({ ...defaults, id: 1, contextCompressionThresholdTokens: NaN });
-    expect((await getSettings())?.contextCompressionThresholdTokens).toBe(12000);
+    expect((await getSettings())?.contextCompressionThresholdTokens).toBe(60000);
     await saveSettings({ ...defaults, id: 1, contextCompressionThresholdTokens: 100001 });
     expect((await db.settings.toArray())[0].contextCompressionThresholdTokens).toBe(100000);
   });

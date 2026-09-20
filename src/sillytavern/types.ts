@@ -265,7 +265,7 @@ export interface AppSettings {
 
 export type AgentNarrativeModeSetting = 'standard' | 'strict';
 
-export const DEFAULT_CONTEXT_COMPRESSION_TOKENS = 12000;
+export const DEFAULT_CONTEXT_COMPRESSION_TOKENS = 60000;
 
 export function normalizeContextCompressionThreshold(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_CONTEXT_COMPRESSION_TOKENS;

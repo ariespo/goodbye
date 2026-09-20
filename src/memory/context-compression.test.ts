@@ -13,7 +13,7 @@ describe('narrative context compression', () => {
     const result = projectContextHistory({ history, variables: {} });
     expect(result.messages).toEqual(history);
     expect(result.compressedMessageIds).toEqual([]);
-    expect(result.thresholdTokens).toBe(12000);
+    expect(result.thresholdTokens).toBe(60000);
   });
 
   it('replaces oldest narrative bodies first, preserves the latest two and never mutates the archive', () => {
