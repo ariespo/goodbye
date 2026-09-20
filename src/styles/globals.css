@@ -4103,6 +4103,26 @@ body[data-guide-highlight='clues'] .action-bar-button[data-action-id='clues'] {
   pointer-events: none !important;
 }
 
+/* Item details must not inherit the scaled HUD's pointer-events or clipping. */
+.item-viewer-shell.pixel-modal-shell {
+  position: fixed;
+  z-index: 320;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  pointer-events: auto;
+}
+
+.item-viewer-shell > .pixel-modal-frame { width: min(600px, 100%); }
+.item-viewer-shell .pixel-modal-frame-content { max-height: calc(100dvh - max(16px, env(safe-area-inset-top)) - max(16px, env(safe-area-inset-bottom))); }
+.item-viewer-shell .pixel-modal-header { gap: 12px; padding: 26px 28px 16px; }
+.item-viewer-shell .pixel-modal-title { font-size: 22px; line-height: 1.35; overflow-wrap: anywhere; }
+.item-viewer-shell .pixel-modal-meta { font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.item-viewer-shell .pixel-modal-close { width: 44px; height: 44px; }
+.item-viewer-shell .pixel-modal-content.item-viewer { min-height: 0; padding: 20px 28px 32px; overflow-y: auto; overscroll-behavior: contain; }
+
+@media (max-width: 639px) {
+  .item-viewer-body > :first-child { align-self: center; }
+}
+
 /* Opening identity gate: a blocking compact modal inside the otherwise inert
  * HUD canvas. It shares the same opaque double-rail language as the core UI. */
 .identity-modal-shell.pixel-modal-shell {

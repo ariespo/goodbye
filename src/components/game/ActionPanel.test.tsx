@@ -77,6 +77,33 @@ describe('ActionPanel', () => {
     useGameStore.setState(initialState, true);
   });
 
+  it('isolates item details above the HUD and returns to investigation without executing an action', () => {
+    useGameStore.setState(state => ({ game: {
+      ...state.game, currentScene: scene,
+      actionPanel: { visible: true, type: 'investigate', content: '', selectedIndex: null },
+    } }));
+    const { container } = render(<div className="game-canvas"><HudViewport><ActionPanel /></HudViewport></div>);
+    const parent = screen.getByRole('dialog', { name: '调查' });
+    const trigger = screen.getByRole('button', { name: '查看文穗的纸条' });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const detail = screen.getByRole('dialog', { name: '文穗的纸条' });
+    expect(container.querySelector('.hud-design-canvas')).not.toContainElement(detail);
+    expect(parent).toHaveAttribute('inert');
+    expect(screen.getByRole('button', { name: '关闭物件详情' })).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '文穗的纸条' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: '调查' })).not.toHaveAttribute('inert');
+    expect(trigger).toHaveFocus();
+    expect(loopMocks.performAction).not.toHaveBeenCalled();
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: '关闭物件详情' }));
+    expect(screen.queryByRole('dialog', { name: '文穗的纸条' })).toBeNull();
+    expect(useGameStore.getState().game.actionPanel.visible).toBe(true);
+  });
+
   it('renders investigate actions in the compact pixel dialog and executes the selected item', () => {
     useGameStore.setState(state => ({
       game: {

@@ -162,6 +162,24 @@ describe('PixelModal', () => {
     expect(insideButton).toHaveFocus();
   });
 
+  it('still traps focus when closing is blocked for a required decision', () => {
+    render(<Harness open closeBlocked onClose={vi.fn()} onAction={vi.fn()} />);
+    const action = screen.getByRole('button', { name: '执行' });
+    action.focus();
+    fireEvent.keyDown(action, { key: 'Tab' });
+    expect(screen.getByRole('button', { name: '关闭' })).toHaveFocus();
+  });
+
+  it('restores focus when an open modal is directly unmounted', () => {
+    const trigger = document.createElement('button');
+    document.body.append(trigger);
+    trigger.focus();
+    const { unmount } = render(<Harness open onClose={vi.fn()} />);
+    unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
+  });
+
   it('uses the independent close SVG instead of text content', () => {
     render(<Harness open onClose={vi.fn()} />);
 

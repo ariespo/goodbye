@@ -177,6 +177,7 @@ export function ActionPanel() {
         onClose={handleClose}
         labelledBy="action-panel-title"
         className="action-panel"
+        suspended={viewingItem !== null}
         compact
       >
         <PixelModalHeader

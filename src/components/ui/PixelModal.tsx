@@ -44,6 +44,7 @@ interface PixelModalShellProps {
   className?: string;
   compact?: boolean;
   closeBlocked?: boolean;
+  suspended?: boolean;
 }
 
 export function PixelModalShell({
@@ -54,6 +55,7 @@ export function PixelModalShell({
   className = '',
   compact = false,
   closeBlocked = false,
+  suspended = false,
 }: PixelModalShellProps) {
   const [rendered, setRendered] = useState(open);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -66,7 +68,6 @@ export function PixelModalShell({
       return;
     }
 
-    previousFocusRef.current?.focus();
     const timer = window.setTimeout(() => {
       setRendered(false);
     }, CLOSE_MS);
@@ -74,34 +75,51 @@ export function PixelModalShell({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !rendered) return;
+    const dialog = dialogRef.current;
+    const previousFocus = previousFocusRef.current;
+    return () => {
+      // A parent may be relocated at a responsive breakpoint while a child
+      // owns focus. Do not steal focus from that still-open child.
+      const active = document.activeElement;
+      if (previousFocus?.isConnected && (active === document.body || dialog?.contains(active))) {
+        previousFocus.focus();
+      }
+    };
+  }, [open, rendered]);
+
+  useEffect(() => {
+    if (!open || suspended) return;
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !closeBlocked) onClose();
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [closeBlocked, onClose, open]);
+  }, [closeBlocked, onClose, open, suspended]);
 
   useEffect(() => {
-    if (!open || !rendered) return;
+    if (!open || !rendered || suspended) return;
 
     const dialog = dialogRef.current;
     if (!dialog) return;
-    (getFocusableElements(dialog)[0] ?? dialog).focus();
-  }, [open, rendered]);
+    if (!dialog.contains(document.activeElement)) {
+      (getFocusableElements(dialog)[0] ?? dialog).focus();
+    }
+  }, [open, rendered, suspended]);
 
   if (!rendered) return null;
 
   const requestClose = () => {
-    if (open && !closeBlocked) onClose();
+    if (open && !closeBlocked && !suspended) onClose();
   };
 
   const trapFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Tab') return;
+    if (event.key !== 'Tab' || suspended || event.defaultPrevented) return;
 
     const dialog = dialogRef.current;
     if (!dialog) return;
+    if (event.target instanceof Element && event.target.closest('[role="dialog"]') !== dialog) return;
 
     const focusableElements = getFocusableElements(dialog);
     if (focusableElements.length === 0) {
@@ -132,7 +150,7 @@ export function PixelModalShell({
       aria-modal="true"
       aria-labelledby={labelledBy}
       aria-hidden={!open ? 'true' : undefined}
-      inert={!open}
+      inert={!open || suspended}
       tabIndex={-1}
       data-testid="pixel-modal-backdrop"
       onKeyDown={trapFocus}
@@ -140,7 +158,7 @@ export function PixelModalShell({
         if (event.target === event.currentTarget) requestClose();
       }}
     >
-      <PixelModalCloseContext.Provider value={{ requestClose, interactive: open }}>
+      <PixelModalCloseContext.Provider value={{ requestClose, interactive: open && !suspended }}>
         <PixelFrame variant="modal" className="pixel-modal-frame" contentClassName="pixel-modal-frame-content">
           {children}
         </PixelFrame>
