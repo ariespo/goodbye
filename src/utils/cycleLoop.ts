@@ -9,6 +9,7 @@ import { resolveSceneEnvironment } from './sceneEnvironment';
 import { settleCycleVariables } from '../engine/cycle-settlement';
 import { acceptedCycleConsequence, buildCycleKeyScene, cycleProse, presentedCycleBeatIds } from '../engine/cycle-key-scenes';
 import { buildTurnCommit } from '../memory/world-memory';
+import { buildNarrativeSummary } from '../memory/narrative-summary';
 
 export { settleCycleVariables } from '../engine/cycle-settlement';
 
@@ -113,7 +114,7 @@ async function commitNextCycle(opts: { variables: DynamicRecord; reason: CycleRe
   );
   const maintext = existing?.content.match(/<maintext>([\s\S]*?)<\/maintext>/i)?.[1]?.trim()
     ?? `${opening}${keyScene.maintext ? `\n${keyScene.maintext}` : ''}`;
-  const scene = maintextToScene(maintext);
+  const scene = { ...maintextToScene(maintext), sourceMessageId: messageId };
   if (existing) variables = existing.variables;
   else {
     const mysteryKnowledge = { ...(isRecord(variables.mysteryKnowledge) ? variables.mysteryKnowledge : {}) };
@@ -137,12 +138,16 @@ async function commitNextCycle(opts: { variables: DynamicRecord; reason: CycleRe
       variables = { ...variables, worldMemory: commit.worldMemory };
     }
   }
+  const summary = `第${cycleCount}个重复日开始：9月9日08:00，玩家回到公寓，线索与记忆保留，当日状态重置、旧计划失效。${keyScene.summary}`;
+  const resetTime = createDefaultGameStatus().time;
   const assistantMsg: ChatMessage = {
     id: messageId,
     role: 'assistant',
-    content: `<maintext>\n${maintext}\n</maintext>\n<sum>第${cycleCount}轮开始:回到9月9日早上8:00，线索与记忆保留，当日状态重置，旧计划失效</sum>\n<vars>{}</vars>`,
+    content: `<maintext>\n${maintext}\n</maintext>\n<sum>${summary}</sum>\n<vars>{}</vars>`,
     timestamp: Date.now(),
     variables,
+    narrativeSummary: buildNarrativeSummary({ text: summary, scene, startedAt: resetTime, endedAt: resetTime,
+      cycleCount, startLocationId: 'home', endLocationId: 'home' }),
   };
 
   const controller = new AbortController();
@@ -164,6 +169,7 @@ async function commitNextCycle(opts: { variables: DynamicRecord; reason: CycleRe
       ...s.game,
       currentScene: scene,
       currentLineIndex: 0,
+      dialogueProgress: null,
       gameStatus: createDefaultGameStatus(),
       currentState: {
         background: first?.background || 'bedroom1-day',

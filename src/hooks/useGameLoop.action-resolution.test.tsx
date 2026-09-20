@@ -147,6 +147,9 @@ describe('priced investigation menu acceptance', () => {
       executedTravelMinutes: 10,
       endTime: '2024-09-09T09:05:00',
     });
+    expect(assistant?.narrativeSummary).toMatchObject({ startLocationId: 'home', endLocationId: 'school',
+      startedAt: new Date('2024-09-09T08:00:00').toISOString(),
+      endedAt: new Date('2024-09-09T09:05:00').toISOString() });
     expect(state.api.parsedContent.actionOutcome).toEqual(assistant?.acceptedActionOutcome);
     expect(state.game.currentScene?.actionOutcome).toEqual(assistant?.acceptedActionOutcome);
     unmount();

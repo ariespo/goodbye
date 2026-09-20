@@ -104,7 +104,7 @@ describe('unified world memory', () => {
       .toMatchObject({ status: 'believed', lastUpdatedTurn: 1 });
   });
 
-  it('retrieves relevant old episodes while keeping only two raw turns', () => {
+  it('retrieves relevant older episodes while keeping all history below the compression threshold', () => {
     const oldEpisode = {
       episodeId: 'episode:old', turnId: 'old', turnIndex: 1, cycleCount: 1,
       locationId: 'supermarket', actorIds: ['chen-huihui'], summary: '慧慧曾因紧张把零钱撒了一地。',
@@ -118,7 +118,7 @@ describe('unified world memory', () => {
     const bundle = compileTurnContext({
       userInput: '去便利店找慧慧', locationId: 'supermarket', activeNpcIds: ['chen-huihui'], history, variables,
     });
-    expect(bundle.recentMessages.map(item => item.id)).toEqual(['m-6', 'm-7', 'm-8', 'm-9']);
+    expect(bundle.recentMessages.map(item => item.id)).toEqual(history.map(item => item.id));
     expect(bundle.relevantEpisodes.map(item => item.episodeId)).toContain('episode:old');
     expect(bundle.selectedIds).toContain('episode:old');
     expect(bundle.relevantBackgroundFacts.map(item => item.factId)).toContain('bg:supermarket-regulars');

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../../sillytavern/types';
@@ -24,6 +24,8 @@ describe('SettingsModal', () => {
   const initialState = useGameStore.getState();
 
   beforeEach(() => {
+    vi.mocked(saveSettings).mockReset();
+    vi.mocked(saveSettings).mockResolvedValue(undefined);
     Object.defineProperty(document, 'fonts', {
       configurable: true,
       value: { load: vi.fn().mockResolvedValue([]) },
@@ -65,5 +67,41 @@ describe('SettingsModal', () => {
     expect(saveSettings).toHaveBeenCalledWith(expect.objectContaining({ api: expect.objectContaining({ pricing: {
       baseUrl: settings.api.baseUrl, model: settings.api.model, currency: 'CNY', inputPerMillion: 2.5, outputPerMillion: 9,
     } }) }));
+  });
+
+  it('shows the default compression budget for existing settings and only applies changes after saving', async () => {
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, settings }, ui: { ...state.ui, showSettings: true } }));
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByRole('button', { name: '剧情模式' }));
+    const input = screen.getByLabelText('剧情压缩阈值（估算 token）');
+    expect(input).toHaveValue(12000);
+    fireEvent.change(input, { target: { value: '18000' } });
+    expect(useGameStore.getState().tavern.settings?.contextCompressionThresholdTokens).toBeUndefined();
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(useGameStore.getState().tavern.settings?.contextCompressionThresholdTokens).toBe(18000));
+    expect(useGameStore.getState().ui.showSettings).toBe(false);
+  });
+
+  it('discards a changed compression budget on cancel and restores the saved value when reopened', () => {
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, settings: { ...settings, contextCompressionThresholdTokens: 9000 } }, ui: { ...state.ui, showSettings: true } }));
+    const { rerender } = render(<SettingsModal />);
+    fireEvent.click(screen.getByRole('button', { name: '剧情模式' }));
+    fireEvent.change(screen.getByLabelText('剧情压缩阈值（估算 token）'), { target: { value: '24000' } });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(useGameStore.getState().tavern.settings?.contextCompressionThresholdTokens).toBe(9000);
+    useGameStore.setState(state => ({ ui: { ...state.ui, showSettings: true } }));
+    rerender(<SettingsModal />);
+    expect(screen.getByLabelText('剧情压缩阈值（估算 token）')).toHaveValue(9000);
+  });
+
+  it.each([
+    ['', 12000], ['-20', 2000], ['999999', 100000], ['8600.7', 8600],
+  ])('normalizes the compression budget %s when saving', async (inputValue, expected) => {
+    useGameStore.setState(state => ({ tavern: { ...state.tavern, settings }, ui: { ...state.ui, showSettings: true } }));
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByRole('button', { name: '剧情模式' }));
+    fireEvent.change(screen.getByLabelText('剧情压缩阈值（估算 token）'), { target: { value: inputValue } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(useGameStore.getState().tavern.settings?.contextCompressionThresholdTokens).toBe(expected));
   });
 });

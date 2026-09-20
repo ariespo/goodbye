@@ -1,5 +1,4 @@
-import { maintextToScene } from '../engine/scene-parser';
-import { OPENING_MAINTEXT, OPENING_PANELS, OPENING_PUBLIC_CONTINUITY, OPENING_STORYLINE, parseOpeningStoryline } from '../engine/opening-storyline';
+import { OPENING_MAINTEXT, OPENING_PANELS, OPENING_PUBLIC_CONTINUITY, parseOpeningStoryline } from '../engine/opening-storyline';
 import { INITIAL_PLAYER_RESOURCES } from '../data/gameDefaults';
 import { getChats, saveChat } from '../sillytavern/database';
 import { createParseState, parseChunk } from '../sillytavern/stream-parser';
@@ -18,12 +17,20 @@ import { invalidatePreplans } from '../agents/mystery';
 import { resolveSceneEnvironment } from './sceneEnvironment';
 import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
 import { acceptedActionUiFromMessage, readPublicActionOutcome } from './actionPresentation';
+import { buildNarrativeSummary } from '../memory/narrative-summary';
+import { restorePersistedScene } from './sceneFromChat';
 
 export const OPENING_ASSISTANT_CONTENT =
-  `<maintext>\n${OPENING_MAINTEXT}\n</maintext>\n${OPENING_PANELS}\n<sum>开局:暴雨第五天，文穗账号的消息称今天不去学校，玩家暂时联系不上她</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
+  `<maintext>\n${OPENING_MAINTEXT}\n</maintext>\n${OPENING_PANELS}\n<sum>9月9日08:00，暴雨第五天，玩家在公寓发现家中无人应答。餐桌上留有早餐和未写日期的纸条，纸条说可能晚一点回来，准备者与时间尚未核实。文穗账号06:50的消息称今天不去学校，但是否本人发送尚未核实；玩家问询未获回复、电话无人接听，目前只是暂时联系不上她。灯织来归还饭盒，说今天尚未联系文穗，当面发消息询问并答应收到回复后告知，随后离开。</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
 
 export function parseOpeningAssistantContent(): ParsedContent {
   return parseChunk(createParseState(), OPENING_ASSISTANT_CONTENT, { strict: true }).parsed;
+}
+
+export function buildOpeningNarrativeSummary() {
+  const time = createDefaultGameStatus().time;
+  return buildNarrativeSummary({ text: parseOpeningAssistantContent().summary, scene: parseOpeningStoryline(),
+    startedAt: time, endedAt: time, cycleCount: 1, startLocationId: 'home', endLocationId: 'home' });
 }
 
 export function createDefaultGameStatus(): GameStatus {
@@ -137,6 +144,7 @@ export async function startNewGame(): Promise<void> {
     role: 'assistant',
     content: OPENING_ASSISTANT_CONTENT,
     parsed: parseOpeningAssistantContent(),
+    narrativeSummary: buildOpeningNarrativeSummary(),
     timestamp: Date.now(),
     variables,
   };
@@ -158,7 +166,7 @@ export async function startNewGame(): Promise<void> {
   const existingChats = await getChats();
   await saveChat(newChat);
 
-  const scene = parseOpeningStoryline();
+  const scene = { ...parseOpeningStoryline(), sourceMessageId: openingMsg.id };
   const first = scene.lines[0];
 
   // 保留设置/世界书/预设，只替换会话与局内运行时
@@ -173,6 +181,7 @@ export async function startNewGame(): Promise<void> {
       ...s.game,
       currentScene: scene,
       currentLineIndex: 0,
+      dialogueProgress: null,
       gameStatus: createDefaultGameStatus(),
       currentState: first
         ? {
@@ -295,14 +304,11 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
 
   // 从最后一条 assistant maintext 重建场景
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-  const maintext = lastAssistant?.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim()
-    || OPENING_STORYLINE;
-  const parsedScene = maintext === OPENING_STORYLINE || maintext === OPENING_MAINTEXT
-    ? parseOpeningStoryline()
-    : maintextToScene(maintext);
+  const parsedScene = (lastAssistant ? restorePersistedScene(lastAssistant, messages) : null) ?? parseOpeningStoryline();
   const acceptedActionUi = acceptedActionUiFromMessage(lastAssistant, parsedContent.options);
   const scene = {
     ...parsedScene,
+    sourceMessageId: lastAssistant?.id,
     ...(lastAssistant?.localAction === 'map-travel' && typeof lastAssistant.parsed?.observe === 'string'
       && lastAssistant.parsed.observe.trim() ? { observe: lastAssistant.parsed.observe } : {}),
     ...(acceptedActionUi.actionOutcome ? { actionOutcome: acceptedActionUi.actionOutcome } : {}),
@@ -322,6 +328,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
       ...s.game,
       currentScene: scene,
       currentLineIndex: lineIndex,
+      dialogueProgress: null,
       gameStatus,
       currentState: {
         ...currentState,

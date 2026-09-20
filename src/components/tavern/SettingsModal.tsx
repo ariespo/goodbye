@@ -4,6 +4,7 @@ import { GameIcon, type GameIconName } from '../ui/GameIcon';
 import { saveSettings } from '../../sillytavern/database';
 import { fetchModels, testConnectivity } from '../../sillytavern/api-router';
 import type { AppSettings } from '../../sillytavern/types';
+import { DEFAULT_CONTEXT_COMPRESSION_TOKENS, normalizeContextCompressionThreshold } from '../../sillytavern/types';
 import type { CSSProperties } from 'react';
 import { applyFontFamily, FONT_OPTIONS, getFontStack } from '../../utils/fonts';
 import { setSfxVolume } from '../../utils/sfx';
@@ -44,6 +45,7 @@ export function SettingsModal() {
   const actions = useGameStore(state => state.actions);
 
   const [draft, setDraft] = useState<AppSettings | null>(settings);
+  const [compressionThresholdDraft, setCompressionThresholdDraft] = useState(() => String(normalizeContextCompressionThreshold(settings?.contextCompressionThresholdTokens)));
   const [mainModels, setMainModels] = useState<string[]>([]);
   const [secModels, setSecModels] = useState<string[]>([]);
   const [mainConn, setMainConn] = useState<{ ok: boolean; latency: number; model?: string } | null>(null);
@@ -60,7 +62,10 @@ export function SettingsModal() {
   const hasDraft = draft !== null;
 
   useEffect(() => {
-    if (settings) setDraft(settings);
+    if (settings) {
+      setDraft(settings);
+      setCompressionThresholdDraft(String(normalizeContextCompressionThreshold(settings.contextCompressionThresholdTokens)));
+    }
   }, [settings, showSettings]);
 
   useEffect(() => {
@@ -197,8 +202,14 @@ export function SettingsModal() {
 
   const handleSave = async () => {
     if (!draft) return;
-    await saveSettings(draft);
-    actions.setSettings(draft);
+    const savedDraft = {
+      ...draft,
+      contextCompressionThresholdTokens: normalizeContextCompressionThreshold(
+        compressionThresholdDraft.trim() ? Number(compressionThresholdDraft) : undefined,
+      ),
+    };
+    await saveSettings(savedDraft);
+    actions.setSettings(savedDraft);
     toggleModal('settings');
     actions.addNotification({ type: 'success', message: '设置已保存', duration: 2500 });
   };
@@ -361,6 +372,7 @@ export function SettingsModal() {
           )}
 
           {activeTab === 'story' && (
+            <div className="settings-tab-panel space-y-6">
             <section className="settings-section settings-tab-panel">
               <h3 className="settings-section-title">剧情一致性</h3>
               <p className="settings-help mb-4">稳定剧情会按回合风险自适应调用审查；全量审查会在每回合执行全部审查，质量边界更严，但速度更慢、消耗更高。</p>
@@ -369,6 +381,25 @@ export function SettingsModal() {
                 <ModeCard active={draft.agentNarrativeMode === 'strict'} icon={<GameIcon name="success" size={18} />} title="全量审查" desc="高级 · 每回合执行事实、节奏、正文、文风与状态审查" onClick={() => patch({ agentNarrativeMode: 'strict' })} />
               </div>
             </section>
+            <section className="settings-section">
+              <h3 className="settings-section-title">剧情记忆</h3>
+              <p className="settings-help mb-4">每次剧情会保留一份简短总结。历史超过设定长度后，发送给模型的较早剧情会逐步换成总结，最近两次剧情尽量保留完整正文。完整剧情仍保存在本地，可随时回看。</p>
+              <label className="block">
+                <span className="settings-label">剧情压缩阈值（估算 token）</span>
+                <input
+                  type="number"
+                  min={2000}
+                  max={100000}
+                  step={1000}
+                  value={compressionThresholdDraft}
+                  onChange={event => setCompressionThresholdDraft(event.target.value)}
+                  aria-describedby="context-compression-help"
+                  className="settings-input w-full font-mono"
+                />
+              </label>
+              <p id="context-compression-help" className="settings-help mt-2">默认 {DEFAULT_CONTEXT_COMPRESSION_TOKENS.toLocaleString('en-US')}，可设为 2,000–100,000。数值越小，压缩越早、发送内容越少；数值越大，近期细节保留越多。这里是长度估算，实际用量由模型决定。空值恢复默认值，超出范围会在保存时调整。</p>
+            </section>
+            </div>
           )}
 
           {activeTab === 'ai' && (

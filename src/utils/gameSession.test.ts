@@ -12,6 +12,10 @@ import {
   startNewGame,
 } from './gameSession';
 import { parseOpeningStoryline } from '../engine/opening-storyline';
+import { maintextToScene } from '../engine/scene-parser';
+import { buildTurnCommit } from '../memory/world-memory';
+import { projectKnowledgeForPlayback } from './knowledgePresentation';
+import { resolvePlayerFacingSpeaker } from '../data/playerKnowledge';
 
 vi.mock('../sillytavern/database', () => ({
   getChats: vi.fn(async () => []),
@@ -93,6 +97,11 @@ describe('new-game resource initialization', () => {
     expect(message.parsed?.observe).toContain('衣柜');
     expect(message.parsed?.actionItems).toHaveLength(5);
     expect(message.content.indexOf('</maintext>')).toBeLessThan(message.content.indexOf('<observe>'));
+    expect(message.narrativeSummary).toMatchObject({ version: 1, cycleCount: 1,
+      startLocationId: 'home', endLocationId: 'home', text: message.parsed?.summary,
+      startedAt: new Date('2024-09-09T08:00:00').toISOString(), endedAt: new Date('2024-09-09T08:00:00').toISOString() });
+    expect(message.parsed?.summary).toContain('灯织');
+    expect(message.parsed?.summary).toContain('本人发送尚未核实');
   });
 
   it('seeds only public opening continuity without treating optional observations as discovered mystery evidence', async () => {
@@ -265,5 +274,29 @@ describe('choice-screen save restoration', () => {
 
     const restoredLine = useGameStore.getState().game.currentScene?.lines[toukoUnlockIndex];
     expect(restoredLine?.knowledgeEvents).toContain('meet:touko');
+    expect(useGameStore.getState().game.currentScene?.knowledgeAlreadyCommitted).not.toBe(true);
+  });
+
+  it('keeps committed names hidden after loading before their introduction and clears stale reading progress', async () => {
+    const before = { location: 'supermarket', cycleCount: 1, knowledgeEvents: ['know:supermarket'] };
+    const after = { ...before, knowledgeEvents: [...before.knowledgeEvents, 'meet:chen-huihui'] };
+    const maintext = '对话|店员|calm|欢迎光临。\n对话|旁白|calm|这是陈慧慧。\n认知|meet:chen-huihui\n对话|陈慧慧|calm|请慢慢看。';
+    const scene = maintextToScene(maintext, { authorizedKnowledgeEvents: ['meet:chen-huihui'], variables: before });
+    const commit = buildTurnCommit({ turnId: 'intro', turnIndex: 1, createdAt: 1,
+      occurredAt: '2024-09-09T08:10:00', locationId: 'supermarket', cycleCount: 1,
+      summary: '认出陈慧慧。', scene, beforeVariables: before, settledVariables: after });
+    const variables = { ...after, worldMemory: commit.worldMemory };
+    const save = createSave({ currentLineIndex: 0, sceneComplete: false });
+    save.tavernState = { variables, messages: [
+      { id: 'request', role: 'user', content: '进店', timestamp: 1, variables: before },
+      { id: 'intro', role: 'assistant', content: `<maintext>${maintext}</maintext>`, timestamp: 2, variables },
+    ] };
+    useGameStore.setState(state => ({ game: { ...state.game, dialogueProgress: { sceneId: 'old', lineIndex: 0, text: '旧存档内容' } } }));
+    await loadGameFromSave(save);
+    const state = useGameStore.getState();
+    const publicVariables = projectKnowledgeForPlayback(state.tavern.variables, state.game.currentScene, 0, false);
+    expect(resolvePlayerFacingSpeaker('陈慧慧', undefined, publicVariables)).toBe('店员');
+    expect(state.game.currentScene?.knowledgeAlreadyCommitted).toBe(true);
+    expect(state.game.dialogueProgress).toBeNull();
   });
 });

@@ -34,6 +34,7 @@ export function PromptInspector() {
       characterName: settings.characterName,
       variables: tavern.variables,
       formatPrompt: settings.formatPromptTemplate,
+      contextCompressionThresholdTokens: settings.contextCompressionThresholdTokens,
     });
   }, [show, store]);
 
@@ -50,7 +51,7 @@ export function PromptInspector() {
     { key: 'order', label: 'Prompt 结构', icon: <GameIcon name="preset" size={14} /> },
     { key: 'lorebook', label: '世界书', icon: <GameIcon name="lorebook" size={14} /> },
     { key: 'history', label: '历史消息', icon: <GameIcon name="history" size={14} /> },
-    { key: 'final', label: '最终消息', icon: <GameIcon name="observe" size={14} /> },
+    { key: 'final', label: '组装预览', icon: <GameIcon name="observe" size={14} /> },
   ];
 
   return (
@@ -67,9 +68,9 @@ export function PromptInspector() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border-subtle shrink-0">
           <div className="flex items-center gap-3">
-            <h2 className="text-sm font-serif-cn text-text-primary">提示词查看器</h2>
+            <h2 className="text-sm font-serif-cn text-text-primary">提示词预览</h2>
             <div className="flex items-center gap-1 text-[10px] text-text-muted">
-              <span className="px-1.5 py-0.5 bg-bg-secondary border border-border-subtle">总 Token: {data.stats.totalTokens}</span>
+              <span className="px-1.5 py-0.5 bg-bg-secondary border border-border-subtle">预览估算 Token: {data.stats.totalTokens}</span>
               <span className="px-1.5 py-0.5 bg-bg-secondary border border-border-subtle">系统: {data.stats.systemTokens}</span>
               <span className="px-1.5 py-0.5 bg-bg-secondary border border-border-subtle">历史: {data.stats.historyTokens}</span>
               <span className="px-1.5 py-0.5 bg-bg-secondary border border-border-subtle">输入: {data.stats.userInputTokens}</span>
@@ -82,6 +83,10 @@ export function PromptInspector() {
             <GameIcon name="close" size={18} />
           </button>
         </div>
+
+        <p className="px-5 py-2 text-[11px] text-text-muted">
+          此处按当前设置预览通用提示词及历史压缩。实际剧情生成会加入导演、写作及审查各阶段的专用内容。
+        </p>
 
         {/* Tabs */}
         <div className="flex border-b border-border-subtle shrink-0">
@@ -284,6 +289,10 @@ function HistoryTab({ data }: { data: PromptInspectionResult }) {
         <span>上下文上限: {history.maxContext}</span>
         <span>可用: {history.availableContext}</span>
       </div>
+      <p className="text-[11px] text-text-muted">
+        已用摘要替换 {history.compressedMessages} 段剧情；压缩阈值 {history.compressionThresholdTokens.toLocaleString()} tokens。
+        历史估算 {history.originalTokens.toLocaleString()} → {history.projectedTokens.toLocaleString()} tokens，存档正文完整保留。
+      </p>
 
       <div className="space-y-1">
         {history.messages.map((msg, i) => (
@@ -302,7 +311,7 @@ function HistoryTab({ data }: { data: PromptInspectionResult }) {
             </span>
             <div className="flex-1 min-w-0">
               <div className="text-[11px] text-text-primary truncate">{msg.content}</div>
-              <div className="text-[10px] text-text-muted">~{msg.tokens} tokens {msg.included ? '' : '(超出预算)'}</div>
+              <div className="text-[10px] text-text-muted">~{msg.tokens} tokens {msg.compressed ? '（剧情摘要）' : ''} {msg.included ? '' : '(超出预算)'}</div>
             </div>
             {msg.included ? <GameIcon name="success" size={12} className="text-green-400 shrink-0" /> : <GameIcon name="pause" size={12} className="text-text-muted shrink-0" />}
           </div>

@@ -392,6 +392,7 @@ function buildProjection(input: TurnPreparationInput, sceneState: ProjectionScen
     maxContext: Number(activePreset?.settings?.openai_max_context ?? DEFAULT_CONTEXT_TOKENS),
     reservedOutput: getMaxOutputTokens(activePreset),
     fixedPromptText: `${basePromptUserInput}\n${settings.formatPromptTemplate ?? ''}`,
+    contextCompressionThresholdTokens: settings.contextCompressionThresholdTokens,
   });
 
   const knownClueIds = (Array.isArray(game.endingCheckContext.unlockedClues)
@@ -670,6 +671,7 @@ export function buildTurnPreparation(input: TurnPreparationInput) {
     identity: { userName: snapshot.settings.userName, playerGender: snapshot.settings.playerGender,
       confirmed: snapshot.settings.playerIdentityConfirmed, characterName: snapshot.settings.characterName },
     budget: snapshot.activePreset?.settings,
+    contextCompressionThresholdTokens: snapshot.settings.contextCompressionThresholdTokens,
   });
   prepared.request.projectExecution = resolution => {
     const projectedSceneState = isNonWorkResolution(resolution) && validSavedScene

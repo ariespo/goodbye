@@ -23,6 +23,8 @@ interface GameStore {
   game: {
     currentScene: Scene | null;
     currentLineIndex: number;
+    /** Monotonic, actually displayed prefix; independent of the local review cursor. */
+    dialogueProgress: { sceneId: string; lineIndex: number; text: string } | null;
     gameStatus: GameStatus;
     currentState: CurrentState;
     isTyping: boolean;
@@ -95,6 +97,7 @@ interface GameStore {
     setVariables: (vars: DynamicRecord) => void;
     setCurrentScene: (scene: Scene | null) => void;
     setCurrentLineIndex: (index: number) => void;
+    markDialogueSeen: (lineIndex: number, text: string) => void;
     setGameStatus: (status: Partial<GameStatus>) => void;
     setCurrentState: (state: Partial<CurrentState>) => void;
     setIsTyping: (typing: boolean) => void;
@@ -419,6 +422,7 @@ export const useGameStore = create<GameStore>((set) => ({
   game: {
     currentScene: null,
     currentLineIndex: 0,
+    dialogueProgress: null,
     gameStatus: defaultGameStatus,
     currentState: defaultCurrentState,
     isTyping: false,
@@ -498,6 +502,7 @@ export const useGameStore = create<GameStore>((set) => ({
           ...(state.tavern.activeChatId !== id ? {
             currentScene: null,
             currentLineIndex: 0,
+            dialogueProgress: null,
             currentState: defaultCurrentState,
             gameStatus: {
               ...state.game.gameStatus,
@@ -524,8 +529,16 @@ export const useGameStore = create<GameStore>((set) => ({
         endingCheckContext: variablesToEndingContext(vars, state.game.endingsSeen) as EndingCheckContext,
       },
     })),
-    setCurrentScene: (scene) => set(state => ({ game: { ...state.game, currentScene: scene, currentLineIndex: 0, sceneComplete: false } })),
+    setCurrentScene: (scene) => set(state => ({ game: { ...state.game, currentScene: scene, currentLineIndex: 0, sceneComplete: false, dialogueProgress: null } })),
     setCurrentLineIndex: (index) => set(state => ({ game: { ...state.game, currentLineIndex: index } })),
+    markDialogueSeen: (lineIndex, text) => set(state => {
+      const sceneId = state.game.currentScene?.id;
+      if (!sceneId || !text) return state;
+      const previous = state.game.dialogueProgress;
+      if (previous?.sceneId === sceneId && (previous.lineIndex > lineIndex
+        || (previous.lineIndex === lineIndex && previous.text.length >= text.length))) return state;
+      return { game: { ...state.game, dialogueProgress: { sceneId, lineIndex, text } } };
+    }),
     setGameStatus: (status) => set(state => ({ game: { ...state.game, gameStatus: { ...state.game.gameStatus, ...status } } })),
     setCurrentState: (newState) => set(state => ({ game: { ...state.game, currentState: { ...state.game.currentState, ...newState } } })),
     setIsTyping: (typing) => set(state => ({ game: { ...state.game, isTyping: typing } })),

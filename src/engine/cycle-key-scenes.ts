@@ -50,14 +50,16 @@ export function buildCycleKeyScene(options: {
   nextVariables: DynamicRecord;
   previousVariables: DynamicRecord;
   messages: ChatMessage[];
-}): { maintext: string; beatId?: string; grantedFactIds: string[]; recalledSources: Array<{ factId: string; level: RevealLevel }> } {
+}): { maintext: string; summary: string; beatId?: string; grantedFactIds: string[]; recalledSources: Array<{ factId: string; level: RevealLevel }> } {
   const cycle = Number(options.nextVariables.cycleCount ?? 1);
   const beatId = ({ 2: 'cycle-1-familiarity-gap', 3: 'cycle-2-fumi-boundary', 4: 'cycle-3-rescue-assumptions' } as Record<number, string>)[cycle];
-  if (!beatId || presentedCycleBeatIds(options.nextVariables).includes(beatId)) return { maintext: '', grantedFactIds: [], recalledSources: [] };
+  if (!beatId || presentedCycleBeatIds(options.nextVariables).includes(beatId)) return { maintext: '', summary: '', grantedFactIds: [], recalledSources: [] };
   const lines: string[] = [];
+  let summary: string;
   const materials = rememberedMaterials(options.nextVariables);
   const grantedFactIds: string[] = [];
   if (cycle === 2) {
+    summary = '玩家意识到熟悉生活细节并不能说明文穗的去向，准备寻找有出处的材料；查看物品或核对学校记录仍只是下一步计划。';
     lines.push('你伸手去关闹钟，手指不用看就找到了开关。熟悉的房间让你几乎相信：只要照着平常做，就能找到文穗。',
       '可当你试着回答“她去了哪里”，那些熟悉的生活细节并没有给出答案。你知道怎样与她生活，却还不知道她的去向。',
       materials.length ? `你能抓住的只有已经见过的材料：${materials[0].text}` : '关于去向的材料仍是空白。你想写下她平时上学的路，笔尖停了停，最后只留下一个问号。',
@@ -65,12 +67,16 @@ export function buildCycleKeyScene(options: {
   } else if (cycle === 3) {
     const note = MYSTERY_TRUTH_GRAPH.facts.find(fact => fact.id === FUMI_BOUNDARY_NOTE_ID)?.revelations.clue;
     if (!note) throw new Error('文穗边界便条缺少已编写的公开线索。');
+    summary = `玩家读完便条，开始区分文穗自己的话与他人转述；${note}`;
     lines.push('你的手在桌边停住。那张事前留下的便条仍在。这一次，你把她写给你的话从头读完。',
       note,
       '你把纸放平。她要的不是由你代替她做一个更好的决定，而是先把她的话听完。你还不知道这些安排后来怎样了。',
       '你把“她想做什么”写在纸的最上面。下面留一行，准备记她自己说过的话；再留一行，记别人怎样转述她。');
     grantedFactIds.push(FUMI_BOUNDARY_NOTE_ID);
   } else {
+    summary = `玩家将已核对与尚未核实的材料分开，重新列出身份、日期、死亡时刻和文穗自己的计划等待核对。${options.previousVariables.deathNews === 'delivered'
+      ? '此前警方来电仅是初步通报，不能当作身份或死亡时刻已被确认。'
+      : '上一日中断前尚未收到初步通报，不能把想象的电话当作记忆。'}`;
     const consequence = acceptedCycleConsequence(options.previousVariables, options.messages);
     lines.push(consequence ?? '你盯着空白的纸，仍没找到一个可靠的时间点，能告诉你该在何时、何处等到文穗。',
       options.previousVariables.deathNews === 'delivered'
@@ -83,7 +89,7 @@ export function buildCycleKeyScene(options: {
       '你把笔放下。今天先回到一份原始记录前，问清它的日期与身份；或者顺着她自己的计划，找到下一处可以核对的地方。门外的雨还在等着。');
   }
   const recalled = cycle === 4 ? materials : cycle === 2 ? materials.slice(0, 1) : [];
-  return { beatId, grantedFactIds,
+  return { beatId, grantedFactIds, summary: cycleProse(summary),
     recalledSources: recalled.map(({ factId, level }) => ({ factId, level })),
     maintext: lines.map(line => `对话|旁白|calm|${cycleProse(line)}`).join('\n') };
 }

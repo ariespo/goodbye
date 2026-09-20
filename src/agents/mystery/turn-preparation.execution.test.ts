@@ -31,6 +31,22 @@ const interrupted: ResolvedActionOutcome = { id: 'r', cycleCount: 1, startTime: 
   interruption: { id: 'death-news', at: '2024-09-09T16:00:00' } };
 
 describe('execution context projection', () => {
+  it('keeps the same summary projection when actual execution recalculates time and location', () => {
+    const input = fixture();
+    input.settings.contextCompressionThresholdTokens = 2000;
+    input.history = Array.from({ length: 5 }, (_, index) => ({
+      id: `old-${index}`, role: 'assistant', timestamp: index, variables: { cycleCount: 1 },
+      content: `<maintext>对话|旁白|calm|原文细节${index}${'雨'.repeat(800)}</maintext><sum>第${index}段：玩家在公寓查看纸条。</sum>`,
+    }));
+    const prepared = buildTurnPreparation(input);
+    const execution = prepared.request.projectExecution!(interrupted);
+    expect(execution.turnContext.recentHistory).toEqual(prepared.request.turnContext.recentHistory);
+    expect(execution.presentationContext.recentHistory).toEqual(prepared.request.presentationContext.recentHistory);
+    expect(JSON.stringify(execution.presentationContext.recentHistory)).not.toContain('原文细节0');
+    expect(JSON.stringify(execution.presentationContext.recentHistory)).toContain('原文细节4');
+    expect(execution.contextBundle.compression?.compressedMessageIds).toHaveLength(3);
+  });
+
   it('keeps canonical continuity bindings out of the full Writer payload while retaining public cognition text', async () => {
     const narrative = [
       '对话|玩家|calm|收据显示文穗买过牛奶。',

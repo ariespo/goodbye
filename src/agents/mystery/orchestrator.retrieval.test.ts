@@ -10,15 +10,15 @@ import { useGameStore } from '../../stores/gameStore';
 function request() {
   const game = useGameStore.getState().game;
   const narrative = '对话|旁白|calm|慧慧把零钱撒在柜台边。';
-  const history: ChatMessage[] = [{ id: 'old', role: 'assistant', content: `<maintext>${narrative}</maintext>`,
+  const history: ChatMessage[] = [{ id: 'old', role: 'assistant', content: `<maintext>${narrative}\n${Array.from({ length: 18 }, () => `对话|旁白|calm|${'雨'.repeat(100)}`).join('\n')}</maintext><sum>玩家在便利店结账。</sum>`,
     timestamp: 1, variables: { cycleCount: 1, mysteryKnowledge: {} } }, ...Array.from({ length: 5 }, (_, index): ChatMessage => ({
-    id: `later-${index}`, role: 'assistant', content: '<maintext>对话|旁白|calm|你望着窗外的雨。</maintext>', timestamp: index + 2,
+    id: `later-${index}`, role: 'assistant', content: `<maintext>对话|旁白|calm|你望着窗外的雨。${'雨'.repeat(400)}</maintext><sum>玩家在公寓等雨停。</sum>`, timestamp: index + 2,
     variables: { cycleCount: 1, mysteryKnowledge: {} },
   }))];
   const memory = buildTurnCommit({ turnId: 'old', turnIndex: 1, createdAt: 1, occurredAt: '2024-09-09T08:10:00',
     locationId: 'supermarket', cycleCount: 1, summary: '普通结账', scene: maintextToScene(narrative), beforeVariables: {}, settledVariables: {} }).worldMemory;
   return buildTurnPreparation({ userInput: '回忆之前慧慧的零钱，对比今天所见',
-    settings: { api: { baseUrl: 'test', model: 'test', apiKey: 'test' }, userName: '玩家', characterName: '文穗', agentNarrativeMode: 'standard' } as AppSettings,
+    settings: { api: { baseUrl: 'test', model: 'test', apiKey: 'test' }, userName: '玩家', characterName: '文穗', agentNarrativeMode: 'standard', contextCompressionThresholdTokens: 2000 } as AppSettings,
     activePreset: { ...createDefaultPreset(), id: 'p', createdAt: 0, updatedAt: 0 },
     variables: { ...createDefaultVariables(), worldMemory: memory, cycleCount: 2, location: 'home' },
     gameStatus: { ...game.gameStatus, time: new Date('2024-09-09T08:20:00') }, currentState: { ...game.currentState, background: 'home-day' },

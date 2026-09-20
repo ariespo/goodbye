@@ -18,7 +18,7 @@ import { HistoryDrawer } from './components/tavern/HistoryDrawer';
 import type { ChatSession, ChatPreset, ChatMessage } from './sillytavern/types';
 import { createDefaultPreset } from './sillytavern/types';
 import { createDefaultVariables } from './sillytavern/vars-merger';
-import { OPENING_ASSISTANT_CONTENT, parseOpeningAssistantContent } from './utils/gameSession';
+import { OPENING_ASSISTANT_CONTENT, parseOpeningAssistantContent, buildOpeningNarrativeSummary } from './utils/gameSession';
 import { OPENING_PUBLIC_CONTINUITY } from './engine/opening-storyline';
 import './styles/animations.css';
 import './styles/themes.css';
@@ -111,6 +111,7 @@ function App() {
             role: 'assistant',
             content: OPENING_ASSISTANT_CONTENT,
             parsed: parseOpeningAssistantContent(),
+            narrativeSummary: buildOpeningNarrativeSummary(),
             timestamp: Date.now(),
             variables: openingVariables,
           };

@@ -325,6 +325,11 @@ describe('narrative day contract at the playable commit boundary', () => {
     expect(JSON.stringify(state.game.history)).not.toContain('确认文穗今早未到校');
     expect(JSON.stringify(state.tavern.variables)).not.toContain('确认文穗今早未到校');
     expect(state.tavern.chats[0].messages.at(-1)?.parsed?.summary).toBe('尚未核实文穗是否到校。');
+    const accepted = state.tavern.chats[0].messages.at(-1)!;
+    expect(accepted.narrativeSummary).toMatchObject({ version: 1, text: '尚未核实文穗是否到校。',
+      startLocationId: 'home', endLocationId: 'home' });
+    expect(accepted.narrativeSummary?.endedAt).toBe(state.game.gameStatus.time.toISOString());
+    expect(state.game.currentScene?.sourceMessageId).toBe(accepted.id);
     unmount();
   });
   it('does not play or charge a scene whose prose remains hidden in observe after both format repairs', async () => {

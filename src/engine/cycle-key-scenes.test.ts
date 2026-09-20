@@ -25,7 +25,7 @@ describe('authored cycle evidence boundaries', () => {
   it('does not replay or regrant an already presented key scene', () => {
     expect(buildCycleKeyScene({ nextVariables: { cycleCount: 3,
       storyProgress: { presentedBeatIds: ['cycle-2-fumi-boundary'] } }, previousVariables: { cycleCount: 2 }, messages: [] }))
-      .toMatchObject({ maintext: '', grantedFactIds: [] });
+      .toMatchObject({ maintext: '', summary: '', grantedFactIds: [] });
   });
   it('cannot revive a legacy solution or exclusive version confirmation in the third reset', () => {
     const result = buildCycleKeyScene({ nextVariables: { cycleCount: 4, mysteryKnowledge: {

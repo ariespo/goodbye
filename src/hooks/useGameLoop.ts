@@ -87,6 +87,7 @@ import {
   type ActionNarrativeContext,
 } from '../engine/action-narrative-context';
 import { buildTurnCommit, normalizeWorldMemory } from '../memory/world-memory';
+import { buildNarrativeSummary } from '../memory/narrative-summary';
 import { commitmentIdFromBoundaryId } from '../memory/character-continuity';
 import type { Scene } from '../sillytavern/types';
 import {
@@ -663,6 +664,15 @@ export function useGameLoop() {
           content: fullText,
           timestamp: Date.now(),
           variables: mergedVariables,
+          narrativeSummary: buildNarrativeSummary({
+            text: parsed.summary,
+            scene: acceptedScene,
+            startedAt: game.gameStatus.time,
+            endedAt: transaction.gameStatus.time,
+            cycleCount: finalCycleCount,
+            startLocationId: resolution?.startLocationId ?? preparation.mysteryLocation,
+            endLocationId: finalLocationId,
+          }),
           ...(actionOutcome ? { acceptedActionOutcome: actionOutcome } : {}),
           parsed: {
             ...parsed,
@@ -698,6 +708,7 @@ export function useGameLoop() {
           ...acceptedScene,
           knowledgeAlreadyCommitted: true,
           }, parsed),
+          sourceMessageId: assistantMessage.id,
           ...(actionOutcome ? { actionOutcome } : {}),
         };
         commitGameTransaction(transaction, committedScene);
@@ -1526,6 +1537,7 @@ export function useGameLoop() {
         ...state.game,
         currentScene: rollbackScene,
         currentLineIndex: rollback.currentLineIndex,
+        dialogueProgress: null,
         sceneComplete: rollback.sceneComplete,
         currentState: rollback.currentState,
         gameStatus: {

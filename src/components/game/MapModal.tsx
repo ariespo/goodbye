@@ -21,6 +21,7 @@ import { commitGameTransaction } from '../../utils/gameTransactionStore';
 import { resolveSceneEnvironment } from '../../utils/sceneEnvironment';
 import { buildMapTravelTransaction, prepareMapTravel } from '../../utils/mapTravel';
 import { captureTurnState } from '../../utils/turnStateSnapshot';
+import { buildNarrativeSummary } from '../../memory/narrative-summary';
 import { GameIcon } from '../ui/GameIcon';
 import {
   PixelModalAction,
@@ -244,8 +245,8 @@ export function MapModal() {
         maintext: mapMaintext,
         options: arrived ? [] : ['处理眼前的事情'],
         summary: arrived
-          ? `从${currentPresentation.name}移动到${selectedPresentation.name}`
-          : `前往${selectedPresentation.name}，已行进${prepared.publicOutcome.executedTravelMinutes}分钟`,
+          ? `玩家从${currentPresentation.name}出发，抵达${selectedPresentation.name}。路上用了${prepared.publicOutcome.executedTravelMinutes}分钟，体力变化${staminaDelta}点。`
+          : `玩家从${currentPresentation.name}前往${selectedPresentation.name}。${resultText}`,
         vars: {},
         observe: arrived ? selectedPresentation.description : undefined,
         investigateItems: [],
@@ -288,6 +289,9 @@ export function MapModal() {
         localAction: 'map-travel',
         acceptedActionOutcome: prepared.publicOutcome,
         parsed: mapParsed,
+        narrativeSummary: buildNarrativeSummary({ text: mapParsed.summary, scene: resultScene,
+          startedAt: liveState.game.gameStatus.time, endedAt: nextTime, cycleCount: captured.cycleCount,
+          startLocationId: currentPresentation.id, endLocationId: prepared.outcome.endLocationId }),
       };
       const baseMessages = activeChat.messages.at(-1)?.role === 'user'
         && liveState.api.turnRecovery.phase !== 'idle'
@@ -314,7 +318,7 @@ export function MapModal() {
         return;
       }
 
-      commitGameTransaction(transaction, resultScene);
+      commitGameTransaction(transaction, { ...resultScene, sourceMessageId: acceptedMessage.id });
       actions.setParsedContent(mapParsed);
       actions.clearTurnRecovery();
       actions.setCurrentState({

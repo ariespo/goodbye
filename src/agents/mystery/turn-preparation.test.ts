@@ -4,6 +4,8 @@ import { createDefaultPreset, type AppSettings, type ChatPreset, type ChatMessag
 import { OPENING_MAINTEXT, OPENING_PANELS } from '../../engine/opening-storyline';
 import { useGameStore } from '../../stores/gameStore';
 import { createDefaultVariables } from '../../sillytavern/vars-merger';
+import { buildTurnCommit } from '../../memory/world-memory';
+import { maintextToScene } from '../../engine/scene-parser';
 
 function inputs() {
   const game = useGameStore.getState().game;
@@ -19,6 +21,29 @@ function inputs() {
 }
 
 describe('shared foreground and speculative preparation', () => {
+  it('uses one compressed history for Director, Writer and execution projection while preserving retrieval originals', () => {
+    const input = inputs();
+    input.userInput = '继续查看房间';
+    input.settings.contextCompressionThresholdTokens = 2000;
+    input.history = Array.from({ length: 6 }, (_, i) => ({
+      id: `compression-${i}`, role: 'assistant', timestamp: i, variables: { cycleCount: 1, mysteryKnowledge: {} },
+      content: `<maintext>对话|旁白|calm|本段专有细节${i}\n${Array.from({ length: 8 }, () => `对话|旁白|calm|${'雨'.repeat(100)}`).join('\n')}</maintext><sum>第${i}次在公寓查看纸条。</sum>`,
+    }));
+    input.variables.worldMemory = buildTurnCommit({ turnId: 'compression-0', turnIndex: 0, createdAt: 1,
+      occurredAt: '2024-09-09T08:10:00', locationId: 'home', cycleCount: 1, summary: '查看房间',
+      scene: maintextToScene('对话|旁白|calm|本段专有细节0'), beforeVariables: {}, settledVariables: {} }).worldMemory;
+    const before = structuredClone(input.history);
+    const prepared = buildTurnPreparation(input);
+    expect(prepared.request.turnContext.recentHistory).toEqual(prepared.request.presentationContext.recentHistory);
+    expect(JSON.stringify(prepared.request.turnContext.recentHistory)).not.toContain('本段专有细节0');
+    expect(JSON.stringify(prepared.request.retrievalCorpus)).toContain('本段专有细节0');
+    expect(prepared.contextBundle.compression?.compressedMessageIds).toHaveLength(4);
+    expect(input.history).toEqual(before);
+    const expanded = buildTurnPreparation({ ...input, settings: { ...input.settings, contextCompressionThresholdTokens: 100000 } });
+    expect(JSON.stringify(expanded.request.turnContext.recentHistory)).toContain('本段专有细节0');
+    expect(preparationContextKey('chat', prepared.request)).not.toBe(preparationContextKey('chat', expanded.request));
+  });
+
   it('prepares and caches appended public scenes while excluding removed locations from the returned plan', () => {
     const input = inputs();
     input.userInput = '调查便利店';

@@ -13,6 +13,7 @@ import { compileTurnContext, normalizeWorldMemory } from '../memory/world-memory
 import { useGameStore } from '../stores/gameStore';
 import * as database from '../sillytavern/database';
 import type { ChatSession } from '../sillytavern/types';
+import { formatNarrativeSummary } from '../memory/narrative-summary';
 
 describe('checkCycleFailure', () => {
   const base = { stamina: 50, sanity: 50, time: new Date(2024, 8, 9, 15, 0) };
@@ -226,6 +227,15 @@ describe('persisted authored loop scenes', () => {
     expect(messages[1].variables.unlockedClues).toContain('shared-fumi-boundary-note');
     expect(messages[2].content).toContain('身份');
     expect(messages[2].content).toContain('尚未核实');
+    const summaries = messages.map(formatNarrativeSummary);
+    expect(summaries[0]).toContain('熟悉生活');
+    expect(summaries[0]).toContain('去向');
+    expect(summaries[1]).toContain('不要替我答应见谁');
+    expect(summaries[1]).toContain('不能证明她此刻仍活着');
+    expect(summaries[2]).toContain('身份');
+    expect(summaries[2]).toContain('尚未收到初步通报');
+    expect(messages[2].narrativeSummary).toMatchObject({ version: 1, cycleCount: 4,
+      startLocationId: 'home', endLocationId: 'home', participants: ['玩家'] });
     expect(state.tavern.variables.storyProgress.presentedBeatIds).toHaveLength(3);
     expect(state.game.currentScene?.lines.some(line => line.text.includes('不要替我答应见谁'))).toBe(true);
   });

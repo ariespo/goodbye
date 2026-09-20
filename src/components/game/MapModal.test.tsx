@@ -218,6 +218,10 @@ describe('MapModal', () => {
     expect(state.game.currentScene?.lines[0].text).not.toContain('抵达文穗的中学');
     const accepted = state.tavern.chats[0].messages.at(-1);
     expect(accepted?.localAction).toBe('map-travel');
+    expect(state.game.currentScene?.sourceMessageId).toBe(accepted?.id);
+    expect(accepted?.narrativeSummary).toMatchObject({ version: 1, startLocationId: 'home', endLocationId: 'home',
+      participants: ['玩家'], cycleCount: 1, text: expect.stringContaining('路程尚未完成') });
+    expect(accepted?.parsed?.summary).toContain('剩余约5分钟');
     expect(accepted?.acceptedActionOutcome).toEqual(state.api.parsedContent.actionOutcome);
     const rebuilt = rebuildSceneFromChat(state.tavern.chats[0]);
     expect(rebuilt?.lines[0]).toMatchObject({ background: 'street', speaker: '旁白' });
@@ -268,6 +272,10 @@ describe('MapModal', () => {
     releaseSave?.();
     await waitFor(() => expect(useGameStore.getState().tavern.variables.location).toBe('school'));
     expect(useGameStore.getState().game.gameStatus.time).toEqual(new Date('2024-09-09T08:10:00'));
+    expect(useGameStore.getState().game.currentScene?.sourceMessageId).toBe(savedChat.messages.at(-1)?.id);
+    expect(savedChat.messages.at(-1)?.narrativeSummary).toMatchObject({ version: 1,
+      startLocationId: 'home', endLocationId: 'school', startedAt: new Date('2024-09-09T08:00:00').toISOString(),
+      endedAt: new Date('2024-09-09T08:10:00').toISOString() });
     expect(useGameStore.getState().tavern.variables.knowledgeEvents).toContain('visit:school');
     expect(useGameStore.getState().api.parsedContent).toMatchObject({
       options: [],

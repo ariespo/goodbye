@@ -123,6 +123,9 @@ describe('App startup with saved game data', () => {
 
     const skipOpening = await screen.findByRole('button', { name: '跳过开场动画' });
     expect(database.saveChat).toHaveBeenCalledTimes(1);
+    const opening = useGameStore.getState().tavern.chats[0].messages[0];
+    expect(opening.narrativeSummary).toMatchObject({ version: 1, cycleCount: 1,
+      startLocationId: 'home', endLocationId: 'home', text: opening.parsed?.summary });
     expect(screen.queryByRole('navigation', { name: '标题菜单' })).not.toBeInTheDocument();
     expect(useGameStore.getState().ui.introPlayed).toBe(false);
 

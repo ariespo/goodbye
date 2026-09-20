@@ -259,9 +259,18 @@ export interface AppSettings {
   soundVolume?: number;
   /** 叙事 Agent 编排：自适应受控流水线 / 每回合全量审查 */
   agentNarrativeMode?: AgentNarrativeModeSetting;
+  /** 较早剧情开始压缩为摘要的历史 token 估算阈值；不改变完整存档。 */
+  contextCompressionThresholdTokens?: number;
 }
 
 export type AgentNarrativeModeSetting = 'standard' | 'strict';
+
+export const DEFAULT_CONTEXT_COMPRESSION_TOKENS = 12000;
+
+export function normalizeContextCompressionThreshold(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_CONTEXT_COMPRESSION_TOKENS;
+  return Math.min(100000, Math.max(2000, Math.trunc(value)));
+}
 
 export function normalizeAgentNarrativeMode(value: unknown): AgentNarrativeModeSetting {
   return value === 'strict' ? 'strict' : 'standard';
@@ -298,7 +307,7 @@ export const DEFAULT_FORMAT_PROMPT = `你必须严格按照以下 XML 标签格�
 要求:至少 2 项,每行一个,不要带序号或额外标记。
 
 ## 3. 回合总结(必填)
-<sum>本回合一句话总结</sum>
+<sum>用 2–4 句话概括本回合的时间、地点、在场人物、实际发生的事件与结果；明确区分已确认的信息和猜测，交代尚未完成的行动。只总结本回合已呈现的剧情，不补写隐藏真相或将玩家的尝试当作已完成事件。</sum>
 
 ## 4. 状态变量(选填,但如有变化必须合法)
 <vars>{ "location": "school", "stamina": 80, "sanity": 75 }</vars>
@@ -387,6 +396,8 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   variables: DynamicRecord;
+  /** 从已接受正文生成的回合摘要；原文仍完整保留用于回看与存档。 */
+  narrativeSummary?: import('../memory/narrative-summary').NarrativeSummary;
   /** 玩家选择的程序元数据，用于重试/重演；不承载模型报价或剩余成本。 */
   actionRequest?: {
     playerActionIntent?: import('../engine/player-action-intent').ActionIntentSnapshot;
@@ -517,6 +528,8 @@ export type Mood = 'calm' | 'horror' | 'insane' | 'sad' | 'angry' | 'happy';
 
 export interface Scene {
   id: string;
+  /** 对应已保存的正文消息；阅读记录据此隐藏尚未播放的文本。 */
+  sourceMessageId?: string;
   lines: SceneLine[];
   /** Generated turns commit all knowledge before playback; opening/legacy scenes may still commit on line completion. */
   knowledgeAlreadyCommitted?: boolean;

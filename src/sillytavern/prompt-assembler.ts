@@ -15,6 +15,7 @@ import { getVariablePath } from './vars-merger';
 import { translateForWriter } from '../engine/variable-thresholds';
 import { buildLoopPacingContract } from '../agents/mystery/loop-contract';
 import { estimateTokens, type TurnContextBundle } from '../memory/world-memory';
+import { projectContextHistory } from '../memory/context-compression';
 
 export interface AssembleOptions {
   userInput: string;
@@ -28,6 +29,7 @@ export interface AssembleOptions {
   formatPrompt?: string;
   /** Shared, retrieval-backed context selected once for every agent in this turn. */
   contextBundle?: TurnContextBundle;
+  contextCompressionThresholdTokens?: number;
 }
 
 export interface AssembleResult {
@@ -61,7 +63,11 @@ export interface PromptInspectionResult {
     includedMessages: number;
     maxContext: number;
     availableContext: number;
-    messages: { role: string; content: string; tokens: number; included: boolean }[];
+    compressedMessages: number;
+    compressionThresholdTokens: number;
+    originalTokens: number;
+    projectedTokens: number;
+    messages: { role: string; content: string; tokens: number; included: boolean; compressed: boolean }[];
   };
   orderItems: PromptOrderInspectItem[];
   varBlock: string | null;
@@ -96,13 +102,21 @@ const MARKER_IDENTIFIERS = new Set([
   'personaDescription', 'dialogueExamples',
 ]);
 
+function promptHistory(options: AssembleOptions) {
+  const projection = projectContextHistory({ history: options.history, variables: options.variables,
+    thresholdTokens: options.contextCompressionThresholdTokens });
+  return options.contextBundle
+    ? { ...projection, ...options.contextBundle.compression, messages: options.contextBundle.recentMessages }
+    : projection;
+}
+
 export function assemblePrompt(options: AssembleOptions): AssembleResult {
-  const { userInput, history, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt, contextBundle } = options;
+  const { userInput, preset, lorebooks, activeLorebookIds, userName, characterName, variables, formatPrompt, contextBundle } = options;
 
   // 1) 扫描世界书
   const activeBooks = lorebooks.filter(b => activeLorebookIds.includes(b.id));
   const matchedAll: MatchedEntry[] = [];
-  const historyForPrompt = contextBundle?.recentMessages ?? history;
+  const historyForPrompt = promptHistory(options).messages;
   const scanText = contextBundle?.lorebookScanText
     ?? `${userInput} ${historyForPrompt.map(m => m.content).join(' ')}`;
   for (const book of activeBooks) {
@@ -326,7 +340,9 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   // 1) 世界书扫描
   const activeBooks = lorebooks.filter(b => activeLorebookIds.includes(b.id));
   const matchedAll: MatchedEntry[] = [];
-  const historyForPrompt = contextBundle?.recentMessages ?? history;
+  const compression = promptHistory(options);
+  const historyForPrompt = compression.messages;
+  const compressedIds = new Set(compression.compressedMessageIds);
   const scanText = contextBundle?.lorebookScanText
     ?? `${userInput} ${historyForPrompt.map(m => m.content).join(' ')}`;
   for (const book of activeBooks) {
@@ -355,16 +371,18 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   ].join('\n');
   const availableContext = Math.max(512, maxContext - maxOutput - repairReserve - estimateTokens(fixedText));
 
-  const historyInspect: { role: string; content: string; tokens: number; included: boolean }[] = [];
+  const historyInspect: PromptInspectionResult['history']['messages'] = [];
   let currentTokens = 0;
+  let overBudget = false;
   for (let i = historyForPrompt.length - 1; i >= 0; i--) {
     const msg = historyForPrompt[i];
     const msgTokens = estimateTokens(msg.content);
-    const included = msg.role !== 'system' && currentTokens + msgTokens <= availableContext;
+    if (msg.role !== 'system' && currentTokens + msgTokens > availableContext) overBudget = true;
+    const included = msg.role !== 'system' && !overBudget;
     if (included) {
       currentTokens += msgTokens;
     }
-    historyInspect.unshift({ role: msg.role, content: msg.content, tokens: msgTokens, included });
+    historyInspect.unshift({ role: msg.role, content: msg.content, tokens: msgTokens, included, compressed: compressedIds.has(msg.id) });
   }
   const includedHistory = historyInspect.filter(m => m.included);
 
@@ -484,23 +502,7 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
   const varBlock = formatVariablesForPrompt(variables || {});
 
   // 5) 组装最终消息（模拟）
-  const finalMessages: { role: string; content: string; index: number }[] = [];
-
-  if (systemAcc || varBlock || memoryBlock || formatPrompt) {
-    let sys = systemAcc;
-    if (varBlock) sys += (sys ? '\n\n' : '') + varBlock;
-    if (memoryBlock) sys += (sys ? '\n\n' : '') + memoryBlock;
-    sys += (sys ? '\n\n' : '') + translateForWriter(variables || {});
-    sys += (sys ? '\n\n' : '') + buildLoopPacingContract(variables?.cycleCount);
-    if (formatPrompt) sys += (sys ? '\n\n' : '') + formatPrompt;
-    finalMessages.push({ role: 'system', content: sys, index: finalMessages.length });
-  }
-
-  for (const msg of includedHistory) {
-    finalMessages.push({ role: msg.role, content: msg.content, index: finalMessages.length });
-  }
-
-  finalMessages.push({ role: 'user', content: replaceMacros(userInput, macroCtx), index: finalMessages.length });
+  const finalMessages = assemblePrompt(options).messages.map((message, index) => ({ ...message, index }));
 
   // 6) 统计
   const injectedWriterDirective = translateForWriter(variables || {});
@@ -523,6 +525,10 @@ export function inspectPrompt(options: AssembleOptions): PromptInspectionResult 
       includedMessages: includedHistory.length,
       maxContext,
       availableContext,
+      compressedMessages: historyInspect.filter(message => message.included && message.compressed).length,
+      compressionThresholdTokens: compression.thresholdTokens,
+      originalTokens: compression.originalTokens,
+      projectedTokens: compression.projectedTokens,
       messages: historyInspect,
     },
     orderItems,

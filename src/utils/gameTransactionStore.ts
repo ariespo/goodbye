@@ -27,7 +27,7 @@ export function commitGameTransaction(result: GameTransactionResult, scene?: Sce
       pendingCycleReset: result.ending
         ? null
         : result.failure ?? state.game.pendingCycleReset,
-      ...(scene ? { currentScene: scene, currentLineIndex: 0, sceneComplete: false } : {}),
+      ...(scene ? { currentScene: scene, currentLineIndex: 0, sceneComplete: false, dialogueProgress: null } : {}),
     },
   }));
 }

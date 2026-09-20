@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { AppSettings, ChatPreset, Lorebook, ChatSession, SaveSlot } from './types';
-import { DEFAULT_FORMAT_PROMPT, DEFAULT_OPAQUE_TAGS, normalizeAgentNarrativeMode } from './types';
+import { DEFAULT_CONTEXT_COMPRESSION_TOKENS, DEFAULT_FORMAT_PROMPT, DEFAULT_OPAQUE_TAGS, normalizeAgentNarrativeMode, normalizeContextCompressionThreshold } from './types';
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_OUTPUT_TOKENS } from './token-budget';
 import {
   legacyEpisodesFromSnapshots,
@@ -316,6 +316,7 @@ function getDefaultSettings(): AppSettings {
     musicVolume: 0.5,
     soundVolume: 0.65,
     agentNarrativeMode: 'standard',
+    contextCompressionThresholdTokens: DEFAULT_CONTEXT_COMPRESSION_TOKENS,
   };
 }
 
@@ -333,6 +334,7 @@ function normalizeSettings(partial: AppSettings | Partial<AppSettings> | undefin
       && !!partial.userName?.trim()
       && !!playerGender,
     agentNarrativeMode: normalizeAgentNarrativeMode((partial as LegacyAppSettings).agentNarrativeMode),
+    contextCompressionThresholdTokens: normalizeContextCompressionThreshold(partial.contextCompressionThresholdTokens),
     api: {
       ...defaults.api,
       ...(partial.api || {}),
@@ -359,7 +361,7 @@ export async function getSettings(): Promise<AppSettings | undefined> {
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  await db.settings.put(settings);
+  await db.settings.put(normalizeSettings(settings));
 }
 
 export async function getLorebooks(): Promise<Lorebook[]> {

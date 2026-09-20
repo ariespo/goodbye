@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { calculateHudLayout } from './hudLayout';
 
 export function HudViewport({ children }: { children: ReactNode }) {
@@ -25,12 +25,13 @@ export function HudViewport({ children }: { children: ReactNode }) {
         className="hud-design-canvas"
         data-design-size="1672x941"
         style={{
+          '--hud-scale': layout.scale,
           width: `${layout.virtualWidth}px`,
           height: `${layout.virtualHeight}px`,
           left: `${layout.offsetX}px`,
           top: `${layout.offsetY}px`,
           transform: `scale(${layout.scale})`,
-        }}
+        } as CSSProperties}
       >
         {children}
       </div>

@@ -7,6 +7,7 @@ import { commitGameTransaction } from './gameTransactionStore';
 import { buildMapTravelTransaction, prepareMapTravel } from './mapTravel';
 import { resolveSceneEnvironment } from './sceneEnvironment';
 import { captureTurnState } from './turnStateSnapshot';
+import { buildNarrativeSummary } from '../memory/narrative-summary';
 
 export interface LocalMapContinuationResult {
   arrived: boolean;
@@ -89,8 +90,8 @@ export async function resumeLocalMapTravelContinuation(
   const mapMaintext = `场景|${nextBackground}\n对话|旁白|calm|${resultText}`;
   const originPresentation = getCurrentLocationPresentation(state.tavern.variables);
   const summary = arrived
-    ? `从${originPresentation.name}移动到${destinationPresentation.name}`
-    : `前往${destinationPresentation.name}，已行进${prepared.publicOutcome.executedTravelMinutes}分钟`;
+    ? `玩家继续前往${destinationPresentation.name}，本次走完剩余${prepared.publicOutcome.executedTravelMinutes}分钟路程并抵达。体力变化${staminaDelta}点。`
+    : `玩家从${originPresentation.name}继续前往${destinationPresentation.name}。${resultText}`;
   const parsed: ParsedContent = {
     thinking: '', maintext: mapMaintext, options: arrived ? [] : ['处理眼前的事情'], summary, vars: {},
     observe: arrived ? destinationPresentation.description : undefined,
@@ -120,6 +121,9 @@ export async function resumeLocalMapTravelContinuation(
     content: `<maintext>\n${mapMaintext}\n</maintext><option>${parsed.options.join('\n')}</option><sum>${summary}</sum><vars>{}</vars>`,
     timestamp: Date.now(), variables: transaction.variables, localAction: 'map-travel',
     acceptedActionOutcome: prepared.publicOutcome, parsed,
+    narrativeSummary: buildNarrativeSummary({ text: summary, scene,
+      startedAt: state.game.gameStatus.time, endedAt: transaction.gameStatus.time,
+      cycleCount: captured.cycleCount, startLocationId: originPresentation.id, endLocationId: prepared.outcome.endLocationId }),
   };
   const updatedChat = {
     ...activeChat,
@@ -135,7 +139,7 @@ export async function resumeLocalMapTravelContinuation(
   assertCurrent();
 
   const actions = useGameStore.getState().actions;
-  commitGameTransaction(transaction, scene);
+  commitGameTransaction(transaction, { ...scene, sourceMessageId: acceptedMessage.id });
   actions.setParsedContent(parsed);
   actions.clearTurnRecovery();
   actions.setCurrentState({

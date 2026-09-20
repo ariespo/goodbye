@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PixelFrame, PixelFrameRails } from '../ui/PixelFrame';
+import './dialogue-navigation.css';
 
 export const DIALOGUE_TEXT_MAIN = '#d8d4cc';
 export const DIALOGUE_TEXT_DIM = '#7a756e';
@@ -22,7 +23,7 @@ export function PixelPanel({
 }) {
   return (
     <div
-      className={`dialogue-panel ${complete ? 'is-scene-complete' : ''} absolute bottom-[5%] left-1/2 z-20 flex w-[var(--dialogue-panel-width,min(88vw,980px))] select-none flex-col`}
+      className={`dialogue-panel dialogue-navigation-panel ${complete ? 'is-scene-complete' : ''} absolute bottom-[5%] left-1/2 z-20 flex w-[var(--dialogue-panel-width,min(88vw,980px))] select-none flex-col`}
       onClick={onClick}
     >
       {/* 左上角外部标签 */}
@@ -88,9 +89,9 @@ export function PixelTag({ text }: { text: string }) {
 /* ── 像素风图标按钮 ── */
 
 export function PixelIconBtn({
-  icon, label, active, onClick,
+  icon, label, active, onClick, disabled = false,
 }: {
-  icon: React.ReactNode; label: string; active?: boolean; onClick: (e: React.MouseEvent) => void;
+  icon: React.ReactNode; label: string; active?: boolean; disabled?: boolean; onClick: (e: React.MouseEvent) => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -98,6 +99,8 @@ export function PixelIconBtn({
 
   return (
     <button
+      type="button"
+      disabled={disabled}
       data-cursor="pointer"
       data-active={active ? 'true' : 'false'}
       className="dialogue-control-button flex min-h-[42px] items-center gap-1.5 select-none px-3 transition-[filter,transform] duration-100"

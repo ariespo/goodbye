@@ -96,7 +96,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 4. 角色称呼、地点名称与可到达范围必须服从 WriterPacket.playerPresentation；不得把内部 ID 写给玩家。
 5. 当 authorizedKnowledgeEvents 引入新人物时，必须按顺序写：角色第一次说话时使用 sceneContract.directive 指定的职业称呼；若场景契约未指定，才使用内部可映射说话者（播放器会显示“？？？”）。随后用旁白从玩家视角明确说明当前可知称呼，紧接该介绍句下一行写“认知|eventId”；事件行之前不得提前使用新称呼，事件行之后必须改用已知姓名。
 6. 地点、身份、职业、行为理解或人物关系更新，都必须在玩家实际看到/听到符合对应 evidenceStandard 的具体依据后，紧接证据句写“认知|eventId”。只能写 authorizedKnowledgeEvents 中的事件 ID；不得先写结论再把结论自身当作 evidence。
-7. 为兼容当前播放器，输出一句 <sum>；<vars> 必须固定为 {}。你不承担数值与存档写入。
+7. 每次正文都同时输出 <sum>，用2～4句概括本次实际发生的剧情：权威时间与地点、实际出场人物、玩家行动及其结果，并保留未完成事项、否定、传闻或猜测的归属。摘要应能在旧正文退出上下文后独立支持接续，不能把选项或后续计划写成已经发生，不新增正文未呈现的事实；不重复描写修辞，目标约120～220字，简单场景可以更短。<vars> 必须固定为 {}。你不承担数值与存档写入。
 7a. WriterPacket.resolvedAction 存在时，它是本回合行动经过、位置、完成度和资源结果的唯一权威。正文必须覆盖 startTime 到 endTime、共 executedMinutes 分钟的完整时间区间，只挑选其中的高光和关键片段，不逐分钟铺写。不得自行改动或独立计算时间、体力、理智或其他资源；不得把计划值、DirectorPlan.timeCostMinutes 或气氛描写当作结算依据。任何未完成阶段不得写成已经发现结果或获得完整奖励，只能呈现本次实际执行的有限进展与中断；完成结果还必须同时出现在 completedSourceIds 对应的 authorizedFacts 或 authorizedActionOutcomes 中。续作不得重演此前已完成的旅行或工作，只写当前 resolvedAction.segments 本次执行的部分。
 7b. 落笔前在内部按 resolvedAction.segments 检查本次的旅行、工作、等待/休息和完成度，再选择片段。正文要让玩家看见这些时间内实际做了什么、过程如何推进、留下什么授权结果或局限；不输出内部计划、检查步骤或推理。55/105分钟不能写成一问一答后直接跳钟，也不能靠重复台词或机械旁白复述答案充数。用简洁的过程概述、阶段转换和关键问答压缩长行动，不逐分钟铺写、不要求固定字数或行数；不得为填时间新增事实。
 7c. 保留玩家原行动后，获准计划与实际执行段中的后续调查可自然接续，包括跨地点。写清“原问题如何得到回应、为什么继续核查、如何到达、实际做到了哪里”；不得把问询限制成反复对话，也不得跳过原对象或临时添加未结算的路程。sceneContracts 存在时逐段遵守各地点的进入、角色和认知规则；终点场景不代表此前互动可省略。中断后的后续计划不能提前演出。
@@ -140,7 +140,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 第二个玩家选项
 </option>
 <hint>非剧透提示</hint>
-<sum>本回合一句话摘要</sum>
+<sum>本回合2～4句客观剧情摘要，保留时间、地点、人物、实际结果与未完成事项。</sum>
 <vars>{}</vars>
 
 maintext 每行一个指令，以半角 | 分隔；旁白也必须使用“对话|旁白|calm|正文”，禁止裸段落。场景与音乐仅在改变时声明；背景昼夜版本服从当前时间。情绪只能用 calm/horror/insane/sad/angry/happy。物品展示可在对话末尾增加第五字段，使用资源清单中与正文实际内容相符的物品id；资源可用不代表其证据内容已授权。获准认知单独成行：认知|eventId。
@@ -150,7 +150,7 @@ vars 固定为空对象，不输出 timeCost；时间与状态由后续程序结
 /** The default legacy format grants Writer state ownership; use the agent protocol instead. */
 export function buildWriterSystemPrompt(formatPrompt?: string): string {
   if (!formatPrompt?.trim() || formatPrompt === DEFAULT_FORMAT_PROMPT) return WRITER_SYSTEM_PROMPT;
-  return `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${formatPrompt}\n\n[Agent 状态权限优先]\n<vars>{}</vars> 必须为空对象；不得输出 timeCost，状态与时间由程序结算。`;
+  return `${WRITER_SYSTEM_PROMPT}\n\n[项目输出格式补充]\n${formatPrompt}\n\n[Agent 状态与摘要规则优先]\n<vars>{}</vars> 必须为空对象；不得输出 timeCost，状态与时间由程序结算。无论旧格式如何描述，<sum> 都须以2～4句交代时间、地点、实际出场人物、实际事件和结果及未完成事项，保留否定与猜测归属；不得新增事实或把尚未执行的计划写成已经发生。`;
 }
 
 export const FACT_CRITIC_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}

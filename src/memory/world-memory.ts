@@ -3,6 +3,7 @@ import type { ChatMessage, ChatSession, Scene, TurnSnapshot } from '../sillytave
 import { characterIdFromSpeaker } from '../data/npcPlayerKnowledge';
 import { getLocationById } from '../data/locations';
 import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
+import { projectContextHistory, type ContextCompressionProjection } from './context-compression';
 import {
   candidateFingerprint,
   cognitionIsPublicPlayerNamePermission,
@@ -131,6 +132,7 @@ export interface TurnContextBundle {
   directorMemory: Record<string, unknown>;
   writerMemory: Record<string, unknown>;
   tokenBudget: ContextTokenBudget;
+  compression?: Omit<ContextCompressionProjection, 'messages'>;
 }
 
 export interface TurnCommit {
@@ -474,6 +476,7 @@ export function compileTurnContext(options: {
   maxContext?: number;
   reservedOutput?: number;
   fixedPromptText?: string;
+  contextCompressionThresholdTokens?: number;
 }): TurnContextBundle {
   const normalizedMemory = normalizeWorldMemory(options.variables, legacyEpisodesFromMessages(options.history));
   const currentCycle = Number.isSafeInteger(Number(options.variables.cycleCount))
@@ -496,8 +499,11 @@ export function compileTurnContext(options: {
       return item.sourceEventIds.length > 0 && item.sourceEventIds.every(id => inVersion(eventCycles.get(id)));
     }),
   };
-  const recentMessageCandidates = options.history.filter(message => message.role !== 'system'
-    && inVersion(message.variables?.cycleCount)).slice(-4);
+  const { messages: recentMessageCandidates, ...compression } = projectContextHistory({
+    history: options.history,
+    variables: options.variables,
+    thresholdTokens: options.contextCompressionThresholdTokens,
+  });
   const terms = [...new Set([options.locationId, ...options.activeNpcIds, ...options.userInput.split(/[\s，。！？、]+/u)])]
     .filter(term => term.length > 1);
   const recentEpisodeIds = new Set(memory.episodes.slice(-2).map(item => item.episodeId));
@@ -661,7 +667,9 @@ export function compileTurnContext(options: {
   disclosureCandidates.forEach(item => selectWhole(relevantDisclosures, item));
   [...recentMessageCandidates].reverse().forEach(item => selectWhole(recentMessages, item, 'start'));
   [...cognitionCandidates].reverse().forEach(item => selectWhole(relevantCognition, item, 'start'));
-  episodeCandidates.forEach(item => selectWhole(relevantEpisodes, item));
+  const representedTurnIds = new Set(recentMessages.map(item => item.id));
+  episodeCandidates.filter(item => !representedTurnIds.has(item.turnId))
+    .forEach(item => selectWhole(relevantEpisodes, item));
   [...softFactCandidates].reverse().forEach(item => selectWhole(relevantBackgroundFacts, item, 'start'));
 
   // The final projection is recalculated after every accepted whole record, so
@@ -677,6 +685,7 @@ export function compileTurnContext(options: {
     lorebookScanText: [options.userInput, options.locationId, ...options.activeNpcIds, ...relevantEpisodes.map(item => item.summary)].join('\n'),
     directorMemory: projection.directorMemory,
     writerMemory: projection.writerMemory,
+    compression,
     tokenBudget: {
       maxContext,
       reservedOutput,

@@ -28,6 +28,13 @@ import { prefetchImages } from '../../utils/assetManager';
 import { paginateDialogueText, resolveDialogueAdvance } from './dialoguePagination';
 const PREFETCH_LOOKAHEAD = 2;
 
+function hasOpenDialogueOverlay() {
+  const { ui, game } = useGameStore.getState();
+  if (Object.entries(ui).some(([key, value]) => key.startsWith('show') && value === true)
+    || game.actionPanel.visible || game.endingPanel.visible) return true;
+  return Boolean(document.querySelector('[role="dialog"]:not([aria-hidden="true"]), .save-modal-shell, .player-identity-prompt'));
+}
+
 function collectLineVisualAssetUrls(
   line: { background?: string | null; character?: string | null; },
   gameTime: Date,
@@ -62,6 +69,11 @@ export function DialogueBox() {
   const settings = useGameStore(state => state.tavern.settings);
   const isWaitingForAI = useGameStore(state => state.game.isWaitingForAI);
   const variables = useGameStore(state => state.tavern.variables);
+  const activeChatId = useGameStore(state => state.tavern.activeChatId);
+  const dialogueProgress = useGameStore(state => state.game.dialogueProgress);
+  const ui = useGameStore(state => state.ui);
+  const actionPanelVisible = useGameStore(state => state.game.actionPanel.visible);
+  const endingPanelVisible = useGameStore(state => state.game.endingPanel.visible);
   const currentScene = useMemo(
     () => storedScene ? applyCharacterEmotionPolicies(storedScene, variables) : null,
     [storedScene, variables],
@@ -73,12 +85,31 @@ export function DialogueBox() {
   const setCurrentScene = useGameStore(state => state.actions.setCurrentScene);
   const setAutoMode = useGameStore(state => state.actions.setAutoMode);
   const setSceneComplete = useGameStore(state => state.actions.setSceneComplete);
+  const markDialogueSeen = useGameStore(state => state.actions.markDialogueSeen);
+  const toggleModal = useGameStore(state => state.actions.toggleModal);
+  const [reviewCursor, setReviewCursor] = useState<{
+    sceneId: string; lineIndex: number; chatId: string | null; sourceMessageId?: string;
+  } | null>(null);
+  const isReviewing = reviewCursor !== null && reviewCursor.sceneId === currentScene?.id
+    && reviewCursor.chatId === activeChatId && reviewCursor.sourceMessageId === currentScene?.sourceMessageId;
+  const viewLineIndex = isReviewing ? Math.min(reviewCursor.lineIndex, currentLineIndex) : currentLineIndex;
+  const requestedPageRef = useRef<number | null>(null);
+  const [overlayOpen, setOverlayOpen] = useState(hasOpenDialogueOverlay);
+
+  useEffect(() => {
+    const update = () => setOverlayOpen(hasOpenDialogueOverlay());
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-hidden'] });
+    return () => observer.disconnect();
+  }, [ui, actionPanelVisible, endingPanelVisible]);
 
   const autoIntervalMs = settings?.autoIntervalMs ?? 1500;
   const typingSpeed = settings?.typingSpeed || 35;
 
-  const currentLine = currentScene?.lines[currentLineIndex];
-  const isLastLine = currentLineIndex >= (currentScene?.lines.length ?? 0) - 1;
+  const currentLine = currentScene?.lines[viewLineIndex];
+  const liveLine = currentScene?.lines[currentLineIndex];
+  const isLastLine = viewLineIndex >= (currentScene?.lines.length ?? 0) - 1;
   const presentationVariables = useMemo(() => projectKnowledgeForPlayback(
     variables,
     currentScene,
@@ -102,22 +133,38 @@ export function DialogueBox() {
     presentationVariables,
   );
   const displaySpeaker = applyMacros(playerFacingSpeaker, userName, characterName, dialogueMacros);
-  const displayText = applyMacros(currentLine?.text || '', userName, characterName, dialogueMacros);
+  const fullDisplayText = applyMacros(currentLine?.text || '', userName, characterName, dialogueMacros);
+  const displayText = isReviewing && viewLineIndex === currentLineIndex && !sceneComplete
+    ? (dialogueProgress?.sceneId === currentScene?.id && dialogueProgress?.lineIndex === currentLineIndex
+      ? dialogueProgress.text : '')
+    : fullDisplayText;
 
   const measureRef = useRef<HTMLDivElement>(null);
-  const [dialoguePages, setDialoguePages] = useState<string[]>([displayText]);
+  const scenePlaybackKey = `${activeChatId}:${currentScene?.sourceMessageId}:${currentScene?.id}`;
+  const pageSource = `${scenePlaybackKey}:${viewLineIndex}:${isReviewing}`;
+  const [pagination, setPagination] = useState({ text: displayText, source: pageSource, pages: [displayText] });
+  const measuredPaginationRef = useRef(pagination);
+  const paginationSceneRef = useRef(scenePlaybackKey);
+  const dialoguePages = useMemo(() => pagination.text === displayText && pagination.source === pageSource
+    ? pagination.pages : [displayText], [pagination, displayText, pageSource]);
   const [dialoguePageIndex, setDialoguePageIndex] = useState(0);
   const activePageIndex = Math.min(dialoguePageIndex, Math.max(0, dialoguePages.length - 1));
   const activePageText = dialoguePages[activePageIndex] ?? displayText;
   const hasNextPage = activePageIndex < dialoguePages.length - 1;
-  const { displayedText, isComplete, skip } = useTypewriter(activePageText, typingSpeed, true);
+  const { displayedText, isComplete, skip } = useTypewriter(activePageText, typingSpeed, !isReviewing, `${pageSource}:${activePageIndex}`, overlayOpen);
 
   useLayoutEffect(() => {
+    if (paginationSceneRef.current !== scenePlaybackKey) {
+      requestedPageRef.current = null;
+      paginationSceneRef.current = scenePlaybackKey;
+    }
     const measureNode = measureRef.current;
     const frame = measureNode?.parentElement;
     if (!measureNode || !frame) return;
 
+    let active = true;
     const repaginate = () => {
+      if (!active) return;
       const style = window.getComputedStyle(frame);
       const availableWidth = frame.clientWidth
         - Number.parseFloat(style.paddingLeft || '0')
@@ -125,28 +172,38 @@ export function DialogueBox() {
       const availableHeight = frame.clientHeight
         - Number.parseFloat(style.paddingTop || '0')
         - Number.parseFloat(style.paddingBottom || '0');
-      if (availableWidth <= 0 || availableHeight <= 0) return;
-
       measureNode.style.width = `${availableWidth}px`;
-      const nextPages = paginateDialogueText(displayText, candidate => {
+      const nextPages = availableWidth <= 0 || availableHeight <= 0 ? [displayText] : paginateDialogueText(displayText, candidate => {
         measureNode.textContent = candidate || ' ';
         return measureNode.scrollHeight <= availableHeight + 1;
       });
       measureNode.textContent = '';
-      setDialoguePages(previous => (
-        previous.length === nextPages.length && previous.every((page, index) => page === nextPages[index])
-          ? previous
-          : nextPages
-      ));
-      setDialoguePageIndex(0);
+      const previous = measuredPaginationRef.current;
+      const changed = previous.text !== displayText || previous.source !== pageSource
+        || previous.pages.length !== nextPages.length || previous.pages.some((page, index) => page !== nextPages[index]);
+      const nextPagination = changed ? { text: displayText, source: pageSource, pages: nextPages } : previous;
+      measuredPaginationRef.current = nextPagination;
+      setPagination(nextPagination);
+      const requested = requestedPageRef.current;
+      requestedPageRef.current = null;
+      // Page numbers are not stable across scenes, fonts or viewport widths.
+      // Restart at the first page on reflow; never treat skipped text as read.
+      setDialoguePageIndex(previousIndex => requested === -1 ? nextPages.length - 1
+        : Math.min(requested ?? (changed ? 0 : previousIndex), nextPages.length - 1));
     };
 
     repaginate();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(repaginate);
     observer?.observe(frame);
     void document.fonts?.ready.then(repaginate);
-    return () => observer?.disconnect();
-  }, [displayText, currentLineIndex, currentScene?.id]);
+    return () => { active = false; observer?.disconnect(); };
+  }, [displayText, pageSource, scenePlaybackKey]);
+
+  useEffect(() => {
+    if (!isReviewing && displayedText) {
+      markDialogueSeen(currentLineIndex, dialoguePages.slice(0, activePageIndex).join('') + displayedText);
+    }
+  }, [isReviewing, displayedText, currentLineIndex, dialoguePages, activePageIndex, markDialogueSeen]);
 
   useEffect(() => {
     if (!currentScene) return;
@@ -171,7 +228,7 @@ export function DialogueBox() {
   );
 
   useEffect(() => {
-    const minimumDisplayMs = currentLine?.minimumDisplayMs ?? 0;
+    const minimumDisplayMs = liveLine?.minimumDisplayMs ?? 0;
     if (minimumDisplayMs <= 0) {
       setMinimumHoldReady(true);
       return;
@@ -179,24 +236,50 @@ export function DialogueBox() {
     setMinimumHoldReady(false);
     const timer = window.setTimeout(() => setMinimumHoldReady(true), minimumDisplayMs);
     return () => window.clearTimeout(timer);
-  }, [currentLine?.minimumDisplayMs, currentLineIndex, currentScene?.id]);
+  }, [liveLine?.minimumDisplayMs, currentLineIndex, currentScene?.id]);
 
   /* ── 场景完成检测 ── */
   useEffect(() => {
-    if (isComplete && !hasNextPage && isLastLine && currentScene) {
+    if (!isReviewing && isComplete && !hasNextPage && isLastLine && currentScene && !sceneComplete) {
       setSceneComplete(true);
     }
-  }, [isComplete, hasNextPage, isLastLine, currentScene, setSceneComplete]);
+  }, [isReviewing, isComplete, hasNextPage, isLastLine, currentScene, sceneComplete, setSceneComplete]);
 
   /* ── 台词知识事件提交 ── */
   useEffect(() => {
-    if (!isComplete || hasNextPage || !currentLine?.knowledgeEvents?.length || !currentScene
+    if (isReviewing || !isComplete || hasNextPage || !currentLine?.knowledgeEvents?.length || !currentScene
       || currentScene.knowledgeAlreadyCommitted) return;
-    commitKnowledgeEvents(currentLine.knowledgeEvents, `${currentScene.id}:${currentLineIndex}`, committedKnowledgeRef.current);
-  }, [currentLine, currentLineIndex, currentScene, isComplete, hasNextPage]);
+    commitKnowledgeEvents(currentLine.knowledgeEvents, `${scenePlaybackKey}:${currentLineIndex}`, committedKnowledgeRef.current);
+  }, [isReviewing, currentLine, currentLineIndex, currentScene, isComplete, hasNextPage, scenePlaybackKey]);
+
+  const handleReturnToCurrent = useCallback(() => {
+    // The viewport may have changed during review. A saved page number can now
+    // point past unread text, so resume at the current sentence's first page.
+    requestedPageRef.current = 0;
+    setDialoguePageIndex(0);
+    setReviewCursor(null);
+  }, []);
+
+  const handlePrevious = useCallback(() => {
+    if (!currentScene || hasOpenDialogueOverlay() || (viewLineIndex === 0 && activePageIndex === 0)) return;
+    setAutoMode(false);
+    const previousLine = activePageIndex === 0 ? viewLineIndex - 1 : viewLineIndex;
+    requestedPageRef.current = activePageIndex === 0 ? -1 : isReviewing ? null : activePageIndex - 1;
+    setDialoguePageIndex(Math.max(0, activePageIndex - 1));
+    setReviewCursor({ sceneId: currentScene.id, lineIndex: previousLine, chatId: activeChatId, sourceMessageId: currentScene.sourceMessageId });
+  }, [currentScene, viewLineIndex, activePageIndex, isReviewing, setAutoMode, activeChatId]);
 
   const handleAdvance = useCallback(() => {
-    if (!currentScene) return;
+    if (!currentScene || hasOpenDialogueOverlay()) return;
+    if (isReviewing) {
+      if (hasNextPage) setDialoguePageIndex(activePageIndex + 1);
+      else if (viewLineIndex + 1 < currentLineIndex) {
+        requestedPageRef.current = 0;
+        setDialoguePageIndex(0);
+        setReviewCursor({ sceneId: currentScene.id, lineIndex: viewLineIndex + 1, chatId: activeChatId, sourceMessageId: currentScene.sourceMessageId });
+      } else handleReturnToCurrent();
+      return;
+    }
     const advance = resolveDialogueAdvance({
       pageComplete: isComplete,
       hasNextPage,
@@ -213,20 +296,23 @@ export function DialogueBox() {
       return;
     }
     if (advance === 'next-line') {
+      requestedPageRef.current = 0;
+      setDialoguePageIndex(0);
       setCurrentLineIndex(currentLineIndex + 1);
     }
-  }, [activePageIndex, currentScene, currentLineIndex, hasNextPage, isComplete, minimumHoldReady, requiresIdentityConfirmation, skip, setCurrentLineIndex]);
+  }, [activePageIndex, currentScene, currentLineIndex, hasNextPage, isComplete, minimumHoldReady, requiresIdentityConfirmation, skip, setCurrentLineIndex, isReviewing, viewLineIndex, handleReturnToCurrent, activeChatId]);
 
   /* ── 自动模式推进 ── */
   useEffect(() => {
     const canAutoAdvance = hasNextPage || !isLastLine;
-    if (autoMode && isComplete && minimumHoldReady && currentLine && canAutoAdvance && !requiresIdentityConfirmation) {
+    if (autoMode && !isReviewing && !overlayOpen && isComplete && minimumHoldReady && currentLine && canAutoAdvance && !requiresIdentityConfirmation) {
       autoTimerRef.current = setTimeout(() => handleAdvance(), autoIntervalMs);
     }
     return () => { if (autoTimerRef.current) clearTimeout(autoTimerRef.current); };
-  }, [autoMode, isComplete, minimumHoldReady, currentLine, hasNextPage, isLastLine, handleAdvance, autoIntervalMs, requiresIdentityConfirmation]);
+  }, [autoMode, isReviewing, overlayOpen, isComplete, minimumHoldReady, currentLine, hasNextPage, isLastLine, handleAdvance, autoIntervalMs, requiresIdentityConfirmation]);
 
   const handleStartOrAdvance = useCallback(() => {
+    if (hasOpenDialogueOverlay()) return;
     if (!advanceHintDone) {
       window.localStorage.setItem('farewell.advance-hint.done', 'true');
       setAdvanceHintDone(true);
@@ -247,14 +333,19 @@ export function DialogueBox() {
 
   /* ── 快进：跳到最后一行，途中台词的知识事件照常提交 ── */
   const handleFastForward = useCallback(() => {
-    if (!currentScene) return;
+    if (!currentScene || hasOpenDialogueOverlay()) return;
+    if (isReviewing) { handleReturnToCurrent(); return; }
     if (!settings?.playerIdentityConfirmed) {
       const identityLineIndex = currentScene.lines.findIndex((line, index) => (
         index >= currentLineIndex && line.playerIdentityPrompt
       ));
       if (identityLineIndex >= 0) {
         if (identityLineIndex === currentLineIndex && isComplete) setIdentityPromptOpen(true);
-        else setCurrentLineIndex(identityLineIndex);
+        else {
+          requestedPageRef.current = 0;
+          setDialoguePageIndex(0);
+          setCurrentLineIndex(identityLineIndex);
+        }
         return;
       }
     }
@@ -265,50 +356,44 @@ export function DialogueBox() {
     if (currentLineIndex < currentScene.lines.length - 1) {
       currentScene.lines.slice(currentLineIndex, -1).forEach((line, offset) => {
         if (!currentScene.knowledgeAlreadyCommitted && line.knowledgeEvents?.length) {
-          commitKnowledgeEvents(line.knowledgeEvents, `${currentScene.id}:${currentLineIndex + offset}`, committedKnowledgeRef.current);
+          commitKnowledgeEvents(line.knowledgeEvents, `${scenePlaybackKey}:${currentLineIndex + offset}`, committedKnowledgeRef.current);
         }
       });
+      requestedPageRef.current = 0;
+      setDialoguePageIndex(0);
       setCurrentLineIndex(currentScene.lines.length - 1);
     } else if (!isComplete) {
       skip();
     } else if (hasNextPage) {
       setDialoguePageIndex(activePageIndex + 1);
     }
-  }, [activePageIndex, currentScene, currentLineIndex, hasNextPage, isComplete, minimumHoldReady, settings?.playerIdentityConfirmed, skip, setCurrentLineIndex]);
+  }, [activePageIndex, currentScene, currentLineIndex, hasNextPage, isComplete, minimumHoldReady, settings?.playerIdentityConfirmed, skip, setCurrentLineIndex, isReviewing, handleReturnToCurrent, scenePlaybackKey]);
 
   /* ── 重头回看：回到第一句，恢复首帧状态 ── */
   const handleRestart = useCallback(() => {
     if (!currentScene || currentScene.lines.length === 0) return;
+    requestedPageRef.current = 0;
+    setAutoMode(false);
     setDialoguePageIndex(0);
-    setCurrentLineIndex(0);
-    setSceneComplete(false);
-    const firstLine = currentScene.lines[0];
-    setCurrentState({
-      background: firstLine.background || null,
-      bgm: firstLine.bgm || null,
-      character: firstLine.character ?? null,
-      mood: firstLine.emotion || 'calm',
-      effect: firstLine.effect || null,
-      environment: resolveSceneEnvironment(firstLine.background),
-      item: firstLine.item || null,
-    });
-  }, [currentScene, setCurrentLineIndex, setSceneComplete, setCurrentState]);
+    setReviewCursor({ sceneId: currentScene.id, lineIndex: 0, chatId: activeChatId, sourceMessageId: currentScene.sourceMessageId });
+  }, [currentScene, setAutoMode, activeChatId]);
 
   const handleToggleAuto = useCallback(() => {
+    if (isReviewing) handleReturnToCurrent();
     setAutoMode(!autoMode);
-  }, [autoMode, setAutoMode]);
+  }, [autoMode, setAutoMode, isReviewing, handleReturnToCurrent]);
 
   /* ── 同步当前行状态 ── */
   useEffect(() => {
-    if (!currentLine) return;
+    if (!liveLine) return;
     setCurrentState({
-      background: currentLine.background || null,
-      bgm: currentLine.bgm || null,
-      character: currentLine.character ?? null,
-      mood: currentLine.emotion || 'calm',
-      effect: currentLine.effect || null,
-      environment: resolveSceneEnvironment(currentLine.background),
-      item: currentLine.item || null,
+      background: liveLine.background || null,
+      bgm: liveLine.bgm || null,
+      character: liveLine.character ?? null,
+      mood: liveLine.emotion || 'calm',
+      effect: liveLine.effect || null,
+      environment: resolveSceneEnvironment(liveLine.background),
+      item: liveLine.item || null,
     });
     setIsTyping(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -321,31 +406,27 @@ export function DialogueBox() {
     function isAdvanceBlocked() {
       const el = document.activeElement;
       if (el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return true;
-      const { ui, game } = useGameStore.getState();
-      if (ui.showSettings || ui.showLorebook || ui.showPreset || ui.showHistory || ui.showMap
-        || ui.showClues || ui.showCharacters || ui.showConclusion || ui.showEndingEditor || ui.showApiGuide
-        || ui.showTitle || ui.showPromptInspector || ui.showOrchestrationLog) return true;
-      if (game.actionPanel.visible || game.endingPanel.visible) return true;
-      // SaveModal 状态在组件内部，只能从 DOM 判断
-      return !!document.querySelector('.save-modal-shell, .player-identity-prompt');
+      return hasOpenDialogueOverlay();
     }
     function onKey(e: KeyboardEvent) {
-      if (e.code === 'Space' || e.code === 'Enter') {
+      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
         if (e.target instanceof Element && e.target.closest(
           'button, a[href], input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="button"]',
         )) return;
         if (isAdvanceBlocked()) return;
         e.preventDefault();
-        handleStartOrAdvance();
+        if (e.code === 'ArrowLeft') handlePrevious();
+        else handleStartOrAdvance();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleStartOrAdvance]);
+  }, [handleStartOrAdvance, handlePrevious]);
 
   /* ── 舞台点击推进（GameCanvas 派发） ── */
   useEffect(() => {
     const onStageAdvance = () => {
+      if (hasOpenDialogueOverlay()) return;
       playSfx('dialogue-advance');
       handleStartOrAdvance();
     };
@@ -370,7 +451,7 @@ export function DialogueBox() {
 
   const speakerTag = showSpeaker ? (
     <>
-      <PixelTag text={displaySpeaker} />
+      <PixelTag text={isReviewing ? `${displaySpeaker} · 回看` : displaySpeaker} />
       {currentLine.emotion && currentLine.emotion !== 'calm' && (
         <span
           className="ml-2"
@@ -380,7 +461,7 @@ export function DialogueBox() {
         </span>
       )}
     </>
-  ) : undefined;
+  ) : isReviewing ? <PixelTag text="回看 · 已读对话" /> : undefined;
 
   return (
     <>
@@ -390,6 +471,23 @@ export function DialogueBox() {
       onClick={handleDialogueClick}
       controls={
         <>
+          <PixelIconBtn
+            disabled={viewLineIndex === 0 && activePageIndex === 0}
+            onClick={(e) => { e.stopPropagation(); handlePrevious(); }}
+            icon={<GameIcon name="back" size={21} />}
+            label={activePageIndex > 0 ? '上一页' : '上一句'}
+          />
+          <PixelIconBtn
+            disabled={!isReviewing && sceneComplete && isLastLine && !hasNextPage && isComplete}
+            onClick={(e) => { e.stopPropagation(); handleStartOrAdvance(); }}
+            icon={<GameIcon name="back" size={21} style={{ transform: 'rotate(180deg)' }} />}
+            label={!isComplete ? '显示全文' : hasNextPage ? '下一页' : '下一句'}
+          />
+          <PixelIconBtn
+            onClick={(e) => { e.stopPropagation(); toggleModal('history'); }}
+            icon={<GameIcon name="history" size={21} />}
+            label="对话记录"
+          />
           <PixelIconBtn
             active={autoMode}
             onClick={(e) => { e.stopPropagation(); handleToggleAuto(); }}
@@ -401,7 +499,13 @@ export function DialogueBox() {
             icon={<GameIcon name="fastForward" size={21} />}
             label="快进"
           />
-          {sceneComplete && (
+          {isReviewing ? (
+            <PixelIconBtn
+              onClick={(e) => { e.stopPropagation(); handleReturnToCurrent(); }}
+              icon={<GameIcon name="play" size={21} />}
+              label="返回当前"
+            />
+          ) : sceneComplete && (
             <PixelIconBtn
               onClick={(e) => { e.stopPropagation(); handleRestart(); }}
               icon={<GameIcon name="restart" size={21} />}

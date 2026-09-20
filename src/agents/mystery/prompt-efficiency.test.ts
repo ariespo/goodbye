@@ -5,6 +5,12 @@ import { buildMysteryBrief } from './brief';
 import { MYSTERY_TRUTH_GRAPH } from './truth-graph';
 
 describe('agent prompt efficiency', () => {
+  it('requires reusable summaries and preserves that priority over old custom format instructions', () => {
+    const prompt = buildWriterSystemPrompt('<sum>本回合一句话总结</sum>');
+    expect(prompt).toContain('2～4句');
+    expect(prompt).toContain('未完成');
+    expect(prompt.lastIndexOf('2～4句')).toBeGreaterThan(prompt.indexOf('[项目输出格式补充]'));
+  });
   it('keeps the playable grammar without legacy Writer state instructions', () => {
     const system = buildWriterSystemPrompt(DEFAULT_FORMAT_PROMPT);
     expect(system).toContain('对话|旁白|calm|');
