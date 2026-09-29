@@ -53,6 +53,40 @@ function assertNoProxyErrorEnvelope(content: string): void {
     classifyHttpStatus(status), status);
 }
 
+/** Gateways can send provider failures in a JSON body or SSE frame after HTTP 200. */
+function assertNoProviderError(data: unknown): void {
+  if (!data || typeof data !== 'object') return;
+  const payload = data as { error?: unknown; choices?: Array<{ finish_reason?: string }> };
+  const error = payload.error;
+  if (error !== undefined && error !== null) {
+    const detail = typeof error === 'object' ? error as {
+      code?: unknown; type?: unknown; message?: unknown; metadata?: { raw?: unknown };
+    } : {};
+    const numericCode = typeof detail.code === 'number' || typeof detail.code === 'string' ? Number(detail.code) : NaN;
+    const status = Number.isInteger(numericCode) && numericCode >= 400 && numericCode <= 599 ? numericCode : null;
+    const code = String(detail.code ?? detail.type ?? '');
+    const kind = status !== null ? classifyHttpStatus(status)
+      : /^(?:rate_limit_exceeded|rate_limit_error)$/.test(code) ? 'rate_limit'
+      : /^(?:server_error|internal_error|api_error|overloaded_error)$/.test(code) ? 'http5xx' : 'http4xx';
+    const message = typeof detail.message === 'string' && detail.message.trim() ? detail.message
+      : typeof error === 'string' && error.trim() ? error : '模型供应商返回错误，未提供详细原因';
+    // OpenRouter may place the actionable upstream error here while message
+    // contains only "Provider returned error". Preserve it for capability fallback.
+    const raw = detail.metadata?.raw;
+    const upstream = typeof raw === 'string' ? raw : raw && typeof raw === 'object' ? JSON.stringify(raw) : '';
+    const suffix = upstream ? `\n供应商详情：${upstream.slice(0, 4000)}` : '';
+    throw new ApiCallError(`API error${status !== null ? ` ${status}` : code ? ` (${code})` : ''}: ${message}${suffix}`, kind, status);
+  }
+  if (Array.isArray(payload.choices) && payload.choices.some(choice => choice?.finish_reason === 'error')) {
+    throw new ApiCallError('模型供应商报告生成失败（finish_reason=error），未提供详细原因', 'http5xx');
+  }
+}
+
+/** Reading an aborted Response body may throw a generic AbortError, losing the timer's reason. */
+function responseError(cause: unknown, signal?: AbortSignal | null): ApiCallError {
+  return toApiCallError(signal?.aborted ? signal.reason : cause);
+}
+
 export function toApiCallError(cause: unknown): ApiCallError {
   if (cause instanceof ApiCallError) return cause;
   if (cause instanceof ContextBudgetError) return new ApiCallError(cause.message, 'context_budget');
@@ -314,7 +348,7 @@ async function fetchWithAuthFallback(
       // 产生误导性的 401（如 DeepSeek 对未知 header 返回 Authentication Fails），掩盖真实错误
       if (response.status !== 401 && response.status !== 403) break;
     } catch (e) {
-      const classified = toApiCallError(e);
+      const classified = responseError(e, init.signal);
       finish(attemptStatus, classified.kind === 'abort' ? 'cancelled' : 'failed');
       // 中止/超时不应再换 header 重试
       if (classified.kind === 'abort' || classified.kind === 'timeout') throw classified;
@@ -399,6 +433,7 @@ export async function streamChatCompletion(
       // Gateways may ignore stream:true when serializing their error response.
       if (/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')) {
         const data = await response.json();
+        assertNoProviderError(data);
         usage = parseApiUsage(data.usage);
         const content = data.choices?.[0]?.message?.content;
         if (typeof content === 'string') assertNoProxyErrorEnvelope(content);
@@ -450,6 +485,7 @@ export async function streamChatCompletion(
         let data;
         try { data = JSON.parse(trimmed.slice(5).trimStart()); } catch { return false; }
         if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+        assertNoProviderError(data);
         // Usage frames are cumulative snapshots, not deltas.
         const frameUsage = parseApiUsage(data.usage);
         if (frameUsage) usage = frameUsage;
@@ -458,8 +494,9 @@ export async function streamChatCompletion(
         return false;
       };
 
+      let receivedDone = false;
       try {
-        while (true) {
+        readStream: while (true) {
           timeout.refresh(idleTimeoutMs);
           const { done, value } = await reader.read();
           if (done) break;
@@ -470,22 +507,28 @@ export async function streamChatCompletion(
 
           for (const line of lines) {
             if (consumeLine(line)) {
-              await complete();
-              return;
+              receivedDone = true;
+              break readStream;
             }
           }
         }
-        buffer += decoder.decode();
-        if (buffer.trim()) consumeLine(buffer);
+        if (!receivedDone) {
+          buffer += decoder.decode();
+          if (buffer.trim()) consumeLine(buffer);
+        }
       } finally {
+        // A provider may leave the HTTP body open after [DONE] or an error.
+        // Close it before retrying or starting the callback's review requests.
+        await reader.cancel().catch(() => {});
         reader.releaseLock();
       }
 
       await complete();
     } catch (cause) {
+      const error = responseError(cause, timeout.signal);
       // An interrupted stream snapshot may exclude charged tokens.
-      finish?.(status, toApiCallError(cause).kind === 'abort' ? 'cancelled' : 'failed', null);
-      throw cause;
+      finish?.(status, error.kind === 'abort' ? 'cancelled' : 'failed', null);
+      throw error;
     } finally {
       timeout.dispose();
     }
@@ -584,6 +627,7 @@ export async function callSecondaryApi(
       finish = result.finish;
       status = response.status;
       const data = await response.json();
+      assertNoProviderError(data);
       usage = parseApiUsage(data.usage);
       const message = data.choices?.[0]?.message;
       const content = typeof message?.content === 'string' ? message.content : '';
@@ -591,8 +635,9 @@ export async function callSecondaryApi(
       if (content.trim()) { finish(status, 'success', usage); return content; }
       throw new ApiCallError('模型未返回最终正文（仅返回了推理内容）', 'http4xx');
     } catch (cause) {
-      finish?.(status, toApiCallError(cause).kind === 'abort' ? 'cancelled' : 'failed', usage);
-      throw cause;
+      const error = responseError(cause, timeout.signal);
+      finish?.(status, error.kind === 'abort' ? 'cancelled' : 'failed', usage);
+      throw error;
     } finally {
       timeout.dispose();
     }

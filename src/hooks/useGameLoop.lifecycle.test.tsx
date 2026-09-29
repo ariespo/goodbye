@@ -14,7 +14,7 @@ import { candidateFingerprint } from '../memory/character-continuity';
 import { applyNarrativePatch, buildNarrativePatchTask, InvalidNarrativePatchError } from '../agents/mystery/narrative-patch';
 import { generateSceneChecklist } from '../agents/mystery/scene-list';
 import { isBoundedRetrievalEligible } from '../agents/mystery/bounded-retrieval';
-import { streamChatCompletion } from '../sillytavern/api-router';
+import { ApiCallError, streamChatCompletion } from '../sillytavern/api-router';
 import { runStateAgent } from '../agents/state/state-agent';
 import { saveChat } from '../sillytavern/database';
 import { createDefaultVariables, variablesToEndingContext } from '../sillytavern/vars-merger';
@@ -91,6 +91,22 @@ beforeEach(async () => {
 afterEach(() => { invalidatePreplans(); useGameStore.getState().api.abortController?.abort(); vi.unstubAllGlobals(); useGameStore.setState(baseline, true); });
 
 describe('foreground State cancellation', () => {
+  it.each([
+    new DOMException('Connection was aborted by the transport', 'AbortError'),
+    new ApiCallError('Connection interrupted', 'abort'),
+  ])('shows a recoverable error for an unexpected transport abort without player cancellation: %s', async error => {
+    vi.mocked(streamChatCompletion).mockRejectedValueOnce(error);
+    const { result, unmount } = renderHook(() => useGameLoop());
+    await act(async () => { await result.current.sendMessage('观察房间'); });
+    const state = useGameStore.getState();
+    expect(state.api.abortController?.signal.aborted).toBe(false);
+    expect(state.api.turnRecovery).toMatchObject({ phase: 'failed_stream', userInput: '观察房间' });
+    expect(state.api.turnRecovery.errorMessage).toBeTruthy();
+    expect(state.game.isWaitingForAI).toBe(false);
+    expect(state.game.history).toHaveLength(0);
+    expect(getTurnMetrics().at(-1)?.outcome).toBe('failed');
+    unmount();
+  });
   it.each(['standard', 'strict'] as const)('%s applies its optional-call policy while preserving the same fixed settlement and persistence', async mode => {
     useGameStore.setState(state => ({ game: { ...state.game, gameStatus: { ...state.game.gameStatus, stamina: 60 } },
       tavern: { ...state.tavern, variables: { ...state.tavern.variables, stamina: 60 }, settings: { ...state.tavern.settings!, agentNarrativeMode: mode },

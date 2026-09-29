@@ -1346,15 +1346,19 @@ export function useGameLoop() {
         );
       }
     } catch (error) {
+      // Only the turn's own lifecycle can cancel silently. An AbortError from
+      // a provider/transport is a recoverable failure while this turn is live.
       const cancelled = abortController.signal.aborted || !ownsTurn()
-        || (error instanceof ApiCallError && error.kind === 'abort')
-        || (error instanceof Error && error.name === 'AbortError');
+        || (!turnCommitted && useGameStore.getState().tavern.variables !== tavern.variables);
       metrics.finish(cancelled ? 'cancelled' : 'failed');
       if (ownsTurn()) {
         actions.setStreaming(false);
         actions.setIsWaitingForAI(false);
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : '未知错误';
+          const unexpectedAbort = (error instanceof ApiCallError && error.kind === 'abort')
+            || (error instanceof Error && error.name === 'AbortError');
+          const message = unexpectedAbort ? '连接意外中断，本回合未完成，请重试。'
+            : error instanceof Error ? error.message : '未知错误';
           actions.setApiError(message);
           actions.setTurnRecovery({ phase: 'failed_stream', userInput, errorMessage: message });
         }
