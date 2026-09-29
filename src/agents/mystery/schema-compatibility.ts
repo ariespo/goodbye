@@ -12,9 +12,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export type AdaptableSchemaKeyword = 'additionalProperties' | 'const';
 
 /** Never traverse enum/default values or property-name maps as if they were schema nodes. */
-export function adaptSchemaForUnsupportedKeywords(
+function inspectSchema(
   schema: Record<string, unknown>, keywords: ReadonlySet<AdaptableSchemaKeyword>,
-): Record<string, unknown> | undefined {
+) {
   let removed = false;
   let supported = true;
   const visit = (node: unknown): unknown => {
@@ -52,7 +52,19 @@ export function adaptSchemaForUnsupportedKeywords(
     return result;
   };
   const adapted = visit(schema);
-  return removed && supported ? adapted as Record<string, unknown> : undefined;
+  return { adapted: adapted as Record<string, unknown>, removed, supported };
+}
+
+export function adaptSchemaForUnsupportedKeywords(
+  schema: Record<string, unknown>, keywords: ReadonlySet<AdaptableSchemaKeyword>,
+): Record<string, unknown> | undefined {
+  const { adapted, removed, supported } = inspectSchema(schema, keywords);
+  return removed && supported ? adapted : undefined;
+}
+
+/** A fallback may only remove server enforcement when every constraint is understood locally. */
+export function isLocallyValidatableSchema(schema: Record<string, unknown>): boolean {
+  return inspectSchema(schema, new Set()).supported;
 }
 
 export function schemaWithoutAdditionalProperties(schema: Record<string, unknown>): Record<string, unknown> | undefined {

@@ -1,5 +1,5 @@
-import type { ChatCompletionMessage, ResponseFormat, SecondaryApiOptions } from '../../sillytavern/api-router';
-import { adaptSchemaForUnsupportedKeywords, validateAdaptedSchemaValue, type AdaptableSchemaKeyword } from './schema-compatibility';
+import { isSchemaCompilationLimitMessage, type ChatCompletionMessage, type ResponseFormat, type SecondaryApiOptions } from '../../sillytavern/api-router';
+import { adaptSchemaForUnsupportedKeywords, isLocallyValidatableSchema, validateAdaptedSchemaValue, type AdaptableSchemaKeyword } from './schema-compatibility';
 
 export type AgentCompletion = (
   messages: ChatCompletionMessage[],
@@ -12,6 +12,8 @@ export type StructuredOutputMode = 'json_schema' | 'json_object' | 'text';
 const responseFormatSupportCache = new Map<string, StructuredOutputMode>();
 /** JSON Schema 方言兼容性取决于完整 schema，不能由同端点的另一个 schema 覆盖。 */
 const jsonSchemaSupportCache = new Map<string, 'native' | 'adapted' | false>();
+/** A rejected grammar must retain its original constraints in local validation. */
+const schemaCompilationLimits = new Set<string>();
 const jsonObjectSupportCache = new Map<string, boolean>();
 /** Only an explicit observed keyword rejection may guide another schema on this endpoint/model. */
 const unsupportedSchemaKeywordHints = new Map<string, Set<AdaptableSchemaKeyword>>();
@@ -19,6 +21,7 @@ const unsupportedSchemaKeywordHints = new Map<string, Set<AdaptableSchemaKeyword
 export function resetResponseFormatSupportCache(): void {
   responseFormatSupportCache.clear();
   jsonSchemaSupportCache.clear();
+  schemaCompilationLimits.clear();
   jsonObjectSupportCache.clear();
   unsupportedSchemaKeywordHints.clear();
 }
@@ -38,8 +41,11 @@ function isAbortError(error: unknown): boolean {
 
 function isResponseFormatUnsupportedError(error: unknown): boolean {
   if (!(error instanceof Error) || isAbortError(error)) return false;
-  const status = (error as Error & { status?: number }).status;
-  if (status === 429 || (typeof status === 'number' && status >= 500)) return false;
+  const { status, kind } = error as Error & { status?: number; kind?: string };
+  if (kind && ['abort', 'timeout', 'network', 'rate_limit', 'http5xx'].includes(kind)) return false;
+  if (typeof status === 'number' && ![400, 404, 422].includes(status)) return false;
+  if (isSchemaCompilationLimitMessage(error.message)
+    && !/(?:HTTP|API error)\s*[:(]?\s*(?:401|403|429|5\d\d)\b/i.test(error.message)) return true;
   return isResponseFormatUnsupportedText(error.message);
 }
 
@@ -118,7 +124,7 @@ function prefersJsonObject(supportKey: string): boolean {
   }
 }
 
-/** 优先使用 JSON Schema；不支持时依次降级为 JSON Object 与纯文本。 */
+/** 优先使用 JSON Schema；不支持或编译超限时依次降级为 JSON Object 与纯文本。 */
 export async function completeStructured(
   complete: AgentCompletion,
   supportKey: string,
@@ -137,6 +143,8 @@ export async function completeStructured(
   // Keep capability probing for proxies and other models.
   const schemaKey = responseFormat.type === 'json_schema'
     ? schemaSupportKey(supportKey, responseFormat) : undefined;
+  const validateFallback = (text: string): string => responseFormat.type === 'json_schema'
+    && schemaKey && schemaCompilationLimits.has(schemaKey) ? validateAdaptedResponse(text, responseFormat) : text;
   if (responseFormat.type === 'json_schema' && prefersJsonObject(supportKey)) {
     responseFormatSupportCache.set(supportKey, 'json_object');
   } else if (responseFormat.type === 'json_schema' && schemaKey && jsonSchemaSupportCache.get(schemaKey) !== false) {
@@ -160,7 +168,9 @@ export async function completeStructured(
         incompatibility = (error as Error).message;
       }
       rememberUnsupportedSchemaKeywords(supportKey, incompatibility);
-      needsAdaptation = unsupportedSchemaKeywordHints.has(supportKey);
+      const grammarLimit = isSchemaCompilationLimitMessage(incompatibility);
+      if (grammarLimit) schemaCompilationLimits.add(schemaKey);
+      needsAdaptation = !grammarLimit && unsupportedSchemaKeywordHints.has(supportKey);
       jsonSchemaSupportCache.set(schemaKey, false);
     }
     if (needsAdaptation) {
@@ -185,6 +195,7 @@ export async function completeStructured(
             }
           } catch (error) {
             if (!isResponseFormatUnsupportedError(error)) throw error;
+            if (isSchemaCompilationLimitMessage((error as Error).message)) schemaCompilationLimits.add(schemaKey);
             learnedAnotherKeyword = rememberUnsupportedSchemaKeywords(supportKey, (error as Error).message);
           }
           if (result !== undefined) {
@@ -210,7 +221,13 @@ export async function completeStructured(
     }
   }
 
+  if (responseFormat.type === 'json_schema' && schemaKey && schemaCompilationLimits.has(schemaKey)
+    && !isLocallyValidatableSchema(responseFormat.json_schema.schema)) {
+    throw new Error('结构化输出编译超限，且原始 schema 含本地校验暂不支持的约束，无法安全降级。');
+  }
+
   if (jsonObjectSupportCache.get(supportKey) !== false) {
+    let fallbackResult: string | undefined;
     try {
       const result = await invoke({ ...options, responseFormat: { type: 'json_object' } });
       if (!isResponseFormatUnsupportedText(result)) {
@@ -218,19 +235,23 @@ export async function completeStructured(
         if (responseFormatSupportCache.get(supportKey) !== 'json_schema') {
           responseFormatSupportCache.set(supportKey, 'json_object');
         }
-        return result;
+        fallbackResult = result;
+      } else {
+        jsonObjectSupportCache.set(supportKey, false);
       }
-      jsonObjectSupportCache.set(supportKey, false);
     } catch (error) {
       if (!isResponseFormatUnsupportedError(error)) throw error;
       jsonObjectSupportCache.set(supportKey, false);
     }
+    // Validation failures are content errors for the bounded correction path,
+    // never a reason to downgrade formats again.
+    if (fallbackResult !== undefined) return validateFallback(fallbackResult);
   }
 
   if (responseFormatSupportCache.get(supportKey) !== 'json_schema') {
     responseFormatSupportCache.set(supportKey, 'text');
   }
-  return invoke(options);
+  return validateFallback(await invoke(options));
 }
 
 export type StructuredCorrection<T> = {

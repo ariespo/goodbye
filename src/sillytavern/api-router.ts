@@ -37,6 +37,11 @@ export function classifyHttpStatus(status: number): ApiErrorKind {
 
 const PROXY_ERROR_PREFIX = '### **Proxy error (HTTP ';
 
+/** Explicit provider compilation failures; not context size or request-rate limits. */
+export function isSchemaCompilationLimitMessage(message: string): boolean {
+  return /\bcompiled grammar is too large\b|\bschema is too complex for compilation\b/i.test(message);
+}
+
 /** Some gateways report an upstream HTTP error inside a successful completion.
  * Require the complete gateway wrapper, not a mention of an HTTP status in prose.
  */
@@ -49,7 +54,9 @@ function assertNoProxyErrorEnvelope(content: string): void {
   const unsupportedFormat = [400, 404, 422].includes(status)
     && /response[_ ]?(?:schema|format)|json_schema|json_object/i.test(content)
     && /not supported|unsupported|unknown (?:name|field)|unavailable/i.test(content);
-  throw new ApiCallError(`网关返回代理错误（HTTP ${status}）${unsupportedFormat ? '：response_schema unsupported' : ''}`,
+  const grammarLimit = [400, 404, 422].includes(status) && isSchemaCompilationLimitMessage(content);
+  const capabilityDetail = grammarLimit ? '：compiled grammar is too large' : unsupportedFormat ? '：response_schema unsupported' : '';
+  throw new ApiCallError(`网关返回代理错误（HTTP ${status}）${capabilityDetail}`,
     classifyHttpStatus(status), status);
 }
 
