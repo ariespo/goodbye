@@ -19,6 +19,8 @@ import { loadMetaProgress, mergeMetaProgress } from './metaProgress';
 import { acceptedActionUiFromMessage, readPublicActionOutcome } from './actionPresentation';
 import { buildNarrativeSummary } from '../memory/narrative-summary';
 import { restorePersistedScene } from './sceneFromChat';
+import { refreshPersistedInvestigationMenu } from '../engine/investigation-opportunities';
+import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
 
 export const OPENING_ASSISTANT_CONTENT =
   `<maintext>\n${OPENING_MAINTEXT}\n</maintext>\n${OPENING_PANELS}\n<sum>9月9日08:00，暴雨第五天，玩家在公寓发现家中无人应答。餐桌上留有早餐和未写日期的纸条，纸条说可能晚一点回来，准备者与时间尚未核实。文穗账号06:50的消息称今天不去学校，但是否本人发送尚未核实；玩家问询未获回复、电话无人接听，目前只是暂时联系不上她。灯织来归还饭盒，说今天尚未联系文穗，当面发消息询问并答应收到回复后告知，随后离开。</sum>\n<vars>{ "location": "home", "stamina": ${INITIAL_PLAYER_RESOURCES.stamina}, "sanity": ${INITIAL_PLAYER_RESOURCES.sanity} }</vars>`;
@@ -118,6 +120,8 @@ export function resolveSavedParsedContent(save: SaveSlot, messages: ChatMessage[
   delete withoutActionUi.optionBindings;
   return {
     ...withoutActionUi,
+    investigateItems: refreshPersistedInvestigationMenu(withoutActionUi.investigateItems, MYSTERY_TRUTH_GRAPH,
+      save.tavernState?.variables ?? lastAssistant?.variables ?? {}),
     ...acceptedActionUiFromMessage(lastAssistant, base.options),
   };
 }
@@ -304,7 +308,7 @@ export async function loadGameFromSave(save: SaveSlot): Promise<void> {
 
   // 从最后一条 assistant maintext 重建场景
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-  const parsedScene = (lastAssistant ? restorePersistedScene(lastAssistant, messages) : null) ?? parseOpeningStoryline();
+  const parsedScene = (lastAssistant ? restorePersistedScene(lastAssistant, messages, variables) : null) ?? parseOpeningStoryline();
   const acceptedActionUi = acceptedActionUiFromMessage(lastAssistant, parsedContent.options);
   const scene = {
     ...parsedScene,

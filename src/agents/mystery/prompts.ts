@@ -19,6 +19,7 @@ sceneCraft 还可选 readerEffect 指定希望读者感到的变化：uncertaint
 权力边界：
 1. MysteryBrief 是本回合唯一事实权限表，不得使用外部常识补完案件。
 2. 只能从 usableFacts 选择事实，且 level 不得超过 maxRevealLevel。
+2a. 可发现不等于玩家已见过。公开调查候选只是尝试方向，不是已经获得的证据；不得把候选名称写成既有事实。新材料的节拍须先落实所选 revealOptions.acquisition 的取得过程，再安排阅读与推导；没有来源依据时不得写成突然出现在手中。取得方式不授权更深内容、额外角色知情或未完成行动的结果。
 3. dialogue 揭示必须指定 speakerId；NPC 只能讲述 npcKnowledge 中允许的事实层级。
 3a. 玩家已掌握某事实不等于在场 NPC 有权讲述它。若 usableFacts 的 deliveryNpcIds 不含在场 NPC，必须使用 narration/object/environment 让玩家出示或核对已有证据；不得用 dialogue 让 NPC 宣布该事实或替玩家下结论。
 3b. speakerId 必须逐字使用 npcKnowledge[].npcId，不得写简称、显示名或自行改写 ID。
@@ -89,6 +90,7 @@ export const WRITER_SYSTEM_PROMPT = `${LOOP_PACING_CONTRACT}
 1. 只能使用 WriterPacket.authorizedFacts 和 playerKnownFacts 中的事实。
 1a. playerKnownFacts 表示玩家已知，不代表每个 NPC 都知道。NPC 复述其中事实时，只能按 knownFactSpeakers 对该 factId、level 明确列出的 speakerIds 发言；不得升级披露层级或补充原文没有的内容。authorizedFacts 的本次交付仍遵守各自的角色权限。
 2. authorizedFacts.text 是允许表达的最深含义；不得用旁白、措辞、反应或选项暗示更深答案。
+2b. authorizedFacts.acquisition 是本次获准的材料取得方式：第一次呈现时先演出玩家如何询问、翻找、获准查阅或收到反馈，再读材料与推导。不得默认玩家早已持有，不得只在摘要或菜单中交代来源。已知材料可接续此前查阅，但不要把旧轮回的记忆写成当前持有的实物。publicOpportunities 只授权尝试，选项不得把未执行的调查结果写成已经发现；acquisition 也不能越过 resolvedAction 的完成度。
 2a. 呈现授权线索时保留 text 中的具体事实原文，文风变化放在玩家动作与情绪上；不要给线索添加尺寸、类别、来源、成因、行为者或意图。atmosphere 级异常只呈现异常本身，不能用“似乎”“像是”等措辞补出更深解释。
 3. 不得新增凶手、动机、证据、死因、时间线节点或 NPC 知情内容。
 3a. “不得新增证据”包括不得擅自补写任何精确时间、电话号码、短信删除、行程修改、脚印、擦痕、撞击痕、血迹形状/位置、检验结论或角色亲口供述；除非这些细节逐字存在于 authorizedFacts.text 或 playerKnownFacts.text。导演 beat 中出现的未授权具体化也不能当作事实使用。
@@ -264,6 +266,7 @@ export function buildNarrativeFactCriticUserPrompt(
 只检查正文是否严格服从 WriterPacket：
 0. actionIntentAudit 对照玩家 originalInput/boundIntent、原获准 planGoal/plannedLocations/plannedNpcIds/approvedSteps 和实际 executedSteps。requestedStepCount 标记必须保留的原行动前缀，extensionStepCount 标记导演接续阶段；程序自动插入的路程不计入这两个逻辑阶段数。必须实际回应原对象、落实原目的地与目标，之后允许服务同一目标且已结算的跨地点调查。检查转折是否有获准依据或明确待核实的理由；不能编造线索、跳过原行动、转向无关目标，不能把“值得核查”写成已证实发现。不要仅因问询后出现调查或移动就判违规。仍不得把“去旧街区问周大爷”直接写成留在学姐楼调查。逐段检查 sceneContracts；预算、事件、资源导致的中断以 resolvedAction 为准，只演出实际完成部分，不把中断改成另一个主动目标。此审计不是新的事实授权。
 - 是否出现 authorizedFacts/playerKnownFacts 未提供的证据细节、精确时间、号码、记录操作、动机、死因或时间线；
+- 新材料是否先在可播放正文中交代从何处、经何种查阅过程取得，再给内容与判断；authorizedFacts.acquisition 授权其取得方式，但不授权更深内容。只写“你已经拿着材料”或在选项/摘要里补来源不能替代正文中的取得过程。查阅动作只能引用 acquisition 对应的 action-outcome 来源，不能据此认定材料内的事实已揭示；不要求固定措辞或重复已演出的过程。
 - 是否让 stance=lies-about 的角色自白、说漏嘴、互相指认、默认承认，或让旁白把沉默/反应解释成答案；
 - 是否违反 characterPerformances、情绪禁演或玩家当前称呼权限。
 authorizedFacts 中的 text 就是本回合可直接呈现的授权内容；delivery=narration/object/environment 规定呈现渠道，不代表还要另找证据才能表达。不得把已授权 confirmation 本身判为越权，只检查正文是否超出 text 或用了错误渠道。

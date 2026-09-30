@@ -706,6 +706,7 @@ export function buildWriterPacket(
         id: revelation.factId,
         level: revelation.level,
         text: option.text,
+        ...(option.acquisition ? { acquisition: option.acquisition } : {}),
         delivery: revelation.delivery,
         ...(revelation.speakerId ? { speakerId: revelation.speakerId } : {}),
       };

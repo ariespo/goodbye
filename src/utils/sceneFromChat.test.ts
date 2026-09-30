@@ -22,6 +22,30 @@ function acceptedChat(): ChatSession {
 }
 
 describe('persisted scene knowledge presentation', () => {
+  it('refreshes old investigation labels without granting knowledge or rewriting the saved story', () => {
+    const chat = acceptedChat();
+    const message = chat.messages[1];
+    message.variables = { cycleCount: 3, location: 'old-man-building', mysteryKnowledge: {} };
+    message.content = '<maintext>对话|旁白|calm|你走到旧楼门口。<investigate>核对孤儿院查询便笺与档案借阅回条|无|现实|55分钟|7|0\n核对寻找文穗的委托讯息与联络账号|无|现实|55分钟|7|0</investigate></maintext>';
+    const original = structuredClone(message);
+    const scene = rebuildSceneFromChat(chat)!;
+    expect(scene.investigateItems).toHaveLength(1);
+    expect(scene.investigateItems![0].desc).toBe('询问周大爷与文穗是否有过联系');
+    expect(message).toEqual(original);
+  });
+
+  it('uses legacy chat variables when the accepted message has no state snapshot', () => {
+    const chat = acceptedChat();
+    chat.variables = { cycleCount: 3, location: 'old-man-building', mysteryKnowledge: {} };
+    chat.messages[1].variables = {};
+    chat.messages[1].content = '<maintext>对话|旁白|calm|你走到旧楼门口。<investigate>核对孤儿院查询便笺与档案借阅回条|无|现实|55分钟|7|0</investigate></maintext>';
+    expect(rebuildSceneFromChat(chat)?.investigateItems?.[0].desc).toBe('询问周大爷与文穗是否有过联系');
+    // An explicit earlier message snapshot must not inherit later learned evidence.
+    chat.variables.mysteryKnowledge = { 'a-orphanage-contact': 'clue' };
+    chat.messages[1].variables = { location: 'old-man-building', mysteryKnowledge: {} };
+    expect(rebuildSceneFromChat(chat)?.investigateItems?.[0].desc).toBe('询问周大爷与文穗是否有过联系');
+  });
+
   it('restores only committed introductions and hides the name until their evidence line is read', () => {
     const chat = acceptedChat();
     const scene = rebuildSceneFromChat(chat)!;

@@ -115,6 +115,8 @@ export interface ProjectedFact {
   kind: MysteryFactKind;
   level: RevealLevel;
   text: string;
+  /** Authored current-turn acquisition path; absent from remembered fact projections. */
+  acquisition?: string;
 }
 
 export interface UsableMysteryFact {
@@ -303,6 +305,7 @@ export interface WriterFact {
   id: string;
   level: RevealLevel;
   text: string;
+  acquisition?: string;
   delivery: DirectorRevelation['delivery'];
   speakerId?: string;
 }

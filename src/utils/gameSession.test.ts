@@ -70,6 +70,16 @@ function createSave(overrides: Partial<SaveSlot['gameState']> = {}): SaveSlot {
 }
 
 describe('new-game resource initialization', () => {
+  it('refreshes a saved parsed menu using save knowledge rather than stale message knowledge', () => {
+    const save = createSave({ parsedContent: { ...parsed, investigateItems: [{
+      desc: '核对孤儿院查询便笺与档案借阅回条', suspect: '无', style: '现实', time: '55分钟', stamina: 7, sanity: 0,
+    }] } });
+    save.tavernState.variables = { location: 'old-man-building', mysteryKnowledge: { 'a-orphanage-contact': 'hint' } };
+    const refreshed = resolveSavedParsedContent(save, [assistantMessage]);
+    expect(refreshed.investigateItems?.[0].desc).toBe('追问身世笔记中档案借阅回条的来历');
+    expect(save.gameState.parsedContent?.investigateItems?.[0].desc).toContain('孤儿院查询便笺');
+  });
+
   it('starts both runtime status and Agent variables at 70 sanity', () => {
     expect(createDefaultGameStatus().sanity).toBe(70);
     expect(createDefaultVariables().sanity).toBe(70);

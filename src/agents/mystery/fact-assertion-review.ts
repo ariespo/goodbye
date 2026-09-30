@@ -139,6 +139,14 @@ export function buildAssertionSources(
       level: fact.level,
       speakerIds: fact.delivery === 'dialogue' && fact.speakerId ? [fact.speakerId] : [],
     })),
+    // Reading a screen or receiving a file is not proof that its clue was revealed.
+    // Keep access choreography out of fact sources used to commit player knowledge.
+    ...(packet.authorizedFacts ?? []).flatMap(fact => fact.acquisition ? [{
+      id: `action-outcome:acquisition:${fact.id}:${fact.level}`,
+      kind: 'action-outcome' as const,
+      text: fact.acquisition,
+      speakerIds: [],
+    }] : []),
     ...(packet.playerKnownFacts ?? []).map(fact => ({
       id: `known-fact:${fact.id}:${fact.level}`,
       kind: 'fact' as const,

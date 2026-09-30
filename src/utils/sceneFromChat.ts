@@ -4,9 +4,11 @@ import type { ChatMessage, ChatSession, Scene } from '../sillytavern/types';
 import { normalizeKnowledgeEvents } from '../data/playerKnowledge';
 import { isRecord } from '../sillytavern/vars-merger';
 import { acceptedActionUiFromMessage } from './actionPresentation';
+import { refreshPersistedInvestigationMenu } from '../engine/investigation-opportunities';
+import { MYSTERY_TRUTH_GRAPH } from '../agents/mystery/truth-graph';
 
 /** Restore presentation gates from the accepted turn ledger, never raw recognition commands alone. */
-export function restorePersistedScene(message: ChatMessage, messages: readonly ChatMessage[]): Scene | null {
+export function restorePersistedScene(message: ChatMessage, messages: readonly ChatMessage[], variables = message.variables): Scene | null {
   const maintext = message.content.match(/<maintext>([\s\S]*?)<\/maintext>/)?.[1]?.trim();
   if (!maintext) return null;
   if (maintext === OPENING_STORYLINE || maintext === OPENING_MAINTEXT) return parseOpeningStoryline();
@@ -26,6 +28,7 @@ export function restorePersistedScene(message: ChatMessage, messages: readonly C
   const scene = maintextToScene(maintext, { authorizedKnowledgeEvents: committedEvents,
     // Post-turn variables must not grant an earlier line a new emotion permission.
     variables: beforeVariables ?? {} });
+  scene.investigateItems = refreshPersistedInvestigationMenu(scene.investigateItems, MYSTERY_TRUTH_GRAPH, variables);
   if (!isRecord(commit)) return scene;
   const evidenceIndexes = new Set((Array.isArray(commit.evidenceLineIds) ? commit.evidenceLineIds : [])
     .flatMap(id => {
@@ -58,7 +61,7 @@ export function rebuildSceneFromChat(chat: ChatSession | null | undefined): Scen
   if (!chat || chat.messages.length === 0) return null;
   const lastAssistant = [...chat.messages].reverse().find(m => m.role === 'assistant');
   if (!lastAssistant) return null;
-  const scene = restorePersistedScene(lastAssistant, chat.messages);
+  const scene = restorePersistedScene(lastAssistant, chat.messages, { ...chat.variables, ...lastAssistant.variables });
   if (!scene) return null;
   const { actionOutcome } = acceptedActionUiFromMessage(lastAssistant, lastAssistant.parsed?.options ?? []);
   const localObserve = lastAssistant.localAction === 'map-travel'

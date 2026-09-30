@@ -1,7 +1,7 @@
 import { FIXED_LOCATION_NPC_IDS, buildMysteryBrief } from '../agents/mystery/brief';
 import { createFactAliasTable } from '../agents/mystery/fact-aliases';
 import { revealLevelRank } from '../agents/mystery/reveal-level';
-import type { MysteryTruthGraph, RevealLevel, TruthContext } from '../agents/mystery/types';
+import { REVEAL_LEVELS, type MysteryTruthGraph, type RevealLevel, type TruthContext } from '../agents/mystery/types';
 import { getLocationById } from '../data/locations';
 import type { ActionScope, ResolvedActionOutcome } from './action-resolution';
 import { quoteActionSteps } from './action-resolution';
@@ -40,26 +40,30 @@ interface InvestigationAffordance {
   factId: string;
   locationId: string;
   publicGoal: string;
+  /** First encounter: no assumption that the player has seen the target record. */
+  discoveryGoal?: string;
+  /** A hint may introduce one material without introducing the whole evidence chain. */
+  hintGoal?: string;
   scope: ActionScope;
   topicKey: string;
   availableUntil?: string;
 }
 
 const INVESTIGATION_AFFORDANCES: readonly InvestigationAffordance[] = [
-  { factId: 'shared-supermarket-receipt', locationId: 'supermarket', publicGoal: '核对事前签收底单和背面的路线标记', scope: 'short', topicKey: 'supermarket:itinerary-receipt' },
-  { factId: 'shared-senpai-camera', locationId: 'senpai-building', publicGoal: '核对楼门口影像日期与寄存卡', scope: 'normal', topicKey: 'senpai-building:dated-records' },
-  { factId: 'shared-observation-deck-plan', locationId: 'observation-deck', publicGoal: '对照路线页终点与救援位置登记', scope: 'normal', topicKey: 'observation-deck:location-record' },
+  { factId: 'shared-supermarket-receipt', locationId: 'supermarket', discoveryGoal: '询问店员能否查到与文穗有关的留存记录', hintGoal: '继续查看签收底单背面的路线', publicGoal: '核对事前签收底单和背面的路线标记', scope: 'short', topicKey: 'supermarket:itinerary-receipt' },
+  { factId: 'shared-senpai-camera', locationId: 'senpai-building', discoveryGoal: '询问灯织是否有可供查证的文穗来访记录', hintGoal: '核对已见到的楼门口影像与寄存卡日期', publicGoal: '核对楼门口影像日期与寄存卡', scope: 'normal', topicKey: 'senpai-building:dated-records' },
+  { factId: 'shared-observation-deck-plan', locationId: 'observation-deck', discoveryGoal: '询问如何查阅观景台的救援登记', hintGoal: '继续核对路线页与救援登记的位置', publicGoal: '对照路线页终点与救援位置登记', scope: 'normal', topicKey: 'observation-deck:location-record' },
   { factId: 'shared-itinerary-crosscheck', locationId: 'home', publicGoal: '把六处行程材料按日期、身份和来源逐项核对', scope: 'deep', topicKey: 'home:itinerary-crosscheck' },
-  { factId: 'a-orphanage-contact', locationId: 'old-man-building', publicGoal: '核对孤儿院查询便笺与档案借阅回条', scope: 'normal', topicKey: 'old-man-building:contact-record' },
-  { factId: 'a-window-transfer-match', locationId: 'old-man-building', publicGoal: '对照伤情、窗槽取样与楼后转运原始记录', scope: 'deep', topicKey: 'old-man-building:forensic-match' },
-  { factId: 'b-commission-message', locationId: 'community-hospital', publicGoal: '核对寻找文穗的委托讯息与联络账号', scope: 'normal', topicKey: 'community-hospital:commission-record' },
-  { factId: 'b-contact-injury-match', locationId: 'water-tower', publicGoal: '逐项核对接触痕迹、撞击伤情和车辆记录', scope: 'deep', topicKey: 'water-tower:injury-timeline' },
-  { factId: 'c-night-gap-record', locationId: 'home', publicGoal: '对照前夜设备日志与个人记事中的缺口', scope: 'normal', topicKey: 'home:night-gap-record' },
-  { factId: 'c-domestic-injury-match', locationId: 'home', publicGoal: '核验封存录音、出入影像和伤情对应的时间', scope: 'deep', topicKey: 'home:external-case-records' },
-  { factId: 'none-railing-maintenance', locationId: 'observation-deck', publicGoal: '按现场编号查验栏杆与排水维修工单', scope: 'normal', topicKey: 'observation-deck:maintenance' },
-  { factId: 'none-unassisted-fall-record', locationId: 'observation-deck', publicGoal: '核验连续现场影像与断口、足迹、伤情', scope: 'deep', topicKey: 'observation-deck:independent-fall-record' },
+  { factId: 'a-orphanage-contact', locationId: 'old-man-building', discoveryGoal: '询问周大爷与文穗是否有过联系', hintGoal: '追问身世笔记中档案借阅回条的来历', publicGoal: '核对孤儿院查询便笺与档案借阅回条', scope: 'normal', topicKey: 'old-man-building:contact-record' },
+  { factId: 'a-window-transfer-match', locationId: 'old-man-building', discoveryGoal: '申请核验旧楼现场与已知案情', publicGoal: '对照伤情、窗槽取样与楼后转运原始记录', scope: 'deep', topicKey: 'old-man-building:forensic-match' },
+  { factId: 'b-commission-message', locationId: 'community-hospital', discoveryGoal: '询问医院里的人是否也在寻找文穗', hintGoal: '追问已见联络讯息中的面谈要求', publicGoal: '核对寻找文穗的委托讯息与联络账号', scope: 'normal', topicKey: 'community-hospital:commission-record' },
+  { factId: 'b-contact-injury-match', locationId: 'water-tower', discoveryGoal: '申请核验水塔现场与已知案情', publicGoal: '逐项核对接触痕迹、撞击伤情和车辆记录', scope: 'deep', topicKey: 'water-tower:injury-timeline' },
+  { factId: 'c-night-gap-record', locationId: 'home', discoveryGoal: '查找家中能核实前夜经过的记录', hintGoal: '复核个人记事与设备日志中对不上的时段', publicGoal: '对照前夜设备日志与个人记事中的缺口', scope: 'normal', topicKey: 'home:night-gap-record' },
+  { factId: 'c-domestic-injury-match', locationId: 'home', discoveryGoal: '申请核验家中记录与已知案情', publicGoal: '核验封存录音、出入影像和伤情对应的时间', scope: 'deep', topicKey: 'home:external-case-records' },
+  { factId: 'none-railing-maintenance', locationId: 'observation-deck', discoveryGoal: '检查观景台栏杆和步道的状况', hintGoal: '按已见的栏杆维修编号查找对应工单', publicGoal: '按现场编号查验栏杆与排水维修工单', scope: 'normal', topicKey: 'observation-deck:maintenance' },
+  { factId: 'none-unassisted-fall-record', locationId: 'observation-deck', discoveryGoal: '申请核验观景台现场与已知案情', publicGoal: '核验连续现场影像与断口、足迹、伤情', scope: 'deep', topicKey: 'observation-deck:independent-fall-record' },
   { factId: 'fake-misidentification-chain', locationId: 'community-hospital', publicGoal: '追查初报姓名从何处录入以及谁完成核验', scope: 'normal', topicKey: 'community-hospital:identity-chain' },
-  { factId: 'fake-verified-survival', locationId: 'observation-deck', publicGoal: '核验受托身份回执、交接记录及联络保密要求', scope: 'deep', topicKey: 'observation-deck:protected-verification' },
+  { factId: 'fake-verified-survival', locationId: 'observation-deck', discoveryGoal: '申请进一步核实文穗的身份与下落', publicGoal: '核验受托身份回执、交接记录及联络保密要求', scope: 'deep', topicKey: 'observation-deck:protected-verification' },
   {
     factId: 'shared-apron-missing',
     locationId: 'home',
@@ -203,6 +207,8 @@ const INVESTIGATION_AFFORDANCES: readonly InvestigationAffordance[] = [
   {
     factId: 'fake-body-mismatch',
     locationId: 'community-hospital',
+    discoveryGoal: '询问医院如何核验收到的身份通报',
+    hintGoal: '追查初报与病历不一致的栏目及缺失附件',
     publicGoal: '核对医院遗体记录与文穗既往病历',
     scope: 'normal',
     topicKey: 'community-hospital:record-comparison',
@@ -258,6 +264,40 @@ function opportunityId(cycleCount: number, alias: string, level: RevealLevel, lo
   return `investigation:c${cycleCount}:${alias}:${level}:${locationId}`;
 }
 
+function publicGoalFor(affordance: InvestigationAffordance, knownLevel: RevealLevel | undefined,
+  currentLocation: string): string | undefined {
+  const knownRank = knownLevel ? revealLevelRank(knownLevel) : -1;
+  // Unlocking a destination or reaching a new day is not an introduction to its records.
+  if (affordance.discoveryGoal && knownRank < revealLevelRank('hint')
+    && affordance.locationId !== currentLocation) return undefined;
+  return affordance.discoveryGoal && knownRank < revealLevelRank('clue')
+    ? (knownRank >= revealLevelRank('hint') ? affordance.hintGoal : undefined) ?? affordance.discoveryGoal
+    : affordance.publicGoal;
+}
+
+/** Re-project old menu snapshots without changing history, knowledge, IDs or prices. */
+export function refreshPersistedInvestigationMenu<T extends { desc: string; opportunityId?: string }>(
+  rows: T[] | undefined, graph: MysteryTruthGraph, variables: Record<string, unknown>,
+): T[] | undefined {
+  if (!rows) return rows;
+  const aliases = createFactAliasTable(graph);
+  const knowledge = variables.mysteryKnowledge && typeof variables.mysteryKnowledge === 'object'
+    && !Array.isArray(variables.mysteryKnowledge) ? variables.mysteryKnowledge as Record<string, unknown> : {};
+  const clueIds = Array.isArray(variables.unlockedClues) ? variables.unlockedClues : [];
+  return rows.flatMap(row => {
+    const match = row.opportunityId?.match(/^investigation:c\d+:(F\d+):(?:atmosphere|hint|clue|confirmation):(.+)$/);
+    const affordance = INVESTIGATION_AFFORDANCES.find(candidate => match
+      ? candidate.factId === aliases.aliasToFactId[match[1]] && candidate.locationId === match[2]
+      : candidate.publicGoal === row.desc || candidate.discoveryGoal === row.desc || candidate.hintGoal === row.desc);
+    if (!affordance?.discoveryGoal) return [row];
+    const stored = knowledge[affordance.factId];
+    const known = REVEAL_LEVELS.includes(stored as RevealLevel) ? stored as RevealLevel
+      : clueIds.includes(affordance.factId) ? 'clue' : undefined;
+    const desc = publicGoalFor(affordance, known, String(variables.location ?? 'home'));
+    return desc ? [{ ...row, desc }] : [];
+  });
+}
+
 function enumerateLegalOpportunities(
   input: BuildInvestigationOpportunitiesInput,
 ): InvestigationOpportunity[] {
@@ -267,6 +307,8 @@ function enumerateLegalOpportunities(
 
   for (const affordance of INVESTIGATION_AFFORDANCES) {
     if (!destinations.has(affordance.locationId)) continue;
+    const publicGoal = publicGoalFor(affordance, input.context.playerKnowledge[affordance.factId], input.context.currentLocation);
+    if (!publicGoal) continue;
     const brief = buildMysteryBrief(input.graph, {
       ...input.context,
       currentLocation: affordance.locationId,
@@ -279,7 +321,7 @@ function enumerateLegalOpportunities(
       result.push({
         id: opportunityId(input.context.cycleCount, alias, option.level, affordance.locationId),
         locationId: affordance.locationId,
-        publicGoal: affordance.publicGoal,
+        publicGoal,
         scope: affordance.scope,
         sourceIds: [`fact:${alias}:${option.level}`],
         topicKey: affordance.topicKey,

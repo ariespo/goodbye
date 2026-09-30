@@ -7,6 +7,7 @@ import {
   buildInvestigationOpportunities,
   findInvestigationOpportunity,
   projectPublicInvestigationOpportunities,
+  refreshPersistedInvestigationMenu,
   settleOpportunityProgress,
   type InvestigationOpportunity,
   type OpportunityProgress,
@@ -59,6 +60,64 @@ function hasFactOpportunity(overrides: Partial<TruthContext>, factId: string): b
 }
 
 describe('buildInvestigationOpportunities', () => {
+  it.each([
+    ['a-orphanage-contact', 'old-man-building', 2, /孤儿院|便笺|回条/],
+    ['b-commission-message', 'community-hospital', 3, /委托|讯息|账号/],
+    ['c-night-gap-record', 'home', 3, /缺口/],
+    ['none-railing-maintenance', 'observation-deck', 3, /编号|工单/],
+    ['shared-supermarket-receipt', 'supermarket', 2, /底单|路线标记/],
+    ['shared-senpai-camera', 'senpai-building', 2, /影像|寄存卡/],
+    ['shared-observation-deck-plan', 'observation-deck', 2, /路线页|终点/],
+    ['fake-body-mismatch', 'community-hospital', 3, /病历|遗体记录|不一致/],
+  ] as const)('does not announce undiscovered evidence in the menu: %s', (factId, location, cycleCount, spoiler) => {
+    const input = { graph: MYSTERY_TRUTH_GRAPH, context: context({ cycleCount,
+      currentLocation: location, playerPresentation: withTravel(location) }), progress: progress(cycleCount) };
+    const opportunity = buildInvestigationOpportunities(input).find(item =>
+      item.sourceIds.includes(`fact:${aliases.factIdToAlias[factId]}:clue`));
+    expect(opportunity).toBeDefined(); // Still possible to discover the evidence.
+    expect(opportunity!.publicGoal).not.toMatch(spoiler);
+    expect(findInvestigationOpportunity(input, opportunity!.id)?.publicGoal).toBe(opportunity!.publicGoal);
+  });
+
+  it('does not advertise unintroduced case records at remote destinations', () => {
+    const input = { graph: MYSTERY_TRUTH_GRAPH, context: context({ cycleCount: 3,
+      playerPresentation: withTravel('old-man-building', 'community-hospital') }), progress: progress(3) };
+    const opportunities = buildInvestigationOpportunities(input);
+    expect(opportunities.some(item => item.topicKey === 'old-man-building:contact-record')).toBe(false);
+    expect(opportunities.some(item => item.topicKey === 'community-hospital:commission-record')).toBe(false);
+  });
+
+  it('does not treat an atmosphere-level anomaly as an introduced record', () => {
+    const opportunities = buildInvestigationOpportunities({ graph: MYSTERY_TRUTH_GRAPH,
+      context: context({ cycleCount: 3, currentLocation: 'community-hospital',
+        playerKnowledge: { 'fake-body-mismatch': 'atmosphere' } }), progress: progress(3) });
+    expect(opportunities.find(item => item.topicKey === 'community-hospital:record-comparison')?.publicGoal)
+      .toBe('询问医院如何核验收到的身份通报');
+  });
+
+  it('uses only the introduced material for a hint-level follow-up, including remembered hints', () => {
+    const input = { graph: MYSTERY_TRUTH_GRAPH, context: context({ cycleCount: 3,
+      playerPresentation: withTravel('old-man-building'),
+      playerKnowledge: { 'a-orphanage-contact': 'hint' as const } }), progress: progress(3) };
+    const opportunity = buildInvestigationOpportunities(input).find(item => item.topicKey === 'old-man-building:contact-record');
+    expect(opportunity?.publicGoal).toContain('回条');
+    expect(opportunity?.publicGoal).not.toMatch(/孤儿院|便笺/);
+  });
+
+  it('refreshes persisted IDs and legacy clue knowledge without changing action authority or prices', () => {
+    const rows = [{ desc: '核对孤儿院查询便笺与档案借阅回条',
+      opportunityId: `investigation:c3:${aliases.factIdToAlias['a-orphanage-contact']}:clue:old-man-building`,
+      time: '95分钟', stamina: 13 }];
+    const refreshed = refreshPersistedInvestigationMenu(rows, MYSTERY_TRUTH_GRAPH, {
+      location: 'home', mysteryKnowledge: { 'a-orphanage-contact': 'hint' },
+    });
+    expect(refreshed).toEqual([{ ...rows[0], desc: '追问身世笔记中档案借阅回条的来历' }]);
+    expect(refreshPersistedInvestigationMenu(rows, MYSTERY_TRUTH_GRAPH, { location: 'home' })).toEqual([]);
+    expect(refreshPersistedInvestigationMenu(rows, MYSTERY_TRUTH_GRAPH, {
+      location: 'home', unlockedClues: ['a-orphanage-contact'],
+    })).toEqual(rows);
+  });
+
   it.each([
     ['shared-supermarket-receipt', 'supermarket', null],
     ['shared-senpai-camera', 'senpai-building', null],
@@ -308,7 +367,7 @@ describe('buildInvestigationOpportunities', () => {
     ['NONE second', 'none-letter-water-tower', { cycleCount: 3, unlockedClueIds: ['none-letter-bedroom'], playerKnowledge: { 'none-letter-bedroom': 'clue' }, playerPresentation: withTravel('water-tower') }],
     ['NONE third', 'none-letter-door-gap', { cycleCount: 4, unlockedClueIds: ['none-letter-bedroom', 'none-letter-water-tower'], playerKnowledge: { 'none-letter-bedroom': 'clue', 'none-letter-water-tower': 'clue' } }],
     ['NONE final', 'none-accidental-goodbye', { cycleCount: 5, lockedRoute: 'NONE', playerKnowledge: clueKnowledge('none-letter-bedroom', 'none-letter-water-tower', 'none-letter-door-gap', 'none-railing-maintenance', 'none-unassisted-fall-record', 'shared-itinerary-crosscheck', 'shared-school-absence', 'shared-water-tower-secret', 'shared-supermarket-receipt', 'shared-detective-tail', 'shared-senpai-camera', 'shared-observation-deck-plan'), playerPresentation: withTravel('observation-deck') }],
-    ['FAKE body', 'fake-body-mismatch', { cycleCount: 3, playerPresentation: withTravel('community-hospital') }],
+    ['FAKE body', 'fake-body-mismatch', { cycleCount: 3, currentLocation: 'community-hospital', playerPresentation: withTravel('community-hospital') }],
     ['FAKE ticket', 'fake-alias-ticket', { cycleCount: 3 }],
     ['FAKE savings', 'fake-empty-savings', { cycleCount: 3, playerPresentation: withTravel('supermarket') }],
     ['FAKE sighting', 'fake-postdeath-sighting', { cycleCount: 4, playerPresentation: withTravel('mountain-trail') }],

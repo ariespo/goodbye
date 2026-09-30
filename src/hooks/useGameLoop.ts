@@ -1500,7 +1500,9 @@ export function useGameLoop() {
     const rollback = resolveTurnRollback(lastUserMsg, {
       gameStatus: currentStore.game.gameStatus,
       currentState: currentStore.game.currentState,
-      currentScene: rebuildSceneFromChat({ ...activeChat, messages: messagesBeforeTurn }),
+      currentScene: rebuildSceneFromChat({ ...activeChat, messages: messagesBeforeTurn,
+        // A legacy message may have no own snapshot; never fill it with post-turn knowledge.
+        variables: lastUserMsg.turnState?.variables ?? lastUserMsg.variables }),
       currentLineIndex: 0,
       sceneComplete: true,
       variables: tavern.variables,

@@ -12,6 +12,7 @@ import {
 import { projectCharacterPerformances } from '../../data/characterPerformance';
 import { buildNpcPlayerKnowledgeBrief } from '../../data/npcPlayerKnowledge';
 import { getVerifiedItineraryProgress } from './itinerary';
+import { evidenceAcquisition } from './evidence-acquisition';
 
 /** Fixed public scene cast; this is neither an encounter list for home nor case knowledge. */
 export const FIXED_LOCATION_NPC_IDS: Readonly<Record<string, readonly string[]>> = {
@@ -231,6 +232,8 @@ export function buildMysteryBrief(graph: MysteryTruthGraph, context: TruthContex
         kind: fact.kind,
         level,
         text: fact.revelations[level] as string,
+        ...(evidenceAcquisition(fact.id, level, context.currentLocation)
+          ? { acquisition: evidenceAcquisition(fact.id, level, context.currentLocation) } : {}),
       }));
     const deliveryNpcIds = graph.npcKnowledge
       .filter((entry) => entry.factId === fact.id && context.activeNpcIds.includes(entry.npcId))
